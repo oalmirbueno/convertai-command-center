@@ -71,7 +71,7 @@ export function useUpdates() {
 }
 
 export function useClients() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   return useQuery({
     queryKey: ["clients", user?.id],
     queryFn: async () => {
@@ -99,7 +99,7 @@ export function useClients() {
         projectCount: (projects || []).filter((p: any) => p.client_id === profile.id).length,
       }));
     },
-    enabled: !!user && user.role === "admin",
+    enabled: !!user && profile?.role === "admin",
   });
 }
 

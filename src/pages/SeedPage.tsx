@@ -6,10 +6,10 @@ import { Loader2, Database } from "lucide-react";
 import { Navigate } from "react-router-dom";
 
 export default function SeedPage() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
 
-  if (user?.role !== "admin") return <Navigate to="/dashboard" replace />;
+  if (profile?.role !== "admin") return <Navigate to="/dashboard" replace />;
 
   const seed = async () => {
     setLoading(true);

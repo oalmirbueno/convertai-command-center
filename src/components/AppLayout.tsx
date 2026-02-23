@@ -53,7 +53,7 @@ const clientMoreNav: NavItem[] = [
 ];
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth();
+  const { user, profile, logout } = useAuth();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -61,8 +61,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const moreRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
-  const mainNav = user?.role === "admin" ? adminMainNav : clientMainNav;
-  const moreNav = user?.role === "admin" ? adminMoreNav : clientMoreNav;
+  const mainNav = profile?.role === "admin" ? adminMainNav : clientMainNav;
+  const moreNav = profile?.role === "admin" ? adminMoreNav : clientMoreNav;
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
@@ -171,15 +171,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <button onClick={() => setUserMenuOpen(!userMenuOpen)}>
               <Avatar className="w-7 h-7 cursor-pointer">
                 <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-semibold">
-                  {user?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
+                  {profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
             </button>
             {userMenuOpen && (
               <div className="absolute top-full right-0 mt-2 w-48 rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in">
                 <div className="px-3 py-2 border-b border-border mb-1">
-                  <p className="text-xs font-medium text-foreground">{user?.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{user?.role === "admin" ? "Administrador" : user?.company_name}</p>
+                  <p className="text-xs font-medium text-foreground">{profile?.full_name}</p>
+                  <p className="text-[11px] text-muted-foreground">{profile?.role === "admin" ? "Administrador" : profile?.company_name}</p>
                 </div>
                 <button
                   onClick={() => { setUserMenuOpen(false); logout(); }}
