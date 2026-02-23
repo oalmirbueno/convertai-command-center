@@ -177,8 +177,10 @@ export type Database = {
           file_url: string
           folder: string | null
           id: string
+          parent_file_id: string | null
           project_id: string | null
           uploaded_by: string
+          version: number | null
         }
         Insert: {
           approval_status?: string
@@ -190,8 +192,10 @@ export type Database = {
           file_url: string
           folder?: string | null
           id?: string
+          parent_file_id?: string | null
           project_id?: string | null
           uploaded_by: string
+          version?: number | null
         }
         Update: {
           approval_status?: string
@@ -203,8 +207,10 @@ export type Database = {
           file_url?: string
           folder?: string | null
           id?: string
+          parent_file_id?: string | null
           project_id?: string | null
           uploaded_by?: string
+          version?: number | null
         }
         Relationships: [
           {
@@ -212,6 +218,13 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_parent_file_id_fkey"
+            columns: ["parent_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
           {

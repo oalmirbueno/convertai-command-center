@@ -121,21 +121,38 @@ export function useMilestones(projectId?: string) {
   });
 }
 
-export function useFiles(projectId?: string) {
+export function useFiles(projectId?: string, clientId?: string) {
   const { user } = useAuth();
   return useQuery({
-    queryKey: ["files", user?.id, projectId],
+    queryKey: ["files", user?.id, projectId, clientId],
     queryFn: async () => {
       let query = supabase
         .from("files")
-        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name)")
+        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name), project:projects(name), client:profiles!files_client_id_fkey(full_name, company_name)")
         .order("created_at", { ascending: false });
       if (projectId) query = query.eq("project_id", projectId);
+      if (clientId) query = query.eq("client_id", clientId);
       const { data, error } = await query;
       if (error) throw error;
       return data;
     },
-    enabled: !!user && !!projectId,
+    enabled: !!user,
+  });
+}
+
+export function useAllFiles() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["all-files", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("files")
+        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name), project:projects(name), client:profiles!files_client_id_fkey(full_name, company_name)")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
   });
 }
 
