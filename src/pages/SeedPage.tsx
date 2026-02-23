@@ -19,13 +19,18 @@ export default function SeedPage() {
       if (!authUser) throw new Error("Não autenticado");
       const adminId = authUser.id;
 
-      // Check existing data
-      const { data: existingProjects } = await supabase.from("projects").select("id").limit(1);
-      if (existingProjects && existingProjects.length > 0) {
-        toast.info("Dados demo já existem! Exclua os dados antigos antes de popular novamente.");
-        setLoading(false);
-        return;
-      }
+      // Clean existing data before seeding
+      setProgress("Limpando dados antigos...");
+      await supabase.from("recharge_requests").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("billing").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("ads_wallet").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("files").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("updates").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("notifications").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("tasks").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("milestones").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("briefings").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("projects").delete().neq("id", "00000000-0000-0000-0000-000000000000");
 
       // Get or create client
       setProgress("Buscando clientes...");
