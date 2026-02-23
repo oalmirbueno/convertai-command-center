@@ -1,5 +1,5 @@
 import { useProjects, useUpdates, useTasks } from "@/hooks/useSupabaseData";
-import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database, FileText, MoreHorizontal, Trash2, Edit3 } from "lucide-react";
+import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database, FileText, MoreHorizontal, Trash2, Edit3, Link2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,6 +7,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import CreateClientModal from "@/components/admin/CreateClientModal";
+import MeetingNotesModal from "@/components/admin/MeetingNotesModal";
+import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
 
 const statusDotColors: Record<string, string> = {
@@ -43,6 +45,8 @@ export default function AdminDashboard() {
   const [editProject, setEditProject] = useState<any>(null);
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createClientOpen, setCreateClientOpen] = useState(false);
+  const [meetingNotesOpen, setMeetingNotesOpen] = useState(false);
+  const [briefingLinkOpen, setBriefingLinkOpen] = useState(false);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -87,8 +91,10 @@ export default function AdminDashboard() {
   const quickActions = [
     { label: "Novo Projeto", icon: Plus, action: () => setCreateProjectOpen(true) },
     { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true) },
+    { label: "Nova Ata de Reunião", icon: FileText, action: () => setMeetingNotesOpen(true) },
+    { label: "Gerar Link Briefing", icon: Link2, action: () => setBriefingLinkOpen(true) },
     { label: "Gerar Plano IA", icon: Sparkles, action: () => {} },
-    { label: "Upload", icon: Upload, action: () => {} },
+    { label: "Upload", icon: Upload, action: () => navigate("/arquivos") },
     { label: "Seed Demo Data", icon: Database, action: () => navigate("/admin/seed") },
   ];
 
@@ -159,8 +165,6 @@ export default function AdminDashboard() {
                       <Clock className="w-3 h-3" />
                       {formatDate(p.deadline)}
                     </div>
-
-                    {/* Project menu */}
                     <button
                       onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
                       className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary"
@@ -169,7 +173,6 @@ export default function AdminDashboard() {
                     </button>
                   </div>
 
-                  {/* Dropdown menu */}
                   {showMenu && (
                     <div className="absolute right-4 top-14 z-20 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
                       <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
@@ -189,13 +192,7 @@ export default function AdminDashboard() {
                       </div>
                       <div className="px-3 py-2">
                         <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
-                        <Slider
-                          defaultValue={[p.progress]}
-                          max={100}
-                          step={5}
-                          onValueCommit={(val) => handleProgressChange(p.id, val[0])}
-                          className="w-full"
-                        />
+                        <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
                         className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
@@ -272,6 +269,8 @@ export default function AdminDashboard() {
 
       <CreateProjectModal open={createProjectOpen || !!editProject} onClose={() => { setCreateProjectOpen(false); setEditProject(null); }} editProject={editProject} />
       <CreateClientModal open={createClientOpen} onClose={() => setCreateClientOpen(false)} />
+      <MeetingNotesModal open={meetingNotesOpen} onClose={() => setMeetingNotesOpen(false)} />
+      <BriefingLinkModal open={briefingLinkOpen} onClose={() => setBriefingLinkOpen(false)} />
     </div>
   );
 }

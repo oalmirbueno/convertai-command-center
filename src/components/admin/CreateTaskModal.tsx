@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -29,12 +29,31 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
-  const [title, setTitle] = useState(editTask?.title || "");
-  const [projectId, setProjectId] = useState(editTask?.project_id || "");
-  const [description, setDescription] = useState(editTask?.description || "");
-  const [priority, setPriority] = useState(editTask?.priority || "medium");
-  const [assignedTo, setAssignedTo] = useState(editTask?.assigned_to || "");
-  const [dueDate, setDueDate] = useState<Date | undefined>(editTask?.due_date ? new Date(editTask.due_date) : undefined);
+  const [title, setTitle] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [description, setDescription] = useState("");
+  const [priority, setPriority] = useState("medium");
+  const [assignedTo, setAssignedTo] = useState("");
+  const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+
+  // BUG 3 FIX: populate fields when editing
+  useEffect(() => {
+    if (editTask) {
+      setTitle(editTask.title || "");
+      setProjectId(editTask.project_id || "");
+      setDescription(editTask.description || "");
+      setPriority(editTask.priority || "medium");
+      setAssignedTo(editTask.assigned_to || "");
+      setDueDate(editTask.due_date ? new Date(editTask.due_date) : undefined);
+    } else {
+      setTitle("");
+      setProjectId("");
+      setDescription("");
+      setPriority("medium");
+      setAssignedTo("");
+      setDueDate(undefined);
+    }
+  }, [editTask, open]);
 
   if (!open) return null;
 

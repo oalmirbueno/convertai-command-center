@@ -169,8 +169,11 @@ export type Database = {
       files: {
         Row: {
           approval_status: string
+          caption: string | null
+          carousel_text: string | null
           client_id: string
           created_at: string
+          description: string | null
           feedback: string | null
           file_name: string
           file_type: string | null
@@ -184,8 +187,11 @@ export type Database = {
         }
         Insert: {
           approval_status?: string
+          caption?: string | null
+          carousel_text?: string | null
           client_id: string
           created_at?: string
+          description?: string | null
           feedback?: string | null
           file_name: string
           file_type?: string | null
@@ -199,8 +205,11 @@ export type Database = {
         }
         Update: {
           approval_status?: string
+          caption?: string | null
+          carousel_text?: string | null
           client_id?: string
           created_at?: string
+          description?: string | null
           feedback?: string | null
           file_name?: string
           file_type?: string | null

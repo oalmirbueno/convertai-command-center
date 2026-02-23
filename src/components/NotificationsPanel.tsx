@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { Bell, FileText, CreditCard, Package, CheckCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 
 const typeIcons: Record<string, React.FC<{ className?: string }>> = {
   approval: CheckCircle,
@@ -11,6 +12,7 @@ const typeIcons: Record<string, React.FC<{ className?: string }>> = {
   request: Package,
   update: Bell,
   system: Bell,
+  task: Bell,
 };
 
 const typeColors: Record<string, string> = {
@@ -20,6 +22,7 @@ const typeColors: Record<string, string> = {
   request: "text-success",
   update: "text-foreground",
   system: "text-muted-foreground",
+  task: "text-info",
 };
 
 interface Props {
@@ -30,10 +33,19 @@ interface Props {
 export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const { data: notifications } = useNotifications();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
-  const markAsRead = async (id: string) => {
-    await supabase.from("notifications").update({ read: true }).eq("id", id);
-    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  const handleClick = async (n: any) => {
+    // Mark as read
+    if (!n.read) {
+      await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    }
+    // Navigate if has link
+    if (n.link) {
+      navigate(n.link);
+      onOpenChange(false);
+    }
   };
 
   return (
@@ -53,7 +65,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                   {i > 0 && <div className="border-t border-border" />}
                   <div
                     className={`flex items-start gap-3 py-3 cursor-pointer hover:bg-secondary/30 px-1 rounded ${n.read ? "opacity-40" : ""}`}
-                    onClick={() => !n.read && markAsRead(n.id)}
+                    onClick={() => handleClick(n)}
                   >
                     {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-info shrink-0 mt-2" />}
                     {n.read && <div className="w-1.5 shrink-0" />}
