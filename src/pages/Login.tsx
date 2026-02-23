@@ -2,11 +2,12 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Shield, User, Loader2, ArrowRight } from "lucide-react";
 import { toast } from "sonner";
+import { Navigate } from "react-router-dom";
 
 type Mode = "login" | "signup";
 
 export default function Login() {
-  const { login, loginWithCredentials, signup } = useAuth();
+  const { authState, login, loginWithCredentials, signup } = useAuth();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -14,11 +15,29 @@ export default function Login() {
   const [company, setCompany] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const handleLogin = async (role: "admin" | "client") => {
+  // If already authenticated, redirect to dashboard
+  if (authState === "authenticated") {
+    return <Navigate to="/dashboard" replace />;
+  }
+
+  // If still checking auth, show loading
+  if (authState === "loading") {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
+          <span className="text-base font-bold text-primary-foreground">C</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Carregando...</p>
+      </div>
+    );
+  }
+
+  const handleDemoLogin = async (role: "admin" | "client") => {
     setLoading(true);
     try {
       await login(role);
     } catch (err: any) {
+      console.error("[Login] Demo login error:", err);
       toast.error(err.message || "Erro ao entrar");
     } finally {
       setLoading(false);
@@ -43,7 +62,14 @@ export default function Login() {
         await signup(email, password, fullName, company || undefined);
         toast.success("Conta criada com sucesso!");
       } catch (err: any) {
-        toast.error(err.message || "Erro ao criar conta");
+        console.error("[Login] Signup error:", err);
+        const msg = err.message?.toLowerCase() || "";
+        if (msg.includes("already registered") || msg.includes("already exists")) {
+          toast.error("Este email já está cadastrado. Tente fazer login.");
+          setMode("login");
+        } else {
+          toast.error(err.message || "Erro ao criar conta");
+        }
       } finally {
         setLoading(false);
       }
@@ -52,9 +78,12 @@ export default function Login() {
       try {
         await loginWithCredentials(email, password);
       } catch (err: any) {
+        console.error("[Login] Credentials error:", err);
         const msg = err.message?.toLowerCase() || "";
         if (msg.includes("invalid login")) {
           toast.error("Email ou senha incorretos");
+        } else if (msg.includes("email not confirmed")) {
+          toast.error("Confirme seu email antes de entrar");
         } else {
           toast.error(err.message || "Erro ao entrar");
         }
@@ -111,6 +140,7 @@ export default function Login() {
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                autoComplete="email"
                 className="w-full bg-secondary border border-transparent rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
               />
             </div>
@@ -121,6 +151,7 @@ export default function Login() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
+                autoComplete={mode === "login" ? "current-password" : "new-password"}
                 className="w-full bg-secondary border border-transparent rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
               />
             </div>
@@ -154,7 +185,7 @@ export default function Login() {
               <p className="text-[11px] text-center text-muted-foreground/50 uppercase tracking-wider">Acesso rápido para teste</p>
               <button
                 type="button"
-                onClick={() => handleLogin("admin")}
+                onClick={() => handleDemoLogin("admin")}
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
               >
@@ -163,7 +194,7 @@ export default function Login() {
               </button>
               <button
                 type="button"
-                onClick={() => handleLogin("client")}
+                onClick={() => handleDemoLogin("client")}
                 disabled={loading}
                 className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-transparent border border-border text-muted-foreground text-[13px] font-medium hover:text-foreground hover:border-muted-foreground/50 transition-colors cursor-pointer disabled:opacity-50"
               >

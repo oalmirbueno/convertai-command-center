@@ -15,20 +15,27 @@ import AppLayout from "@/components/AppLayout";
 
 const queryClient = new QueryClient();
 
-function AppRoutes() {
-  const { user, loading } = useAuth();
-
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center animate-pulse">
-          <span className="text-xs font-bold text-primary-foreground">C</span>
-        </div>
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+      <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
+        <span className="text-base font-bold text-primary-foreground">C</span>
       </div>
-    );
+      <p className="text-xs text-muted-foreground">Carregando...</p>
+    </div>
+  );
+}
+
+function AppRoutes() {
+  const { user, authState } = useAuth();
+
+  // NEVER redirect during loading - just show spinner
+  if (authState === "loading") {
+    return <LoadingScreen />;
   }
 
-  if (!user) {
+  // Not authenticated - show login on all routes
+  if (authState === "unauthenticated") {
     return (
       <Routes>
         <Route path="*" element={<Login />} />
@@ -36,12 +43,13 @@ function AppRoutes() {
     );
   }
 
+  // Authenticated - show app
   return (
     <AppLayout>
       <Routes>
-        <Route path="/dashboard" element={user.role === "admin" ? <AdminDashboard /> : <ClientDashboard />} />
+        <Route path="/dashboard" element={user?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />} />
         <Route path="/projetos" element={<Placeholder title="Projetos" />} />
-        {user.role === "admin" && (
+        {user?.role === "admin" && (
           <>
             <Route path="/kanban" element={<Kanban />} />
             <Route path="/clientes" element={<Clients />} />
@@ -52,7 +60,7 @@ function AppRoutes() {
             <Route path="/admin/seed" element={<SeedPage />} />
           </>
         )}
-        {user.role === "client" && (
+        {user?.role === "client" && (
           <>
             <Route path="/acompanhamento" element={<Placeholder title="Acompanhamento" />} />
             <Route path="/pedidos" element={<Placeholder title="Pedidos" />} />
