@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
-import { notifications } from "@/data/mockData";
+import { useNotifications } from "@/hooks/useSupabaseData";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, Menu, X, MoreHorizontal, Search } from "lucide-react";
@@ -63,7 +63,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const mainNav = user?.role === "admin" ? adminMainNav : clientMainNav;
   const moreNav = user?.role === "admin" ? adminMoreNav : clientMoreNav;
-  const unreadCount = notifications.filter((n) => !n.read).length;
+  const { data: notifData } = useNotifications();
+  const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -170,15 +171,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <button onClick={() => setUserMenuOpen(!userMenuOpen)}>
               <Avatar className="w-7 h-7 cursor-pointer">
                 <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-semibold">
-                  {user?.avatar}
+                  {user?.full_name?.split(" ").map(n => n[0]).join("").slice(0,2)}
                 </AvatarFallback>
               </Avatar>
             </button>
             {userMenuOpen && (
               <div className="absolute top-full right-0 mt-2 w-48 rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in">
                 <div className="px-3 py-2 border-b border-border mb-1">
-                  <p className="text-xs font-medium text-foreground">{user?.name}</p>
-                  <p className="text-[11px] text-muted-foreground">{user?.role === "admin" ? "Administrador" : user?.company}</p>
+                  <p className="text-xs font-medium text-foreground">{user?.full_name}</p>
+                  <p className="text-[11px] text-muted-foreground">{user?.role === "admin" ? "Administrador" : user?.company_name}</p>
                 </div>
                 <button
                   onClick={() => { setUserMenuOpen(false); logout(); }}
