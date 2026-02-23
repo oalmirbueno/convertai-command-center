@@ -26,56 +26,83 @@ function LoadingScreen() {
   );
 }
 
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <Navigate to="/login" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
-  const { user, authState } = useAuth();
+  const { user, profile, loading } = useAuth();
 
-  // NEVER redirect during loading - just show spinner
-  if (authState === "loading") {
-    return <LoadingScreen />;
-  }
+  if (loading) return <LoadingScreen />;
 
-  // Not authenticated - show login on all routes
-  if (authState === "unauthenticated") {
-    return (
-      <Routes>
-        <Route path="*" element={<Login />} />
-      </Routes>
-    );
-  }
-
-  // Authenticated - show app
   return (
-    <AppLayout>
-      <Routes>
-        <Route path="/dashboard" element={user?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />} />
-        <Route path="/projetos" element={<Placeholder title="Projetos" />} />
-        {user?.role === "admin" && (
-          <>
-            <Route path="/kanban" element={<Kanban />} />
-            <Route path="/clientes" element={<Clients />} />
-            <Route path="/equipe" element={<Placeholder title="Equipe" />} />
-            <Route path="/ia-planner" element={<Placeholder title="IA Planner" />} />
-            <Route path="/arquivos" element={<Placeholder title="Arquivos" />} />
-            <Route path="/config" element={<Placeholder title="Configurações" />} />
-            <Route path="/admin/seed" element={<SeedPage />} />
-          </>
-        )}
-        {user?.role === "client" && (
-          <>
-            <Route path="/acompanhamento" element={<Placeholder title="Acompanhamento" />} />
-            <Route path="/pedidos" element={<Placeholder title="Pedidos" />} />
-            <Route path="/documentos" element={<Placeholder title="Documentos" />} />
-            <Route path="/perfil" element={<Placeholder title="Perfil" />} />
-          </>
-        )}
-        <Route path="/aprovacoes" element={<Placeholder title="Aprovações" />} />
-        <Route path="/relatorios" element={<Placeholder title="Relatórios" />} />
-        <Route path="/timeline" element={<Placeholder title="Timeline" />} />
-        <Route path="/financeiro" element={<Placeholder title="Financeiro" />} />
-        <Route path="/" element={<Navigate to="/dashboard" replace />} />
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </AppLayout>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+
+      {/* Protected routes */}
+      <Route path="/dashboard" element={
+        <ProtectedRoute>
+          <AppLayout>
+            {profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}
+          </AppLayout>
+        </ProtectedRoute>
+      } />
+      <Route path="/projetos" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Projetos" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/kanban" element={
+        <ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/clientes" element={
+        <ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/equipe" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Equipe" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/ia-planner" element={
+        <ProtectedRoute><AppLayout><Placeholder title="IA Planner" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/arquivos" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Arquivos" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/config" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Configurações" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/admin/seed" element={
+        <ProtectedRoute><AppLayout><SeedPage /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/acompanhamento" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Acompanhamento" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/pedidos" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Pedidos" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/documentos" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Documentos" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/perfil" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/aprovacoes" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Aprovações" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/relatorios" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Relatórios" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/timeline" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Timeline" /></AppLayout></ProtectedRoute>
+      } />
+      <Route path="/financeiro" element={
+        <ProtectedRoute><AppLayout><Placeholder title="Financeiro" /></AppLayout></ProtectedRoute>
+      } />
+
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      <Route path="*" element={<Navigate to="/dashboard" replace />} />
+    </Routes>
   );
 }
 

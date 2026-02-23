@@ -36,7 +36,7 @@ interface ProjectCanvasProps {
 }
 
 export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
-  const { user } = useAuth();
+  const { profile } = useAuth();
   const { data: projects, isLoading } = useProjects();
 
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
@@ -53,7 +53,7 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
       {/* Greeting */}
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-foreground">
-          Olá, {user?.company_name || user?.full_name} 👋
+          Olá, {profile?.company_name || profile?.full_name} 👋
         </h1>
         <p className="text-[13px] text-muted-foreground mt-1">Acompanhe seus projetos em tempo real.</p>
       </div>

@@ -1,27 +1,30 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Shield, User, Loader2, ArrowRight } from "lucide-react";
-import { toast } from "sonner";
-import { Navigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 
 type Mode = "login" | "signup";
 
 export default function Login() {
-  const { authState, login, loginWithCredentials, signup } = useAuth();
+  const { user, profile, loading, login, loginWithCredentials, signup } = useAuth();
+  const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [company, setCompany] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState("");
 
-  // If already authenticated, redirect to dashboard
-  if (authState === "authenticated") {
-    return <Navigate to="/dashboard" replace />;
-  }
+  // Redirect when authenticated - ALWAYS via useEffect, never in render
+  useEffect(() => {
+    if (!loading && user && profile) {
+      navigate("/dashboard", { replace: true });
+    }
+  }, [loading, user, profile, navigate]);
 
-  // If still checking auth, show loading
-  if (authState === "loading") {
+  // Show loading spinner while checking auth
+  if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
         <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
@@ -32,63 +35,76 @@ export default function Login() {
     );
   }
 
+  // If already authenticated, show loading while redirect happens
+  if (user && profile) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
+        <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
+          <span className="text-base font-bold text-primary-foreground">C</span>
+        </div>
+        <p className="text-xs text-muted-foreground">Redirecionando...</p>
+      </div>
+    );
+  }
+
   const handleDemoLogin = async (role: "admin" | "client") => {
-    setLoading(true);
+    setSubmitting(true);
+    setError("");
     try {
       await login(role);
     } catch (err: any) {
       console.error("[Login] Demo login error:", err);
-      toast.error(err.message || "Erro ao entrar");
+      setError(err.message || "Erro ao entrar");
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) return;
+    setError("");
 
     if (mode === "signup") {
       if (!fullName.trim()) {
-        toast.error("Informe seu nome completo");
+        setError("Informe seu nome completo");
         return;
       }
       if (password.length < 6) {
-        toast.error("A senha deve ter no mínimo 6 caracteres");
+        setError("A senha deve ter no mínimo 6 caracteres");
         return;
       }
-      setLoading(true);
+      setSubmitting(true);
       try {
         await signup(email, password, fullName, company || undefined);
-        toast.success("Conta criada com sucesso!");
       } catch (err: any) {
         console.error("[Login] Signup error:", err);
         const msg = err.message?.toLowerCase() || "";
         if (msg.includes("already registered") || msg.includes("already exists")) {
-          toast.error("Este email já está cadastrado. Tente fazer login.");
+          setError("Este email já está cadastrado. Tente fazer login.");
           setMode("login");
         } else {
-          toast.error(err.message || "Erro ao criar conta");
+          setError(err.message || "Erro ao criar conta");
         }
       } finally {
-        setLoading(false);
+        setSubmitting(false);
       }
     } else {
-      setLoading(true);
+      setSubmitting(true);
       try {
         await loginWithCredentials(email, password);
       } catch (err: any) {
         console.error("[Login] Credentials error:", err);
         const msg = err.message?.toLowerCase() || "";
         if (msg.includes("invalid login")) {
-          toast.error("Email ou senha incorretos");
+          setError("Email ou senha incorretos");
         } else if (msg.includes("email not confirmed")) {
-          toast.error("Confirme seu email antes de entrar");
+          setError("Confirme seu email antes de entrar");
         } else {
-          toast.error(err.message || "Erro ao entrar");
+          setError(err.message || "Erro ao entrar");
         }
       } finally {
-        setLoading(false);
+        setSubmitting(false);
       }
     }
   };
@@ -156,25 +172,29 @@ export default function Login() {
               />
             </div>
 
+            {error && (
+              <p className="text-xs text-destructive text-center">{error}</p>
+            )}
+
             <button
               type="submit"
-              disabled={loading || !email || !password}
+              disabled={submitting || !email || !password}
               className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
             >
-              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
+              {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
               {mode === "login" ? "Entrar" : "Criar Conta"}
             </button>
 
             <p className="text-center text-[12px] text-muted-foreground">
               {mode === "login" ? (
                 <>Não tem conta?{" "}
-                  <button type="button" onClick={() => setMode("signup")} className="text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
+                  <button type="button" onClick={() => { setMode("signup"); setError(""); }} className="text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
                     Criar conta
                   </button>
                 </>
               ) : (
                 <>Já tem conta?{" "}
-                  <button type="button" onClick={() => setMode("login")} className="text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
+                  <button type="button" onClick={() => { setMode("login"); setError(""); }} className="text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
                     Entrar
                   </button>
                 </>
@@ -186,19 +206,19 @@ export default function Login() {
               <button
                 type="button"
                 onClick={() => handleDemoLogin("admin")}
-                disabled={loading}
+                disabled={submitting}
                 className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
+                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
                 Entrar como Admin
               </button>
               <button
                 type="button"
                 onClick={() => handleDemoLogin("client")}
-                disabled={loading}
+                disabled={submitting}
                 className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-transparent border border-border text-muted-foreground text-[13px] font-medium hover:text-foreground hover:border-muted-foreground/50 transition-colors cursor-pointer disabled:opacity-50"
               >
-                {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <User className="w-3.5 h-3.5" />}
+                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <User className="w-3.5 h-3.5" />}
                 Entrar como Cliente
               </button>
             </div>

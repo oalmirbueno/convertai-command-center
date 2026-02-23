@@ -21,7 +21,7 @@ const priorities = [
 ] as const;
 
 export default function RequestButton({ projectId, projectName }: { projectId: string; projectName: string }) {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -46,7 +46,7 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
       // In a real scenario you'd query admin users
       await supabase.from("notifications").insert({
         user_id: user.id,
-        message: `Novo pedido de ${user.company_name || user.full_name}: ${title}`,
+        message: `Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`,
         notification_type: "request",
       });
 
