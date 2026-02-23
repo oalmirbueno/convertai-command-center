@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     // Safety timeout - never stay loading forever
-    const timeout = setTimeout(resolve, 5000);
+    const timeout = setTimeout(resolve, 2000);
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
@@ -148,15 +148,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
     });
     if (error) throw error;
-
-    // Update company_name on profile if provided
-    if (data.user && companyName) {
-      await supabase.from("profiles").update({ company_name: companyName }).eq("id", data.user.id);
-    }
-
-    // Auto sign-in after signup
-    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-    if (signInError) throw signInError;
+    // Profile is created automatically by the handle_new_user trigger
+    // onAuthStateChange will handle setting the user state
   };
 
   const logout = async () => {
