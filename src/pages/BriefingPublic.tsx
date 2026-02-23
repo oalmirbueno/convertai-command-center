@@ -131,11 +131,11 @@ export default function BriefingPublic() {
     };
     await supabase.from("briefings").update({ responses, submitted: true }).eq("id", briefing.id);
 
-    // Notify admin
-    const { data: adminRole } = await supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
-    if (adminRole) {
+    // Notify admin using RPC to bypass RLS
+    const { data: adminId } = await supabase.rpc("get_admin_user_id");
+    if (adminId) {
       await supabase.from("notifications").insert({
-        user_id: adminRole.user_id,
+        user_id: adminId,
         message: "Novo briefing recebido!",
         notification_type: "system",
         link: "/briefings",

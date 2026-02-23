@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,27 @@ export default function Projects() {
   const [createOpen, setCreateOpen] = useState(false);
   const [editProject, setEditProject] = useState<any>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = () => { setMenuProject(null); setMenuPos(null); };
+    if (menuProject) {
+      document.addEventListener("click", handleClickOutside);
+      return () => document.removeEventListener("click", handleClickOutside);
+    }
+  }, [menuProject]);
+
+  const handleMenuClick = (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation();
+    if (menuProject === projectId) {
+      setMenuProject(null);
+      setMenuPos(null);
+    } else {
+      const rect = (e.target as HTMLElement).getBoundingClientRect();
+      setMenuPos({ x: rect.right - 192, y: rect.bottom + 4 });
+      setMenuProject(projectId);
+    }
+  };
 
   const filtered = (projects || []).filter((p: any) => {
     if (!isAdmin && p.client_id !== profile?.id) return false;
@@ -130,40 +152,12 @@ export default function Projects() {
                     {formatDate(p.deadline)}
                   </div>
                   {isAdmin && (
-                    <button onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
+                    <button onClick={(e) => handleMenuClick(e, p.id)}
                       className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary">
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
                   )}
                 </div>
-
-                {showMenu && isAdmin && (
-                  <div className="absolute right-4 top-full z-50 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-fade-in">
-                    <button onClick={() => { setEditProject(p); setMenuProject(null); }}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left">
-                      <Edit3 className="w-3.5 h-3.5" /> Editar
-                    </button>
-                    <div className="px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground mb-1.5">Status</p>
-                      <div className="flex flex-wrap gap-1">
-                        {STATUS_OPTIONS.filter(s => s.value !== "all").map(s => (
-                          <button key={s.value} onClick={() => handleStatusChange(p.id, s.value)}
-                            className={`text-[10px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
-                            {s.label}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="px-3 py-2">
-                      <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
-                      <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
-                    </div>
-                    <button onClick={() => handleDelete(p.id)}
-                      className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 cursor-pointer bg-transparent border-none text-left">
-                      <Trash2 className="w-3.5 h-3.5" /> Excluir
-                    </button>
-                  </div>
-                )}
               </div>
             );
           })}
@@ -171,6 +165,48 @@ export default function Projects() {
       )}
 
       <CreateProjectModal open={createOpen || !!editProject} onClose={() => { setCreateOpen(false); setEditProject(null); }} editProject={editProject} />
+
+      {/* Portal menu */}
+      {menuProject && menuPos && isAdmin && createPortal(
+        <div
+          className="bg-popover border border-border rounded-xl p-1.5 shadow-xl w-48 animate-in fade-in zoom-in-95 duration-150"
+          style={{ position: "fixed", top: menuPos.y, left: menuPos.x, zIndex: 9999 }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {(() => {
+            const p = (projects || []).find((pr: any) => pr.id === menuProject);
+            if (!p) return null;
+            return (
+              <>
+                <button onClick={() => { setEditProject(p); setMenuProject(null); setMenuPos(null); }}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left">
+                  <Edit3 className="w-3.5 h-3.5" /> Editar
+                </button>
+                <div className="px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground mb-1.5">Status</p>
+                  <div className="flex flex-wrap gap-1">
+                    {STATUS_OPTIONS.filter(s => s.value !== "all").map(s => (
+                      <button key={s.value} onClick={() => handleStatusChange(p.id, s.value)}
+                        className={`text-[10px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="px-3 py-2">
+                  <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
+                  <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
+                </div>
+                <button onClick={() => { handleDelete(p.id); setMenuPos(null); }}
+                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 cursor-pointer bg-transparent border-none text-left">
+                  <Trash2 className="w-3.5 h-3.5" /> Excluir
+                </button>
+              </>
+            );
+          })()}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

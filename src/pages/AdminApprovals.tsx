@@ -6,7 +6,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { FileImage, FileText, Film, Archive, RefreshCw, Upload } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { FileImage, FileText, Film, Archive, RefreshCw, Upload, ExternalLink, Zap } from "lucide-react";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
@@ -40,6 +41,7 @@ export default function AdminApprovals() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState("all");
+  const [previewFile, setPreviewFile] = useState<any>(null);
 
   // Only files with approval status != none
   const approvalFiles = (allFiles || []).filter((f: any) => f.approval_status !== "none");
@@ -54,6 +56,23 @@ export default function AdminApprovals() {
       toast({ title: "Reenviado para aprovação" });
     } catch {
       toast({ title: "Erro", variant: "destructive" });
+    }
+  };
+
+  const handleCreateAdjustTask = async (file: any) => {
+    try {
+      await supabase.from("tasks").insert({
+        project_id: file.project_id,
+        title: `Ajustar: ${file.file_name}`,
+        description: `Feedback do cliente:\n${file.feedback || "Sem detalhes"}`,
+        status: "backlog",
+        priority: "high",
+        assigned_to: file.uploaded_by || null,
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      toast({ title: "Tarefa criada no Kanban!" });
+    } catch {
+      toast({ title: "Erro ao criar tarefa", variant: "destructive" });
     }
   };
 
@@ -103,7 +122,8 @@ export default function AdminApprovals() {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden">
+              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                onClick={() => setPreviewFile(f)}>
                 {/* Preview */}
                 <div className="h-32 bg-secondary flex items-center justify-center">
                   {isImage(f.file_name) ? (
@@ -136,9 +156,15 @@ export default function AdminApprovals() {
                   {f.approval_status === "rejected" && (
                     <div className="flex gap-2 pt-1">
                       <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1"
-                        onClick={() => handleResend(f.id)}>
+                        onClick={(e) => { e.stopPropagation(); handleResend(f.id); }}>
                         <RefreshCw className="w-3 h-3" /> Reenviar
                       </Button>
+                      {f.project_id && (
+                        <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1 border-warning/50 text-warning hover:bg-warning/10"
+                          onClick={(e) => { e.stopPropagation(); handleCreateAdjustTask(f); }}>
+                          <Zap className="w-3 h-3" /> Criar Tarefa
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -147,6 +173,61 @@ export default function AdminApprovals() {
           })}
         </div>
       )}
+      {/* Preview Modal */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+          {previewFile && (
+            <div className="space-y-4">
+              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
+                {isImage(previewFile.file_name) ? (
+                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
+                ) : (
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
+                    <ExternalLink className="w-4 h-4" /> {previewFile.file_name?.toLowerCase().endsWith(".pdf") ? "Abrir PDF" : "Baixar arquivo"}
+                  </a>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+              </p>
+              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.pending).cls}`}>
+                  {(approvalBadge[previewFile.approval_status] || approvalBadge.pending).label}
+                </span>
+              </div>
+              {previewFile.approval_status === "rejected" && previewFile.feedback && (
+                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
+                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter className="flex gap-2">
+            {previewFile?.approval_status === "rejected" && (
+              <>
+                <Button size="sm" variant="outline" className="gap-1"
+                  onClick={() => { handleResend(previewFile.id); setPreviewFile(null); }}>
+                  <RefreshCw className="w-3 h-3" /> Reenviar
+                </Button>
+                {previewFile.project_id && (
+                  <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"
+                    onClick={() => { handleCreateAdjustTask(previewFile); setPreviewFile(null); }}>
+                    <Zap className="w-3 h-3" /> Criar Tarefa
+                  </Button>
+                )}
+              </>
+            )}
+            <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" className="gap-2">Baixar</Button>
+            </a>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
