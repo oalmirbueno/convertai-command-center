@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
@@ -29,14 +29,12 @@ const DEMO_ACCOUNTS = {
 };
 
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  // Fetch profile and roles in parallel
   const [profileRes, rolesRes] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
     supabase.from("user_roles").select("role").eq("user_id", userId),
   ]);
 
   if (!profileRes.data) return null;
-
   const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
   return { ...profileRes.data, role };
 }
@@ -44,50 +42,52 @@ async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const resolvedRef = useRef(false);
+
+  const loadProfile = useCallback(async (userId: string) => {
+    try {
+      const profile = await fetchUserProfile(userId);
+      setUser(profile);
+    } catch (err) {
+      console.error("Error fetching profile:", err);
+      setUser(null);
+    }
+  }, []);
 
   useEffect(() => {
-    const resolve = (profile: UserProfile | null) => {
-      if (!resolvedRef.current) {
-        resolvedRef.current = true;
-        setUser(profile);
-        setLoading(false);
-      } else {
-        // After initial resolve, still update user if profile changed
-        setUser(profile);
-      }
-    };
+    let mounted = true;
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    // Check initial session first
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
       if (session?.user) {
-        // setTimeout(0) prevents Supabase auth deadlock when fetching during callback
-        setTimeout(async () => {
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            resolve(profile);
-          } catch (err) {
-            console.error("Error fetching profile:", err);
-            resolve(null);
-          }
+        await loadProfile(session.user.id);
+      }
+      if (mounted) setLoading(false);
+    });
+
+    // Listen for auth changes (login, logout, token refresh)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+      console.log("Auth event:", event);
+      if (event === "SIGNED_OUT") {
+        setUser(null);
+        setLoading(false);
+      }
+      // Don't handle SIGNED_IN here — we handle it in login functions directly
+      // This avoids the deadlock issue with fetching during the callback
+      if (event === "TOKEN_REFRESHED" && session?.user) {
+        // Just refresh profile on token refresh
+        setTimeout(() => {
+          if (mounted) loadProfile(session.user.id);
         }, 0);
-      } else {
-        resolve(null);
       }
     });
 
-    // Fallback: if nothing resolves in 3s, stop loading
-    const timeout = setTimeout(() => {
-      if (!resolvedRef.current) {
-        resolvedRef.current = true;
-        setLoading(false);
-      }
-    }, 3000);
-
     return () => {
+      mounted = false;
       subscription.unsubscribe();
-      clearTimeout(timeout);
     };
-  }, []);
+  }, [loadProfile]);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
     const account = DEMO_ACCOUNTS[role];
@@ -98,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (signInError) {
+      // User doesn't exist, sign up
       const { error: signUpError } = await supabase.auth.signUp({
         email: account.email,
         password: account.password,
@@ -112,10 +113,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     }
 
-    if (role === "client") {
-      const { data: { user: authUser } } = await supabase.auth.getUser();
-      if (authUser) {
-        await supabase.from("profiles").update({ company_name: "Acerbi Associação" }).eq("id", authUser.id);
+    // Directly fetch profile after successful login
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadProfile(session.user.id);
+      
+      // Update company_name if client
+      if (role === "client") {
+        await supabase.from("profiles").update({ company_name: "Acerbi Associação" }).eq("id", session.user.id);
       }
     }
   };
@@ -123,19 +128,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const loginWithCredentials = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
+
+    // Directly fetch profile after successful login
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      await loadProfile(session.user.id);
+    }
   };
 
   const signup = async (email: string, password: string, fullName: string, companyName?: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    const { error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
     });
     if (error) throw error;
+
+    // Directly fetch profile after successful signup (auto-confirm creates session)
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.user) {
+      // Small delay to let the trigger create the profile
+      await new Promise(r => setTimeout(r, 500));
+      await loadProfile(session.user.id);
+    }
   };
 
   const logout = async () => {
-    resolvedRef.current = false;
     await supabase.auth.signOut();
     setUser(null);
   };
