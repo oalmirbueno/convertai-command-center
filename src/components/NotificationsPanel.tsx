@@ -1,6 +1,5 @@
 import { notifications } from "@/data/mockData";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Badge } from "@/components/ui/badge";
 import { Bell, FileText, CreditCard, Package, CheckCircle } from "lucide-react";
 
 const typeIcons: Record<string, React.FC<{ className?: string }>> = {
@@ -10,7 +9,7 @@ const typeIcons: Record<string, React.FC<{ className?: string }>> = {
   pedido: Package,
 };
 
-const typeColors: Record<string, string> = {
+const typeGlowColors: Record<string, string> = {
   aprovação: "text-primary",
   relatório: "text-info",
   cobrança: "text-warning",
@@ -25,33 +24,38 @@ interface Props {
 export default function NotificationsPanel({ open, onOpenChange }: Props) {
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="bg-card border-border/50 w-full sm:max-w-md">
+      <SheetContent
+        side="right"
+        className="w-80 sm:max-w-xs border-l border-border/30"
+        style={{ background: 'rgba(8, 8, 16, 0.9)', backdropFilter: 'blur(24px)' }}
+      >
         <SheetHeader className="pb-4">
-          <SheetTitle className="text-foreground flex items-center gap-2">
-            <Bell className="w-5 h-5 text-primary" />
+          <SheetTitle className="text-foreground flex items-center gap-2 text-sm">
+            <Bell className="w-4 h-4 text-primary" />
             Notificações
           </SheetTitle>
         </SheetHeader>
-        <div className="space-y-3">
-          {notifications.map((n) => {
+        <div className="space-y-0">
+          {notifications.map((n, i) => {
             const Icon = typeIcons[n.type] || Bell;
             return (
-              <div
-                key={n.id}
-                className={`flex items-start gap-3 p-3 rounded-xl transition-colors ${
-                  n.read ? "opacity-60" : "bg-secondary/40"
-                }`}
-              >
-                <div className={`mt-0.5 ${typeColors[n.type]}`}>
-                  <Icon className="w-4 h-4" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground">{n.title}</p>
-                    {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
+              <div key={n.id}>
+                {i > 0 && <div className="separator-fade mx-0 my-0" />}
+                <div className={`flex items-start gap-3 py-3 ${n.read ? "opacity-40" : ""}`}>
+                  {/* Unread cyan dot */}
+                  {!n.read && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-accent shrink-0 mt-2" />
+                  )}
+                  {n.read && <div className="w-1.5 shrink-0" />}
+
+                  <div className={`mt-0.5 ${typeGlowColors[n.type]} opacity-60`}>
+                    <Icon className="w-3.5 h-3.5" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">{n.message}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1">{n.time}</p>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-foreground">{n.title}</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">{n.message}</p>
+                    <p className="text-[10px] text-muted-foreground opacity-40 mt-1">{n.time}</p>
+                  </div>
                 </div>
               </div>
             );
