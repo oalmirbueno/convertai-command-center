@@ -1,10 +1,14 @@
+import { useState } from "react";
 import { useClients } from "@/hooks/useSupabaseData";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserPlus, Link2 } from "lucide-react";
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import CreateClientModal from "@/components/admin/CreateClientModal";
+import EditClientDrawer from "@/components/admin/EditClientDrawer";
 
 export default function Clients() {
   const { data: clients, isLoading } = useClients();
+  const [createOpen, setCreateOpen] = useState(false);
+  const [editClient, setEditClient] = useState<any>(null);
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -15,7 +19,10 @@ export default function Clients() {
             <Link2 className="w-3.5 h-3.5" />
             Link Briefing
           </button>
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+          >
             <UserPlus className="w-3.5 h-3.5" />
             Novo Cliente
           </button>
@@ -31,6 +38,7 @@ export default function Clients() {
           {(clients || []).map((c: any) => (
             <div
               key={c.id}
+              onClick={() => setEditClient(c)}
               className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer"
             >
               <Avatar className="w-10 h-10 shrink-0">
@@ -51,6 +59,9 @@ export default function Clients() {
           ))}
         </div>
       )}
+
+      <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} />
+      <EditClientDrawer open={!!editClient} onClose={() => setEditClient(null)} client={editClient} />
     </div>
   );
 }

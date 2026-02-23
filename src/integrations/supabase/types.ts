@@ -64,6 +64,54 @@ export type Database = {
           },
         ]
       }
+      briefings: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          id: string
+          project_id: string | null
+          required: boolean | null
+          responses: Json | null
+          submitted: boolean | null
+          token: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          project_id?: string | null
+          required?: boolean | null
+          responses?: Json | null
+          submitted?: boolean | null
+          token?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          id?: string
+          project_id?: string | null
+          required?: boolean | null
+          responses?: Json | null
+          submitted?: boolean | null
+          token?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "briefings_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "briefings_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_requests: {
         Row: {
           ai_draft: string | null
