@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      ads_wallet: {
+        Row: {
+          balance: number | null
+          client_id: string
+          created_at: string | null
+          id: string
+          last_recharge_date: string | null
+          platform: string
+        }
+        Insert: {
+          balance?: number | null
+          client_id: string
+          created_at?: string | null
+          id?: string
+          last_recharge_date?: string | null
+          platform?: string
+        }
+        Update: {
+          balance?: number | null
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          last_recharge_date?: string | null
+          platform?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_wallet_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       billing: {
         Row: {
           amount: number
@@ -433,6 +468,64 @@ export type Database = {
           {
             foreignKeyName: "projects_created_by_fkey"
             columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      recharge_requests: {
+        Row: {
+          amount: number
+          approved_by: string | null
+          client_id: string
+          created_at: string | null
+          id: string
+          platform: string
+          reason: string | null
+          requested_by: string | null
+          status: string | null
+        }
+        Insert: {
+          amount: number
+          approved_by?: string | null
+          client_id: string
+          created_at?: string | null
+          id?: string
+          platform?: string
+          reason?: string | null
+          requested_by?: string | null
+          status?: string | null
+        }
+        Update: {
+          amount?: number
+          approved_by?: string | null
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          platform?: string
+          reason?: string | null
+          requested_by?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "recharge_requests_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recharge_requests_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "recharge_requests_requested_by_fkey"
+            columns: ["requested_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]

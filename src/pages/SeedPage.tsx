@@ -139,6 +139,25 @@ export default function SeedPage() {
         { project_id: p[3].id, client_id: clientId, uploaded_by: adminId, file_name: "landing-page-preview.png", file_url: "#", file_type: "preview", folder: "entregas", approval_status: "pending" },
       ]);
 
+      // Create financial data
+      setProgress("Criando dados financeiros...");
+      await supabase.from("profiles").update({ plan_renewal_date: "2026-03-15", plan_status: "active" }).eq("id", clientId);
+
+      await supabase.from("billing").insert([
+        { client_id: clientId, type: "renewal", amount: 2500, due_date: "2026-02-15", description: "Gestão de Redes Sociais", status: "paid", paid_date: "2026-02-14" },
+        { client_id: clientId, type: "renewal", amount: 2500, due_date: "2026-03-15", description: "Gestão de Redes Sociais", status: "pending" },
+        { client_id: clientId, type: "extra_service", amount: 800, due_date: "2026-02-01", description: "Landing Page Cogecon", status: "pending" },
+      ]);
+
+      await supabase.from("ads_wallet").insert([
+        { client_id: clientId, platform: "meta", balance: 1200, last_recharge_date: "2026-02-10T00:00:00Z" },
+        { client_id: clientId, platform: "google", balance: 800, last_recharge_date: "2026-02-05T00:00:00Z" },
+      ]);
+
+      await supabase.from("recharge_requests").insert([
+        { client_id: clientId, platform: "meta", amount: 500, reason: "Campanha Rodada de Negócios precisa de mais budget", status: "pending", requested_by: trafficId },
+      ]);
+
       setProgress("Pronto!");
       toast.success("Dados demo populados com sucesso!");
     } catch (err: any) {

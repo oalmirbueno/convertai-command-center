@@ -10,6 +10,9 @@ export interface UserProfile {
   email: string;
   company_name?: string | null;
   avatar_url?: string | null;
+  plan_renewal_date?: string | null;
+  plan_status?: string;
+  services_config?: any;
   role: AppRole;
 }
 
@@ -40,7 +43,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // 1. Try to fetch profile
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("id, full_name, email, company_name, avatar_url")
+        .select("id, full_name, email, company_name, avatar_url, plan_renewal_date, plan_status, services_config")
         .eq("id", authUser.id)
         .maybeSingle();
 
