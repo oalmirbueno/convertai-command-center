@@ -53,51 +53,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let resolved = false;
-    const resolve = () => {
-      if (!resolved) {
-        resolved = true;
+    // Set up auth state listener FIRST
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        // Use setTimeout to avoid Supabase auth deadlock
+        setTimeout(async () => {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            setUser(profile);
+          } catch (err) {
+            console.error("Error fetching profile:", err);
+            setUser(null);
+          }
+          setLoading(false);
+        }, 0);
+      } else {
+        setUser(null);
         setLoading(false);
       }
-    };
+    });
 
-    // Safety timeout - never stay loading forever
-    const timeout = setTimeout(resolve, 2000);
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      try {
-        if (session?.user) {
+    // Check initial session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        try {
           const profile = await fetchUserProfile(session.user.id);
           setUser(profile);
-        } else {
+        } catch (err) {
+          console.error("Error fetching profile:", err);
           setUser(null);
         }
-      } catch (err) {
-        console.error("Error in onAuthStateChange:", err);
-        setUser(null);
-      } finally {
-        resolve();
       }
+      setLoading(false);
     });
 
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      try {
-        if (session?.user) {
-          const profile = await fetchUserProfile(session.user.id);
-          setUser(profile);
-        }
-      } catch (err) {
-        console.error("Error in getSession:", err);
-        setUser(null);
-      } finally {
-        resolve();
-      }
-    });
-
-    return () => {
-      clearTimeout(timeout);
-      subscription.unsubscribe();
-    };
+    return () => subscription.unsubscribe();
   }, []);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
