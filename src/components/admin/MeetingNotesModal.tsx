@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { X, Loader2, CalendarIcon } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, Loader2, CalendarIcon, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -25,14 +25,25 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
   const [saving, setSaving] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
   const [clientId, setClientId] = useState("");
   const [projectType, setProjectType] = useState("social_media");
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [deadline, setDeadline] = useState<Date | undefined>();
   const [content, setContent] = useState("");
+  const [file, setFile] = useState<File | null>(null);
 
   if (!open) return null;
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (f) {
+      const maxSize = 50 * 1024 * 1024;
+      if (f.size > maxSize) { toast.error("Arquivo muito grande (máx 50MB)"); return; }
+      setFile(f);
+    }
+  };
 
   const handleSave = async () => {
     if (!clientId || !content.trim()) { toast.error("Preencha cliente e conteúdo"); return; }
@@ -50,6 +61,25 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
       }).select().single();
       if (error) throw error;
 
+      // Upload file if present
+      if (file && project) {
+        const ext = file.name.split(".").pop();
+        const path = `${clientId}/estrategicos/${project.id}_${Date.now()}.${ext}`;
+        const { error: uploadErr } = await supabase.storage.from("files").upload(path, file);
+        if (!uploadErr) {
+          const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+          await supabase.from("files").insert({
+            file_name: file.name,
+            file_url: urlData.publicUrl,
+            file_type: "strategic",
+            folder: "estrategicos",
+            client_id: clientId,
+            project_id: project.id,
+            uploaded_by: user!.id,
+          });
+        }
+      }
+
       await supabase.from("milestones").insert({
         project_id: project.id, title: "Kick-off",
         target_date: format(startDate, "yyyy-MM-dd"), status: "completed", milestone_order: 0,
@@ -58,8 +88,6 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
         project_id: project.id, author_id: user!.id,
         message: "Projeto criado a partir de ata de reunião", update_type: "milestone",
       });
-      // Notify client
-      const { data: adminRole } = await supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
       await supabase.from("notifications").insert({
         user_id: clientId,
         message: `Novo projeto criado: ${name}`,
@@ -126,8 +154,23 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Conteúdo da Reunião *</label>
-            <textarea value={content} onChange={e => setContent(e.target.value)} rows={12} placeholder="Cole aqui suas anotações..."
+            <textarea value={content} onChange={e => setContent(e.target.value)} rows={10} placeholder="Cole aqui suas anotações..."
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+          </div>
+          {/* File upload */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Arquivo (PDF/DOC)</label>
+            <input ref={fileRef} type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} className="hidden" />
+            <button onClick={() => fileRef.current?.click()}
+              className="w-full bg-secondary border border-dashed border-border rounded-[10px] px-3.5 py-3 text-sm text-muted-foreground hover:text-foreground hover:border-muted-foreground/50 transition-colors cursor-pointer flex items-center justify-center gap-2">
+              <Upload className="w-4 h-4" />
+              {file ? file.name : "Clique para anexar arquivo"}
+            </button>
+            {file && (
+              <button onClick={() => setFile(null)} className="text-xs text-destructive hover:underline cursor-pointer bg-transparent border-none">
+                Remover arquivo
+              </button>
+            )}
           </div>
         </div>
         <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
