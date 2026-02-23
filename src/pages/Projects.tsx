@@ -129,7 +129,7 @@ export default function Projects() {
             return (
               <div key={p.id}
                 className="bg-card border border-border rounded-xl px-5 py-4 hover:border-muted-foreground/30 transition-colors relative"
-                onMouseLeave={() => setMenuProject(null)}
+                
               >
                 <div className="flex items-center gap-4">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
