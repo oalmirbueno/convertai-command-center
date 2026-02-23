@@ -29,10 +29,12 @@ const DEMO_ACCOUNTS = {
 };
 
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  console.log("[Auth] Fetching profile for:", userId);
   const [profileRes, rolesRes] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
     supabase.from("user_roles").select("role").eq("user_id", userId),
   ]);
+  console.log("[Auth] Profile result:", profileRes.data, "Roles:", rolesRes.data);
 
   if (!profileRes.data) return null;
   const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
@@ -43,54 +45,86 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  const loadProfile = useCallback(async (userId: string) => {
-    try {
-      const profile = await fetchUserProfile(userId);
-      setUser(profile);
-    } catch (err) {
-      console.error("Error fetching profile:", err);
-      setUser(null);
-    }
-  }, []);
-
   useEffect(() => {
     let mounted = true;
+    console.log("[Auth] Provider mounting, setting up auth...");
 
-    // Check initial session first
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-      if (session?.user) {
-        await loadProfile(session.user.id);
+    // Safety timeout - never stay loading more than 4 seconds
+    const safetyTimeout = setTimeout(() => {
+      if (mounted && loading) {
+        console.warn("[Auth] Safety timeout reached, forcing loading=false");
+        setLoading(false);
       }
-      if (mounted) setLoading(false);
-    });
+    }, 4000);
 
-    // Listen for auth changes (login, logout, token refresh)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const initAuth = async () => {
+      try {
+        console.log("[Auth] Getting session...");
+        const { data: { session }, error } = await supabase.auth.getSession();
+        console.log("[Auth] Session result:", session ? `user=${session.user.id}` : "no session", error);
+        
+        if (!mounted) return;
+        
+        if (session?.user) {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            if (mounted) {
+              console.log("[Auth] Setting user:", profile?.full_name);
+              setUser(profile);
+            }
+          } catch (err) {
+            console.error("[Auth] Error fetching profile:", err);
+            if (mounted) setUser(null);
+          }
+        }
+      } catch (err) {
+        console.error("[Auth] Error getting session:", err);
+      } finally {
+        if (mounted) {
+          console.log("[Auth] Setting loading=false");
+          setLoading(false);
+        }
+      }
+    };
+
+    initAuth();
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      console.log("[Auth] onAuthStateChange:", event);
       if (!mounted) return;
-      console.log("Auth event:", event);
+      
       if (event === "SIGNED_OUT") {
         setUser(null);
         setLoading(false);
-      }
-      // Don't handle SIGNED_IN here — we handle it in login functions directly
-      // This avoids the deadlock issue with fetching during the callback
-      if (event === "TOKEN_REFRESHED" && session?.user) {
-        // Just refresh profile on token refresh
-        setTimeout(() => {
-          if (mounted) loadProfile(session.user.id);
+      } else if (event === "SIGNED_IN" && session?.user) {
+        // Fetch profile in next tick to avoid deadlock
+        setTimeout(async () => {
+          if (!mounted) return;
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            if (mounted) {
+              setUser(profile);
+              setLoading(false);
+            }
+          } catch (err) {
+            console.error("[Auth] Error in onAuthStateChange profile fetch:", err);
+            if (mounted) setLoading(false);
+          }
         }, 0);
       }
     });
 
     return () => {
       mounted = false;
+      clearTimeout(safetyTimeout);
       subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, []);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
     const account = DEMO_ACCOUNTS[role];
+    console.log("[Auth] Demo login:", role);
     
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: account.email,
@@ -98,7 +132,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
 
     if (signInError) {
-      // User doesn't exist, sign up
+      console.log("[Auth] SignIn failed, trying signup...");
       const { error: signUpError } = await supabase.auth.signUp({
         email: account.email,
         password: account.password,
@@ -113,12 +147,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     }
 
-    // Directly fetch profile after successful login
+    // Fetch profile directly - don't rely on onAuthStateChange
+    console.log("[Auth] Login succeeded, fetching profile directly...");
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      await loadProfile(session.user.id);
+      const profile = await fetchUserProfile(session.user.id);
+      console.log("[Auth] Direct profile fetch result:", profile?.full_name);
+      setUser(profile);
       
-      // Update company_name if client
       if (role === "client") {
         await supabase.from("profiles").update({ company_name: "Acerbi Associação" }).eq("id", session.user.id);
       }
@@ -126,13 +162,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const loginWithCredentials = async (email: string, password: string) => {
+    console.log("[Auth] Credentials login:", email);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
 
-    // Directly fetch profile after successful login
+    // Fetch profile directly
+    console.log("[Auth] Login succeeded, fetching profile directly...");
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      await loadProfile(session.user.id);
+      const profile = await fetchUserProfile(session.user.id);
+      console.log("[Auth] Direct profile fetch result:", profile?.full_name);
+      setUser(profile);
     }
   };
 
@@ -144,16 +184,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     if (error) throw error;
 
-    // Directly fetch profile after successful signup (auto-confirm creates session)
     const { data: { session } } = await supabase.auth.getSession();
     if (session?.user) {
-      // Small delay to let the trigger create the profile
       await new Promise(r => setTimeout(r, 500));
-      await loadProfile(session.user.id);
+      const profile = await fetchUserProfile(session.user.id);
+      setUser(profile);
     }
   };
 
   const logout = async () => {
+    console.log("[Auth] Logging out...");
     await supabase.auth.signOut();
     setUser(null);
   };
