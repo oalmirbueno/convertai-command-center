@@ -64,7 +64,6 @@ export default {
         success: "hsl(var(--success))",
         warning: "hsl(var(--warning))",
         info: "hsl(var(--info))",
-        cyan: "hsl(var(--cyan))",
       },
       borderRadius: {
         lg: "var(--radius)",
