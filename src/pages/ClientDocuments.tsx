@@ -4,6 +4,7 @@ import { useFiles, useProjects } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,11 +43,6 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
   none: { cls: "bg-muted text-muted-foreground", label: "—" },
 };
 
-async function getAdminId() {
-  const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
-  return data?.user_id;
-}
-
 export default function ClientDocuments() {
   const { user } = useAuth();
   const { data: files, isLoading } = useFiles(undefined, user?.id);
@@ -75,16 +71,7 @@ export default function ClientDocuments() {
       await supabase.from("files").update({ approval_status: "approved" }).eq("id", confirmApprove);
       const file = (files || []).find((f: any) => f.id === confirmApprove);
 
-      // Notify admin (not self)
-      const adminId = await getAdminId();
-      if (adminId) {
-        await supabase.from("notifications").insert({
-          user_id: adminId,
-          message: `Cliente aprovou: ${file?.file_name}`,
-          notification_type: "approval",
-          link: "/aprovacoes",
-        });
-      }
+      await notifyAdmin(`Cliente aprovou: ${file?.file_name}`, "approval", "/aprovacoes");
 
       if (file?.project_id) {
         await supabase.from("updates").insert({
@@ -108,41 +95,34 @@ export default function ClientDocuments() {
     if (!feedbackFileId || !user || feedbackText.trim().length < 10) return;
     setSubmitting(true);
     try {
-      const file = (files || []).find((f: any) => f.id === feedbackFileId);
       await supabase.from("files").update({
         approval_status: "rejected",
         feedback: feedbackText,
       }).eq("id", feedbackFileId);
 
-      // Notify admin (not self)
-      const adminId = await getAdminId();
-      if (adminId) {
-        await supabase.from("notifications").insert({
-          user_id: adminId,
-          message: `Cliente solicitou ajustes em: ${file?.file_name}`,
-          notification_type: "approval",
-          link: "/aprovacoes",
-        });
-      }
+      await notifyAdmin(`Cliente solicitou ajustes em: ${(files || []).find((f: any) => f.id === feedbackFileId)?.file_name}`, "approval", "/aprovacoes");
 
-      if (file?.project_id) {
+      // Fetch complete file data for task creation
+      const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
+
+      if (fileData?.project_id) {
         await supabase.from("updates").insert({
-          project_id: file.project_id,
+          project_id: fileData.project_id,
           author_id: user.id,
-          message: `Cliente solicitou ajustes em: ${file?.file_name}`,
+          message: `Cliente solicitou ajustes em: ${fileData.file_name}`,
           update_type: "alert",
         });
 
         // Create task in kanban on rejection
-        await supabase.from("tasks").insert({
-          project_id: file.project_id,
-          title: `Ajustar: ${file?.file_name}`,
-          description: `Feedback do cliente: ${feedbackText}`,
+        const { error: taskErr } = await supabase.from("tasks").insert({
+          project_id: fileData.project_id,
+          title: `Ajustar: ${fileData.file_name}`,
+          description: `Feedback do cliente:\n${feedbackText}`,
           status: "backlog",
           priority: "high",
-          assigned_to: file.uploaded_by || null,
+          assigned_to: fileData.uploaded_by || null,
         });
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        if (!taskErr) queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
 
       queryClient.invalidateQueries({ queryKey: ["files"] });

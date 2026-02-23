@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -42,13 +43,8 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
         priority,
       });
 
-      // Create notification for admin (we use the client's own ID since we don't know admin ID)
-      // In a real scenario you'd query admin users
-      await supabase.from("notifications").insert({
-        user_id: user.id,
-        message: `Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`,
-        notification_type: "request",
-      });
+      // Notify admin
+      await notifyAdmin(`Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`, "request", "/pedidos");
 
       // Create update in feed
       await supabase.from("updates").insert({

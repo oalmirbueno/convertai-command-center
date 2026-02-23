@@ -348,7 +348,7 @@ export default function AdminFiles() {
 
       {/* Upload Modal */}
       <Dialog open={uploadOpen} onOpenChange={(o) => { if (!uploading) { setUploadOpen(o); if (!o) resetUploadForm(); } }}>
-        <DialogContent className="max-w-lg bg-card border-border">
+        <DialogContent className="max-w-lg bg-card border-border max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Upload de Arquivo</DialogTitle>
           </DialogHeader>
