@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, ExternalLink,
 } from "lucide-react";
 
 const FOLDERS = [
@@ -72,6 +72,15 @@ export default function AdminFiles() {
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
+  const [previewFile, setPreviewFile] = useState<any>(null);
+
+  const isImage = (name: string) => {
+    const ext = name?.split(".").pop()?.toLowerCase() || "";
+    return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+  };
+  const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
+  const formatDate = (d: string) =>
+    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   const filteredFiles = (allFiles || []).filter((f: any) => {
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
@@ -191,8 +200,7 @@ export default function AdminFiles() {
     selectedClient === "all" || p.client_id === selectedClient
   );
 
-  const formatDate = (d: string) =>
-    new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  // formatDate already defined above
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -256,7 +264,8 @@ export default function AdminFiles() {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
+              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                onClick={() => setPreviewFile(f)}>
                 <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="text-[13px] font-medium text-foreground truncate">
@@ -277,10 +286,11 @@ export default function AdminFiles() {
                 </div>
                 <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
                 <a href={f.file_url} target="_blank" rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors">
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  onClick={(e) => e.stopPropagation()}>
                   <Download className="w-4 h-4" />
                 </a>
-                <button onClick={() => handleDelete(f.id, f.file_url)}
+                <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id, f.file_url); }}
                   className="text-muted-foreground hover:text-destructive transition-colors">
                   <Trash2 className="w-4 h-4" />
                 </button>
@@ -289,6 +299,52 @@ export default function AdminFiles() {
           })}
         </div>
       )}
+
+      {/* Preview Modal */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+          {previewFile && (
+            <div className="space-y-4">
+              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
+                {isImage(previewFile.file_name) ? (
+                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
+                ) : isPdf(previewFile.file_name) ? (
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
+                    <ExternalLink className="w-4 h-4" /> Abrir PDF
+                  </a>
+                ) : (
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
+                    <ExternalLink className="w-4 h-4" /> Baixar arquivo
+                  </a>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+              </p>
+              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              <div className="flex items-center gap-2">
+                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
+                  {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
+                </span>
+              </div>
+              {previewFile.feedback && (
+                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
+                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
+              <Button variant="outline" className="gap-2"><Download className="w-3.5 h-3.5" /> Baixar</Button>
+            </a>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Upload Modal */}
       <Dialog open={uploadOpen} onOpenChange={(o) => { if (!uploading) { setUploadOpen(o); if (!o) resetUploadForm(); } }}>

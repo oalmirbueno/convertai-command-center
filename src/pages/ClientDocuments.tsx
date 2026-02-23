@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
 
 const CLIENT_FOLDERS = [
   { id: "estrategicos", label: "📁 Estratégicos" },
@@ -28,12 +28,24 @@ const fileIcon = (name: string) => {
   return FileText;
 };
 
+const isImage = (name: string) => {
+  const ext = name?.split(".").pop()?.toLowerCase() || "";
+  return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+};
+
+const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
+
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning", label: "⏳ Pendente" },
   approved: { cls: "bg-success/10 text-success", label: "✓ Aprovado" },
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Ajuste Solicitado" },
   none: { cls: "bg-muted text-muted-foreground", label: "—" },
 };
+
+async function getAdminId() {
+  const { data } = await supabase.from("user_roles").select("user_id").eq("role", "admin").limit(1).maybeSingle();
+  return data?.user_id;
+}
 
 export default function ClientDocuments() {
   const { user } = useAuth();
@@ -48,6 +60,7 @@ export default function ClientDocuments() {
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [previewFile, setPreviewFile] = useState<any>(null);
 
   const filteredFiles = (files || []).filter((f: any) => {
     if ((f.folder || "estrategicos") !== activeFolder) return false;
@@ -61,11 +74,18 @@ export default function ClientDocuments() {
     try {
       await supabase.from("files").update({ approval_status: "approved" }).eq("id", confirmApprove);
       const file = (files || []).find((f: any) => f.id === confirmApprove);
-      await supabase.from("notifications").insert({
-        user_id: user.id,
-        message: `Cliente aprovou: ${file?.file_name}`,
-        notification_type: "approval",
-      });
+
+      // Notify admin (not self)
+      const adminId = await getAdminId();
+      if (adminId) {
+        await supabase.from("notifications").insert({
+          user_id: adminId,
+          message: `Cliente aprovou: ${file?.file_name}`,
+          notification_type: "approval",
+          link: "/aprovacoes",
+        });
+      }
+
       if (file?.project_id) {
         await supabase.from("updates").insert({
           project_id: file.project_id,
@@ -81,6 +101,7 @@ export default function ClientDocuments() {
     }
     setSubmitting(false);
     setConfirmApprove(null);
+    setPreviewFile(null);
   };
 
   const handleReject = async () => {
@@ -93,11 +114,16 @@ export default function ClientDocuments() {
         feedback: feedbackText,
       }).eq("id", feedbackFileId);
 
-      await supabase.from("notifications").insert({
-        user_id: user.id,
-        message: `Cliente solicitou ajustes em: ${file?.file_name}`,
-        notification_type: "approval",
-      });
+      // Notify admin (not self)
+      const adminId = await getAdminId();
+      if (adminId) {
+        await supabase.from("notifications").insert({
+          user_id: adminId,
+          message: `Cliente solicitou ajustes em: ${file?.file_name}`,
+          notification_type: "approval",
+          link: "/aprovacoes",
+        });
+      }
 
       if (file?.project_id) {
         await supabase.from("updates").insert({
@@ -107,14 +133,16 @@ export default function ClientDocuments() {
           update_type: "alert",
         });
 
-        // Create auto task
+        // Create task in kanban on rejection
         await supabase.from("tasks").insert({
           project_id: file.project_id,
           title: `Ajustar: ${file?.file_name}`,
-          description: feedbackText,
+          description: `Feedback do cliente: ${feedbackText}`,
           status: "backlog",
           priority: "high",
+          assigned_to: file.uploaded_by || null,
         });
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
 
       queryClient.invalidateQueries({ queryKey: ["files"] });
@@ -125,6 +153,7 @@ export default function ClientDocuments() {
     setSubmitting(false);
     setFeedbackFileId(null);
     setFeedbackText("");
+    setPreviewFile(null);
   };
 
   const formatDate = (d: string) =>
@@ -177,10 +206,10 @@ export default function ClientDocuments() {
           {filteredFiles.map((f: any) => {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
-            const showApprovalActions = activeFolder === "materiais" && f.approval_status === "pending";
 
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 space-y-2">
+              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                onClick={() => setPreviewFile(f)}>
                 <div className="flex items-center gap-3">
                   <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
@@ -194,27 +223,14 @@ export default function ClientDocuments() {
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-foreground transition-colors">
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}>
                     <Download className="w-4 h-4" />
                   </a>
                 </div>
 
-                {showApprovalActions && (
-                  <div className="flex items-center gap-2 pl-8">
-                    <Button size="sm" className="bg-success hover:bg-success/90 text-white text-[12px] rounded-lg h-7"
-                      onClick={() => setConfirmApprove(f.id)}>
-                      ✅ Aprovar
-                    </Button>
-                    <Button size="sm" variant="outline"
-                      className="border-destructive text-destructive hover:bg-destructive/10 text-[12px] rounded-lg h-7"
-                      onClick={() => { setFeedbackFileId(f.id); setFeedbackText(""); }}>
-                      ❌ Ajustar
-                    </Button>
-                  </div>
-                )}
-
                 {f.approval_status === "rejected" && f.feedback && (
-                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 ml-8">
+                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 ml-8 mt-2">
                     <p className="text-[11px] text-muted-foreground mb-0.5">Seu feedback:</p>
                     <p className="text-xs text-foreground">{f.feedback}</p>
                   </div>
@@ -224,6 +240,52 @@ export default function ClientDocuments() {
           })}
         </div>
       )}
+
+      {/* Preview Modal */}
+      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+          {previewFile && (
+            <div className="space-y-4">
+              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
+                {isImage(previewFile.file_name) ? (
+                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
+                ) : isPdf(previewFile.file_name) ? (
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
+                    <ExternalLink className="w-4 h-4" /> Abrir PDF
+                  </a>
+                ) : (
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
+                    <ExternalLink className="w-4 h-4" /> Baixar arquivo
+                  </a>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
+              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {previewFile.approval_status === "rejected" && previewFile.feedback && (
+                <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
+                  <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
+                  <p className="text-xs text-foreground">{previewFile.feedback}</p>
+                </div>
+              )}
+            </div>
+          )}
+          {previewFile?.approval_status === "pending" && (
+            <DialogFooter>
+              <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
+                onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
+                ❌ Solicitar Ajuste
+              </Button>
+              <Button className="bg-success hover:bg-success/90 text-white"
+                onClick={() => { setConfirmApprove(previewFile.id); setPreviewFile(null); }}>
+                ✅ Aprovar
+              </Button>
+            </DialogFooter>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Approve dialog */}
       <Dialog open={!!confirmApprove} onOpenChange={() => setConfirmApprove(null)}>
