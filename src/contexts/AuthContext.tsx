@@ -1,6 +1,5 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { User as SupabaseUser } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
 
@@ -30,86 +29,79 @@ const DEMO_ACCOUNTS = {
 };
 
 async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, full_name, email, company_name, avatar_url")
-    .eq("id", userId)
-    .maybeSingle();
+  // Fetch profile and roles in parallel
+  const [profileRes, rolesRes] = await Promise.all([
+    supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
+    supabase.from("user_roles").select("role").eq("user_id", userId),
+  ]);
 
-  if (!profile) return null;
+  if (!profileRes.data) return null;
 
-  const { data: roles } = await supabase
-    .from("user_roles")
-    .select("role")
-    .eq("user_id", userId);
-
-  const role = (roles?.[0]?.role as AppRole) || "client";
-
-  return { ...profile, role };
+  const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
+  return { ...profileRes.data, role };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const resolvedRef = useRef(false);
 
   useEffect(() => {
-    // Set up auth state listener FIRST
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        // Use setTimeout to avoid Supabase auth deadlock
-        setTimeout(async () => {
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            setUser(profile);
-          } catch (err) {
-            console.error("Error fetching profile:", err);
-            setUser(null);
-          }
-          setLoading(false);
-        }, 0);
-      } else {
-        setUser(null);
+    const resolve = (profile: UserProfile | null) => {
+      if (!resolvedRef.current) {
+        resolvedRef.current = true;
+        setUser(profile);
         setLoading(false);
+      } else {
+        // After initial resolve, still update user if profile changed
+        setUser(profile);
       }
-    });
+    };
 
-    // Check initial session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         try {
           const profile = await fetchUserProfile(session.user.id);
-          setUser(profile);
+          resolve(profile);
         } catch (err) {
           console.error("Error fetching profile:", err);
-          setUser(null);
+          resolve(null);
         }
+      } else {
+        resolve(null);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    // Fallback: if nothing resolves in 3s, stop loading
+    const timeout = setTimeout(() => {
+      if (!resolvedRef.current) {
+        resolvedRef.current = true;
+        setLoading(false);
+      }
+    }, 3000);
+
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, []);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
     const account = DEMO_ACCOUNTS[role];
     
-    // Try sign in first
     const { error: signInError } = await supabase.auth.signInWithPassword({
       email: account.email,
       password: account.password,
     });
 
     if (signInError) {
-      // If user doesn't exist, sign up
       const { error: signUpError } = await supabase.auth.signUp({
         email: account.email,
         password: account.password,
         options: { data: account.meta },
       });
-
       if (signUpError) throw signUpError;
 
-      // After signup with auto-confirm, sign in
       const { error } = await supabase.auth.signInWithPassword({
         email: account.email,
         password: account.password,
@@ -117,7 +109,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
     }
 
-    // Update company_name if client
     if (role === "client") {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
@@ -138,11 +129,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
     });
     if (error) throw error;
-    // Profile is created automatically by the handle_new_user trigger
-    // onAuthStateChange will handle setting the user state
   };
 
   const logout = async () => {
+    resolvedRef.current = false;
     await supabase.auth.signOut();
     setUser(null);
   };
