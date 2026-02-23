@@ -146,3 +146,38 @@
 .stagger-children > *:nth-child(6) { animation-delay: 250ms; }
 .stagger-children > *:nth-child(7) { animation-delay: 300ms; }
 .stagger-children > *:nth-child(8) { animation-delay: 350ms; }
+.stagger-children > *:nth-child(9) { animation-delay: 400ms; }
+.stagger-children > *:nth-child(10) { animation-delay: 450ms; }
+
+/* Canvas stagger with 80ms delay */
+.canvas-stagger > * {
+  opacity: 0;
+  animation: canvas-card-in 0.35s ease-out forwards;
+}
+@keyframes canvas-card-in {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.canvas-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.canvas-stagger > *:nth-child(2) { animation-delay: 80ms; }
+.canvas-stagger > *:nth-child(3) { animation-delay: 160ms; }
+.canvas-stagger > *:nth-child(4) { animation-delay: 240ms; }
+.canvas-stagger > *:nth-child(5) { animation-delay: 320ms; }
+.canvas-stagger > *:nth-child(6) { animation-delay: 400ms; }
+.canvas-stagger > *:nth-child(7) { animation-delay: 480ms; }
+.canvas-stagger > *:nth-child(8) { animation-delay: 560ms; }
+
+/* Dot grid background */
+.dot-grid-bg {
+  background-image: radial-gradient(circle, hsl(0 0% 100% / 0.03) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Pulse milestone */
+@keyframes milestone-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 hsl(263 70% 66% / 0.4); }
+  50% { box-shadow: 0 0 0 6px hsl(263 70% 66% / 0); }
+}
+.milestone-pulse {
+  animation: milestone-pulse 2s ease-in-out infinite;
+}

@@ -75,7 +75,6 @@ export function useClients() {
   return useQuery({
     queryKey: ["clients", user?.id],
     queryFn: async () => {
-      // Get profiles that have the 'client' role
       const { data: clientRoles, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id")
@@ -91,7 +90,6 @@ export function useClients() {
         .in("id", clientIds);
       if (error) throw error;
 
-      // Get project counts per client
       const { data: projects } = await supabase
         .from("projects")
         .select("client_id");
@@ -102,5 +100,74 @@ export function useClients() {
       }));
     },
     enabled: !!user && user.role === "admin",
+  });
+}
+
+export function useMilestones(projectId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["milestones", user?.id, projectId],
+    queryFn: async () => {
+      let query = supabase
+        .from("milestones")
+        .select("*")
+        .order("milestone_order", { ascending: true });
+      if (projectId) query = query.eq("project_id", projectId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId,
+  });
+}
+
+export function useFiles(projectId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["files", user?.id, projectId],
+    queryFn: async () => {
+      let query = supabase
+        .from("files")
+        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name)")
+        .order("created_at", { ascending: false });
+      if (projectId) query = query.eq("project_id", projectId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId,
+  });
+}
+
+export function useProjectUpdates(projectId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["project-updates", user?.id, projectId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("updates")
+        .select("*, author:profiles!updates_author_id_fkey(full_name)")
+        .eq("project_id", projectId!)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user && !!projectId,
+  });
+}
+
+export function useClientRequests() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["client-requests", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("client_requests")
+        .select("*")
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!user,
   });
 }
