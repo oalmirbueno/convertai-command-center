@@ -138,7 +138,7 @@ export default function Projects() {
                 </div>
 
                 {showMenu && isAdmin && (
-                  <div className="absolute right-4 top-14 z-20 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-fade-in">
+                  <div className="absolute right-4 top-full z-50 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-fade-in">
                     <button onClick={() => { setEditProject(p); setMenuProject(null); }}
                       className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left">
                       <Edit3 className="w-3.5 h-3.5" /> Editar

@@ -174,7 +174,7 @@ export default function AdminDashboard() {
                   </div>
 
                   {showMenu && (
-                    <div className="absolute right-4 top-14 z-20 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
+                    <div className="absolute right-4 top-full z-50 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
                       <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
                         className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors cursor-pointer bg-transparent border-none text-left">
                         <Edit3 className="w-3.5 h-3.5" /> Editar
@@ -223,11 +223,18 @@ export default function AdminDashboard() {
           ) : (updates || []).length === 0 ? (
             <div className="text-sm text-muted-foreground py-4 text-center">Nenhuma atualização.</div>
           ) : (
-            <div className="space-y-0">
+          <div className="space-y-0">
               {(updates || []).map((u: any, i: number) => (
                 <div key={u.id}>
                   {i > 0 && <div className="border-t border-border" />}
-                  <div className="flex items-start gap-3 py-3">
+                  <div
+                    className="flex items-start gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors px-1"
+                    onClick={() => {
+                      if (u.update_type === "system" && u.message.includes("pedido")) navigate("/pedidos");
+                      else if (u.update_type === "creative") navigate("/arquivos");
+                      else if (u.project_id) navigate("/projetos");
+                    }}
+                  >
                     <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${updateTypeDotColors[u.update_type] || "bg-muted-foreground"}`} />
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] text-foreground">{u.message}</p>

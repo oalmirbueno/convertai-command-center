@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyUser } from "@/lib/notifyHelpers";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Clock, Plus, Filter, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -57,11 +58,7 @@ export default function Kanban() {
     if (column === "review" && task?.project_id) {
       const { data: project } = await supabase.from("projects").select("client_id, name").eq("id", task.project_id).maybeSingle();
       if (project?.client_id) {
-        await supabase.from("notifications").insert({
-          user_id: project.client_id,
-          message: `Tarefa "${task.title}" enviada para revisão`,
-          notification_type: "task",
-        });
+        await notifyUser(project.client_id, `Tarefa "${task.title}" enviada para revisão`, "task", "/dashboard");
       }
     }
     if (column === "done" && task?.project_id) {
@@ -147,7 +144,7 @@ export default function Kanban() {
                     <Plus className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="space-y-2 min-h-[200px]">
+                <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", scrollbarWidth: "none" }}>
                   {colTasks.map((task: any) => (
                     <div
                       key={task.id}

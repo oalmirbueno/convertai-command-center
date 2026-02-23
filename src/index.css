@@ -181,3 +181,12 @@
 .milestone-pulse {
   animation: milestone-pulse 2s ease-in-out infinite;
 }
+
+/* Hidden scrollbar utility */
+.scrollbar-hidden {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hidden::-webkit-scrollbar {
+  display: none;
+}
