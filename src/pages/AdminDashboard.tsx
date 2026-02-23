@@ -1,36 +1,17 @@
 import { useState } from "react";
-import { projects, updates, typeColors } from "@/data/mockData";
+import { projects, updates, typeColors, updateDotColors } from "@/data/mockData";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { updateDotColors } from "@/data/mockData";
 import {
   FolderOpen, Users, ListTodo, Eye, Plus, UserPlus, Sparkles, Upload,
   Clock, AlertTriangle, ChevronRight
 } from "lucide-react";
 
 const stats = [
-  { label: "Projetos Ativos", value: "4", icon: FolderOpen, color: "text-primary", glowColor: "hover:shadow-[0_0_20px_hsl(249_76%_64%/0.15)]" },
-  { label: "Clientes", value: "2", icon: Users, color: "text-cyan", glowColor: "hover:shadow-[0_0_20px_hsl(195_100%_50%/0.15)]" },
-  { label: "Tarefas Pendentes", value: "6", icon: ListTodo, color: "text-warning", glowColor: "hover:shadow-[0_0_20px_hsl(38_92%_55%/0.15)]" },
-  { label: "Em Revisão", value: "2", icon: Eye, color: "text-accent", glowColor: "hover:shadow-[0_0_20px_hsl(195_100%_50%/0.15)]" },
+  { label: "Projetos Ativos", value: "4", color: "bg-primary" },
+  { label: "Clientes", value: "2", color: "bg-success" },
+  { label: "Tarefas Pendentes", value: "6", color: "bg-warning" },
+  { label: "Em Revisão", value: "2", color: "bg-info" },
 ];
-
-// Fake sparkline data
-const sparklines = [[3,5,4,7,6,8,7], [1,2,1,2,2,2,2], [8,7,6,7,5,6,6], [1,2,3,2,3,2,2]];
-
-const MiniSparkline = ({ data, color }: { data: number[]; color: string }) => {
-  const max = Math.max(...data);
-  const min = Math.min(...data);
-  const range = max - min || 1;
-  const h = 20;
-  const w = 60;
-  const points = data.map((v, i) => `${(i / (data.length - 1)) * w},${h - ((v - min) / range) * h}`).join(" ");
-  return (
-    <svg width={w} height={h} className="mt-1 opacity-40">
-      <polyline points={points} fill="none" stroke="currentColor" strokeWidth="1.5" className={color} />
-    </svg>
-  );
-};
 
 const quickActions = [
   { label: "Novo Projeto", icon: Plus },
@@ -45,10 +26,10 @@ const urgentTasks = [
   { title: "Layout convite digital", project: "Evento Cresol", deadline: "22 Fev", priority: "média" },
 ];
 
-const statusColors: Record<string, string> = {
-  "Em andamento": "text-cyan",
-  "Em revisão": "text-warning",
-  "Backlog": "text-muted-foreground",
+const statusDotColors: Record<string, string> = {
+  "Em andamento": "bg-info pulse-dot",
+  "Em revisão": "bg-warning",
+  "Backlog": "bg-muted-foreground",
 };
 
 export default function AdminDashboard() {
@@ -56,27 +37,15 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-8 animate-fade-in">
-      {/* Page title */}
-      <div>
-        <h1 className="heading-mc text-foreground">Dashboard</h1>
-        <p className="text-[13px] text-muted-foreground opacity-40 mt-1">Visão geral dos seus projetos e equipe.</p>
-      </div>
+      <p className="heading-page">Dashboard</p>
 
-      {/* Stats — transparent cards with border + sparkline */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-5 stagger-children">
-        {stats.map((s, i) => (
-          <div
-            key={s.label}
-            className={`glass-card rounded-2xl p-5 transition-all ${s.glowColor}`}
-          >
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-mono font-light text-[32px] leading-none text-foreground">{s.value}</p>
-                <p className="label-mc mt-2">{s.label}</p>
-                <MiniSparkline data={sparklines[i]} color={s.color} />
-              </div>
-              <s.icon className={`w-5 h-5 ${s.color} opacity-50`} />
-            </div>
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+        {stats.map((s) => (
+          <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors">
+            <p className="label-sm">{s.label}</p>
+            <p className="font-mono font-light text-[28px] leading-none text-foreground mt-2">{s.value}</p>
+            <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
           </div>
         ))}
       </div>
@@ -84,71 +53,51 @@ export default function AdminDashboard() {
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2">
         {quickActions.map((a) => (
-          <button
-            key={a.label}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium text-muted-foreground border border-border/50 hover:border-primary/30 hover:text-foreground transition-all cursor-pointer bg-transparent"
-          >
+          <button key={a.label} className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
             <a.icon className="w-3.5 h-3.5" />
             {a.label}
           </button>
         ))}
       </div>
 
-      {/* Projects — expandable rows */}
+      {/* Projects */}
       <div>
-        <h2 className="label-mc mb-4">Projetos Ativos</h2>
-        <div className="space-y-1 stagger-children">
+        <p className="label-sm mb-4">Projetos Ativos</p>
+        <div className="space-y-0.5 stagger-children">
           {projects.map((p) => {
             const isHovered = hoveredProject === p.id;
             return (
               <div
                 key={p.id}
-                className="glass-card rounded-xl px-5 py-4 cursor-pointer transition-all"
+                className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onMouseEnter={() => setHoveredProject(p.id)}
                 onMouseLeave={() => setHoveredProject(null)}
               >
                 <div className="flex items-center gap-4">
-                  {/* Status dot */}
-                  <div className={`w-2 h-2 rounded-full shrink-0 ${statusColors[p.status] === "text-cyan" ? "bg-cyan pulse-dot" : statusColors[p.status] === "text-warning" ? "bg-warning" : "bg-muted-foreground"}`} />
-
-                  {/* Name + type */}
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-medium text-foreground">{p.name}</span>
-                      <Badge className={`${typeColors[p.type]} border-0 text-[10px] rounded-full px-2`}>
-                        {p.type}
-                      </Badge>
+                      <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{p.type}</span>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{p.client}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{p.client}</p>
                   </div>
-
-                  {/* Progress bar */}
                   <div className="w-32 hidden md:block">
-                    <div className="h-1 rounded-full bg-border overflow-hidden">
-                      <div
-                        className="h-full rounded-full shimmer-bar transition-all"
-                        style={{ width: `${p.progress}%` }}
-                      />
+                    <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
+                      <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
                     </div>
-                    <p className="text-[10px] font-mono text-muted-foreground mt-1 text-right">{p.progress}%</p>
+                    <p className="text-xs font-mono text-muted-foreground mt-1 text-right">{p.progress}%</p>
                   </div>
-
-                  {/* Deadline */}
-                  <div className="hidden sm:flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                  <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
                     <Clock className="w-3 h-3" />
                     {p.deadline}
                   </div>
-
-                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-all ${isHovered ? "translate-x-0.5 text-primary" : ""}`} />
+                  <ChevronRight className={`w-4 h-4 text-muted-foreground transition-all ${isHovered ? "translate-x-0.5 text-foreground" : ""}`} />
                 </div>
-
-                {/* Expanded info */}
                 {isHovered && (
-                  <div className="mt-3 pt-3 flex items-center justify-between animate-fade-in" style={{ borderTop: '1px solid rgba(108,92,231,0.08)' }}>
+                  <div className="mt-3 pt-3 border-t border-border flex items-center justify-between animate-fade-in">
                     <p className="text-xs text-muted-foreground">{p.description}</p>
-                    <Button variant="ghost" size="sm" className="text-xs text-primary hover:text-primary h-7 px-3">
-                      Abrir
-                    </Button>
+                    <button className="text-xs text-primary hover:underline">Abrir</button>
                   </div>
                 )}
               </div>
@@ -157,40 +106,44 @@ export default function AdminDashboard() {
         </div>
       </div>
 
-      {/* Updates + Urgent Tasks */}
+      {/* Updates + Urgent */}
       <div className="grid lg:grid-cols-2 gap-6">
-        <div>
-          <h2 className="label-mc mb-4">Atualizações Recentes</h2>
-          <div className="space-y-4">
-            {updates.map((u) => (
-              <div key={u.id} className="flex items-start gap-3">
-                <div className={`w-1.5 h-1.5 rounded-full mt-2 ${updateDotColors[u.type]}`} />
-                <div>
-                  <p className="text-[13px] text-foreground">{u.message}</p>
-                  <p className="text-[11px] text-muted-foreground opacity-50">{u.time}</p>
+        <div className="bg-card border border-border rounded-xl p-5">
+          <p className="label-sm mb-4">Atualizações Recentes</p>
+          <div className="space-y-0">
+            {updates.map((u, i) => (
+              <div key={u.id}>
+                {i > 0 && <div className="border-t border-border" />}
+                <div className="flex items-start gap-3 py-3">
+                  <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${updateDotColors[u.type]}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-foreground">{u.message}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{u.time}</p>
+                  </div>
                 </div>
               </div>
             ))}
           </div>
         </div>
 
-        <div>
-          <h2 className="label-mc mb-4 flex items-center gap-2">
+        <div className="bg-card border border-border rounded-xl p-5">
+          <p className="label-sm mb-4 flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 text-warning" />
             Tarefas Urgentes
-          </h2>
-          <div className="space-y-2">
+          </p>
+          <div className="space-y-0">
             {urgentTasks.map((t, i) => (
-              <div key={i} className="glass-card rounded-xl px-4 py-3 flex items-center justify-between">
-                <div>
-                  <p className="text-[13px] font-medium text-foreground">{t.title}</p>
-                  <p className="text-[11px] text-muted-foreground">{t.project}</p>
-                </div>
-                <div className="text-right">
-                  <Badge className={`${t.priority === "alta" ? "bg-destructive/10 text-destructive border-destructive/20" : "bg-warning/10 text-warning border-warning/20"} border text-[10px] rounded-full`}>
-                    {t.priority}
-                  </Badge>
-                  <p className="text-[10px] text-muted-foreground mt-1">{t.deadline}</p>
+              <div key={i}>
+                {i > 0 && <div className="border-t border-border" />}
+                <div className="flex items-center justify-between py-3">
+                  <div>
+                    <p className="text-[13px] font-medium text-foreground">{t.title}</p>
+                    <p className="text-[11px] text-muted-foreground">{t.project}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className={`text-[11px] font-medium ${t.priority === "alta" ? "text-destructive" : "text-warning"}`}>{t.priority}</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{t.deadline}</p>
+                  </div>
                 </div>
               </div>
             ))}

@@ -1,20 +1,19 @@
 import { useState } from "react";
-import { kanbanTasks, KanbanTask, priorityColors } from "@/data/mockData";
-import { Badge } from "@/components/ui/badge";
+import { kanbanTasks, KanbanTask } from "@/data/mockData";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Clock } from "lucide-react";
 
 const columns = [
-  { id: "backlog" as const, title: "Backlog", color: "bg-muted-foreground" },
-  { id: "andamento" as const, title: "Em Andamento", color: "bg-cyan" },
-  { id: "revisao" as const, title: "Revisão", color: "bg-warning" },
-  { id: "concluido" as const, title: "Concluído", color: "bg-success" },
+  { id: "backlog" as const, title: "Backlog", dotColor: "bg-muted-foreground" },
+  { id: "andamento" as const, title: "Em Andamento", dotColor: "bg-info" },
+  { id: "revisao" as const, title: "Revisão", dotColor: "bg-warning" },
+  { id: "concluido" as const, title: "Concluído", dotColor: "bg-success" },
 ];
 
 const priorityBorderColors: Record<string, string> = {
   alta: "border-l-destructive",
   média: "border-l-warning",
-  baixa: "border-l-success",
+  baixa: "border-l-muted-foreground",
 };
 
 export default function Kanban() {
@@ -33,57 +32,50 @@ export default function Kanban() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div>
-        <h1 className="heading-mc text-foreground">Kanban</h1>
-        <p className="text-[13px] text-muted-foreground opacity-40 mt-1">Gerencie tarefas arrastando entre colunas.</p>
-      </div>
+      <p className="heading-page">Kanban</p>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
+      <div className="flex gap-6 overflow-x-auto pb-4" style={{ scrollSnapType: 'x mandatory' }}>
         {columns.map((col) => {
           const colTasks = tasks.filter((t) => t.column === col.id);
           return (
             <div
               key={col.id}
-              className="space-y-3"
+              className="min-w-[300px] max-w-[320px] flex-shrink-0 space-y-3"
+              style={{ scrollSnapAlign: 'start' }}
               onDragOver={(e) => e.preventDefault()}
               onDrop={() => handleDrop(col.id)}
             >
               {/* Column header */}
-              <div className="flex items-center gap-2 mb-3">
-                <div className={`w-2 h-2 rounded-full ${col.color}`} />
-                <h3 className="label-mc text-foreground">{col.title}</h3>
-                <span className="text-[10px] font-mono text-muted-foreground ml-auto">{colTasks.length}</span>
+              <div className="flex items-center gap-2 mb-1">
+                <div className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
+                <span className="label-sm">{col.title}</span>
+                <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded ml-auto">{colTasks.length}</span>
               </div>
 
-              {/* Cards — transparent bg, no column bg */}
+              {/* Cards */}
               <div className="space-y-2 min-h-[200px]">
                 {colTasks.map((task) => (
                   <div
                     key={task.id}
                     draggable
                     onDragStart={() => handleDragStart(task.id)}
-                    className={`glass-card rounded-xl border-l-4 ${priorityBorderColors[task.priority]} cursor-grab active:cursor-grabbing transition-all hover:shadow-lg hover:shadow-primary/5`}
+                    className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority]} cursor-grab active:cursor-grabbing hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
                   >
-                    <div className="p-4 space-y-3">
+                    <div className="p-3.5 space-y-2.5">
                       <div>
                         <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
                         <p className="text-[11px] text-muted-foreground mt-0.5">{task.project}</p>
                       </div>
                       <div className="flex items-center justify-between">
-                        <Badge className={`${priorityColors[task.priority]} border-0 text-[10px] rounded-full`}>
-                          {task.priority}
-                        </Badge>
-                        <div className="flex items-center gap-2">
-                          <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {task.deadline}
-                          </div>
-                          <Avatar className="w-5 h-5">
-                            <AvatarFallback className="text-[9px] bg-primary/15 text-primary font-semibold">
-                              {task.assigneeAvatar}
-                            </AvatarFallback>
-                          </Avatar>
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {task.deadline}
                         </div>
+                        <Avatar className="w-6 h-6">
+                          <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                            {task.assigneeAvatar}
+                          </AvatarFallback>
+                        </Avatar>
                       </div>
                     </div>
                   </div>
