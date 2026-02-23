@@ -3,7 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 export function useProjects() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isClient = profile?.role === "client";
   return useQuery({
     queryKey: ["projects", user?.id],
     queryFn: async () => {
@@ -15,6 +16,7 @@ export function useProjects() {
       return data;
     },
     enabled: !!user,
+    refetchInterval: isClient ? 15000 : undefined,
   });
 }
 
@@ -50,6 +52,7 @@ export function useNotifications() {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 15000,
   });
 }
 
