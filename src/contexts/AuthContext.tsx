@@ -1,8 +1,8 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import type { Session } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
+export type AuthState = "loading" | "authenticated" | "unauthenticated";
 
 export interface UserProfile {
   id: string;
@@ -15,7 +15,8 @@ export interface UserProfile {
 
 interface AuthContextType {
   user: UserProfile | null;
-  loading: boolean;
+  authState: AuthState;
+  loading: boolean; // alias for authState === "loading"
   login: (role: "admin" | "client") => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, companyName?: string) => Promise<void>;
@@ -25,79 +26,98 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const DEMO_ACCOUNTS = {
-  admin: { email: "admin@convertai.com", password: "admin123456", meta: { full_name: "Lucas Ferreira", role: "admin" } },
-  client: { email: "maria@acerbi.com.br", password: "client123456", meta: { full_name: "Maria Acerbi", role: "client", company_name: "Acerbi Associação" } },
+  admin: { email: "admin@convertai.com", password: "admin123456", name: "Lucas Ferreira", role: "admin" as AppRole, company: null as string | null },
+  client: { email: "maria@acerbi.com.br", password: "client123456", name: "Maria Acerbi", role: "client" as AppRole, company: "Acerbi Associação" },
 };
-
-// Build profile from session user metadata - no extra DB queries needed during login
-function buildProfileFromSession(session: Session): UserProfile {
-  const u = session.user;
-  const meta = u.user_metadata || {};
-  return {
-    id: u.id,
-    full_name: meta.full_name || meta.name || u.email?.split("@")[0] || "User",
-    email: u.email || "",
-    company_name: meta.company_name || null,
-    avatar_url: meta.avatar_url || null,
-    role: (meta.role as AppRole) || "client",
-  };
-}
-
-// Full profile fetch from DB (used for enrichment after initial load)
-async function fetchFullProfile(userId: string): Promise<UserProfile | null> {
-  const [profileRes, rolesRes] = await Promise.all([
-    supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
-    supabase.from("user_roles").select("role").eq("user_id", userId),
-  ]);
-
-  if (!profileRes.data) return null;
-  const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
-  return { ...profileRes.data, role };
-}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authState, setAuthState] = useState<AuthState>("loading");
 
-  // Enrich profile from DB in the background (non-blocking)
-  const enrichProfile = (userId: string) => {
-    setTimeout(async () => {
-      try {
-        const fullProfile = await fetchFullProfile(userId);
-        if (fullProfile) {
-          setUser(fullProfile);
-        }
-      } catch (err) {
-        console.error("[Auth] Background profile enrichment failed:", err);
+  // Fetch profile from DB, with fallback to auth metadata
+  async function fetchAndSetProfile(userId: string): Promise<void> {
+    try {
+      const [profileRes, rolesRes] = await Promise.all([
+        supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
+        supabase.from("user_roles").select("role").eq("user_id", userId),
+      ]);
+
+      if (profileRes.data) {
+        const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
+        setUser({ ...profileRes.data, role });
+        setAuthState("authenticated");
+        return;
       }
-    }, 100);
-  };
+    } catch (err) {
+      console.error("[Auth] DB profile fetch failed:", err);
+    }
+
+    // Fallback: build profile from auth metadata
+    try {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const meta = authUser.user_metadata || {};
+        setUser({
+          id: authUser.id,
+          full_name: meta.full_name || authUser.email?.split("@")[0] || "Usuário",
+          email: authUser.email || "",
+          company_name: meta.company_name || null,
+          avatar_url: meta.avatar_url || null,
+          role: (meta.role as AppRole) || "client",
+        });
+        setAuthState("authenticated");
+        return;
+      }
+    } catch (err) {
+      console.error("[Auth] getUser fallback failed:", err);
+    }
+
+    // Complete fallback
+    setAuthState("unauthenticated");
+  }
 
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout
+    // Safety timeout - never stay loading more than 5 seconds
     const safetyTimeout = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("[Auth] Safety timeout - forcing loading=false");
-        setLoading(false);
+      if (mounted && authState === "loading") {
+        console.warn("[Auth] Safety timeout reached");
+        setAuthState("unauthenticated");
       }
-    }, 4000);
+    }, 5000);
 
+    // 1. Check current session
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (!mounted) return;
+      if (session?.user) {
+        await fetchAndSetProfile(session.user.id);
+      } else {
+        setAuthState("unauthenticated");
+      }
+    }).catch(() => {
+      if (mounted) setAuthState("unauthenticated");
+    });
+
+    // 2. Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
-      console.log("[Auth] onAuthStateChange:", event);
+      console.log("[Auth] Event:", event);
 
-      if (session) {
-        // Instantly build profile from session metadata - no DB call needed
-        const profile = buildProfileFromSession(session);
-        setUser(profile);
-        setLoading(false);
-        // Then enrich from DB in background
-        enrichProfile(session.user.id);
-      } else {
+      if (event === "SIGNED_OUT") {
         setUser(null);
-        setLoading(false);
+        setAuthState("unauthenticated");
+      } else if (event === "SIGNED_IN" && session?.user) {
+        // Use setTimeout to avoid Supabase internal deadlock
+        const userId = session.user.id;
+        setTimeout(() => {
+          if (mounted) fetchAndSetProfile(userId);
+        }, 50);
+      } else if (event === "TOKEN_REFRESHED" && session?.user) {
+        const userId = session.user.id;
+        setTimeout(() => {
+          if (mounted) fetchAndSetProfile(userId);
+        }, 50);
       }
     });
 
@@ -109,53 +129,77 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
-    const account = DEMO_ACCOUNTS[role];
+    const cred = DEMO_ACCOUNTS[role];
 
-    const { data, error: signInError } = await supabase.auth.signInWithPassword({
-      email: account.email,
-      password: account.password,
+    // Try sign in first
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+      email: cred.email,
+      password: cred.password,
     });
 
-    if (signInError) {
-      const { error: signUpError } = await supabase.auth.signUp({
-        email: account.email,
-        password: account.password,
-        options: { data: account.meta },
-      });
-      if (signUpError) throw signUpError;
-
-      const { data: retryData, error } = await supabase.auth.signInWithPassword({
-        email: account.email,
-        password: account.password,
-      });
-      if (error) throw error;
+    if (loginData?.user) {
+      // Login succeeded - onAuthStateChange will handle profile
+      return;
     }
-    // onAuthStateChange handles setting the user
+
+    if (loginError?.message?.includes("Invalid login credentials")) {
+      // User doesn't exist, create
+      const { data: signupData, error: signupError } = await supabase.auth.signUp({
+        email: cred.email,
+        password: cred.password,
+        options: { data: { full_name: cred.name, role: cred.role, company_name: cred.company } },
+      });
+      if (signupError) throw signupError;
+
+      // Sign in after signup
+      const { error: reloginError } = await supabase.auth.signInWithPassword({
+        email: cred.email,
+        password: cred.password,
+      });
+      if (reloginError) throw reloginError;
+      return;
+    }
+
+    if (loginError) throw loginError;
   };
 
   const loginWithCredentials = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-    // onAuthStateChange handles setting the user
+    // onAuthStateChange handles setting user
   };
 
   const signup = async (email: string, password: string, fullName: string, companyName?: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
     });
     if (error) throw error;
-    // onAuthStateChange handles setting the user
+
+    // If auto-confirm is on, sign in immediately
+    if (data?.user && !data.user.email_confirmed_at) {
+      // Email confirmation required - user needs to confirm
+      return;
+    }
+
+    // Try immediate login
+    const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
+    if (loginError) {
+      // Signup worked but login failed - likely needs email confirmation
+      return;
+    }
+    // onAuthStateChange handles setting user
   };
 
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
+    setAuthState("unauthenticated");
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithCredentials, signup, logout }}>
+    <AuthContext.Provider value={{ user, authState, loading: authState === "loading", login, loginWithCredentials, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
