@@ -4,18 +4,21 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserPlus, Link2 } from "lucide-react";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
+import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 
 export default function Clients() {
   const { data: clients, isLoading } = useClients();
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<any>(null);
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <p className="heading-page">Clientes</p>
         <div className="flex gap-2">
-          <button className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
+          <button onClick={() => setBriefingOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
             <Link2 className="w-3.5 h-3.5" />
             Link Briefing
           </button>
@@ -62,6 +65,7 @@ export default function Clients() {
 
       <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <EditClientDrawer open={!!editClient} onClose={() => setEditClient(null)} client={editClient} />
+      <BriefingLinkModal open={briefingOpen} onClose={() => setBriefingOpen(false)} />
     </div>
   );
 }
