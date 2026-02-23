@@ -171,3 +171,33 @@ export function useClientRequests() {
     enabled: !!user,
   });
 }
+
+export function useTeamMembers() {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["team-members", user?.id],
+    queryFn: async () => {
+      // Get non-client roles
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id, role")
+        .neq("role", "client");
+      if (rolesError) throw rolesError;
+
+      const userIds = roles?.map((r: any) => r.user_id) || [];
+      if (userIds.length === 0) return [];
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .in("id", userIds);
+      if (error) throw error;
+
+      return (data || []).map((p: any) => ({
+        ...p,
+        role: roles?.find((r: any) => r.user_id === p.id)?.role || "admin",
+      }));
+    },
+    enabled: !!user,
+  });
+}

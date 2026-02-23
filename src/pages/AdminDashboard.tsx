@@ -1,7 +1,13 @@
-import { useProjects, useUpdates } from "@/hooks/useSupabaseData";
-import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database } from "lucide-react";
+import { useProjects, useUpdates, useTasks } from "@/hooks/useSupabaseData";
+import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database, FileText, MoreHorizontal, Trash2, Edit3 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import CreateProjectModal from "@/components/admin/CreateProjectModal";
+import CreateClientModal from "@/components/admin/CreateClientModal";
+import { Slider } from "@/components/ui/slider";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -20,26 +26,33 @@ const updateTypeDotColors: Record<string, string> = {
   system: "bg-muted-foreground",
 };
 
-const quickActions = [
-  { label: "Novo Projeto", icon: Plus },
-  { label: "Novo Cliente", icon: UserPlus },
-  { label: "Gerar Plano IA", icon: Sparkles },
-  { label: "Upload", icon: Upload },
-  { label: "Seed Demo Data", icon: Database, action: "seed" },
+const STATUS_OPTIONS = [
+  { value: "planning", label: "Planejamento" },
+  { value: "active", label: "Ativo" },
+  { value: "review", label: "Revisão" },
+  { value: "paused", label: "Pausado" },
+  { value: "done", label: "Concluído" },
 ];
 
 export default function AdminDashboard() {
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: updates, isLoading: loadingUpdates } = useUpdates();
+  const { data: allTasks } = useTasks();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
+  const [menuProject, setMenuProject] = useState<string | null>(null);
+  const [editProject, setEditProject] = useState<any>(null);
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createClientOpen, setCreateClientOpen] = useState(false);
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
+  const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
 
   const stats = [
     { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
     { label: "Clientes", value: "—", color: "bg-success" },
-    { label: "Tarefas Pendentes", value: "—", color: "bg-warning" },
+    { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
     { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
   ];
 
@@ -47,6 +60,37 @@ export default function AdminDashboard() {
     if (!d) return "";
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
+
+  const handleStatusChange = async (projectId: string, newStatus: string) => {
+    await supabase.from("projects").update({ status: newStatus }).eq("id", projectId);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    toast.success("Status atualizado");
+    setMenuProject(null);
+  };
+
+  const handleProgressChange = async (projectId: string, progress: number) => {
+    await supabase.from("projects").update({ progress }).eq("id", projectId);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+  };
+
+  const handleDeleteProject = async (projectId: string) => {
+    if (!confirm("Excluir este projeto? Todas as tarefas, milestones e updates serão removidos.")) return;
+    await supabase.from("tasks").delete().eq("project_id", projectId);
+    await supabase.from("milestones").delete().eq("project_id", projectId);
+    await supabase.from("updates").delete().eq("project_id", projectId);
+    await supabase.from("projects").delete().eq("id", projectId);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    toast.success("Projeto excluído");
+    setMenuProject(null);
+  };
+
+  const quickActions = [
+    { label: "Novo Projeto", icon: Plus, action: () => setCreateProjectOpen(true) },
+    { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true) },
+    { label: "Gerar Plano IA", icon: Sparkles, action: () => {} },
+    { label: "Upload", icon: Upload, action: () => {} },
+    { label: "Seed Demo Data", icon: Database, action: () => navigate("/admin/seed") },
+  ];
 
   return (
     <div className="space-y-8 animate-fade-in">
@@ -68,7 +112,7 @@ export default function AdminDashboard() {
         {quickActions.map((a) => (
           <button
             key={a.label}
-            onClick={() => { if ((a as any).action === "seed") navigate("/admin/seed"); }}
+            onClick={a.action}
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent"
           >
             <a.icon className="w-3.5 h-3.5" />
@@ -88,12 +132,13 @@ export default function AdminDashboard() {
           <div className="space-y-0.5 stagger-children">
             {activeProjects.map((p: any) => {
               const isHovered = hoveredProject === p.id;
+              const showMenu = menuProject === p.id;
               return (
                 <div
                   key={p.id}
-                  className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                  className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative"
                   onMouseEnter={() => setHoveredProject(p.id)}
-                  onMouseLeave={() => setHoveredProject(null)}
+                  onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
                 >
                   <div className="flex items-center gap-4">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
@@ -114,9 +159,52 @@ export default function AdminDashboard() {
                       <Clock className="w-3 h-3" />
                       {formatDate(p.deadline)}
                     </div>
-                    <ChevronRight className={`w-4 h-4 text-muted-foreground transition-all ${isHovered ? "translate-x-0.5 text-foreground" : ""}`} />
+
+                    {/* Project menu */}
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setMenuProject(showMenu ? null : p.id); }}
+                      className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1 rounded hover:bg-secondary"
+                    >
+                      <MoreHorizontal className="w-4 h-4" />
+                    </button>
                   </div>
-                  {isHovered && p.description && (
+
+                  {/* Dropdown menu */}
+                  {showMenu && (
+                    <div className="absolute right-4 top-14 z-20 bg-popover border border-border rounded-xl p-1.5 shadow-lg w-48 animate-in fade-in zoom-in-95 duration-150">
+                      <button onClick={(e) => { e.stopPropagation(); setEditProject(p); setMenuProject(null); }}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 transition-colors cursor-pointer bg-transparent border-none text-left">
+                        <Edit3 className="w-3.5 h-3.5" /> Editar
+                      </button>
+                      <div className="px-3 py-2">
+                        <p className="text-[11px] text-muted-foreground mb-1.5">Status</p>
+                        <div className="flex flex-wrap gap-1">
+                          {STATUS_OPTIONS.map((s) => (
+                            <button key={s.value} onClick={(e) => { e.stopPropagation(); handleStatusChange(p.id, s.value); }}
+                              className={`text-[10px] px-2 py-0.5 rounded-full border cursor-pointer transition-colors ${p.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                              {s.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="px-3 py-2">
+                        <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
+                        <Slider
+                          defaultValue={[p.progress]}
+                          max={100}
+                          step={5}
+                          onValueCommit={(val) => handleProgressChange(p.id, val[0])}
+                          className="w-full"
+                        />
+                      </div>
+                      <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
+                        className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
+                        <Trash2 className="w-3.5 h-3.5" /> Excluir
+                      </button>
+                    </div>
+                  )}
+
+                  {isHovered && !showMenu && p.description && (
                     <div className="mt-3 pt-3 border-t border-border flex items-center justify-between animate-fade-in">
                       <p className="text-xs text-muted-foreground">{p.description}</p>
                       <button className="text-xs text-primary hover:underline">Abrir</button>
@@ -129,7 +217,7 @@ export default function AdminDashboard() {
         )}
       </div>
 
-      {/* Updates */}
+      {/* Updates + Urgent Tasks */}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-xl p-5">
           <p className="label-sm mb-4">Atualizações Recentes</p>
@@ -160,9 +248,30 @@ export default function AdminDashboard() {
             <AlertTriangle className="w-3.5 h-3.5 text-warning" />
             Tarefas Urgentes
           </p>
-          <div className="text-sm text-muted-foreground py-4 text-center">Use Seed para popular tarefas.</div>
+          {urgentTasks.length === 0 ? (
+            <div className="text-sm text-muted-foreground py-4 text-center">Nenhuma tarefa urgente.</div>
+          ) : (
+            <div className="space-y-0">
+              {urgentTasks.map((t: any, i: number) => (
+                <div key={t.id}>
+                  {i > 0 && <div className="border-t border-border" />}
+                  <div className="flex items-center gap-3 py-3">
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${t.priority === "urgent" ? "bg-destructive" : "bg-warning"}`} />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground">{t.title}</p>
+                      <p className="text-[11px] text-muted-foreground">{t.project?.name}</p>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">{t.due_date ? new Date(t.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }) : ""}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
+
+      <CreateProjectModal open={createProjectOpen || !!editProject} onClose={() => { setCreateProjectOpen(false); setEditProject(null); }} editProject={editProject} />
+      <CreateClientModal open={createClientOpen} onClose={() => setCreateClientOpen(false)} />
     </div>
   );
 }
