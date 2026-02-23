@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import type { Session } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
 
@@ -28,13 +29,26 @@ const DEMO_ACCOUNTS = {
   client: { email: "maria@acerbi.com.br", password: "client123456", meta: { full_name: "Maria Acerbi", role: "client", company_name: "Acerbi Associação" } },
 };
 
-async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
-  console.log("[Auth] Fetching profile for:", userId);
+// Build profile from session user metadata - no extra DB queries needed during login
+function buildProfileFromSession(session: Session): UserProfile {
+  const u = session.user;
+  const meta = u.user_metadata || {};
+  return {
+    id: u.id,
+    full_name: meta.full_name || meta.name || u.email?.split("@")[0] || "User",
+    email: u.email || "",
+    company_name: meta.company_name || null,
+    avatar_url: meta.avatar_url || null,
+    role: (meta.role as AppRole) || "client",
+  };
+}
+
+// Full profile fetch from DB (used for enrichment after initial load)
+async function fetchFullProfile(userId: string): Promise<UserProfile | null> {
   const [profileRes, rolesRes] = await Promise.all([
     supabase.from("profiles").select("id, full_name, email, company_name, avatar_url").eq("id", userId).maybeSingle(),
     supabase.from("user_roles").select("role").eq("user_id", userId),
   ]);
-  console.log("[Auth] Profile result:", profileRes.data, "Roles:", rolesRes.data);
 
   if (!profileRes.data) return null;
   const role = (rolesRes.data?.[0]?.role as AppRole) || "client";
@@ -45,73 +59,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Enrich profile from DB in the background (non-blocking)
+  const enrichProfile = (userId: string) => {
+    setTimeout(async () => {
+      try {
+        const fullProfile = await fetchFullProfile(userId);
+        if (fullProfile) {
+          setUser(fullProfile);
+        }
+      } catch (err) {
+        console.error("[Auth] Background profile enrichment failed:", err);
+      }
+    }, 100);
+  };
+
   useEffect(() => {
     let mounted = true;
-    console.log("[Auth] Provider mounting, setting up auth...");
 
-    // Safety timeout - never stay loading more than 4 seconds
+    // Safety timeout
     const safetyTimeout = setTimeout(() => {
       if (mounted && loading) {
-        console.warn("[Auth] Safety timeout reached, forcing loading=false");
+        console.warn("[Auth] Safety timeout - forcing loading=false");
         setLoading(false);
       }
     }, 4000);
 
-    const initAuth = async () => {
-      try {
-        console.log("[Auth] Getting session...");
-        const { data: { session }, error } = await supabase.auth.getSession();
-        console.log("[Auth] Session result:", session ? `user=${session.user.id}` : "no session", error);
-        
-        if (!mounted) return;
-        
-        if (session?.user) {
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            if (mounted) {
-              console.log("[Auth] Setting user:", profile?.full_name);
-              setUser(profile);
-            }
-          } catch (err) {
-            console.error("[Auth] Error fetching profile:", err);
-            if (mounted) setUser(null);
-          }
-        }
-      } catch (err) {
-        console.error("[Auth] Error getting session:", err);
-      } finally {
-        if (mounted) {
-          console.log("[Auth] Setting loading=false");
-          setLoading(false);
-        }
-      }
-    };
-
-    initAuth();
-
-    // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log("[Auth] onAuthStateChange:", event);
       if (!mounted) return;
-      
-      if (event === "SIGNED_OUT") {
+      console.log("[Auth] onAuthStateChange:", event);
+
+      if (session) {
+        // Instantly build profile from session metadata - no DB call needed
+        const profile = buildProfileFromSession(session);
+        setUser(profile);
+        setLoading(false);
+        // Then enrich from DB in background
+        enrichProfile(session.user.id);
+      } else {
         setUser(null);
         setLoading(false);
-      } else if (event === "SIGNED_IN" && session?.user) {
-        // Fetch profile in next tick to avoid deadlock
-        setTimeout(async () => {
-          if (!mounted) return;
-          try {
-            const profile = await fetchUserProfile(session.user.id);
-            if (mounted) {
-              setUser(profile);
-              setLoading(false);
-            }
-          } catch (err) {
-            console.error("[Auth] Error in onAuthStateChange profile fetch:", err);
-            if (mounted) setLoading(false);
-          }
-        }, 0);
       }
     });
 
@@ -124,15 +110,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (role: "admin" | "client"): Promise<void> => {
     const account = DEMO_ACCOUNTS[role];
-    console.log("[Auth] Demo login:", role);
-    
-    const { error: signInError } = await supabase.auth.signInWithPassword({
+
+    const { data, error: signInError } = await supabase.auth.signInWithPassword({
       email: account.email,
       password: account.password,
     });
 
     if (signInError) {
-      console.log("[Auth] SignIn failed, trying signup...");
       const { error: signUpError } = await supabase.auth.signUp({
         email: account.email,
         password: account.password,
@@ -140,40 +124,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       if (signUpError) throw signUpError;
 
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data: retryData, error } = await supabase.auth.signInWithPassword({
         email: account.email,
         password: account.password,
       });
       if (error) throw error;
     }
-
-    // Fetch profile directly - don't rely on onAuthStateChange
-    console.log("[Auth] Login succeeded, fetching profile directly...");
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const profile = await fetchUserProfile(session.user.id);
-      console.log("[Auth] Direct profile fetch result:", profile?.full_name);
-      setUser(profile);
-      
-      if (role === "client") {
-        await supabase.from("profiles").update({ company_name: "Acerbi Associação" }).eq("id", session.user.id);
-      }
-    }
+    // onAuthStateChange handles setting the user
   };
 
   const loginWithCredentials = async (email: string, password: string) => {
-    console.log("[Auth] Credentials login:", email);
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
-
-    // Fetch profile directly
-    console.log("[Auth] Login succeeded, fetching profile directly...");
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      const profile = await fetchUserProfile(session.user.id);
-      console.log("[Auth] Direct profile fetch result:", profile?.full_name);
-      setUser(profile);
-    }
+    // onAuthStateChange handles setting the user
   };
 
   const signup = async (email: string, password: string, fullName: string, companyName?: string) => {
@@ -183,17 +146,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
     });
     if (error) throw error;
-
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.user) {
-      await new Promise(r => setTimeout(r, 500));
-      const profile = await fetchUserProfile(session.user.id);
-      setUser(profile);
-    }
+    // onAuthStateChange handles setting the user
   };
 
   const logout = async () => {
-    console.log("[Auth] Logging out...");
     await supabase.auth.signOut();
     setUser(null);
   };
