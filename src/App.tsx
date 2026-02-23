@@ -16,6 +16,8 @@ import ClientApprovals from "@/pages/ClientApprovals";
 import AdminRequests from "@/pages/AdminRequests";
 import Team from "@/pages/Team";
 import BriefingPublic from "@/pages/BriefingPublic";
+import AdminBriefings from "@/pages/AdminBriefings";
+import Projects from "@/pages/Projects";
 import Placeholder from "@/pages/Placeholder";
 import SeedPage from "@/pages/SeedPage";
 import AppLayout from "@/components/AppLayout";
@@ -51,7 +53,8 @@ function AppRoutes() {
       <Route path="/briefing/:token" element={<BriefingPublic />} />
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
-      <Route path="/projetos" element={<ProtectedRoute><AppLayout><Placeholder title="Projetos" /></AppLayout></ProtectedRoute>} />
+      <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
+      <Route path="/briefings" element={<ProtectedRoute><AppLayout><AdminBriefings /></AppLayout></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
