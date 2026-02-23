@@ -10,12 +10,23 @@ import ClientDashboard from "@/pages/ClientDashboard";
 import Kanban from "@/pages/Kanban";
 import Clients from "@/pages/Clients";
 import Placeholder from "@/pages/Placeholder";
+import SeedPage from "@/pages/SeedPage";
 import AppLayout from "@/components/AppLayout";
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center animate-pulse">
+          <span className="text-xs font-bold text-primary-foreground">C</span>
+        </div>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
@@ -38,6 +49,7 @@ function AppRoutes() {
             <Route path="/ia-planner" element={<Placeholder title="IA Planner" />} />
             <Route path="/arquivos" element={<Placeholder title="Arquivos" />} />
             <Route path="/config" element={<Placeholder title="Configurações" />} />
+            <Route path="/admin/seed" element={<SeedPage />} />
           </>
         )}
         {user.role === "client" && (

@@ -1,47 +1,126 @@
-import React, { createContext, useContext, useState, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import type { User as SupabaseUser } from "@supabase/supabase-js";
 
-export type UserRole = "admin" | "client";
+export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
 
-export interface User {
-  name: string;
+export interface UserProfile {
+  id: string;
+  full_name: string;
   email: string;
-  role: UserRole;
-  company?: string;
-  avatar?: string;
+  company_name?: string | null;
+  avatar_url?: string | null;
+  role: AppRole;
 }
 
 interface AuthContextType {
-  user: User | null;
-  login: (role: UserRole) => void;
-  logout: () => void;
+  user: UserProfile | null;
+  loading: boolean;
+  login: (role: "admin" | "client") => Promise<void>;
+  loginWithCredentials: (email: string, password: string) => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-const mockUsers: Record<UserRole, User> = {
-  admin: {
-    name: "Lucas Ferreira",
-    email: "lucas@convertai.com",
-    role: "admin",
-    avatar: "LF",
-  },
-  client: {
-    name: "Maria Acerbi",
-    email: "maria@acerbi.com.br",
-    role: "client",
-    company: "Acerbi Associação",
-    avatar: "MA",
-  },
+const DEMO_ACCOUNTS = {
+  admin: { email: "admin@convertai.com", password: "admin123456", meta: { full_name: "Lucas Ferreira", role: "admin" } },
+  client: { email: "maria@acerbi.com.br", password: "client123456", meta: { full_name: "Maria Acerbi", role: "client", company_name: "Acerbi Associação" } },
 };
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+async function fetchUserProfile(userId: string): Promise<UserProfile | null> {
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, company_name, avatar_url")
+    .eq("id", userId)
+    .maybeSingle();
 
-  const login = (role: UserRole) => setUser(mockUsers[role]);
-  const logout = () => setUser(null);
+  if (!profile) return null;
+
+  const { data: roles } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
+
+  const role = (roles?.[0]?.role as AppRole) || "client";
+
+  return { ...profile, role };
+}
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        setUser(profile);
+      } else {
+        setUser(null);
+      }
+      setLoading(false);
+    });
+
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
+      if (session?.user) {
+        const profile = await fetchUserProfile(session.user.id);
+        setUser(profile);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const login = async (role: "admin" | "client"): Promise<void> => {
+    const account = DEMO_ACCOUNTS[role];
+    
+    // Try sign in first
+    const { error: signInError } = await supabase.auth.signInWithPassword({
+      email: account.email,
+      password: account.password,
+    });
+
+    if (signInError) {
+      // If user doesn't exist, sign up
+      const { error: signUpError } = await supabase.auth.signUp({
+        email: account.email,
+        password: account.password,
+        options: { data: account.meta },
+      });
+
+      if (signUpError) throw signUpError;
+
+      // After signup with auto-confirm, sign in
+      const { error } = await supabase.auth.signInWithPassword({
+        email: account.email,
+        password: account.password,
+      });
+      if (error) throw error;
+    }
+
+    // Update company_name if client
+    if (role === "client") {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase.from("profiles").update({ company_name: "Acerbi Associação" }).eq("id", authUser.id);
+      }
+    }
+  };
+
+  const loginWithCredentials = async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  };
+
+  const logout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+  };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithCredentials, logout }}>
       {children}
     </AuthContext.Provider>
   );
