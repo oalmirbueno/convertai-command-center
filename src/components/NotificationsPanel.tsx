@@ -36,23 +36,39 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const navigate = useNavigate();
 
   const handleClick = async (n: any) => {
-    // Mark as read
     if (!n.read) {
       await supabase.from("notifications").update({ read: true }).eq("id", n.id);
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
-    // Navigate if has link
     if (n.link) {
       navigate(n.link);
       onOpenChange(false);
     }
   };
 
+  const markAllRead = async () => {
+    const unread = (notifications || []).filter((n: any) => !n.read);
+    if (unread.length === 0) return;
+    for (const n of unread) {
+      await supabase.from("notifications").update({ read: true }).eq("id", n.id);
+    }
+    queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+
+  const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="right" className="w-[340px] sm:max-w-[340px] bg-card border-l border-border">
         <SheetHeader className="pb-4">
-          <SheetTitle className="label-sm text-foreground">Notificações</SheetTitle>
+          <div className="flex items-center justify-between">
+            <SheetTitle className="label-sm text-foreground">Notificações</SheetTitle>
+            {unreadCount > 0 && (
+              <button onClick={markAllRead} className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none">
+                Marcar todas como lidas
+              </button>
+            )}
+          </div>
         </SheetHeader>
         <div className="space-y-0">
           {(!notifications || notifications.length === 0) ? (

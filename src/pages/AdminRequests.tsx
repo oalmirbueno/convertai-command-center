@@ -27,6 +27,16 @@ export default function AdminRequests() {
   const queryClient = useQueryClient();
   const [selected, setSelected] = useState<any>(null);
   const [saving, setSaving] = useState(false);
+  const [filter, setFilter] = useState("all");
+
+  const filters = [
+    { value: "all", label: "Todos" },
+    { value: "new", label: "Novos" },
+    { value: "in_progress", label: "Em Andamento" },
+    { value: "completed", label: "Concluídos" },
+  ];
+
+  const filteredRequests = (requests || []).filter((r: any) => filter === "all" || r.status === filter);
 
   const getClient = (id: string) => (clients || []).find((c: any) => c.id === id);
   const getProject = (id: string) => (projects || []).find((p: any) => p.id === id);
@@ -74,7 +84,17 @@ export default function AdminRequests() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <p className="heading-page">Pedidos de Clientes</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="heading-page">Pedidos de Clientes</p>
+        <div className="flex items-center gap-1">
+          {filters.map((f) => (
+            <button key={f.value} onClick={() => setFilter(f.value)}
+              className={`px-3 py-1.5 rounded-full text-[12px] transition-colors cursor-pointer border ${filter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+              {f.label}
+            </button>
+          ))}
+        </div>
+      </div>
 
       {isLoading ? (
         <div className="space-y-2">{[1, 2, 3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
@@ -82,7 +102,7 @@ export default function AdminRequests() {
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhum pedido recebido.</div>
       ) : (
         <div className="space-y-2 stagger-children">
-          {(requests || []).map((r: any) => {
+          {filteredRequests.map((r: any) => {
             const client = getClient(r.client_id);
             const project = getProject(r.project_id);
             const status = statusOptions.find(s => s.value === r.status) || statusOptions[0];
