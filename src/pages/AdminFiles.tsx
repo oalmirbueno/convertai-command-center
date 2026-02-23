@@ -16,7 +16,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, ExternalLink,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, ExternalLink, Zap,
 } from "lucide-react";
 
 const FOLDERS = [
@@ -338,7 +338,23 @@ export default function AdminFiles() {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex gap-2">
+            {previewFile?.approval_status === "rejected" && previewFile?.project_id && (
+              <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"
+                onClick={async () => {
+                  await supabase.from("tasks").insert({
+                    project_id: previewFile.project_id,
+                    title: `Ajustar: ${previewFile.file_name}`,
+                    description: `Feedback do cliente:\n${previewFile.feedback || "Sem detalhes"}`,
+                    status: "backlog", priority: "high",
+                    assigned_to: previewFile.uploaded_by || null,
+                  });
+                  queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  toast({ title: "Tarefa criada no Kanban!" });
+                }}>
+                <Zap className="w-3 h-3" /> Criar Tarefa
+              </Button>
+            )}
             <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
               <Button variant="outline" className="gap-2"><Download className="w-3.5 h-3.5" /> Baixar</Button>
             </a>
