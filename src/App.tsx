@@ -20,6 +20,8 @@ import AdminBriefings from "@/pages/AdminBriefings";
 import Projects from "@/pages/Projects";
 import Placeholder from "@/pages/Placeholder";
 import SeedPage from "@/pages/SeedPage";
+import AdminFinanceiro from "@/pages/AdminFinanceiro";
+import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import AppLayout from "@/components/AppLayout";
 
 const queryClient = new QueryClient();
@@ -69,7 +71,7 @@ function AppRoutes() {
       <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppLayout><Placeholder title="Relatórios" /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout><Placeholder title="Timeline" /></AppLayout></ProtectedRoute>} />
-      <Route path="/financeiro" element={<ProtectedRoute><AppLayout><Placeholder title="Financeiro" /></AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
