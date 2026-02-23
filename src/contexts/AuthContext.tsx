@@ -18,6 +18,7 @@ interface AuthContextType {
   loading: boolean;
   login: (role: "admin" | "client") => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
+  signup: (email: string, password: string, fullName: string, companyName?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -114,13 +115,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   };
 
+  const signup = async (email: string, password: string, fullName: string, companyName?: string) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName, role: "client", company_name: companyName || null } },
+    });
+    if (error) throw error;
+
+    // Update company_name on profile if provided
+    if (data.user && companyName) {
+      await supabase.from("profiles").update({ company_name: companyName }).eq("id", data.user.id);
+    }
+
+    // Auto sign-in after signup
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    if (signInError) throw signInError;
+  };
+
   const logout = async () => {
     await supabase.auth.signOut();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithCredentials, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithCredentials, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
