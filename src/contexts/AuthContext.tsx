@@ -53,6 +53,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let resolved = false;
+    const resolve = () => {
+      if (!resolved) {
+        resolved = true;
+        setLoading(false);
+      }
+    };
+
+    // Safety timeout - never stay loading forever
+    const timeout = setTimeout(resolve, 5000);
+
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       try {
         if (session?.user) {
@@ -62,10 +73,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(null);
         }
       } catch (err) {
-        console.error("Error fetching profile:", err);
+        console.error("Error in onAuthStateChange:", err);
         setUser(null);
       } finally {
-        setLoading(false);
+        resolve();
       }
     });
 
@@ -76,14 +87,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(profile);
         }
       } catch (err) {
-        console.error("Error fetching profile:", err);
+        console.error("Error in getSession:", err);
         setUser(null);
       } finally {
-        setLoading(false);
+        resolve();
       }
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      clearTimeout(timeout);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (role: "admin" | "client"): Promise<void> => {
