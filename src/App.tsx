@@ -9,6 +9,10 @@ import AdminDashboard from "@/pages/AdminDashboard";
 import ClientDashboard from "@/pages/ClientDashboard";
 import Kanban from "@/pages/Kanban";
 import Clients from "@/pages/Clients";
+import AdminFiles from "@/pages/AdminFiles";
+import AdminApprovals from "@/pages/AdminApprovals";
+import ClientDocuments from "@/pages/ClientDocuments";
+import ClientApprovals from "@/pages/ClientApprovals";
 import Placeholder from "@/pages/Placeholder";
 import SeedPage from "@/pages/SeedPage";
 import AppLayout from "@/components/AppLayout";
@@ -67,7 +71,7 @@ function AppRoutes() {
         <ProtectedRoute><AppLayout><Placeholder title="IA Planner" /></AppLayout></ProtectedRoute>
       } />
       <Route path="/arquivos" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Arquivos" /></AppLayout></ProtectedRoute>
+        <ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>
       } />
       <Route path="/config" element={
         <ProtectedRoute><AppLayout><Placeholder title="Configurações" /></AppLayout></ProtectedRoute>
@@ -82,13 +86,17 @@ function AppRoutes() {
         <ProtectedRoute><AppLayout><Placeholder title="Pedidos" /></AppLayout></ProtectedRoute>
       } />
       <Route path="/documentos" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Documentos" /></AppLayout></ProtectedRoute>
+        <ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>
       } />
       <Route path="/perfil" element={
         <ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>
       } />
       <Route path="/aprovacoes" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Aprovações" /></AppLayout></ProtectedRoute>
+        <ProtectedRoute>
+          <AppLayout>
+            {profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}
+          </AppLayout>
+        </ProtectedRoute>
       } />
       <Route path="/relatorios" element={
         <ProtectedRoute><AppLayout><Placeholder title="Relatórios" /></AppLayout></ProtectedRoute>
