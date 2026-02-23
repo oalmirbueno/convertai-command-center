@@ -213,7 +213,12 @@ export default function AdminFinanceiro() {
                   <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
                   <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {new Date(b.due_date).toLocaleDateString("pt-BR")}</p>
                 </div>
-                <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
+                  {b.type === "ads_recharge" && (
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/15 text-info font-medium">📢 Ads</span>
+                  )}
+                </div>
                 {statusBadge(b.status, b.due_date)}
                 {b.status === "pending" && (
                   <div className="flex gap-1.5">
