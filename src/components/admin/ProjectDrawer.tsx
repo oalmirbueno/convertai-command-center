@@ -1,0 +1,238 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
+import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
+import { toast } from "sonner";
+import { Slider } from "@/components/ui/slider";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle } from "lucide-react";
+
+const STATUS_OPTIONS = [
+  { value: "planning", label: "Planejamento" },
+  { value: "active", label: "Ativo" },
+  { value: "review", label: "Revisão" },
+  { value: "paused", label: "Pausado" },
+  { value: "done", label: "Concluído" },
+];
+
+const statusDotColors: Record<string, string> = {
+  active: "bg-info", review: "bg-warning", planning: "bg-muted-foreground",
+  paused: "bg-muted-foreground", done: "bg-success",
+};
+
+interface Props {
+  project: any;
+  open: boolean;
+  onClose: () => void;
+  onEdit: (project: any) => void;
+}
+
+export default function ProjectDrawer({ project, open, onClose, onEdit }: Props) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: tasks } = useTasks(project?.id);
+  const { data: milestones } = useMilestones(project?.id);
+  const [localProgress, setLocalProgress] = useState<number | null>(null);
+
+  if (!project) return null;
+
+  const progress = localProgress ?? project.progress;
+
+  const handleStatusChange = async (newStatus: string) => {
+    await supabase.from("projects").update({ status: newStatus }).eq("id", project.id);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    toast.success("Status atualizado");
+  };
+
+  const handleProgressCommit = async (val: number[]) => {
+    const value = val[0];
+    setLocalProgress(value);
+    await supabase.from("projects").update({ progress: value }).eq("id", project.id);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    toast.success("Progresso atualizado");
+  };
+
+  const handleDelete = async () => {
+    if (!confirm("Excluir este projeto e todos os dados relacionados?")) return;
+    await supabase.from("tasks").delete().eq("project_id", project.id);
+    await supabase.from("milestones").delete().eq("project_id", project.id);
+    await supabase.from("updates").delete().eq("project_id", project.id);
+    await supabase.from("projects").delete().eq("id", project.id);
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    toast.success("Projeto excluído");
+    onClose();
+  };
+
+  // Team: unique assignees from tasks
+  const teamMap = new Map<string, { name: string; count: number }>();
+  (tasks || []).forEach((t: any) => {
+    if (t.assigned_to && t.assignee?.full_name) {
+      const existing = teamMap.get(t.assigned_to);
+      if (existing) existing.count++;
+      else teamMap.set(t.assigned_to, { name: t.assignee.full_name, count: 1 });
+    }
+  });
+
+  // Task counts by status
+  const taskCounts = { backlog: 0, todo: 0, doing: 0, review: 0, done: 0 };
+  (tasks || []).forEach((t: any) => {
+    if (t.status in taskCounts) (taskCounts as any)[t.status]++;
+  });
+  const totalTasks = (tasks || []).length;
+
+  const formatDate = (d: string) => {
+    if (!d) return "";
+    return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
+  };
+
+  const milestoneIcon = (status: string) => {
+    if (status === "done") return <CheckCircle2 className="w-3.5 h-3.5 text-success" />;
+    if (status === "in_progress") return <Clock className="w-3.5 h-3.5 text-info" />;
+    return <Circle className="w-3.5 h-3.5 text-muted-foreground" />;
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
+      <SheetContent className="w-[420px] max-w-[90vw] bg-card border-l border-border p-0 overflow-y-auto" side="right">
+        <div className="p-5 space-y-5">
+          {/* Header */}
+          <SheetHeader className="space-y-1">
+            <SheetTitle className="text-base font-semibold text-foreground pr-6">{project.name}</SheetTitle>
+            <p className="text-xs text-muted-foreground">{project.client?.company_name || project.client?.full_name}</p>
+          </SheetHeader>
+
+          {/* Status pills */}
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Status</p>
+            <div className="flex flex-wrap gap-1.5">
+              {STATUS_OPTIONS.map(s => (
+                <button key={s.value} onClick={() => handleStatusChange(s.value)}
+                  className={`text-[11px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${project.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Progress */}
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Progresso</p>
+            <Slider
+              defaultValue={[project.progress]}
+              value={[progress]}
+              max={100}
+              step={5}
+              onValueChange={(val) => setLocalProgress(val[0])}
+              onValueCommit={handleProgressCommit}
+              className="w-full"
+            />
+            <p className="text-xs font-mono text-muted-foreground text-right">{progress}%</p>
+          </div>
+
+          {/* Info */}
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Informações</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <span className="text-muted-foreground">Tipo</span>
+                <p className="text-foreground capitalize">{project.project_type?.replace("_", " ")}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Início</span>
+                <p className="text-foreground">{formatDate(project.start_date)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Prazo</span>
+                <p className="text-foreground">{formatDate(project.deadline)}</p>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Status</span>
+                <div className="flex items-center gap-1.5">
+                  <div className={`w-2 h-2 rounded-full ${statusDotColors[project.status] || "bg-muted-foreground"}`} />
+                  <p className="text-foreground">{STATUS_OPTIONS.find(s => s.value === project.status)?.label}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Description */}
+          {project.description && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{project.description}</p>
+            </div>
+          )}
+
+          {/* Team */}
+          {teamMap.size > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Equipe do Projeto</p>
+              <div className="space-y-1.5">
+                {Array.from(teamMap.entries()).map(([id, { name, count }]) => (
+                  <div key={id} className="flex items-center gap-2 text-xs">
+                    <Users className="w-3 h-3 text-muted-foreground" />
+                    <span className="text-foreground">{name}</span>
+                    <span className="text-muted-foreground">— {count} task{count > 1 ? "s" : ""}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Tasks summary */}
+          {totalTasks > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Tarefas</p>
+              <div className="flex gap-3 text-xs">
+                {taskCounts.backlog > 0 && <span className="text-muted-foreground">Backlog: {taskCounts.backlog}</span>}
+                {taskCounts.todo > 0 && <span className="text-muted-foreground">To-do: {taskCounts.todo}</span>}
+                {taskCounts.doing > 0 && <span className="text-info">Doing: {taskCounts.doing}</span>}
+                {taskCounts.review > 0 && <span className="text-warning">Review: {taskCounts.review}</span>}
+                {taskCounts.done > 0 && <span className="text-success">Done: {taskCounts.done}</span>}
+              </div>
+              <button onClick={() => { onClose(); navigate("/kanban"); }}
+                className="text-[11px] text-primary hover:underline cursor-pointer flex items-center gap-1 bg-transparent border-none p-0">
+                <ExternalLink className="w-3 h-3" /> Ver no Kanban
+              </button>
+            </div>
+          )}
+
+          {/* Milestones */}
+          {(milestones || []).length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestones</p>
+              <div className="space-y-1.5">
+                {(milestones || []).map((m: any) => (
+                  <div key={m.id} className="flex items-center gap-2 text-xs">
+                    {milestoneIcon(m.status)}
+                    <span className={m.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}>
+                      {m.title}
+                    </span>
+                    <span className="text-muted-foreground/60 ml-auto">{formatDate(m.target_date)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="space-y-2 pt-2 border-t border-border">
+            <button onClick={() => { onClose(); onEdit(project); }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
+              <Edit3 className="w-3.5 h-3.5" /> Editar Projeto
+            </button>
+            <button onClick={() => { onClose(); navigate("/dashboard"); }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
+              <Eye className="w-3.5 h-3.5" /> Ver como Cliente
+            </button>
+            <button onClick={handleDelete}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 cursor-pointer bg-transparent border-none text-left transition-colors">
+              <Trash2 className="w-3.5 h-3.5" /> Excluir Projeto
+            </button>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}

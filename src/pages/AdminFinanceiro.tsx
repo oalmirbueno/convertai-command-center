@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -15,9 +15,12 @@ const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 
 const statusBadge = (status: string, dueDate?: string) => {
   const isOverdue = dueDate && new Date(dueDate) < new Date() && status === "pending";
-  if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Pago</span>;
+  if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">✅ Pago</span>;
+  if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
+  if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
   if (isOverdue) return <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Atrasado</span>;
   if (status === "pending") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Pendente</span>;
+  if (status === "rejected") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Recusada</span>;
   return <span className="text-[11px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{status}</span>;
 };
 
@@ -39,11 +42,8 @@ export default function AdminFinanceiro() {
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
 
-  // New billing form
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
-  // Recharge form
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
-  // Edit plan form
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
 
   const now = new Date();
@@ -59,22 +59,19 @@ export default function AdminFinanceiro() {
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
-
   const activeClients = (clients || []).filter((c: any) => c.plan_status === "active").length;
 
   const handleMarkPaid = async (id: string) => {
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
     queryClient.invalidateQueries({ queryKey: ["billing"] });
-    toast.success("Marcado como pago");
+    toast.success("Pagamento registrado!");
   };
 
   const handleCreateBilling = async () => {
     if (!billForm.client_id || !billForm.amount || !billForm.due_date) { toast.error("Preencha todos os campos"); return; }
     await supabase.from("billing").insert({
-      client_id: billForm.client_id,
-      type: billForm.type,
-      amount: parseFloat(billForm.amount),
-      due_date: billForm.due_date,
+      client_id: billForm.client_id, type: billForm.type,
+      amount: parseFloat(billForm.amount), due_date: billForm.due_date,
       description: billForm.description || null,
     });
     queryClient.invalidateQueries({ queryKey: ["billing"] });
@@ -85,34 +82,55 @@ export default function AdminFinanceiro() {
 
   const handleRequestRecharge = async () => {
     if (!rechargeModal || !rechargeForm.amount) { toast.error("Informe o valor"); return; }
+    const amount = parseFloat(rechargeForm.amount);
     await supabase.from("recharge_requests").insert({
-      client_id: rechargeModal.clientId,
-      platform: rechargeModal.platform,
-      amount: parseFloat(rechargeForm.amount),
-      reason: rechargeForm.reason || null,
-      requested_by: user?.id,
+      client_id: rechargeModal.clientId, platform: rechargeModal.platform,
+      amount, reason: rechargeForm.reason || null, requested_by: user?.id,
     });
-    await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(parseFloat(rechargeForm.amount))} solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
+    // Notify the CLIENT
+    await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(amount)} solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
-    toast.success("Solicitação de recarga enviada");
+    toast.success("Solicitação de recarga enviada! Cliente será notificado.");
     setRechargeModal(null);
     setRechargeForm({ amount: "", reason: "" });
   };
 
-  const handleSendReminder = async (client: any) => {
+  const handleCompleteRecharge = async (r: any) => {
+    // Update wallet balance
+    const wallet = (wallets || []).find((w: any) => w.client_id === r.client_id && w.platform === r.platform);
+    if (wallet) {
+      await supabase.from("ads_wallet").update({
+        balance: Number(wallet.balance) + Number(r.amount),
+        last_recharge_date: new Date().toISOString(),
+      }).eq("id", wallet.id);
+    }
+    await supabase.from("recharge_requests").update({ status: "completed", approved_by: user?.id }).eq("id", r.id);
+    queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+    toast.success("Saldo atualizado!");
+  };
+
+  const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
     const billingRecord = (billing || []).find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
     const renewalDate = client.plan_renewal_date ? new Date(client.plan_renewal_date).toLocaleDateString("pt-BR") : "em breve";
-    await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados! 🚀`, "billing", "/financeiro");
+
+    if (via === "whatsapp") {
+      const phone = client.phone?.replace(/\D/g, "") || "";
+      const msg = encodeURIComponent(`Olá! Seu plano renova em ${renewalDate}. Os resultados estão crescendo! Para garantir a continuidade, confirme a renovação. 🚀`);
+      window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+    } else {
+      await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados! 🚀`, "billing", "/financeiro");
+      toast.success("Lembrete enviado");
+    }
+
     if (billingRecord) {
       await supabase.from("billing").update({ reminder_count: (billingRecord.reminder_count || 0) + 1 }).eq("id", billingRecord.id);
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
     }
-    queryClient.invalidateQueries({ queryKey: ["billing"] });
-    toast.success("Lembrete enviado");
   };
 
   const handleEditPlan = async () => {
     if (!editPlanModal) return;
-    const updates: any = {};
     if (planForm.renewal_date) {
       await supabase.from("profiles").update({ plan_renewal_date: planForm.renewal_date }).eq("id", editPlanModal.id);
     }
@@ -133,6 +151,12 @@ export default function AdminFinanceiro() {
     setPlanForm({ amount: "", renewal_date: "", description: "" });
   };
 
+  const openWhatsAppReminder = (client: any, billingItem: any) => {
+    const phone = client?.phone?.replace(/\D/g, "") || "";
+    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${new Date(billingItem.due_date).toLocaleDateString("pt-BR")}. Qualquer dúvida estamos à disposição! 😊`);
+    window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
+  };
+
   // Group wallets by client
   const walletsByClient: Record<string, any[]> = {};
   (wallets || []).forEach((w: any) => {
@@ -150,7 +174,7 @@ export default function AdminFinanceiro() {
           { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
           { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
           { label: "Investimento Ads", value: fmt(totalAds), icon: DollarSign, color: "text-info" },
-          { label: "Clientes Ativos", value: activeClients, icon: Users, color: "text-primary" },
+          { label: "Clientes Ativos", value: String(activeClients), icon: Users, color: "text-primary" },
         ].map((s, i) => (
           <div key={i} className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">
@@ -180,7 +204,7 @@ export default function AdminFinanceiro() {
           </div>
           <div className="space-y-2 stagger-children">
             {(billing || []).map((b: any) => (
-              <div key={b.id} className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4">
+              <div key={b.id} className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
                 <span className="text-lg">{typeIcon(b.type)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
@@ -189,10 +213,16 @@ export default function AdminFinanceiro() {
                 <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
                 {statusBadge(b.status, b.due_date)}
                 {b.status === "pending" && (
-                  <button onClick={() => handleMarkPaid(b.id)}
-                    className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none">
-                    Marcar como Pago
-                  </button>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => handleMarkPaid(b.id)}
+                      className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none">
+                      Marcar como Pago
+                    </button>
+                    <button onClick={() => openWhatsAppReminder(b.client, b)}
+                      className="text-[11px] px-2 py-1 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none">
+                      <MessageCircle className="w-3 h-3" />
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
@@ -224,12 +254,12 @@ export default function AdminFinanceiro() {
             </div>
           ))}
 
-          {/* Pending recharge requests */}
+          {/* Recharge requests */}
           {(recharges || []).length > 0 && (
             <div className="space-y-2 mt-4">
               <p className="text-xs text-muted-foreground uppercase tracking-wider">Solicitações de Recarga</p>
               {(recharges || []).map((r: any) => (
-                <div key={r.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4">
+                <div key={r.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
                   <Zap className="w-4 h-4 text-warning" />
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-foreground">{fmt(Number(r.amount))} — {r.platform}</p>
@@ -237,6 +267,12 @@ export default function AdminFinanceiro() {
                     <p className="text-[11px] text-muted-foreground">Por {r.requester?.full_name} • {new Date(r.created_at).toLocaleDateString("pt-BR")}</p>
                   </div>
                   {statusBadge(r.status)}
+                  {r.status === "approved" && (
+                    <button onClick={() => handleCompleteRecharge(r)}
+                      className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Concluir Recarga
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -261,20 +297,19 @@ export default function AdminFinanceiro() {
                   {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">🔴 Pendente</span>}
                 </div>
                 {clientBilling && (
-                  <p className="text-xs text-muted-foreground">
-                    {clientBilling.description || "Plano"} • {fmt(Number(clientBilling.amount))}/mês
-                  </p>
+                  <p className="text-xs text-muted-foreground">{clientBilling.description || "Plano"} • {fmt(Number(clientBilling.amount))}/mês</p>
                 )}
                 {renewalDate && (
-                  <p className="text-xs text-muted-foreground">
-                    Renovação: {renewalDate.toLocaleDateString("pt-BR")}
-                    {daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}
-                  </p>
+                  <p className="text-xs text-muted-foreground">Renovação: {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</p>
                 )}
-                <div className="flex gap-2 pt-1">
-                  <button onClick={() => handleSendReminder(c)}
+                <div className="flex gap-2 pt-1 flex-wrap">
+                  <button onClick={() => handleSendReminder(c, "notification")}
                     className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                    <Bell className="w-3 h-3" /> {reminderCount > 0 ? `Lembrete enviado (${reminderCount}x)` : "Enviar Lembrete"}
+                    <Bell className="w-3 h-3" /> {reminderCount > 0 ? `Lembrete enviado (${reminderCount}x)` : "📩 Notificação"}
+                  </button>
+                  <button onClick={() => handleSendReminder(c, "whatsapp")}
+                    className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
+                    <MessageCircle className="w-3 h-3" /> 💬 WhatsApp
                   </button>
                   <button onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : "", renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || "" }); }}
                     className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
@@ -340,7 +375,7 @@ export default function AdminFinanceiro() {
               <Input type="number" value={rechargeForm.amount} onChange={e => setRechargeForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Motivo</label>
+              <label className="text-xs text-muted-foreground">Motivo *</label>
               <textarea value={rechargeForm.reason} onChange={e => setRechargeForm(f => ({ ...f, reason: e.target.value }))}
                 className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={3} placeholder="Campanha X precisa de mais budget..." />
             </div>
