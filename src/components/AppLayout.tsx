@@ -28,6 +28,7 @@ const adminMainNav: NavItem[] = [
 
 const adminMoreNav: NavItem[] = [
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
+  { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "IA Planner", url: "/ia-planner", icon: Sparkles },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Timeline", url: "/timeline", icon: GitBranch },

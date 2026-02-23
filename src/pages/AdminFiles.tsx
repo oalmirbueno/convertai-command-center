@@ -69,6 +69,9 @@ export default function AdminFiles() {
   const [uploadProject, setUploadProject] = useState("");
   const [uploadType, setUploadType] = useState("documento");
   const [uploadApproval, setUploadApproval] = useState(false);
+  const [uploadCaption, setUploadCaption] = useState("");
+  const [uploadCarousel, setUploadCarousel] = useState("");
+  const [uploadDescription, setUploadDescription] = useState("");
 
   const filteredFiles = (allFiles || []).filter((f: any) => {
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
@@ -119,8 +122,11 @@ export default function AdminFiles() {
         file_type: uploadType,
         folder: uploadFolder,
         uploaded_by: user.id,
-        project_id: uploadProject || null,
+        project_id: uploadProject === "none" ? null : uploadProject || null,
         approval_status: uploadApproval ? "pending" : "none",
+        caption: uploadCaption.trim() || null,
+        carousel_text: uploadCarousel.trim() || null,
+        description: uploadDescription.trim() || null,
       });
       setUploadProgress(90);
 
@@ -129,6 +135,7 @@ export default function AdminFiles() {
           user_id: selectedClient,
           message: `Novo arquivo para aprovação: ${uploadName}`,
           notification_type: "approval",
+          link: "/aprovacoes",
         });
       }
 
@@ -159,6 +166,9 @@ export default function AdminFiles() {
     setUploadType("documento");
     setUploadApproval(false);
     setUploadProgress(0);
+    setUploadCaption("");
+    setUploadCarousel("");
+    setUploadDescription("");
   };
 
   const handleDelete = async (fileId: string, fileUrl: string) => {
@@ -352,6 +362,21 @@ export default function AdminFiles() {
                     ))}
                   </SelectContent>
                 </Select>
+              </div>
+              <div>
+                <Label className="label-sm">Legenda (opcional)</Label>
+                <textarea value={uploadCaption} onChange={(e) => setUploadCaption(e.target.value)} rows={2} placeholder="Legenda do post..."
+                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+              </div>
+              <div>
+                <Label className="label-sm">Texto do Carrossel (opcional)</Label>
+                <textarea value={uploadCarousel} onChange={(e) => setUploadCarousel(e.target.value)} rows={2} placeholder="Texto para carrossel multi-slide..."
+                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+              </div>
+              <div>
+                <Label className="label-sm">Descrição interna (opcional)</Label>
+                <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Notas para o cliente..."
+                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
               </div>
               <div className="flex items-center justify-between py-2">
                 <Label className="label-sm">Enviar para aprovação do cliente?</Label>

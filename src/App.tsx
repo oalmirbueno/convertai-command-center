@@ -13,6 +13,9 @@ import AdminFiles from "@/pages/AdminFiles";
 import AdminApprovals from "@/pages/AdminApprovals";
 import ClientDocuments from "@/pages/ClientDocuments";
 import ClientApprovals from "@/pages/ClientApprovals";
+import AdminRequests from "@/pages/AdminRequests";
+import Team from "@/pages/Team";
+import BriefingPublic from "@/pages/BriefingPublic";
 import Placeholder from "@/pages/Placeholder";
 import SeedPage from "@/pages/SeedPage";
 import AppLayout from "@/components/AppLayout";
@@ -32,7 +35,6 @@ function LoadingScreen() {
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
-
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
   return <>{children}</>;
@@ -40,73 +42,31 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 function AppRoutes() {
   const { user, profile, loading } = useAuth();
-
   if (loading) return <LoadingScreen />;
 
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      {/* Public briefing route */}
+      <Route path="/briefing/:token" element={<BriefingPublic />} />
 
-      {/* Protected routes */}
-      <Route path="/dashboard" element={
-        <ProtectedRoute>
-          <AppLayout>
-            {profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}
-          </AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/projetos" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Projetos" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/kanban" element={
-        <ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/clientes" element={
-        <ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/equipe" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Equipe" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/ia-planner" element={
-        <ProtectedRoute><AppLayout><Placeholder title="IA Planner" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/arquivos" element={
-        <ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/config" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Configurações" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/admin/seed" element={
-        <ProtectedRoute><AppLayout><SeedPage /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/acompanhamento" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Acompanhamento" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/pedidos" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Pedidos" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/documentos" element={
-        <ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/perfil" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/aprovacoes" element={
-        <ProtectedRoute>
-          <AppLayout>
-            {profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}
-          </AppLayout>
-        </ProtectedRoute>
-      } />
-      <Route path="/relatorios" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Relatórios" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/timeline" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Timeline" /></AppLayout></ProtectedRoute>
-      } />
-      <Route path="/financeiro" element={
-        <ProtectedRoute><AppLayout><Placeholder title="Financeiro" /></AppLayout></ProtectedRoute>
-      } />
+      <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
+      <Route path="/projetos" element={<ProtectedRoute><AppLayout><Placeholder title="Projetos" /></AppLayout></ProtectedRoute>} />
+      <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
+      <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
+      <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
+      <Route path="/ia-planner" element={<ProtectedRoute><AppLayout><Placeholder title="IA Planner" /></AppLayout></ProtectedRoute>} />
+      <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />
+      <Route path="/config" element={<ProtectedRoute><AppLayout><Placeholder title="Configurações" /></AppLayout></ProtectedRoute>} />
+      <Route path="/admin/seed" element={<ProtectedRoute><AppLayout><SeedPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/acompanhamento" element={<ProtectedRoute><AppLayout><Placeholder title="Acompanhamento" /></AppLayout></ProtectedRoute>} />
+      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminRequests /> : <Placeholder title="Pedidos" />}</AppLayout></ProtectedRoute>} />
+      <Route path="/documentos" element={<ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>} />
+      <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
+      <Route path="/relatorios" element={<ProtectedRoute><AppLayout><Placeholder title="Relatórios" /></AppLayout></ProtectedRoute>} />
+      <Route path="/timeline" element={<ProtectedRoute><AppLayout><Placeholder title="Timeline" /></AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro" element={<ProtectedRoute><AppLayout><Placeholder title="Financeiro" /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
