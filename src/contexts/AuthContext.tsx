@@ -58,15 +58,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     };
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
-        try {
-          const profile = await fetchUserProfile(session.user.id);
-          resolve(profile);
-        } catch (err) {
-          console.error("Error fetching profile:", err);
-          resolve(null);
-        }
+        // setTimeout(0) prevents Supabase auth deadlock when fetching during callback
+        setTimeout(async () => {
+          try {
+            const profile = await fetchUserProfile(session.user.id);
+            resolve(profile);
+          } catch (err) {
+            console.error("Error fetching profile:", err);
+            resolve(null);
+          }
+        }, 0);
       } else {
         resolve(null);
       }
