@@ -51,15 +51,18 @@ export default function AdminFinanceiro() {
   const thisYear = now.getFullYear();
 
   const monthlyRevenue = (billing || [])
-    .filter((b: any) => b.status === "paid" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
+    .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const pendingTotal = (billing || [])
-    .filter((b: any) => b.status === "pending")
+    .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
+    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+
+  const overdueTotal = (billing || [])
+    .filter((b: any) => b.status === "pending" && new Date(b.due_date) < now)
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
-  const activeClients = (clients || []).filter((c: any) => c.plan_status === "active").length;
 
   const handleMarkPaid = async (id: string) => {
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
@@ -174,7 +177,7 @@ export default function AdminFinanceiro() {
           { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
           { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
           { label: "Investimento Ads", value: fmt(totalAds), icon: DollarSign, color: "text-info" },
-          { label: "Clientes Ativos", value: String(activeClients), icon: Users, color: "text-primary" },
+          { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
         ].map((s, i) => (
           <div key={i} className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center gap-2 mb-2">

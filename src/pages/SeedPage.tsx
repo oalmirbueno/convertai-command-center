@@ -141,6 +141,11 @@ export default function SeedPage() {
 
       // Create financial data
       setProgress("Criando dados financeiros...");
+      // Clean old financial data first
+      await supabase.from("recharge_requests").delete().eq("client_id", clientId);
+      await supabase.from("billing").delete().eq("client_id", clientId);
+      await supabase.from("ads_wallet").delete().eq("client_id", clientId);
+
       await supabase.from("profiles").update({ plan_renewal_date: "2026-03-15", plan_status: "active" }).eq("id", clientId);
 
       await supabase.from("billing").insert([

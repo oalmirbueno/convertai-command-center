@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -34,12 +34,22 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   const { data: tasks } = useTasks(project?.id);
   const { data: milestones } = useMilestones(project?.id);
   const [localProgress, setLocalProgress] = useState<number | null>(null);
+  const [currentStatus, setCurrentStatus] = useState(project?.status || "planning");
+
+  // Sync status when project changes
+  useEffect(() => {
+    if (project) {
+      setCurrentStatus(project.status);
+      setLocalProgress(null);
+    }
+  }, [project]);
 
   if (!project) return null;
 
   const progress = localProgress ?? project.progress;
 
   const handleStatusChange = async (newStatus: string) => {
+    setCurrentStatus(newStatus);
     await supabase.from("projects").update({ status: newStatus }).eq("id", project.id);
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Status atualizado");
@@ -108,7 +118,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
             <div className="flex flex-wrap gap-1.5">
               {STATUS_OPTIONS.map(s => (
                 <button key={s.value} onClick={() => handleStatusChange(s.value)}
-                  className={`text-[11px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${project.status === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+                  className={`text-[11px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${currentStatus === s.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
                   {s.label}
                 </button>
               ))}
@@ -199,22 +209,34 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
           )}
 
           {/* Milestones */}
-          {(milestones || []).length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestones</p>
-              <div className="space-y-1.5">
+          <div className="space-y-2">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestones</p>
+            {(!milestones || milestones.length === 0) ? (
+              <p className="text-xs text-muted-foreground">Nenhum milestone cadastrado</p>
+            ) : (
+              <div className="space-y-2">
                 {(milestones || []).map((m: any) => (
-                  <div key={m.id} className="flex items-center gap-2 text-xs">
-                    {milestoneIcon(m.status)}
-                    <span className={m.status === "done" ? "text-muted-foreground line-through" : "text-foreground"}>
-                      {m.title}
-                    </span>
-                    <span className="text-muted-foreground/60 ml-auto">{formatDate(m.target_date)}</span>
+                  <div key={m.id} className="flex items-center gap-2">
+                    {m.status === "completed" ? (
+                      <div className="w-5 h-5 rounded-full bg-success flex items-center justify-center shrink-0">
+                        <CheckCircle2 className="w-3 h-3 text-success-foreground" />
+                      </div>
+                    ) : m.status === "in_progress" ? (
+                      <div className="w-5 h-5 rounded-full border-2 border-primary shrink-0" />
+                    ) : (
+                      <div className="w-5 h-5 rounded-full bg-secondary shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground">{m.title}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                      </p>
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Actions */}
           <div className="space-y-2 pt-2 border-t border-border">

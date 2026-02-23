@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,14 +33,36 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
-  const [clientId, setClientId] = useState(editProject?.client_id || "");
-  const [name, setName] = useState(editProject?.name || "");
-  const [description, setDescription] = useState(editProject?.description || "");
-  const [projectType, setProjectType] = useState(editProject?.project_type || "other");
-  const [startDate, setStartDate] = useState<Date | undefined>(editProject?.start_date ? new Date(editProject.start_date) : new Date());
-  const [deadline, setDeadline] = useState<Date | undefined>(editProject?.deadline ? new Date(editProject.deadline) : undefined);
-  const [scope, setScope] = useState(editProject?.scope || "");
-  const [objectives, setObjectives] = useState(editProject?.objectives || "");
+  const [clientId, setClientId] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [projectType, setProjectType] = useState("other");
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+  const [deadline, setDeadline] = useState<Date | undefined>(undefined);
+  const [scope, setScope] = useState("");
+  const [objectives, setObjectives] = useState("");
+
+  useEffect(() => {
+    if (editProject) {
+      setClientId(editProject.client_id || "");
+      setName(editProject.name || "");
+      setDescription(editProject.description || "");
+      setProjectType(editProject.project_type || "other");
+      setStartDate(editProject.start_date ? new Date(editProject.start_date) : new Date());
+      setDeadline(editProject.deadline ? new Date(editProject.deadline) : undefined);
+      setScope(editProject.scope || "");
+      setObjectives(editProject.objectives || "");
+    } else {
+      setClientId("");
+      setName("");
+      setDescription("");
+      setProjectType("other");
+      setStartDate(new Date());
+      setDeadline(undefined);
+      setScope("");
+      setObjectives("");
+    }
+  }, [editProject]);
 
   if (!open) return null;
 
