@@ -1,6 +1,7 @@
 import { useProjects, useUpdates } from "@/hooks/useSupabaseData";
-import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload } from "lucide-react";
+import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database } from "lucide-react";
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -24,12 +25,14 @@ const quickActions = [
   { label: "Novo Cliente", icon: UserPlus },
   { label: "Gerar Plano IA", icon: Sparkles },
   { label: "Upload", icon: Upload },
+  { label: "Seed Demo Data", icon: Database, action: "seed" },
 ];
 
 export default function AdminDashboard() {
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: updates, isLoading: loadingUpdates } = useUpdates();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
+  const navigate = useNavigate();
 
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
 
@@ -63,7 +66,11 @@ export default function AdminDashboard() {
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2">
         {quickActions.map((a) => (
-          <button key={a.label} className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
+          <button
+            key={a.label}
+            onClick={() => { if ((a as any).action === "seed") navigate("/admin/seed"); }}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent"
+          >
             <a.icon className="w-3.5 h-3.5" />
             {a.label}
           </button>
