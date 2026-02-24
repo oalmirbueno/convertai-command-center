@@ -148,7 +148,7 @@ export default function Login() {
         <img
           src={consultantHero}
           alt="Consultora Aceleriq"
-          className="absolute -left-8 bottom-0 h-[85%] w-auto object-cover object-top pointer-events-none select-none"
+          className="absolute -left-16 bottom-0 h-[85%] w-auto object-cover object-top pointer-events-none select-none"
           style={{
             maskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 85%)",
             WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 85%)",
