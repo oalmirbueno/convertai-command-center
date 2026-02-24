@@ -35,12 +35,12 @@ Deno.serve(async (req) => {
     const { action, ...payload } = await req.json();
 
     if (action === "create") {
-      const { email, full_name, role } = payload;
+      const { email, full_name, role, password } = payload;
       if (!email || !full_name || !role) throw new Error("Missing fields");
 
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        password: "Temp@2026!",
+        password: password || "Temp@2026!",
         email_confirm: true,
         user_metadata: { full_name, role },
       });

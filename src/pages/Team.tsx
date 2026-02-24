@@ -24,6 +24,7 @@ export default function Team() {
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [role, setRole] = useState("design");
 
   const taskCountFor = (userId: string) => (allTasks || []).filter((t: any) => t.assigned_to === userId && t.status !== "done").length;
@@ -42,13 +43,14 @@ export default function Team() {
 
   const handleCreate = async () => {
     if (!name.trim() || !email.trim()) { toast.error("Preencha nome e email"); return; }
+    if (password && password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
     setSaving(true);
     try {
-      await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role });
-      toast.success("Membro criado! Senha temporária: Temp@2026!");
+      await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password: password || undefined });
+      toast.success(password ? "Membro criado com a senha definida!" : "Membro criado! Senha temporária: Temp@2026!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setCreateOpen(false);
-      setName(""); setEmail(""); setRole("design");
+      setName(""); setEmail(""); setPassword(""); setRole("design");
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar membro");
     }
@@ -69,7 +71,7 @@ export default function Team() {
       toast.success("Membro atualizado!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setEditMember(null);
-      setName(""); setEmail(""); setRole("design");
+      setName(""); setEmail(""); setPassword(""); setRole("design");
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
     }
@@ -100,7 +102,7 @@ export default function Team() {
   const closeModal = () => {
     setCreateOpen(false);
     setEditMember(null);
-    setName(""); setEmail(""); setRole("design");
+    setName(""); setEmail(""); setPassword(""); setRole("design");
   };
 
   const isModalOpen = createOpen || !!editMember;
@@ -184,6 +186,13 @@ export default function Team() {
                   <option value="manager">Manager</option>
                 </select>
               </div>
+              {!editMember && (
+                <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Senha Inicial</label>
+                  <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Deixe vazio para padrão (Temp@2026!)"
+                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+              )}
             </div>
             <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button onClick={closeModal} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>
