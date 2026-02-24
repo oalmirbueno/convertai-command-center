@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
-import { Plus, MoreHorizontal, Clock } from "lucide-react";
+import { Plus, MoreHorizontal, Clock, Sparkles } from "lucide-react";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ProjectDrawer from "@/components/admin/ProjectDrawer";
+import MeetingToProjectModal from "@/components/admin/MeetingToProjectModal";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos" },
@@ -33,6 +34,7 @@ export default function Projects() {
 
   const [filter, setFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
+  const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [editProject, setEditProject] = useState<any>(null);
   const [drawerProject, setDrawerProject] = useState<any>(null);
 
@@ -52,11 +54,17 @@ export default function Projects() {
       <div className="flex items-center justify-between">
         <p className="heading-page">Projetos</p>
         {isAdmin && (
-          <button onClick={() => setCreateOpen(true)}
-            data-tour="projects-create-btn"
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Novo Projeto
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setMeetingModalOpen(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium text-muted-foreground border border-border hover:border-primary/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
+              <Sparkles className="w-3.5 h-3.5" /> Gerar via Ata
+            </button>
+            <button onClick={() => setCreateOpen(true)}
+              data-tour="projects-create-btn"
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+              <Plus className="w-3.5 h-3.5" /> Novo Projeto
+            </button>
+          </div>
         )}
       </div>
 
@@ -113,6 +121,7 @@ export default function Projects() {
       )}
 
       <CreateProjectModal open={createOpen || !!editProject} onClose={() => { setCreateOpen(false); setEditProject(null); }} editProject={editProject} />
+      <MeetingToProjectModal open={meetingModalOpen} onClose={() => setMeetingModalOpen(false)} />
 
       {isAdmin && (
         <ProjectDrawer

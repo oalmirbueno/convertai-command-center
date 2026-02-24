@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 
 function generatePassword(len = 10) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
@@ -106,6 +107,19 @@ export default function CreateClientModal({ open, onClose }: Props) {
       setGeneratedPassword(password);
       setCreatedSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+
+      // Fire webhook (fire and forget)
+      if (signupData?.user) {
+        fireWebhook(webhooks.onboardClient, {
+          client_id: signupData.user.id,
+          name: fullName.trim(),
+          email: email.trim(),
+          company: company.trim(),
+          phone: phone.trim() || '',
+          services: services,
+          send_welcome_email: true,
+        });
+      }
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar cliente");
     } finally {

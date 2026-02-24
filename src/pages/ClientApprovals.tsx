@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { notifyAdmin } from "@/lib/notifyHelpers";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -35,7 +36,7 @@ const isImage = (name: string) => {
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
 export default function ClientApprovals() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
   const { data: files, isLoading } = useFiles(undefined, user?.id);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -65,6 +66,17 @@ export default function ClientApprovals() {
       }
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Aprovado com sucesso!" });
+
+      // Fire webhook
+      fireWebhook(webhooks.creativeApproval, {
+        file_id: confirmApprove,
+        file_name: file?.file_name || '',
+        project_id: file?.project_id || '',
+        client_id: user.id,
+        client_name: profile?.full_name || '',
+        action: 'approved',
+        feedback: '',
+      });
     } catch {
       toast({ title: "Erro ao aprovar", variant: "destructive" });
     }
@@ -103,6 +115,17 @@ export default function ClientApprovals() {
 
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Feedback enviado" });
+
+      // Fire webhook
+      fireWebhook(webhooks.creativeApproval, {
+        file_id: feedbackFileId,
+        file_name: fileData?.file_name || '',
+        project_id: fileData?.project_id || '',
+        client_id: user.id,
+        client_name: profile?.full_name || '',
+        action: 'rejected',
+        feedback: feedbackText,
+      });
     } catch {
       toast({ title: "Erro ao enviar feedback", variant: "destructive" });
     }
