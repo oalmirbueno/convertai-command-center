@@ -18,12 +18,14 @@ export default function Clients() {
         <p className="heading-page">Clientes</p>
         <div className="flex gap-2 flex-wrap">
           <button onClick={() => setBriefingOpen(true)}
+            data-tour="clients-briefing-btn"
             className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
             <Link2 className="w-3.5 h-3.5" />
             <span className="hidden sm:inline">Link</span> Briefing
           </button>
           <button
             onClick={() => setCreateOpen(true)}
+            data-tour="clients-create-btn"
             className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
           >
             <UserPlus className="w-3.5 h-3.5" />
