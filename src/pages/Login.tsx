@@ -231,10 +231,6 @@ export default function Login() {
           </div>
 
           <div className={cn("login-card", shake && "animate-shake")}>
-            {/* Logo icon desktop */}
-            <div className="hidden lg:flex w-12 h-12 rounded-[14px] items-center justify-center mb-7" style={{ background: "#00FF66" }}>
-              <span className="text-[22px] font-bold" style={{ color: "#0D0D0D" }}>A</span>
-            </div>
 
             {/* Tabs */}
             <div className="flex gap-8 mb-9">
