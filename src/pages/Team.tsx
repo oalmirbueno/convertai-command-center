@@ -1,11 +1,10 @@
 import { useState } from "react";
-import { useTeamMembers } from "@/hooks/useSupabaseData";
+import { useTeamMembers, useTasks } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserPlus, X, Loader2, Trash2, Edit3 } from "lucide-react";
 import { toast } from "sonner";
-import { useTasks } from "@/hooks/useSupabaseData";
 
 const roleBadge: Record<string, { cls: string; label: string }> = {
   admin: { cls: "bg-primary/10 text-primary", label: "Admin" },
@@ -27,27 +26,23 @@ export default function Team() {
 
   const taskCountFor = (userId: string) => (allTasks || []).filter((t: any) => t.assigned_to === userId && t.status !== "done").length;
 
+  const callManageTeam = async (body: any) => {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session) throw new Error("Não autenticado");
+
+    const res = await supabase.functions.invoke("manage-team", {
+      body,
+      headers: { Authorization: `Bearer ${session.access_token}` },
+    });
+    if (res.error || res.data?.error) throw new Error(res.data?.error || res.error?.message || "Erro");
+    return res.data;
+  };
+
   const handleCreate = async () => {
     if (!name.trim() || !email.trim()) { toast.error("Preencha nome e email"); return; }
     setSaving(true);
     try {
-      const { data: currentSession } = await supabase.auth.getSession();
-
-      const { error: authError } = await supabase.auth.signUp({
-        email: email.trim(),
-        password: "Temp@2026!",
-        options: { data: { full_name: name.trim(), role } },
-      });
-      if (authError) throw authError;
-
-      // Restore admin session
-      if (currentSession?.session) {
-        await supabase.auth.setSession({
-          access_token: currentSession.session.access_token,
-          refresh_token: currentSession.session.refresh_token,
-        });
-      }
-
+      await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role });
       toast.success("Membro criado! Senha temporária: Temp@2026!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setCreateOpen(false);
@@ -80,11 +75,10 @@ export default function Team() {
   };
 
   const handleRemove = async (member: any) => {
-    if (!confirm(`Remover ${member.full_name} da equipe?`)) return;
+    if (!confirm(`Remover ${member.full_name} da equipe? Isso excluirá o usuário permanentemente.`)) return;
     try {
-      // We can't delete auth users from client-side, but we can remove their role
-      await supabase.from("user_roles").delete().eq("user_id", member.id);
-      toast.success("Membro removido da equipe");
+      await callManageTeam({ action: "delete", user_id: member.id });
+      toast.success("Membro removido com sucesso");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover");
