@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart } from "lucide-react";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -202,12 +203,16 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       await supabase.from("reports").insert(payload);
 
       if (status === "published") {
+        // Notify client
         await supabase.from("notifications").insert({
           user_id: clientId,
           message: `Novo relatório disponível: ${title}`,
           notification_type: "report",
           link: "/relatorios",
         });
+        // Notify admin (if creator is not admin)
+        await notifyAdmin(`Novo relatório publicado: ${title}`, "report", "/relatorios");
+        // Update feed
         await supabase.from("updates").insert({
           project_id: projectId,
           author_id: user!.id,
