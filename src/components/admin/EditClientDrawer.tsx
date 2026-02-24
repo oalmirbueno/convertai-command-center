@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { X, Loader2, Trash2, FileText } from "lucide-react";
+import { useState, useEffect, useRef } from "react";
+import { X, Loader2, Trash2, FileText, Camera } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -45,6 +45,9 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState("");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   // Fetch client's briefing
   const { data: clientBriefing } = useQuery({
@@ -72,8 +75,29 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       setPlanStatus(client.plan_status || "active");
       setServices(client.services_config || {});
       setClientPassword("");
+      setAvatarUrl(client.avatar_url || "");
     }
   }, [client]);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !client) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("Arquivo deve ter no máximo 5MB"); return; }
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${client.id}/avatar.${ext}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+      await supabase.from("profiles").update({ avatar_url: url }).eq("id", client.id);
+      setAvatarUrl(url);
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
+      toast.success("Logo atualizada!");
+    } catch (err: any) { toast.error(err.message || "Erro ao enviar logo"); }
+    setUploadingAvatar(false);
+  };
 
   if (!open || !client) return null;
 
@@ -173,6 +197,32 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
           </div>
 
           <div className="flex-1 overflow-y-auto px-5 py-5 space-y-4">
+            {/* Avatar upload */}
+            <div className="flex items-center gap-4 pb-2">
+              <div className="relative group">
+                <div className="w-16 h-16 rounded-full overflow-hidden bg-secondary border border-border flex items-center justify-center">
+                  {avatarUrl ? (
+                    <img src={avatarUrl} alt={client.full_name} className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-lg font-semibold text-primary">
+                      {client.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                    </span>
+                  )}
+                </div>
+                <button
+                  onClick={() => avatarInputRef.current?.click()}
+                  disabled={uploadingAvatar}
+                  className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer border-none"
+                >
+                  {uploadingAvatar ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
+                </button>
+                <input ref={avatarInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+              </div>
+              <div>
+                <p className="text-sm font-medium text-foreground">{client.company_name || client.full_name}</p>
+                <p className="text-[11px] text-muted-foreground">Clique na foto para alterar a logo</p>
+              </div>
+            </div>
             {/* Status do Cliente */}
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status do Cliente</label>

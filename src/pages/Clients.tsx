@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserPlus, Link2 } from "lucide-react";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
@@ -95,6 +95,7 @@ export default function Clients() {
               className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer"
             >
               <Avatar className="w-10 h-10 shrink-0">
+                {c.avatar_url && <AvatarImage src={c.avatar_url} alt={c.full_name} />}
                 <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
                   {c.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                 </AvatarFallback>
