@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -102,6 +103,18 @@ export default function AdminFinanceiro() {
     await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(amount)} solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
     toast.success("Solicitação de recarga enviada! Cliente será notificado.");
+
+    // Fire webhook
+    const client = (clients || []).find((c: any) => c.id === rechargeModal.clientId);
+    fireWebhook(webhooks.adsRecharge, {
+      client_id: rechargeModal.clientId,
+      client_name: client?.full_name || '',
+      client_email: client?.email || '',
+      amount,
+      platform: rechargeModal.platform,
+      urgency: 'normal',
+    });
+
     setRechargeModal(null);
     setRechargeForm({ amount: "", reason: "" });
   };

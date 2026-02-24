@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 
 const statusBadge: Record<string, { cls: string; label: string }> = {
   new: { cls: "bg-info/10 text-info", label: "Aberto" },
@@ -81,6 +82,18 @@ export default function ClientRequests() {
 
       toast.success("Pedido enviado!");
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
+
+      // Fire webhook
+      fireWebhook(webhooks.clientRequest, {
+        request_id: crypto.randomUUID(),
+        client_id: user!.id,
+        client_name: profile?.full_name || '',
+        company: profile?.company_name || '',
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+      });
+
       setCreateOpen(false);
       setTitle("");
       setDescription("");

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Loader2 } from "lucide-react";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 import WelcomeScreen from "@/components/briefing/WelcomeScreen";
 import QuestionScreen from "@/components/briefing/QuestionScreen";
 import CompletionScreen from "@/components/briefing/CompletionScreen";
@@ -60,6 +61,15 @@ export default function BriefingPublic() {
         link: "/briefings",
       });
     }
+
+    // Fire webhook
+    fireWebhook(webhooks.processDiagnostic, {
+      diagnostic_id: briefingId,
+      client_name: answers.companyName || "Sem nome",
+      company: answers.companyName || "",
+      answers,
+    });
+
     setPhase("complete");
   };
 
