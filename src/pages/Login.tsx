@@ -97,7 +97,7 @@ export default function Login() {
       if (!acceptTerms) { triggerError("Aceite os termos para continuar"); return; }
       setSubmitting(true);
       try {
-        await signup(email, password, fullName, company || undefined);
+        await signup(email, password, fullName, company || undefined, phone?.replace(/\D/g, "") || undefined);
       } catch (err: any) {
         const msg = err.message?.toLowerCase() || "";
         if (msg.includes("already registered") || msg.includes("already exists")) {
