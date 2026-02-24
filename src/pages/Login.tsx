@@ -99,17 +99,18 @@ export default function Login() {
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden bg-background">
       <div className="grid-perspective" />
+      <div className="login-orb" />
 
-      <div className="relative z-10 w-full max-w-sm px-6 animate-fade-in">
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] bg-primary mb-4">
-            <span className="text-base font-bold text-primary-foreground">C</span>
+      <div className="relative z-10 w-full max-w-sm px-6">
+        <div className="text-center mb-10 login-card">
+          <div className="inline-flex items-center justify-center w-9 h-9 rounded-[10px] mb-4" style={{ background: 'linear-gradient(135deg, #00FF66, #00CC52)' }}>
+            <span className="text-base font-bold text-primary-foreground">A</span>
           </div>
-          <h1 className="text-lg font-semibold text-foreground">ConvertAI</h1>
-          <p className="text-xs text-muted-foreground tracking-widest uppercase mt-1">Client Execution OS</p>
+          <h1 className="text-lg font-semibold text-foreground">Aceler<span className="text-primary">iq</span></h1>
+          <p className="text-xs text-muted-foreground tracking-widest uppercase mt-1">Performance OS — Acesse seu painel</p>
         </div>
 
-        <div className="rounded-2xl bg-card p-8" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
+        <div className="rounded-2xl bg-card p-8 login-form" style={{ boxShadow: '0 24px 64px rgba(0,0,0,0.5)' }}>
           <form onSubmit={handleCredentials} className="space-y-5">
             {mode === "signup" && (
               <>
@@ -166,7 +167,7 @@ export default function Login() {
             <button
               type="submit"
               disabled={submitting || !email || !password}
-              className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+              className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 login-btn btn-interactive"
             >
               {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ArrowRight className="w-3.5 h-3.5" />}
               {mode === "login" ? "Entrar" : "Criar Conta"}
@@ -191,7 +192,7 @@ export default function Login() {
           </form>
         </div>
 
-        <p className="text-center text-[11px] text-muted-foreground/40 mt-8">© 2026 ConvertAI</p>
+        <p className="text-center text-[11px] text-muted-foreground/40 mt-8">© 2026 Aceleriq</p>
       </div>
     </div>
   );
