@@ -31,7 +31,8 @@ const typeIcon = (type: string) => {
 };
 
 export default function AdminFinanceiro() {
-  const { user } = useAuth();
+  const { user, profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
   const queryClient = useQueryClient();
   const { data: billing } = useBilling();
   const { data: wallets } = useAdsWallet();
@@ -180,29 +181,43 @@ export default function AdminFinanceiro() {
     <div className="space-y-6 animate-fade-in">
       <p className="heading-page">Financeiro</p>
 
-      {/* Stats */}
-      <div className="grid grid-cols-2 gap-3">
-        {[
-          { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
-          { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
-          { label: "Investimento Ads", value: fmt(totalAds), icon: DollarSign, color: "text-info" },
-          { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
-        ].map((s, i) => (
-          <div key={i} className="bg-card border border-border rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <s.icon className={`w-4 h-4 ${s.color}`} />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
+      {/* Stats - only admin sees revenue/pending/overdue */}
+      {isAdmin && (
+        <div className="grid grid-cols-2 gap-3">
+          {[
+            { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
+            { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
+            { label: "Investimento Ads", value: fmt(totalAds), icon: DollarSign, color: "text-info" },
+            { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
+          ].map((s, i) => (
+            <div key={i} className="bg-card border border-border rounded-xl p-4">
+              <div className="flex items-center gap-2 mb-2">
+                <s.icon className={`w-4 h-4 ${s.color}`} />
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
+              </div>
+              <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
             </div>
-            <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <Tabs defaultValue="overview" className="space-y-4">
+      {!isAdmin && (
+        <div className="grid grid-cols-1 gap-3">
+          <div className="bg-card border border-border rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <DollarSign className="w-4 h-4 text-info" />
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Investimento Ads Total</span>
+            </div>
+            <p className="text-lg font-semibold font-mono text-foreground">{fmt(totalAds)}</p>
+          </div>
+        </div>
+      )}
+
+      <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
-          <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>
+          {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
-          <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>
+          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>}
         </TabsList>
 
         {/* Tab: Overview */}
