@@ -168,6 +168,34 @@ export default function SeedPage() {
         { client_id: clientId, platform: "meta", amount: 500, reason: "Campanha Rodada de Negócios precisa de mais budget", status: "pending", requested_by: trafficId },
       ]);
 
+      // Reports
+      setProgress("Criando relatórios...");
+      await supabase.from("reports").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+      await supabase.from("reports").insert([
+        {
+          project_id: p[0].id,
+          client_id: clientId,
+          title: "Relatório Semanal — Redes Sociais",
+          period_start: "2026-02-17",
+          period_end: "2026-02-23",
+          metrics: { reach: 12400, impressions: 28700, engagement: 3.2, clicks: 847, ctr: 2.9, conversions: 23 },
+          summary: "Semana com crescimento de 15% no alcance orgânico. Posts com vídeos curtos tiveram 3x mais engajamento. Campanha de tráfego pago manteve CTR acima da média do setor.",
+          status: "published",
+          created_by: adminId,
+        },
+        {
+          project_id: p[0].id,
+          client_id: clientId,
+          title: "Relatório Mensal — Janeiro 2026",
+          period_start: "2026-01-01",
+          period_end: "2026-01-31",
+          metrics: { reach: 45200, impressions: 98400, engagement: 2.8, clicks: 3120, ctr: 3.2, conversions: 87 },
+          summary: "Mês de lançamento do projeto com foco em construção de audiência. Base de seguidores cresceu 22%. Próximo mês foco em conversão.",
+          status: "published",
+          created_by: adminId,
+        },
+      ]);
+
       setProgress("Pronto!");
       toast.success("Dados demo populados com sucesso!");
     } catch (err: any) {
