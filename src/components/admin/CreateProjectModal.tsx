@@ -105,6 +105,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
           user_id: clientId,
           message: `Novo projeto criado: ${name.trim()}`,
           notification_type: "project",
+          link: "/dashboard",
         });
 
         // Create system update
