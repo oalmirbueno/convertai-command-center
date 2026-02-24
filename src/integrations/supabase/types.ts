@@ -532,6 +532,73 @@ export type Database = {
           },
         ]
       }
+      reports: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          created_by: string | null
+          file_url: string | null
+          id: string
+          metrics: Json | null
+          period_end: string | null
+          period_start: string | null
+          project_id: string
+          status: string | null
+          summary: string | null
+          title: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          created_by?: string | null
+          file_url?: string | null
+          id?: string
+          metrics?: Json | null
+          period_end?: string | null
+          period_start?: string | null
+          project_id: string
+          status?: string | null
+          summary?: string | null
+          title: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          file_url?: string | null
+          id?: string
+          metrics?: Json | null
+          period_end?: string | null
+          period_start?: string | null
+          project_id?: string
+          status?: string | null
+          summary?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           assigned_to: string | null

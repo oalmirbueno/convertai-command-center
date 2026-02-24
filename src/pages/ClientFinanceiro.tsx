@@ -179,7 +179,7 @@ export default function ClientFinanceiro() {
 
   // ===== RENDER =====
   return (
-    <div className="space-y-8 animate-fade-in max-w-3xl">
+    <div className="space-y-8 animate-fade-in w-full">
       <h1 className="text-xl font-semibold text-foreground">Financeiro</h1>
 
       {/* ========== SEÇÃO 1: MEU PLANO ========== */}

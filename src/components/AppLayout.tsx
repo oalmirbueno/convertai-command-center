@@ -23,15 +23,14 @@ const adminMainNav: NavItem[] = [
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
   { title: "Clientes", url: "/clientes", icon: Users },
-  { title: "Equipe", url: "/equipe", icon: UsersRound },
+  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
 ];
 
 const adminMoreNav: NavItem[] = [
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Briefings", url: "/briefings", icon: FileText },
-  { title: "IA Planner", url: "/ia-planner", icon: Sparkles },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Equipe", url: "/equipe", icon: UsersRound },
   { title: "Timeline", url: "/timeline", icon: GitBranch },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
@@ -41,13 +40,12 @@ const adminMoreNav: NavItem[] = [
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
-  { title: "Acompanhamento", url: "/acompanhamento", icon: Eye },
-  { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
+  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+  { title: "Timeline", url: "/timeline", icon: GitBranch },
 ];
 
 const clientMoreNav: NavItem[] = [
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-  { title: "Timeline", url: "/timeline", icon: GitBranch },
+  { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Documentos", url: "/documentos", icon: FileText },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
