@@ -70,8 +70,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const role = profile?.role || "client";
   const isAdmin = role === "admin";
   const isTeam = ["design", "traffic", "manager"].includes(role);
-  const mainNav = isAdmin ? adminMainNav : clientMainNav;
-  const moreNav = isAdmin ? adminMoreNav : clientMoreNav;
+  const isAdminOrTeam = isAdmin || isTeam;
+  const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
+  const moreNav = isAdminOrTeam ? adminMoreNav : clientMoreNav;
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
