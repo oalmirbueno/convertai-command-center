@@ -10,6 +10,7 @@ import CreateClientModal from "@/components/admin/CreateClientModal";
 import MeetingNotesModal from "@/components/admin/MeetingNotesModal";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -77,14 +78,17 @@ export default function AdminDashboard() {
     queryClient.invalidateQueries({ queryKey: ["projects"] });
   };
 
-  const handleDeleteProject = async (projectId: string) => {
-    if (!confirm("Excluir este projeto? Todas as tarefas, milestones e updates serão removidos.")) return;
-    await supabase.from("tasks").delete().eq("project_id", projectId);
-    await supabase.from("milestones").delete().eq("project_id", projectId);
-    await supabase.from("updates").delete().eq("project_id", projectId);
-    await supabase.from("projects").delete().eq("id", projectId);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState<string | null>(null);
+
+  const handleDeleteProject = async () => {
+    if (!confirmDeleteProject) return;
+    await supabase.from("tasks").delete().eq("project_id", confirmDeleteProject);
+    await supabase.from("milestones").delete().eq("project_id", confirmDeleteProject);
+    await supabase.from("updates").delete().eq("project_id", confirmDeleteProject);
+    await supabase.from("projects").delete().eq("id", confirmDeleteProject);
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Projeto excluído");
+    setConfirmDeleteProject(null);
     setMenuProject(null);
   };
 
@@ -192,7 +196,7 @@ export default function AdminDashboard() {
                         <p className="text-[11px] text-muted-foreground mb-1.5">Progresso: {p.progress}%</p>
                         <Slider defaultValue={[p.progress]} max={100} step={5} onValueCommit={(val) => handleProgressChange(p.id, val[0])} className="w-full" />
                       </div>
-                      <button onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteProject(p.id); }}
                         className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none text-left">
                         <Trash2 className="w-3.5 h-3.5" /> Excluir
                       </button>
@@ -276,6 +280,14 @@ export default function AdminDashboard() {
       <CreateClientModal open={createClientOpen} onClose={() => setCreateClientOpen(false)} />
       <MeetingNotesModal open={meetingNotesOpen} onClose={() => setMeetingNotesOpen(false)} />
       <BriefingLinkModal open={briefingLinkOpen} onClose={() => setBriefingLinkOpen(false)} />
+
+      <ConfirmModal
+        open={!!confirmDeleteProject}
+        title="Excluir projeto"
+        description="Todas as tarefas, milestones e atualizações deste projeto serão removidos permanentemente."
+        onConfirm={handleDeleteProject}
+        onCancel={() => setConfirmDeleteProject(null)}
+      />
     </div>
   );
 }

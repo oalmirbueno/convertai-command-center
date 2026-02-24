@@ -6,7 +6,8 @@ import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, AlertTriangle, Loader2 } from "lucide-react";
+import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle } from "lucide-react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const STATUS_OPTIONS = [
   { value: "planning", label: "Planejamento" },
@@ -36,7 +37,6 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   const [localProgress, setLocalProgress] = useState<number | null>(null);
   const [currentStatus, setCurrentStatus] = useState(project?.status || "planning");
   const [confirmDelete, setConfirmDelete] = useState(false);
-  const [deleting, setDeleting] = useState(false);
 
   // Sync status when project changes
   useEffect(() => {
@@ -82,14 +82,12 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   };
 
   const handleDelete = async () => {
-    setDeleting(true);
     await supabase.from("tasks").delete().eq("project_id", project.id);
     await supabase.from("milestones").delete().eq("project_id", project.id);
     await supabase.from("updates").delete().eq("project_id", project.id);
     await supabase.from("projects").delete().eq("id", project.id);
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Projeto excluído");
-    setDeleting(false);
     setConfirmDelete(false);
     onClose();
   };
@@ -274,36 +272,13 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
             </button>
           </div>
 
-          {/* Inline delete confirmation */}
-          {confirmDelete && (
-            <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => !deleting && setConfirmDelete(false)}>
-              <div className="bg-card border border-border rounded-xl p-6 w-[340px] space-y-4 shadow-2xl" onClick={e => e.stopPropagation()}>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-destructive/10 flex items-center justify-center shrink-0">
-                    <AlertTriangle className="w-5 h-5 text-destructive" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Excluir projeto</p>
-                    <p className="text-xs text-muted-foreground">Esta ação não pode ser desfeita.</p>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  O projeto <span className="font-medium text-foreground">"{project.name}"</span> e todos os dados relacionados (tarefas, milestones, atualizações) serão removidos permanentemente.
-                </p>
-                <div className="flex gap-2 justify-end">
-                  <button disabled={deleting} onClick={() => setConfirmDelete(false)}
-                    className="px-4 py-2 text-xs rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent cursor-pointer transition-colors disabled:opacity-50">
-                    Cancelar
-                  </button>
-                  <button disabled={deleting} onClick={handleDelete}
-                    className="px-4 py-2 text-xs rounded-lg bg-destructive text-destructive-foreground hover:opacity-90 cursor-pointer transition-opacity disabled:opacity-50 flex items-center gap-1.5">
-                    {deleting && <Loader2 className="w-3 h-3 animate-spin" />}
-                    {deleting ? "Excluindo..." : "Excluir"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
+          <ConfirmModal
+            open={confirmDelete}
+            title="Excluir projeto"
+            description={`O projeto "${project.name}" e todos os dados relacionados (tarefas, milestones, atualizações) serão removidos permanentemente.`}
+            onConfirm={handleDelete}
+            onCancel={() => setConfirmDelete(false)}
+          />
 
         </div>
       </SheetContent>

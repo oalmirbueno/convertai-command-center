@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
@@ -35,6 +36,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const [priority, setPriority] = useState("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   // BUG 3 FIX: populate fields when editing
   useEffect(() => {
@@ -109,17 +111,21 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
     }
   };
 
+
   const handleDelete = async () => {
-    if (!editTask || !confirm("Excluir esta tarefa?")) return;
+    if (!editTask) return;
     try {
       await supabase.from("tasks").delete().eq("id", editTask.id);
       toast.success("Tarefa excluída");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      setConfirmDelete(false);
       onClose();
     } catch (err: any) {
       toast.error(err.message);
     }
   };
+
+  if (!open) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
@@ -196,7 +202,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
 
         <div className="px-6 py-4 border-t border-border flex justify-between">
           {isEdit && (
-            <button onClick={handleDelete} className="px-4 py-2 rounded-[10px] text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
+            <button onClick={() => setConfirmDelete(true)} className="px-4 py-2 rounded-[10px] text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
               Excluir
             </button>
           )}
@@ -211,6 +217,14 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
           </div>
         </div>
       </div>
+
+      <ConfirmModal
+        open={confirmDelete}
+        title="Excluir tarefa"
+        description="Esta tarefa será removida permanentemente."
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

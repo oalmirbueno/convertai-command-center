@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback } from "react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -180,17 +181,19 @@ export default function AdminFiles() {
     setUploadDescription("");
   };
 
-  const handleDelete = async (fileId: string, fileUrl: string) => {
-    if (!confirm("Excluir este arquivo?")) return;
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; url: string } | null>(null);
+
+  const handleDelete = async () => {
+    if (!confirmDeleteFile) return;
     try {
-      // Extract path from URL for storage deletion
-      const urlParts = fileUrl.split("/files/");
+      const urlParts = confirmDeleteFile.url.split("/files/");
       if (urlParts[1]) {
         await supabase.storage.from("files").remove([urlParts[1]]);
       }
-      await supabase.from("files").delete().eq("id", fileId);
+      await supabase.from("files").delete().eq("id", confirmDeleteFile.id);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       toast({ title: "Arquivo excluído" });
+      setConfirmDeleteFile(null);
     } catch {
       toast({ title: "Erro ao excluir", variant: "destructive" });
     }
@@ -291,7 +294,7 @@ export default function AdminFiles() {
                     onClick={(e) => e.stopPropagation()}>
                     <Download className="w-4 h-4" />
                   </a>
-                  <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id, f.file_url); }}
+                  <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url }); }}
                     className="text-muted-foreground hover:text-destructive transition-colors">
                     <Trash2 className="w-4 h-4" />
                   </button>
@@ -471,6 +474,14 @@ export default function AdminFiles() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ConfirmModal
+        open={!!confirmDeleteFile}
+        title="Excluir arquivo"
+        description="Este arquivo será removido permanentemente do sistema."
+        onConfirm={handleDelete}
+        onCancel={() => setConfirmDeleteFile(null)}
+      />
     </div>
   );
 }
