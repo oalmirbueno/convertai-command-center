@@ -55,6 +55,11 @@ export default function Clients() {
                 <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
                 <p className="text-[11px] text-muted-foreground">{c.email}</p>
               </div>
+              {(c as any).plan_name && (
+                <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
+                  {(c as any).plan_name}
+                </span>
+              )}
               <div className="text-right hidden md:block">
                 <p className="text-xs font-mono text-foreground">{c.projectCount}</p>
                 <p className="text-[10px] text-muted-foreground">projetos</p>
