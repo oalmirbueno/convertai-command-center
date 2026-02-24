@@ -534,6 +534,8 @@ export type Database = {
       }
       reports: {
         Row: {
+          chart_data: Json | null
+          chart_type: string | null
           client_id: string
           created_at: string | null
           created_by: string | null
@@ -552,6 +554,8 @@ export type Database = {
           title: string
         }
         Insert: {
+          chart_data?: Json | null
+          chart_type?: string | null
           client_id: string
           created_at?: string | null
           created_by?: string | null
@@ -570,6 +574,8 @@ export type Database = {
           title: string
         }
         Update: {
+          chart_data?: Json | null
+          chart_type?: string | null
           client_id?: string
           created_at?: string | null
           created_by?: string | null

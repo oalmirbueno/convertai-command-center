@@ -2,9 +2,12 @@ import { useParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { ArrowLeft, Download, MessageCircle } from "lucide-react";
+import { ArrowLeft, Download, MessageCircle, TrendingUp, TrendingDown } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
+import {
+  AreaChart, Area, BarChart, Bar, LineChart, Line,
+  XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
+} from "recharts";
 
 const metricConfig: Record<string, { label: string; format: (v: number) => string }> = {
   reach: { label: "Alcance", format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v) },
@@ -23,31 +26,14 @@ function formatDateLong(d: string) {
   return new Date(d).toLocaleDateString("pt-BR", { day: "numeric", month: "long", year: "numeric" });
 }
 
-// Generate fake weekly sparkline data based on value
-function generateSparkline(value: number) {
-  const base = value * 0.7;
-  return [0.6, 0.75, 0.65, 0.85, 0.9, 1.0, 0.95].map((mult, i) => ({
-    i,
-    v: Math.round(base * mult + Math.random() * value * 0.1),
-  }));
-}
-
-// Generate chart data for the evolution chart
-function generateChartData(metrics: Record<string, number>) {
-  const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-  const reach = metrics.reach || 0;
-  const impressions = metrics.impressions || 0;
-  return days.map((day, i) => ({
-    day,
-    alcance: Math.round(reach * (0.6 + i * 0.06 + Math.random() * 0.08)),
-    impressoes: Math.round(impressions * (0.6 + i * 0.05 + Math.random() * 0.08)),
-  }));
-}
+const CHART_COLORS = [
+  "hsl(263, 70%, 66%)", "hsl(188, 94%, 43%)", "hsl(142, 71%, 45%)",
+  "hsl(38, 92%, 50%)", "hsl(346, 87%, 60%)", "hsl(221, 83%, 53%)",
+];
 
 export default function ReportDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { profile } = useAuth();
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["report-detail", id],
@@ -84,10 +70,15 @@ export default function ReportDetail() {
   const m = (report.metrics || {}) as Record<string, any>;
   const customMetrics = (m.custom || []) as Array<{ label: string; value: number }>;
   const standardMetrics = Object.entries(m)
-    .filter(([k]) => k !== "custom" && metricConfig[k])
+    .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== 0)
     .map(([k, v]) => ({ key: k, value: v as number, ...metricConfig[k] }));
 
-  const chartData = generateChartData(m);
+  const chartData = ((report as any).chart_data || []) as Array<Record<string, any>>;
+  const chartType = ((report as any).chart_type || "area") as string;
+  const chartColumns = chartData.length > 0
+    ? Object.keys(chartData[0]).filter(k => k !== "label")
+    : [];
+
   const periodLabel = report.period_start && report.period_end
     ? `${formatDateLong(report.period_start)} a ${formatDateLong(report.period_end)}`
     : "";
@@ -97,9 +88,86 @@ export default function ReportDetail() {
 
   const handlePrint = () => window.print();
 
+  const renderChart = () => {
+    if (chartData.length === 0 || chartColumns.length === 0) return null;
+
+    const gradients = chartColumns.map((_, i) => ({
+      id: `grad${i}`,
+      color: CHART_COLORS[i % CHART_COLORS.length],
+    }));
+
+    const commonProps = {
+      data: chartData,
+      margin: { top: 5, right: 10, left: 0, bottom: 5 },
+    };
+
+    const xAxis = (
+      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+    );
+    const yAxis = (
+      <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={50}
+        tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />
+    );
+    const tooltip = (
+      <Tooltip
+        contentStyle={{
+          background: "hsl(var(--card))",
+          border: "1px solid hsl(var(--border))",
+          borderRadius: 12,
+          fontSize: 12,
+          color: "hsl(var(--foreground))",
+        }}
+      />
+    );
+    const grid = <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />;
+
+    if (chartType === "bar") {
+      return (
+        <BarChart {...commonProps}>
+          {grid}{xAxis}{yAxis}{tooltip}
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {chartColumns.map((col, i) => (
+            <Bar key={col} dataKey={col} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[4, 4, 0, 0]} />
+          ))}
+        </BarChart>
+      );
+    }
+
+    if (chartType === "line") {
+      return (
+        <LineChart {...commonProps}>
+          {grid}{xAxis}{yAxis}{tooltip}
+          <Legend wrapperStyle={{ fontSize: 11 }} />
+          {chartColumns.map((col, i) => (
+            <Line key={col} type="monotone" dataKey={col} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2} dot={{ r: 4 }} />
+          ))}
+        </LineChart>
+      );
+    }
+
+    // Default: area
+    return (
+      <AreaChart {...commonProps}>
+        <defs>
+          {gradients.map(g => (
+            <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="5%" stopColor={g.color} stopOpacity={0.3} />
+              <stop offset="95%" stopColor={g.color} stopOpacity={0} />
+            </linearGradient>
+          ))}
+        </defs>
+        {grid}{xAxis}{yAxis}{tooltip}
+        <Legend wrapperStyle={{ fontSize: 11 }} />
+        {chartColumns.map((col, i) => (
+          <Area key={col} type="monotone" dataKey={col} stroke={gradients[i].color} fill={`url(#${gradients[i].id})`} strokeWidth={2} />
+        ))}
+      </AreaChart>
+    );
+  };
+
   return (
     <div className="space-y-8 animate-fade-in max-w-4xl mx-auto w-full print-report">
-      <button onClick={() => navigate("/relatorios")} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+      <button onClick={() => navigate("/relatorios")} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
@@ -119,26 +187,12 @@ export default function ReportDetail() {
         <section>
           <h2 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">Métricas Principais</h2>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
-            {standardMetrics.map(metric => {
-              const sparkData = generateSparkline(metric.value);
-              const variation = Math.round(Math.random() * 20 + 2);
-              return (
-                <div key={metric.key} className="bg-card border border-border rounded-2xl p-5">
-                  <p className="text-2xl font-mono font-light text-foreground">{metric.format(metric.value)}</p>
-                  <p className="text-[10px] uppercase text-muted-foreground mt-1">{metric.label}</p>
-                  <p className="text-[11px] text-success mt-1">▲ +{variation}%</p>
-                  <div className="flex items-end gap-0.5 h-7 mt-2">
-                    {sparkData.map((d, i) => (
-                      <div
-                        key={i}
-                        className="flex-1 bg-primary/40 rounded-sm transition-all duration-500"
-                        style={{ height: `${(d.v / (sparkData[sparkData.length - 1].v || 1)) * 100}%`, animationDelay: `${i * 80}ms` }}
-                      />
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
+            {standardMetrics.map(metric => (
+              <div key={metric.key} className="bg-card border border-border rounded-2xl p-5">
+                <p className="text-2xl font-mono font-light text-foreground">{metric.format(metric.value)}</p>
+                <p className="text-[10px] uppercase text-muted-foreground mt-1">{metric.label}</p>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -155,41 +209,57 @@ export default function ReportDetail() {
         </div>
       )}
 
-      {/* EVOLUTION CHART */}
-      {(m.reach || m.impressions) && (
+      {/* CHART — Real data */}
+      {chartData.length > 0 && chartColumns.length > 0 && (
         <section className="bg-card border border-border rounded-2xl p-6">
-          <h2 className="text-sm font-semibold text-foreground mb-4">📈 Evolução Semanal</h2>
-          <div className="h-56">
+          <h2 className="text-sm font-semibold text-foreground mb-4">📈 Evolução</h2>
+          <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={chartData}>
-                <defs>
-                  <linearGradient id="colorAlcance" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(263, 70%, 66%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(263, 70%, 66%)" stopOpacity={0} />
-                  </linearGradient>
-                  <linearGradient id="colorImpr" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="hsl(188, 94%, 43%)" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: "hsl(240, 4%, 52%)" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 10, fill: "hsl(240, 4%, 52%)" }} axisLine={false} tickLine={false} width={45} tickFormatter={v => v >= 1000 ? (v / 1000).toFixed(0) + "K" : v} />
-                <Tooltip
-                  contentStyle={{ background: "hsl(240, 5%, 7%)", border: "1px solid hsl(240, 4%, 16%)", borderRadius: 12, fontSize: 12 }}
-                  labelStyle={{ color: "hsl(0, 0%, 98%)" }}
-                />
-                <Area type="monotone" dataKey="alcance" stroke="hsl(263, 70%, 66%)" fill="url(#colorAlcance)" strokeWidth={2} />
-                <Area type="monotone" dataKey="impressoes" stroke="hsl(188, 94%, 43%)" fill="url(#colorImpr)" strokeWidth={2} />
-              </AreaChart>
+              {renderChart()!}
             </ResponsiveContainer>
           </div>
-          <div className="flex gap-6 mt-3 justify-center">
-            <span className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="w-3 h-0.5 bg-primary rounded-full" /> Alcance
-            </span>
-            <span className="flex items-center gap-2 text-xs text-muted-foreground">
-              <span className="w-3 h-0.5 bg-accent rounded-full" /> Impressões
-            </span>
+        </section>
+      )}
+
+      {/* DATA TABLE */}
+      {chartData.length > 0 && chartColumns.length > 0 && (
+        <section className="bg-card border border-border rounded-2xl p-6">
+          <h2 className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">Dados Detalhados</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-[12px]">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left py-2 px-3 text-muted-foreground font-medium">Período</th>
+                  {chartColumns.map(col => (
+                    <th key={col} className="text-right py-2 px-3 text-muted-foreground font-medium">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {chartData.map((row, i) => (
+                  <tr key={i} className="border-b border-border/50">
+                    <td className="py-2 px-3 text-foreground font-medium">{row.label}</td>
+                    {chartColumns.map(col => (
+                      <td key={col} className="py-2 px-3 text-right font-mono text-foreground">
+                        {typeof row[col] === "number" ? (row[col] as number).toLocaleString("pt-BR") : row[col]}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+                {/* Totals row */}
+                <tr className="bg-secondary/30 font-medium">
+                  <td className="py-2 px-3 text-foreground">Total</td>
+                  {chartColumns.map(col => {
+                    const total = chartData.reduce((s, r) => s + (Number(r[col]) || 0), 0);
+                    return (
+                      <td key={col} className="py-2 px-3 text-right font-mono text-foreground">
+                        {total.toLocaleString("pt-BR")}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
           </div>
         </section>
       )}
