@@ -120,7 +120,11 @@ export default function SeedPage() {
       // Create updates
       setProgress("Criando atualizações...");
       await supabase.from("updates").insert([
+        { project_id: p[0].id, author_id: adminId, message: "Projeto Presença Digital criado", update_type: "system" },
         { project_id: p[0].id, author_id: adminId, message: "Carrossel Padaria do Zé enviado para aprovação", update_type: "creative" },
+        { project_id: p[0].id, author_id: clientId, message: "Carrossel Fevereiro aprovado pelo cliente", update_type: "creative" },
+        { project_id: p[0].id, author_id: adminId, message: "Relatório Semanal publicado", update_type: "report" },
+        { project_id: p[0].id, author_id: designId, message: "Task 'Design banner' concluída", update_type: "task" },
         { project_id: p[0].id, author_id: adminId, message: "Copy posts março finalizado e aprovado", update_type: "task" },
         { project_id: p[0].id, author_id: designId, message: "Captação de fotos em andamento", update_type: "task" },
         { project_id: p[1].id, author_id: adminId, message: "Aguardando materiais Cogecon para iniciar artes", update_type: "alert" },
@@ -130,11 +134,15 @@ export default function SeedPage() {
       // Create notifications
       setProgress("Criando notificações...");
       await supabase.from("notifications").insert([
-        { user_id: clientId, message: "Novo criativo aguardando aprovação: Carrossel Padaria do Zé", notification_type: "approval" },
-        { user_id: clientId, message: "Relatório semanal de redes sociais disponível", notification_type: "report" },
-        { user_id: clientId, message: "Landing page pronta para revisão final", notification_type: "project" },
-        { user_id: adminId, message: "Acerbi aprovou criativo do mês anterior", notification_type: "approval" },
-        { user_id: adminId, message: "Novo pedido do cliente: Ajuste na bio do Instagram", notification_type: "request" },
+        { user_id: clientId, message: "Novo criativo para aprovação: Carrossel Março", notification_type: "approval", link: "/aprovacoes", read: false },
+        { user_id: clientId, message: "Relatório Semanal publicado - Presença Digital", notification_type: "report", link: "/relatorios", read: false },
+        { user_id: clientId, message: "Seu plano renova em 15/03/2026. Garanta a continuidade! 🚀", notification_type: "billing", link: "/financeiro", read: true },
+        { user_id: clientId, message: "Landing page pronta para revisão final", notification_type: "project", link: "/aprovacoes", read: false },
+        { user_id: clientId, message: "Tarefa 'Design banner' concluída", notification_type: "task", link: "/dashboard", read: true },
+        { user_id: adminId, message: "Acerbi aprovou o criativo Carrossel Fevereiro", notification_type: "approval", link: "/aprovacoes", read: true },
+        { user_id: adminId, message: "Novo pedido de Acerbi: Ajuste na bio do Instagram", notification_type: "request", link: "/pedidos", read: false },
+        { user_id: adminId, message: "Briefing recebido de novo lead", notification_type: "request", link: "/briefings", read: false },
+        { user_id: adminId, message: "Task 'Design carrossel' movida para Done", notification_type: "task", link: "/kanban", read: true },
       ]);
 
       // Create files
