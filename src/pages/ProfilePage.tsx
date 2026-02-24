@@ -30,12 +30,12 @@ export default function ProfilePage() {
   const initials = profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?";
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-lg">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-lg w-full">
       <p className="heading-page">Meu Perfil</p>
 
-      <div className="bg-card border border-border rounded-xl p-6 space-y-6">
+      <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Avatar className="w-16 h-16">
+          <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
             <AvatarFallback className="bg-primary/15 text-primary text-lg font-semibold">{initials}</AvatarFallback>
           </Avatar>
           <div>
