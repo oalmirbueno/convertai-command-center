@@ -68,46 +68,30 @@ Deno.serve(async (req) => {
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
       // Clean up ALL foreign key references before deleting auth user
-      // Nullify assigned tasks instead of deleting them
-      await adminClient.from("tasks").update({ assigned_to: null }).eq("assigned_to", user_id);
-      
-      // Nullify files uploaded_by
-      await adminClient.from("files").update({ uploaded_by: caller.id }).eq("uploaded_by", user_id);
-      
-      // Nullify updates author
-      await adminClient.from("updates").delete().eq("author_id", user_id);
-      
-      // Delete notifications for this user
-      await adminClient.from("notifications").delete().eq("user_id", user_id);
-      
-      // Delete client_requests if they're a client
-      await adminClient.from("client_requests").delete().eq("client_id", user_id);
-      
-      // Nullify reports created_by
-      await adminClient.from("reports").update({ created_by: null }).eq("created_by", user_id);
-      
-      // Delete recharge_requests references
-      await adminClient.from("recharge_requests").delete().eq("client_id", user_id);
-      await adminClient.from("recharge_requests").update({ requested_by: null }).eq("requested_by", user_id);
-      await adminClient.from("recharge_requests").update({ approved_by: null }).eq("approved_by", user_id);
-      
-      // Delete ads_wallet
-      await adminClient.from("ads_wallet").delete().eq("client_id", user_id);
-      
-      // Delete billing
-      await adminClient.from("billing").delete().eq("client_id", user_id);
-      
-      // Delete briefings
-      await adminClient.from("briefings").delete().eq("client_id", user_id);
-      
-      // Nullify projects created_by, delete projects owned by user
-      await adminClient.from("projects").update({ created_by: null }).eq("created_by", user_id);
-      
-      // Delete user_roles
-      await adminClient.from("user_roles").delete().eq("user_id", user_id);
-      
-      // Delete profile
-      await adminClient.from("profiles").delete().eq("id", user_id);
+      const cleanup = async (label: string, promise: Promise<any>) => {
+        const res = await promise;
+        if (res.error) console.error(`Cleanup ${label} failed:`, res.error);
+        else console.log(`Cleanup ${label}: ok`);
+      };
+
+      await cleanup("tasks", adminClient.from("tasks").update({ assigned_to: null }).eq("assigned_to", user_id));
+      await cleanup("files_uploaded", adminClient.from("files").update({ uploaded_by: caller.id }).eq("uploaded_by", user_id));
+      await cleanup("files_client", adminClient.from("files").update({ client_id: caller.id }).eq("client_id", user_id));
+      await cleanup("updates", adminClient.from("updates").delete().eq("author_id", user_id));
+      await cleanup("notifications", adminClient.from("notifications").delete().eq("user_id", user_id));
+      await cleanup("client_requests", adminClient.from("client_requests").delete().eq("client_id", user_id));
+      await cleanup("reports_created", adminClient.from("reports").update({ created_by: null }).eq("created_by", user_id));
+      await cleanup("reports_client", adminClient.from("reports").update({ client_id: caller.id }).eq("client_id", user_id));
+      await cleanup("recharge_client", adminClient.from("recharge_requests").delete().eq("client_id", user_id));
+      await cleanup("recharge_by", adminClient.from("recharge_requests").update({ requested_by: null }).eq("requested_by", user_id));
+      await cleanup("recharge_approved", adminClient.from("recharge_requests").update({ approved_by: null }).eq("approved_by", user_id));
+      await cleanup("ads_wallet", adminClient.from("ads_wallet").delete().eq("client_id", user_id));
+      await cleanup("billing", adminClient.from("billing").delete().eq("client_id", user_id));
+      await cleanup("briefings", adminClient.from("briefings").delete().eq("client_id", user_id));
+      await cleanup("projects_client", adminClient.from("projects").update({ client_id: caller.id }).eq("client_id", user_id));
+      await cleanup("projects_created", adminClient.from("projects").update({ created_by: null }).eq("created_by", user_id));
+      await cleanup("user_roles", adminClient.from("user_roles").delete().eq("user_id", user_id));
+      await cleanup("profiles", adminClient.from("profiles").delete().eq("id", user_id));
 
       // Finally delete auth user
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
