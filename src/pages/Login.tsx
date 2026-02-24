@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Loader2, ArrowRight, Eye, EyeOff, Check } from "lucide-react";
+import { Loader2, ArrowRight, Eye, EyeOff, Check, BarChart3, Zap, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import consultantHero from "@/assets/consultant-hero.jpg";
+import consultantHero from "@/assets/consultant-hero-flipped.jpg";
 
 type Mode = "login" | "signup";
 
@@ -141,76 +141,76 @@ export default function Login() {
       {/* ═══ LEFT PANEL ═══ */}
       <div className="hidden lg:flex w-[55%] relative flex-col overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
         <div className="tech-grid-bg" />
-        {/* Orb glow */}
-        <div className="absolute w-[600px] h-[600px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.06) 0%, transparent 70%)", top: "20%", left: "50%", transform: "translateX(-50%)" }} />
+        {/* Orb glow behind person */}
+        <div className="absolute w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.06) 0%, transparent 70%)", top: "25%", left: "20%", transform: "translate(-50%, -20%)" }} />
 
-        {/* Consultant image — full height, right-aligned, no card */}
+        {/* Consultant image — LEFT side, no card, fades into bg on right */}
         <img
           src={consultantHero}
           alt="Consultora Aceleriq"
-          className="absolute right-0 bottom-0 h-[85%] w-auto object-cover object-top pointer-events-none select-none"
+          className="absolute left-0 bottom-0 h-[90%] w-auto object-cover object-top pointer-events-none select-none"
           style={{
-            maskImage: "linear-gradient(to left, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
-            WebkitMaskImage: "linear-gradient(to left, rgba(0,0,0,1) 40%, rgba(0,0,0,0) 100%)",
+            maskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 95%)",
+            WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 95%)",
             animation: "fadeIn 1s ease-out 0.3s both",
           }}
         />
 
-        {/* Content — left side, over the image */}
-        <div className="relative z-10 flex-1 flex flex-col justify-center px-14 max-w-[420px]">
-          {/* Logo big */}
-          <div className="mb-10" style={{ animation: "fadeInUp 0.6s ease-out" }}>
-            <div className="flex items-center gap-3 mb-6">
-              <div className="w-14 h-14 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
-                <span className="text-2xl font-bold text-primary-foreground">A</span>
-              </div>
-            </div>
-            <h1 className="text-[42px] font-bold text-foreground leading-[1.1] tracking-tight">
-              Aceler<span className="text-primary">iq</span>
-            </h1>
-            <p className="text-[13px] text-muted-foreground/60 tracking-[4px] uppercase mt-2">Performance OS</p>
+        {/* Logo — top left, over image */}
+        <div className="relative z-20 px-10 pt-8 flex items-center gap-3" style={{ animation: "fadeIn 0.5s ease-out" }}>
+          <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
+            <span className="text-xl font-bold text-primary-foreground">A</span>
           </div>
+          <div>
+            <span className="font-bold text-lg text-foreground">Aceler<span className="text-primary">iq</span></span>
+            <p className="text-[10px] text-muted-foreground/50 tracking-[3px] uppercase -mt-0.5">Performance OS</p>
+          </div>
+        </div>
 
-          {/* Welcome text */}
+        {/* Content — RIGHT side of left panel, no overlap with image */}
+        <div className="relative z-10 flex-1 flex flex-col justify-center ml-auto pr-14 pl-8" style={{ maxWidth: "340px" }}>
+          {/* Welcome */}
           <div style={{ animation: "fadeInUp 0.6s ease-out 0.3s both" }}>
-            <h2 className="text-[22px] font-semibold text-foreground mb-3 leading-tight">
-              Bom te ver por aqui!
+            <h2 className="text-[26px] font-bold text-foreground mb-3 leading-tight">
+              Bom te ver<br />por aqui!
             </h2>
-            <p className="text-[15px] text-muted-foreground leading-[1.8] mb-8">
-              Gerencie seus projetos, acompanhe entregas em tempo real e receba relatórios inteligentes — tudo num só lugar.
+            <p className="text-[14px] text-muted-foreground leading-[1.8] mb-8">
+              Gerencie projetos, acompanhe entregas e receba relatórios inteligentes — tudo num só lugar.
             </p>
           </div>
 
-          {/* Value props */}
-          <div className="space-y-4" style={{ animation: "fadeInUp 0.6s ease-out 0.5s both" }}>
+          {/* Value props with Lucide icons */}
+          <div className="space-y-5" style={{ animation: "fadeInUp 0.6s ease-out 0.5s both" }}>
             {[
-              { icon: "📊", text: "Projetos e entregas em tempo real" },
-              { icon: "⚡", text: "Aprovações e feedback sem atrito" },
-              { icon: "🎯", text: "Estratégias sob medida para seu negócio" },
+              { Icon: BarChart3, text: "Projetos e entregas em tempo real" },
+              { Icon: Zap, text: "Aprovações e feedback sem atrito" },
+              { Icon: Target, text: "Estratégias sob medida para você" },
             ].map((item, i) => (
               <div key={i} className="flex items-center gap-3">
-                <span className="text-lg">{item.icon}</span>
+                <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-primary/10">
+                  <item.Icon className="w-4 h-4 text-primary" />
+                </div>
                 <span className="text-sm text-foreground/80">{item.text}</span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="relative z-10 px-14 pb-6" style={{ animation: "fadeIn 0.5s ease-out 1s both" }}>
-          <div className="flex items-center gap-8 mb-4">
+        {/* Footer metrics */}
+        <div className="relative z-10 ml-auto pr-14 pl-8 pb-6" style={{ maxWidth: "340px", animation: "fadeIn 0.5s ease-out 1s both" }}>
+          <div className="flex items-center gap-6 mb-3">
             {[
               { value: `+${empresas}`, label: "empresas" },
               { value: `${satisfacao}%`, label: "satisfação" },
               { value: `${(avaliacao / 10).toFixed(1)}★`, label: "avaliação" },
             ].map((m, i) => (
-              <div key={i} className="flex items-center gap-2">
+              <div key={i} className="flex items-center gap-1.5">
                 <span className="text-primary text-sm font-bold font-mono">{m.value}</span>
                 <span className="text-[10px] text-muted-foreground/40 uppercase">{m.label}</span>
               </div>
             ))}
           </div>
-          <p className="text-[11px] text-muted-foreground/20">© 2026 Aceleriq. Todos os direitos reservados.</p>
+          <p className="text-[11px] text-muted-foreground/20">© 2026 Aceleriq</p>
         </div>
       </div>
 
