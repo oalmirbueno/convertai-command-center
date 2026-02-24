@@ -36,7 +36,7 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
       <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
-        <span className="text-base font-bold text-primary-foreground">C</span>
+        <span className="text-base font-bold text-primary-foreground">A</span>
       </div>
       <p className="text-xs text-muted-foreground">Carregando...</p>
     </div>
