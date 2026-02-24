@@ -3,7 +3,7 @@ import { useTeamMembers, useTasks } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { UserPlus, X, Loader2, Trash2, Edit3 } from "lucide-react";
+import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 const roleBadge: Record<string, { cls: string; label: string }> = {
@@ -19,6 +19,8 @@ export default function Team() {
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editMember, setEditMember] = useState<any>(null);
+  const [removeMember, setRemoveMember] = useState<any>(null);
+  const [removing, setRemoving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -74,15 +76,18 @@ export default function Team() {
     setSaving(false);
   };
 
-  const handleRemove = async (member: any) => {
-    if (!confirm(`Remover ${member.full_name} da equipe? Isso excluirá o usuário permanentemente.`)) return;
+  const handleRemove = async () => {
+    if (!removeMember) return;
+    setRemoving(true);
     try {
-      await callManageTeam({ action: "delete", user_id: member.id });
+      await callManageTeam({ action: "delete", user_id: removeMember.id });
       toast.success("Membro removido com sucesso");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      setRemoveMember(null);
     } catch (err: any) {
       toast.error(err.message || "Erro ao remover");
     }
+    setRemoving(false);
   };
 
   const openEdit = (m: any) => {
@@ -140,7 +145,7 @@ export default function Team() {
                     <Edit3 className="w-3.5 h-3.5" />
                   </button>
                   {m.role !== "admin" && (
-                    <button onClick={() => handleRemove(m)}
+                    <button onClick={() => setRemoveMember(m)}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border-none">
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
@@ -185,6 +190,42 @@ export default function Team() {
               <button onClick={editMember ? handleEdit : handleCreate} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {saving ? "Salvando..." : editMember ? "Salvar" : "Criar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Remove Confirmation Modal */}
+      {removeMember && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !removing && setRemoveMember(null)} />
+          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[400px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+            <div className="px-5 sm:px-6 pt-6 pb-4 text-center space-y-3">
+              <div className="mx-auto w-12 h-12 rounded-full bg-destructive/15 flex items-center justify-center">
+                <AlertTriangle className="w-6 h-6 text-destructive" />
+              </div>
+              <h2 className="text-[15px] font-semibold text-foreground">Remover membro</h2>
+              <p className="text-[13px] text-muted-foreground leading-relaxed">
+                Tem certeza que deseja remover <span className="font-medium text-foreground">{removeMember.full_name}</span> da equipe?
+                Essa ação é <span className="text-destructive font-medium">permanente</span> e excluirá o usuário e todos os dados associados.
+              </p>
+            </div>
+            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
+              <button
+                onClick={() => setRemoveMember(null)}
+                disabled={removing}
+                className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleRemove}
+                disabled={removing}
+                className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-destructive text-destructive-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+              >
+                {removing && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                {removing ? "Removendo..." : "Sim, remover"}
               </button>
             </div>
           </div>
