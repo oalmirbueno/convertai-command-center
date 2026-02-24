@@ -538,8 +538,12 @@ export type Database = {
           created_at: string | null
           created_by: string | null
           file_url: string | null
+          highlights: string | null
           id: string
+          images: Json | null
+          internal_notes: string | null
           metrics: Json | null
+          next_steps: string | null
           period_end: string | null
           period_start: string | null
           project_id: string
@@ -552,8 +556,12 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           file_url?: string | null
+          highlights?: string | null
           id?: string
+          images?: Json | null
+          internal_notes?: string | null
           metrics?: Json | null
+          next_steps?: string | null
           period_end?: string | null
           period_start?: string | null
           project_id: string
@@ -566,8 +574,12 @@ export type Database = {
           created_at?: string | null
           created_by?: string | null
           file_url?: string | null
+          highlights?: string | null
           id?: string
+          images?: Json | null
+          internal_notes?: string | null
           metrics?: Json | null
+          next_steps?: string | null
           period_end?: string | null
           period_start?: string | null
           project_id?: string
