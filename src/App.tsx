@@ -59,7 +59,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
 
-      <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
+      <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
       <Route path="/briefings" element={<ProtectedRoute><AppLayout><AdminBriefings /></AppLayout></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
@@ -67,15 +67,15 @@ function AppRoutes() {
       <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
       <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />
       <Route path="/config" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminRequests /> : <ClientRequests />}</AppLayout></ProtectedRoute>} />
+      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminRequests /> : <ClientRequests />}</AppLayout></ProtectedRoute>} />
       <Route path="/documentos" element={<ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />
-      <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
-      <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
+      <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
+      <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios/novo" element={<ProtectedRoute><AppLayout><AdminReportCreate /></AppLayout></ProtectedRoute>} />
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout><TimelinePage /></AppLayout></ProtectedRoute>} />
-      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
