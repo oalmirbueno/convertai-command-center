@@ -2,7 +2,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 Deno.serve(async (req) => {
@@ -67,14 +67,54 @@ Deno.serve(async (req) => {
       if (!user_id) throw new Error("Missing user_id");
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
-      // Delete related data FIRST (service role bypasses RLS)
-      await adminClient.from("user_roles").delete().eq("user_id", user_id);
+      // Clean up ALL foreign key references before deleting auth user
+      // Nullify assigned tasks instead of deleting them
+      await adminClient.from("tasks").update({ assigned_to: null }).eq("assigned_to", user_id);
+      
+      // Nullify files uploaded_by
+      await adminClient.from("files").update({ uploaded_by: caller.id }).eq("uploaded_by", user_id);
+      
+      // Nullify updates author
+      await adminClient.from("updates").delete().eq("author_id", user_id);
+      
+      // Delete notifications for this user
       await adminClient.from("notifications").delete().eq("user_id", user_id);
+      
+      // Delete client_requests if they're a client
+      await adminClient.from("client_requests").delete().eq("client_id", user_id);
+      
+      // Nullify reports created_by
+      await adminClient.from("reports").update({ created_by: null }).eq("created_by", user_id);
+      
+      // Delete recharge_requests references
+      await adminClient.from("recharge_requests").delete().eq("client_id", user_id);
+      await adminClient.from("recharge_requests").update({ requested_by: null }).eq("requested_by", user_id);
+      await adminClient.from("recharge_requests").update({ approved_by: null }).eq("approved_by", user_id);
+      
+      // Delete ads_wallet
+      await adminClient.from("ads_wallet").delete().eq("client_id", user_id);
+      
+      // Delete billing
+      await adminClient.from("billing").delete().eq("client_id", user_id);
+      
+      // Delete briefings
+      await adminClient.from("briefings").delete().eq("client_id", user_id);
+      
+      // Nullify projects created_by, delete projects owned by user
+      await adminClient.from("projects").update({ created_by: null }).eq("created_by", user_id);
+      
+      // Delete user_roles
+      await adminClient.from("user_roles").delete().eq("user_id", user_id);
+      
+      // Delete profile
       await adminClient.from("profiles").delete().eq("id", user_id);
 
-      // Now delete auth user
+      // Finally delete auth user
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error("deleteUser error:", deleteError);
+        throw new Error(deleteError.message || "Error deleting user");
+      }
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
