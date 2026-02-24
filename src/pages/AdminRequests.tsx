@@ -44,6 +44,17 @@ export default function AdminRequests() {
   const handleStatusChange = async (status: string) => {
     if (!selected) return;
     await supabase.from("client_requests").update({ status }).eq("id", selected.id);
+    // Create update if project exists
+    if (selected.project_id) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        const label = statusOptions.find(s => s.value === status)?.label || status;
+        await supabase.from("updates").insert({
+          project_id: selected.project_id, author_id: authUser.id,
+          message: `Pedido "${selected.title}": status → ${label}`, update_type: "request",
+        });
+      }
+    }
     queryClient.invalidateQueries({ queryKey: ["client-requests"] });
     setSelected({ ...selected, status });
     toast.success("Status atualizado");
@@ -62,6 +73,16 @@ export default function AdminRequests() {
         priority: priorityMap[selected.priority] || "medium",
       });
       await supabase.from("client_requests").update({ status: "in_progress" }).eq("id", selected.id);
+      // Create update
+      if (selected.project_id) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          await supabase.from("updates").insert({
+            project_id: selected.project_id, author_id: authUser.id,
+            message: `Pedido "${selected.title}" transformado em tarefa`, update_type: "task",
+          });
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setSelected({ ...selected, status: "in_progress" });
@@ -75,6 +96,15 @@ export default function AdminRequests() {
   const handleComplete = async () => {
     if (!selected) return;
     await supabase.from("client_requests").update({ status: "completed" }).eq("id", selected.id);
+    if (selected.project_id) {
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase.from("updates").insert({
+          project_id: selected.project_id, author_id: authUser.id,
+          message: `Pedido "${selected.title}" concluído`, update_type: "request",
+        });
+      }
+    }
     queryClient.invalidateQueries({ queryKey: ["client-requests"] });
     setSelected({ ...selected, status: "completed" });
     toast.success("Pedido concluído");

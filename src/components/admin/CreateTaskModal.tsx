@@ -89,6 +89,14 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       } else {
         const { error } = await supabase.from("tasks").insert(payload);
         if (error) throw error;
+        // Create update for new task
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser && projectId) {
+          await supabase.from("updates").insert({
+            project_id: projectId, author_id: authUser.id,
+            message: `Nova tarefa criada: ${title.trim()}`, update_type: "task",
+          });
+        }
         toast.success("Tarefa criada!");
       }
 

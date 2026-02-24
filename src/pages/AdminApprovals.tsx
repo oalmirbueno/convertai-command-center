@@ -51,7 +51,27 @@ export default function AdminApprovals() {
 
   const handleResend = async (fileId: string) => {
     try {
+      const file = approvalFiles.find((f: any) => f.id === fileId);
       await supabase.from("files").update({ approval_status: "pending", feedback: null }).eq("id", fileId);
+      // Create update
+      if (file?.project_id) {
+        const { data: { user: authUser } } = await supabase.auth.getUser();
+        if (authUser) {
+          await supabase.from("updates").insert({
+            project_id: file.project_id, author_id: authUser.id,
+            message: `Criativo reenviado para aprovação: ${file.file_name}`, update_type: "delivery",
+          });
+        }
+        // Notify client
+        if (file.client_id) {
+          await supabase.from("notifications").insert({
+            user_id: file.client_id,
+            message: `Criativo atualizado para aprovação: ${file.file_name}`,
+            notification_type: "approval",
+            link: "/aprovacoes",
+          });
+        }
+      }
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       toast({ title: "Reenviado para aprovação" });
     } catch {

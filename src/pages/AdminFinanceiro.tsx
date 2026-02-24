@@ -65,7 +65,12 @@ export default function AdminFinanceiro() {
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   const handleMarkPaid = async (id: string) => {
+    const bill = (billing || []).find((b: any) => b.id === id);
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
+    // Notify client
+    if (bill?.client_id) {
+      await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado ✅`, "billing", "/financeiro");
+    }
     queryClient.invalidateQueries({ queryKey: ["billing"] });
     toast.success("Pagamento registrado!");
   };
@@ -77,6 +82,8 @@ export default function AdminFinanceiro() {
       amount: parseFloat(billForm.amount), due_date: billForm.due_date,
       description: billForm.description || null,
     });
+    // Notify client
+    await notifyUser(billForm.client_id, `Nova cobrança de ${fmt(parseFloat(billForm.amount))} registrada`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["billing"] });
     toast.success("Cobrança criada");
     setNewBillingOpen(false);
@@ -108,6 +115,8 @@ export default function AdminFinanceiro() {
       }).eq("id", wallet.id);
     }
     await supabase.from("recharge_requests").update({ status: "completed", approved_by: user?.id }).eq("id", r.id);
+    // Notify client
+    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída! Saldo atualizado ✅`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
     queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
     toast.success("Saldo atualizado!");
