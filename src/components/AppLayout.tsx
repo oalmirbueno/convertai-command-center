@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import NotificationsPanel from "@/components/NotificationsPanel";
@@ -77,21 +78,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
   const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
-  const tourKey = `onboarding_done_${role}`;
 
   // Page-specific tour
   const pageSteps = getPageTour(location.pathname, role);
   const pageTourConfig = pageTours.find(p => location.pathname.startsWith(p.route));
   const activeTourSteps = tourMode === "page" && pageSteps ? pageSteps : fullTourSteps;
-  const activeTourKey = tourMode === "page" ? `page_tour_${location.pathname}` : tourKey;
 
-  // Auto-start tour on first visit
+  // Auto-start tour on first visit (using DB flag)
   useEffect(() => {
-    if (profile && !localStorage.getItem(tourKey)) {
+    if (profile && !profile.onboarding_done) {
       const timer = setTimeout(() => setTourOpen(true), 800);
       return () => clearTimeout(timer);
     }
-  }, [profile, tourKey]);
+  }, [profile]);
+
+  const handleTourClose = useCallback(() => {
+    setTourOpen(false);
+    if (user) {
+      supabase.from("profiles").update({ onboarding_done: true } as any).eq("id", user.id).then();
+    }
+  }, [user]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -279,14 +285,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <OnboardingTour
         steps={activeTourSteps}
         isOpen={tourOpen}
-        onClose={() => setTourOpen(false)}
-        storageKey={activeTourKey}
+        onClose={handleTourClose}
+        storageKey="onboarding_done"
       />
 
       {/* Help button to restart tour */}
       {!tourOpen && (
         <HelpButton
-          onFullTour={() => { setTourMode("full"); localStorage.removeItem(tourKey); setTourOpen(true); }}
+          onFullTour={() => { setTourMode("full"); setTourOpen(true); }}
           onPageTour={pageSteps ? () => { setTourMode("page"); setTourOpen(true); } : null}
           pageTourLabel={pageTourConfig?.label}
         />

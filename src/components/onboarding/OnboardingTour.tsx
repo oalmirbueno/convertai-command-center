@@ -130,7 +130,6 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
   };
 
   const handleFinish = () => {
-    localStorage.setItem(storageKey, "true");
     setCurrentStep(0);
     onClose();
   };
