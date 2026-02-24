@@ -139,7 +139,7 @@ export default function Login() {
   return (
     <div className="relative min-h-screen flex flex-col lg:flex-row overflow-hidden bg-background">
       {/* ═══ LEFT PANEL ═══ */}
-      <div className="hidden lg:flex w-[55%] relative overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
+      <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
         <div className="tech-grid-bg" />
         {/* Orb glow behind person */}
         <div className="absolute w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.06) 0%, transparent 70%)", top: "25%", left: "15%", transform: "translate(-50%, -20%)" }} />
@@ -219,7 +219,7 @@ export default function Login() {
       </div>
 
       {/* ═══ RIGHT PANEL ═══ */}
-      <div className="flex-1 flex items-center justify-center px-5 sm:px-6 py-8 sm:py-12 min-h-screen lg:min-h-0" style={{ background: "#121212" }}>
+      <div className="flex-1 flex items-center justify-center px-5 sm:px-6 py-8 sm:py-12 min-h-screen lg:min-h-0 lg:w-[45%]" style={{ background: "#121212" }}>
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-6" style={{ animation: "fadeInUp 0.4s ease-out" }}>

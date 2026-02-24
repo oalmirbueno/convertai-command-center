@@ -13,7 +13,7 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-lg">
+    <div className="space-y-6 animate-fade-in max-w-lg w-full">
       <p className="heading-page">Configurações</p>
 
       <div className="space-y-2">
@@ -21,7 +21,7 @@ export default function SettingsPage() {
           <button
             key={s.label}
             onClick={s.action}
-            className="w-full bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer text-left"
+            className="w-full bg-card border border-border rounded-xl px-4 sm:px-5 py-4 flex items-center gap-3 sm:gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer text-left"
           >
             <div className="w-9 h-9 rounded-lg bg-secondary flex items-center justify-center shrink-0">
               <s.icon className="w-4 h-4 text-muted-foreground" />

@@ -166,7 +166,7 @@ export default function ReportDetail() {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-4xl mx-auto w-full print-report">
+    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-4xl mx-auto w-full print-report">
       <button onClick={() => navigate("/relatorios")} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
@@ -211,9 +211,9 @@ export default function ReportDetail() {
 
       {/* CHART — Real data */}
       {chartData.length > 0 && chartColumns.length > 0 && (
-        <section className="bg-card border border-border rounded-2xl p-6">
+        <section className="bg-card border border-border rounded-2xl p-4 sm:p-6">
           <h2 className="text-sm font-semibold text-foreground mb-4">📈 Evolução</h2>
-          <div className="h-64">
+          <div className="h-48 sm:h-64">
             <ResponsiveContainer width="100%" height="100%">
               {renderChart()!}
             </ResponsiveContainer>
@@ -287,17 +287,17 @@ export default function ReportDetail() {
       )}
 
       {/* ACTIONS */}
-      <div className="flex flex-wrap gap-3 no-print pb-8">
+      <div className="flex flex-col sm:flex-row flex-wrap gap-3 no-print pb-8">
         {report.file_url ? (
-          <a href={report.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium">
+          <a href={report.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium w-full sm:w-auto">
             <Download className="w-4 h-4" /> Baixar Relatório em PDF
           </a>
         ) : (
-          <button onClick={handlePrint} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium cursor-pointer border-none">
+          <button onClick={handlePrint} className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-medium cursor-pointer border-none w-full sm:w-auto">
             <Download className="w-4 h-4" /> Baixar Relatório em PDF
           </button>
         )}
-        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium">
+        <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium w-full sm:w-auto">
           <MessageCircle className="w-4 h-4" /> Falar sobre resultados
         </a>
       </div>

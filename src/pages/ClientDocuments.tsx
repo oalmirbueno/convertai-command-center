@@ -141,10 +141,10 @@ export default function ClientDocuments() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="heading-page">Documentos</p>
         <Select value={filterProject} onValueChange={setFilterProject}>
-          <SelectTrigger className="w-[200px] bg-card border-border rounded-xl text-sm">
+          <SelectTrigger className="w-full sm:w-[200px] bg-card border-border rounded-xl text-sm">
             <SelectValue placeholder="Filtrar por projeto" />
           </SelectTrigger>
           <SelectContent>

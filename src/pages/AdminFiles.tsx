@@ -204,11 +204,11 @@ export default function AdminFiles() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <p className="heading-page">Arquivos</p>
         <div className="flex items-center gap-3">
           <Select value={selectedClient} onValueChange={setSelectedClient}>
-            <SelectTrigger className="w-[220px] bg-card border-border rounded-xl text-sm">
+            <SelectTrigger className="w-full sm:w-[220px] bg-card border-border rounded-xl text-sm">
               <SelectValue placeholder="Todos os clientes" />
             </SelectTrigger>
             <SelectContent>
@@ -264,36 +264,41 @@ export default function AdminFiles() {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
-                <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="text-[13px] font-medium text-foreground truncate">
-                    {f.file_name}
-                    {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                  </p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {f.project?.name || "—"} • {formatDate(f.created_at)}
-                  </p>
+                <div className="flex items-center gap-3">
+                  <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-medium text-foreground truncate">
+                      {f.file_name}
+                      {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
+                    </p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {f.project?.name || "—"} • {formatDate(f.created_at)}
+                    </p>
+                  </div>
+                  <div className="hidden md:flex items-center gap-2">
+                    <Avatar className="w-5 h-5">
+                      <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
+                        {f.uploader?.full_name?.charAt(0) || "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
+                  </div>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
+                  <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    onClick={(e) => e.stopPropagation()}>
+                    <Download className="w-4 h-4" />
+                  </a>
+                  <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id, f.file_url); }}
+                    className="text-muted-foreground hover:text-destructive transition-colors">
+                    <Trash2 className="w-4 h-4" />
+                  </button>
                 </div>
-                <div className="hidden md:flex items-center gap-2">
-                  <Avatar className="w-5 h-5">
-                    <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
-                      {f.uploader?.full_name?.charAt(0) || "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
+                <div className="sm:hidden mt-2 ml-8">
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                 </div>
-                <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
-                <a href={f.file_url} target="_blank" rel="noopener noreferrer"
-                  className="text-muted-foreground hover:text-foreground transition-colors"
-                  onClick={(e) => e.stopPropagation()}>
-                  <Download className="w-4 h-4" />
-                </a>
-                <button onClick={(e) => { e.stopPropagation(); handleDelete(f.id, f.file_url); }}
-                  className="text-muted-foreground hover:text-destructive transition-colors">
-                  <Trash2 className="w-4 h-4" />
-                </button>
               </div>
             );
           })}
@@ -403,7 +408,7 @@ export default function AdminFiles() {
                 <Input value={uploadName} onChange={(e) => setUploadName(e.target.value)}
                   className="mt-1 bg-secondary border-border rounded-xl" />
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="label-sm">Pasta</Label>
                   <Select value={uploadFolder} onValueChange={setUploadFolder}>
