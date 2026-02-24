@@ -116,6 +116,16 @@ export default function TimelinePage() {
     const cycle: Record<string, string> = { pending: "in_progress", in_progress: "completed", completed: "pending" };
     const next = cycle[milestone.status] || "pending";
     await supabase.from("milestones").update({ status: next }).eq("id", milestone.id);
+    // Find project for this milestone
+    const project = (projects || []).find((p: any) => p.id === milestone.project_id);
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+    if (authUser && milestone.project_id) {
+      await supabase.from("updates").insert({
+        project_id: milestone.project_id, author_id: authUser.id,
+        message: `Milestone "${milestone.title}" → ${statusLabels[next]}${project ? ` (${project.name})` : ""}`,
+        update_type: "progress",
+      });
+    }
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
     toast.success("Status: " + statusLabels[next]);
     setSelectedMilestone(null);
@@ -135,6 +145,16 @@ export default function TimelinePage() {
         status: newStatus,
         milestone_order: maxOrder + 1,
       });
+      // Create update
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      const proj = (projects || []).find((p: any) => p.id === addMilestoneProject);
+      if (authUser && addMilestoneProject) {
+        await supabase.from("updates").insert({
+          project_id: addMilestoneProject, author_id: authUser.id,
+          message: `Novo milestone criado: ${newTitle}${proj ? ` (${proj.name})` : ""}`,
+          update_type: "progress",
+        });
+      }
       queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
       toast.success("Milestone criado!");
       setAddMilestoneProject(null);

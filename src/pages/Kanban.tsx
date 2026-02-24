@@ -81,6 +81,13 @@ export default function Kanban() {
       if (project?.client_id) {
         await notifyUser(project.client_id, `Tarefa "${task.title}" enviada para revisão`, "task", "/dashboard");
       }
+      const { data: { user: authUser } } = await supabase.auth.getUser();
+      if (authUser) {
+        await supabase.from("updates").insert({
+          project_id: task.project_id, author_id: authUser.id,
+          message: `Task "${task.title}" em revisão`, update_type: "task",
+        });
+      }
     }
     if (column === "done" && task?.project_id) {
       const { data: { user } } = await supabase.auth.getUser();
