@@ -35,6 +35,7 @@ export function useTasks(projectId?: string) {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 15000,
   });
 }
 
@@ -47,12 +48,12 @@ export function useNotifications() {
         .from("notifications")
         .select("*")
         .order("created_at", { ascending: false })
-        .limit(20);
+        .limit(30);
       if (error) throw error;
       return data;
     },
     enabled: !!user,
-    refetchInterval: 15000,
+    refetchInterval: 10000,
   });
 }
 
@@ -70,6 +71,7 @@ export function useUpdates() {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 15000,
   });
 }
 
@@ -140,6 +142,7 @@ export function useFiles(projectId?: string, clientId?: string) {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 20000,
   });
 }
 

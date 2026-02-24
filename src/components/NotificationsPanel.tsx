@@ -1,29 +1,72 @@
+import { useState } from "react";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Bell, FileText, CreditCard, Package, CheckCircle } from "lucide-react";
+import { Bell, FileText, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
-const typeIcons: Record<string, React.FC<{ className?: string }>> = {
-  approval: CheckCircle,
-  report: FileText,
-  billing: CreditCard,
-  request: Package,
-  update: Bell,
-  system: Bell,
-  task: Bell,
-};
+function getNotifIcon(type: string) {
+  switch (type) {
+    case "approval": return { icon: <CheckCircle className="w-4 h-4" />, bg: "bg-primary/10 text-primary" };
+    case "request": return { icon: <Package className="w-4 h-4" />, bg: "bg-info/10 text-info" };
+    case "project": case "update": return { icon: <FolderOpen className="w-4 h-4" />, bg: "bg-success/10 text-success" };
+    case "billing": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
+    case "task": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
+    case "report": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
+    default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
+  }
+}
 
-const typeColors: Record<string, string> = {
-  approval: "text-primary",
-  report: "text-info",
-  billing: "text-warning",
-  request: "text-success",
-  update: "text-foreground",
-  system: "text-muted-foreground",
-  task: "text-info",
-};
+function getLinkLabel(notif: any): string {
+  if (!notif.link) return "Abrir";
+  if (notif.link.includes("/aprovacoes")) return "Ver Arquivo";
+  if (notif.link.includes("/projetos") || notif.link.includes("/dashboard")) return "Ver Projeto";
+  if (notif.link.includes("/relatorios")) return "Ver Relatório";
+  if (notif.link.includes("/financeiro")) return "Ver Financeiro";
+  if (notif.link.includes("/pedidos")) return "Ver Pedido";
+  if (notif.link.includes("/kanban")) return "Ver Tarefas";
+  return "Abrir";
+}
+
+function timeAgo(dateStr: string): string {
+  const date = new Date(dateStr);
+  const now = new Date();
+  const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
+  if (seconds < 60) return "agora";
+  if (seconds < 3600) return `há ${Math.floor(seconds / 60)} min`;
+  if (seconds < 86400) return `há ${Math.floor(seconds / 3600)}h`;
+  if (seconds < 172800) return "ontem";
+  if (seconds < 604800) return `há ${Math.floor(seconds / 86400)} dias`;
+  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+}
+
+function isSameDay(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+}
+
+function groupNotifications(notifs: any[]) {
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const groups: { label: string; items: any[] }[] = [];
+  const todayItems = notifs.filter(n => isSameDay(new Date(n.created_at), today));
+  const yesterdayItems = notifs.filter(n => isSameDay(new Date(n.created_at), yesterday));
+  const weekItems = notifs.filter(n => {
+    const d = new Date(n.created_at);
+    return !isSameDay(d, today) && !isSameDay(d, yesterday) && (today.getTime() - d.getTime()) < 7 * 86400000;
+  });
+  const olderItems = notifs.filter(n => (today.getTime() - new Date(n.created_at).getTime()) >= 7 * 86400000);
+
+  if (todayItems.length) groups.push({ label: "Hoje", items: todayItems });
+  if (yesterdayItems.length) groups.push({ label: "Ontem", items: yesterdayItems });
+  if (weekItems.length) groups.push({ label: "Esta semana", items: weekItems });
+  if (olderItems.length) groups.push({ label: "Anteriores", items: olderItems });
+
+  return groups;
+}
 
 interface Props {
   open: boolean;
@@ -34,6 +77,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
   const { data: notifications } = useNotifications();
   const queryClient = useQueryClient();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<"all" | "unread">("all");
 
   const handleClick = async (n: any) => {
     if (!n.read) {
@@ -53,51 +97,91 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
       await supabase.from("notifications").update({ read: true }).eq("id", n.id);
     }
     queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    toast.success("Todas marcadas como lidas");
   };
 
   const unreadCount = (notifications || []).filter((n: any) => !n.read).length;
+  const displayNotifs = tab === "unread"
+    ? (notifications || []).filter((n: any) => !n.read)
+    : (notifications || []);
+  const groups = groupNotifications(displayNotifs);
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[340px] sm:max-w-[340px] bg-card border-l border-border">
-        <SheetHeader className="pb-4">
+      <SheetContent side="right" className="w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0">
+        <SheetHeader className="px-5 pt-5 pb-3">
           <div className="flex items-center justify-between">
             <SheetTitle className="label-sm text-foreground">Notificações</SheetTitle>
+          </div>
+        </SheetHeader>
+
+        {/* Tabs + Mark all */}
+        <div className="px-5 pb-3 space-y-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setTab("all")}
+              className={`text-[12px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+                tab === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => setTab("unread")}
+              className={`text-[12px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+                tab === "unread" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Não lidas{unreadCount > 0 ? ` (${unreadCount})` : ""}
+            </button>
             {unreadCount > 0 && (
-              <button onClick={markAllRead} className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none">
+              <button onClick={markAllRead} className="text-[11px] text-primary hover:underline cursor-pointer bg-transparent border-none ml-auto">
                 Marcar todas como lidas
               </button>
             )}
           </div>
-        </SheetHeader>
-        <div className="space-y-0">
-          {(!notifications || notifications.length === 0) ? (
-            <p className="text-sm text-muted-foreground py-4 text-center">Nenhuma notificação.</p>
+        </div>
+
+        {/* Notifications list */}
+        <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 140px)", scrollbarWidth: "none" }}>
+          {groups.length === 0 ? (
+            <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma notificação.</p>
           ) : (
-            notifications.map((n: any, i: number) => {
-              const Icon = typeIcons[n.notification_type] || Bell;
-              return (
-                <div key={n.id}>
-                  {i > 0 && <div className="border-t border-border" />}
-                  <div
-                    className={`flex items-start gap-3 py-3 cursor-pointer hover:bg-secondary/30 px-1 rounded ${n.read ? "opacity-40" : ""}`}
-                    onClick={() => handleClick(n)}
-                  >
-                    {!n.read && <div className="w-1.5 h-1.5 rounded-full bg-info shrink-0 mt-2" />}
-                    {n.read && <div className="w-1.5 shrink-0" />}
-                    <div className={`mt-0.5 ${typeColors[n.notification_type] || "text-muted-foreground"}`}>
-                      <Icon className="w-3.5 h-3.5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-medium text-foreground">{n.message}</p>
-                      <p className="text-[11px] text-muted-foreground/50 mt-1">
-                        {new Date(n.created_at).toLocaleString("pt-BR")}
-                      </p>
-                    </div>
-                  </div>
+            groups.map((group) => (
+              <div key={group.label}>
+                <div className="px-5 py-2">
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">{group.label}</p>
                 </div>
-              );
-            })
+                {group.items.map((n: any) => {
+                  const { icon, bg } = getNotifIcon(n.notification_type);
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => handleClick(n)}
+                      className={`px-5 py-3.5 cursor-pointer transition-colors ${
+                        n.read ? "hover:bg-secondary/30" : "bg-primary/5 hover:bg-primary/10"
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${bg}`}>
+                          {icon}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-[13px] leading-snug ${n.read ? "text-muted-foreground" : "text-foreground font-medium"}`}>
+                            {n.message}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
+                          {n.link && (
+                            <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)} →</p>
+                          )}
+                        </div>
+                        {!n.read && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ))
           )}
         </div>
       </SheetContent>

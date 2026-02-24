@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
+import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -22,16 +23,34 @@ const priorityBorderColors: Record<string, string> = {
   low: "border-l-border",
 };
 
+const priorityLabels: Record<string, string> = {
+  urgent: "Urgente",
+  high: "Alta",
+  medium: "Média",
+  low: "Baixa",
+};
+
+const statusLabels: Record<string, string> = {
+  backlog: "Backlog",
+  doing: "Em Andamento",
+  review: "Revisão",
+  done: "Concluído",
+};
+
 export default function Kanban() {
   const { data: tasks, isLoading } = useTasks();
   const { data: teamMembers } = useTeamMembers();
   const { data: projects } = useProjects();
+  const { profile } = useAuth();
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  const isClient = profile?.role === "client";
 
   // Modals
   const [createStatus, setCreateStatus] = useState<string | null>(null);
   const [editTask, setEditTask] = useState<any>(null);
+  const [viewTask, setViewTask] = useState<any>(null);
 
   // Filters
   const [filterProject, setFilterProject] = useState("");
@@ -47,14 +66,16 @@ export default function Kanban() {
     return true;
   });
 
-  const handleDragStart = (taskId: string) => setDraggedTask(taskId);
+  const handleDragStart = (taskId: string) => {
+    if (isClient) return;
+    setDraggedTask(taskId);
+  };
 
   const handleDrop = async (column: string) => {
-    if (!draggedTask) return;
+    if (isClient || !draggedTask) return;
     const task = (tasks || []).find((t: any) => t.id === draggedTask);
     await supabase.from("tasks").update({ status: column }).eq("id", draggedTask);
 
-    // Notifications on status change
     if (column === "review" && task?.project_id) {
       const { data: project } = await supabase.from("projects").select("client_id, name").eq("id", task.project_id).maybeSingle();
       if (project?.client_id) {
@@ -82,6 +103,14 @@ export default function Kanban() {
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
   };
 
+  const handleCardClick = (task: any) => {
+    if (isClient) {
+      setViewTask(task);
+    } else {
+      setEditTask(task);
+    }
+  };
+
   return (
     <div className="space-y-6 animate-fade-in">
       <p className="heading-page">Kanban</p>
@@ -96,13 +125,15 @@ export default function Kanban() {
             <option key={p.id} value={p.id}>{p.name}</option>
           ))}
         </select>
-        <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
-          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors">
-          <option value="">Todos os responsáveis</option>
-          {(teamMembers || []).map((m: any) => (
-            <option key={m.id} value={m.id}>{m.full_name}</option>
-          ))}
-        </select>
+        {!isClient && (
+          <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
+            className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+            <option value="">Todos os responsáveis</option>
+            {(teamMembers || []).map((m: any) => (
+              <option key={m.id} value={m.id}>{m.full_name}</option>
+            ))}
+          </select>
+        )}
         <select value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}
           className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors">
           <option value="">Todas prioridades</option>
@@ -122,7 +153,7 @@ export default function Kanban() {
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : (tasks || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhuma tarefa encontrada. Use a página Seed para popular dados demo.</div>
+        <div className="text-sm text-muted-foreground py-8 text-center">Nenhuma tarefa encontrada.</div>
       ) : (
         <div className="flex gap-6 overflow-x-auto pb-4" style={{ scrollSnapType: 'x mandatory' }}>
           {columns.map((col) => {
@@ -132,26 +163,28 @@ export default function Kanban() {
                 key={col.id}
                 className="min-w-[300px] max-w-[320px] flex-shrink-0 space-y-3"
                 style={{ scrollSnapAlign: 'start' }}
-                onDragOver={(e) => e.preventDefault()}
-                onDrop={() => handleDrop(col.id)}
+                onDragOver={isClient ? undefined : (e) => e.preventDefault()}
+                onDrop={isClient ? undefined : () => handleDrop(col.id)}
               >
                 <div className="flex items-center gap-2 mb-1">
                   <div className={`w-1.5 h-1.5 rounded-full ${col.dotColor}`} />
                   <span className="label-sm">{col.title}</span>
                   <span className="text-[10px] font-mono text-muted-foreground bg-secondary px-1.5 py-0.5 rounded ml-auto">{colTasks.length}</span>
-                  <button onClick={() => setCreateStatus(col.id)}
-                    className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-0.5 rounded hover:bg-secondary">
-                    <Plus className="w-3.5 h-3.5" />
-                  </button>
+                  {!isClient && (
+                    <button onClick={() => setCreateStatus(col.id)}
+                      className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-0.5 rounded hover:bg-secondary">
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                 </div>
                 <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", scrollbarWidth: "none" }}>
                   {colTasks.map((task: any) => (
                     <div
                       key={task.id}
-                      draggable
-                      onDragStart={() => handleDragStart(task.id)}
-                      onClick={() => setEditTask(task)}
-                      className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} cursor-grab active:cursor-grabbing hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
+                      draggable={!isClient}
+                      onDragStart={isClient ? undefined : () => handleDragStart(task.id)}
+                      onClick={() => handleCardClick(task)}
+                      className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
                     >
                       <div className="p-3.5 space-y-2.5">
                         <div>
@@ -179,18 +212,80 @@ export default function Kanban() {
         </div>
       )}
 
-      <CreateTaskModal
-        open={!!createStatus}
-        onClose={() => setCreateStatus(null)}
-        defaultStatus={createStatus || "backlog"}
-        teamMembers={teamMembers || []}
-      />
-      <CreateTaskModal
-        open={!!editTask}
-        onClose={() => setEditTask(null)}
-        editTask={editTask}
-        teamMembers={teamMembers || []}
-      />
+      {/* View-only modal for clients */}
+      {viewTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setViewTask(null)} />
+          <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4 animate-in fade-in zoom-in-95 duration-200">
+            <button onClick={() => setViewTask(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1">
+              <X className="w-4 h-4" />
+            </button>
+            <div className="space-y-4">
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Título</p>
+                <p className="text-sm font-medium text-foreground mt-1">{viewTask.title}</p>
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Descrição</p>
+                <p className="text-sm text-muted-foreground mt-1">{viewTask.description || "—"}</p>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prioridade</p>
+                  <span className={`inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full ${
+                    viewTask.priority === "urgent" ? "bg-destructive/10 text-destructive" :
+                    viewTask.priority === "high" ? "bg-warning/10 text-warning" :
+                    "bg-secondary text-muted-foreground"
+                  }`}>
+                    {priorityLabels[viewTask.priority] || viewTask.priority}
+                  </span>
+                </div>
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</p>
+                  <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full bg-secondary text-foreground">
+                    {statusLabels[viewTask.status] || viewTask.status}
+                  </span>
+                </div>
+              </div>
+              {viewTask.due_date && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prazo</p>
+                  <p className="text-sm text-foreground mt-1">{new Date(viewTask.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</p>
+                </div>
+              )}
+              {viewTask.assignee?.full_name && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</p>
+                  <p className="text-sm text-foreground mt-1">{viewTask.assignee.full_name}</p>
+                </div>
+              )}
+              {viewTask.project?.name && (
+                <div>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</p>
+                  <p className="text-sm text-foreground mt-1">{viewTask.project.name}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isClient && (
+        <>
+          <CreateTaskModal
+            open={!!createStatus}
+            onClose={() => setCreateStatus(null)}
+            defaultStatus={createStatus || "backlog"}
+            teamMembers={teamMembers || []}
+          />
+          <CreateTaskModal
+            open={!!editTask}
+            onClose={() => setEditTask(null)}
+            editTask={editTask}
+            teamMembers={teamMembers || []}
+          />
+        </>
+      )}
     </div>
   );
 }
