@@ -59,6 +59,7 @@ export default function Team() {
 
   const handleEdit = async () => {
     if (!editMember || !name.trim()) { toast.error("Preencha o nome"); return; }
+    if (password && password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
     setSaving(true);
     try {
       await supabase.from("profiles").update({ full_name: name.trim() }).eq("id", editMember.id);
@@ -66,6 +67,11 @@ export default function Team() {
       // Update role if changed
       if (role !== editMember.role) {
         await supabase.from("user_roles").update({ role: role as any }).eq("user_id", editMember.id);
+      }
+
+      // Update password if provided
+      if (password) {
+        await callManageTeam({ action: "update_password", user_id: editMember.id, password });
       }
 
       toast.success("Membro atualizado!");
@@ -186,13 +192,14 @@ export default function Team() {
                   <option value="manager">Manager</option>
                 </select>
               </div>
-              {!editMember && (
-                <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Senha Inicial</label>
-                  <input value={password} onChange={e => setPassword(e.target.value)} type="password" placeholder="Deixe vazio para padrão (Temp@2026!)"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
-                </div>
-              )}
+              <div className="space-y-1.5">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  {editMember ? "Nova Senha" : "Senha Inicial"}
+                </label>
+                <input value={password} onChange={e => setPassword(e.target.value)} type="password"
+                  placeholder={editMember ? "Deixe vazio para manter atual" : "Deixe vazio para padrão (Temp@2026!)"}
+                  className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+              </div>
             </div>
             <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button onClick={closeModal} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>

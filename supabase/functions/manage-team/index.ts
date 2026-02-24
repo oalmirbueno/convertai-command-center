@@ -105,6 +105,19 @@ Deno.serve(async (req) => {
       });
     }
 
+    if (action === "update_password") {
+      const { user_id, password } = payload;
+      if (!user_id || !password) throw new Error("Missing user_id or password");
+      if (password.length < 6) throw new Error("Password must be at least 6 characters");
+
+      const { error: updateError } = await adminClient.auth.admin.updateUserById(user_id, { password });
+      if (updateError) throw updateError;
+
+      return new Response(JSON.stringify({ success: true }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     throw new Error("Invalid action");
   } catch (err: any) {
     console.error("manage-team error:", err);
