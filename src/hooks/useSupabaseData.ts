@@ -77,6 +77,7 @@ export function useUpdates() {
 
 export function useClients() {
   const { user, profile } = useAuth();
+  const isTeamOrAdmin = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
   return useQuery({
     queryKey: ["clients", user?.id],
     queryFn: async () => {
@@ -104,7 +105,7 @@ export function useClients() {
         projectCount: (projects || []).filter((p: any) => p.client_id === profile.id).length,
       }));
     },
-    enabled: !!user && profile?.role === "admin",
+    enabled: !!user && isTeamOrAdmin,
   });
 }
 
