@@ -1,12 +1,12 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { Shield, User, Loader2, ArrowRight } from "lucide-react";
+import { Loader2, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 type Mode = "login" | "signup";
 
 export default function Login() {
-  const { user, profile, loading, login, loginWithCredentials, signup } = useAuth();
+  const { user, profile, loading, loginWithCredentials, signup } = useAuth();
   const navigate = useNavigate();
   const [mode, setMode] = useState<Mode>("login");
   const [email, setEmail] = useState("");
@@ -46,19 +46,6 @@ export default function Login() {
       </div>
     );
   }
-
-  const handleDemoLogin = async (role: "admin" | "client") => {
-    setSubmitting(true);
-    setError("");
-    try {
-      await login(role);
-    } catch (err: any) {
-      console.error("[Login] Demo login error:", err);
-      setError(err.message || "Erro ao entrar");
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleCredentials = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -201,27 +188,6 @@ export default function Login() {
               )}
             </p>
 
-            <div className="pt-2 space-y-2.5">
-              <p className="text-[11px] text-center text-muted-foreground/50 uppercase tracking-wider">Acesso rápido para teste</p>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("admin")}
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Shield className="w-3.5 h-3.5" />}
-                Entrar como Admin
-              </button>
-              <button
-                type="button"
-                onClick={() => handleDemoLogin("client")}
-                disabled={submitting}
-                className="w-full flex items-center justify-center gap-2 h-10 rounded-[10px] bg-transparent border border-border text-muted-foreground text-[13px] font-medium hover:text-foreground hover:border-muted-foreground/50 transition-colors cursor-pointer disabled:opacity-50"
-              >
-                {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <User className="w-3.5 h-3.5" />}
-                Entrar como Cliente
-              </button>
-            </div>
           </form>
         </div>
 

@@ -1,5 +1,5 @@
 import { useProjects, useUpdates, useTasks } from "@/hooks/useSupabaseData";
-import { Clock, AlertTriangle, ChevronRight, Plus, UserPlus, Sparkles, Upload, Database, FileText, MoreHorizontal, Trash2, Edit3, Link2 } from "lucide-react";
+import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -93,9 +93,7 @@ export default function AdminDashboard() {
     { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true) },
     { label: "Nova Ata de Reunião", icon: FileText, action: () => setMeetingNotesOpen(true) },
     { label: "Gerar Link Briefing", icon: Link2, action: () => setBriefingLinkOpen(true) },
-    { label: "Gerar Plano IA", icon: Sparkles, action: () => {} },
     { label: "Upload", icon: Upload, action: () => navigate("/arquivos") },
-    { label: "Seed Demo Data", icon: Database, action: () => navigate("/admin/seed") },
   ];
 
   return (
@@ -133,7 +131,7 @@ export default function AdminDashboard() {
         {loadingProjects ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
         ) : activeProjects.length === 0 ? (
-          <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado. Use a página Seed para popular dados demo.</div>
+          <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
         ) : (
           <div className="space-y-0.5 stagger-children">
             {activeProjects.map((p: any) => {
