@@ -25,6 +25,8 @@ import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import AdminReports from "@/pages/AdminReports";
 import ClientReports from "@/pages/ClientReports";
 import TimelinePage from "@/pages/TimelinePage";
+import AdminReportCreate from "@/pages/AdminReportCreate";
+import ReportDetail from "@/pages/ReportDetail";
 import AppLayout from "@/components/AppLayout";
 
 const queryClient = new QueryClient();
@@ -73,6 +75,8 @@ function AppRoutes() {
       <Route path="/perfil" element={<ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>} />
       <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
+      <Route path="/relatorios/novo" element={<ProtectedRoute><AppLayout><AdminReportCreate /></AppLayout></ProtectedRoute>} />
+      <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout><TimelinePage /></AppLayout></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
 

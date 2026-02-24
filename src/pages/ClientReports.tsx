@@ -1,49 +1,29 @@
-import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { FileText } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useNavigate } from "react-router-dom";
 
-const metricFields = [
-  { key: "reach", label: "Alcance" },
-  { key: "impressions", label: "Impressões" },
-  { key: "engagement", label: "Engaj. %" },
-  { key: "clicks", label: "Cliques" },
-  { key: "ctr", label: "CTR %" },
-  { key: "conversions", label: "Conversões" },
-];
+const metricConfig: Record<string, { label: string; format: (v: number) => string }> = {
+  reach: { label: "Alcance", format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v) },
+  impressions: { label: "Impressões", format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v) },
+  engagement: { label: "Engaj.", format: v => v + "%" },
+  clicks: { label: "Cliques", format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v) },
+  ctr: { label: "CTR", format: v => v + "%" },
+  conversions: { label: "Conversões", format: v => String(v) },
+  followers_gained: { label: "Seguidores", format: v => "+" + v },
+  ad_spend: { label: "Investido", format: v => "R$" + v.toLocaleString("pt-BR") },
+};
 
-function formatNumber(n: number) {
-  if (n >= 1000) return (n / 1000).toFixed(1) + "K";
-  return String(n);
-}
-
-function formatDate(d: string) {
+function formatDateShort(d: string) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
-function formatDateShort(d: string) {
-  if (!d) return "";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
-function MiniBars() {
-  const bars = [55, 80, 40, 95, 65];
-  return (
-    <div className="flex items-end gap-0.5 h-6 mt-2">
-      {bars.map((v, i) => (
-        <div key={i} className="flex-1 bg-primary/50 rounded-sm" style={{ height: `${v}%` }} />
-      ))}
-    </div>
-  );
-}
-
 export default function ClientReports() {
   const { user } = useAuth();
-  const [previewReport, setPreviewReport] = useState<any>(null);
+  const navigate = useNavigate();
 
   const { data: reports, isLoading } = useQuery({
     queryKey: ["reports-client", user?.id],
@@ -83,44 +63,58 @@ export default function ClientReports() {
       ) : (
         <div className="space-y-5">
           {reports.map((r: any) => {
-            const m = (r.metrics || {}) as Record<string, number>;
-            const visibleMetrics = metricFields.filter(f => m[f.key] !== undefined);
-            return (
-              <div key={r.id} className="bg-card border border-border rounded-2xl p-6">
-                <p className="text-sm font-semibold text-foreground">📊 {r.title}</p>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {(r as any).project?.name}
-                  {r.period_start && r.period_end && ` • ${formatDateShort(r.period_start)}-${formatDateShort(r.period_end)}`}
-                </p>
+            const m = (r.metrics || {}) as Record<string, any>;
+            const visibleMetrics = Object.entries(m)
+              .filter(([k]) => k !== "custom" && metricConfig[k])
+              .map(([k, v]) => ({ key: k, value: v as number, ...metricConfig[k] }));
 
+            return (
+              <div key={r.id} className="bg-card border border-border rounded-2xl p-6 hover:border-primary/30 transition-colors">
+                {/* Header */}
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold text-foreground">📊 {r.title}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {(r as any).project?.name}
+                      {r.period_start && r.period_end && ` • ${formatDateShort(r.period_start)} a ${formatDateShort(r.period_end)}`}
+                    </p>
+                  </div>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success shrink-0">Publicado</span>
+                </div>
+
+                {/* Metrics grid */}
                 {visibleMetrics.length > 0 && (
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-5">
-                    {visibleMetrics.map(f => (
-                      <div key={f.key} className="bg-secondary/40 rounded-xl p-3">
-                        <p className="text-lg font-mono font-medium text-foreground">
-                          {f.key === "engagement" || f.key === "ctr" ? m[f.key] + "%" : formatNumber(m[f.key])}
-                        </p>
-                        <p className="text-[10px] uppercase text-muted-foreground">{f.label}</p>
-                        <MiniBars />
+                    {visibleMetrics.slice(0, 8).map(metric => (
+                      <div key={metric.key} className="bg-secondary/40 rounded-xl p-3">
+                        <p className="text-lg font-mono font-medium text-foreground">{metric.format(metric.value)}</p>
+                        <p className="text-[10px] uppercase text-muted-foreground">{metric.label}</p>
+                        <div className="flex items-end gap-0.5 h-6 mt-2">
+                          {[40, 65, 50, 80, 70].map((v, i) => (
+                            <div key={i} className="flex-1 bg-primary/40 rounded-sm" style={{ height: `${v}%` }} />
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>
                 )}
 
+                {/* Summary preview */}
                 {r.summary && (
-                  <p className="text-[13px] text-muted-foreground mt-4 italic">"{r.summary}"</p>
+                  <p className="text-[13px] text-muted-foreground mt-4 italic line-clamp-2">"{r.summary}"</p>
                 )}
 
+                {/* CTA */}
                 <div className="flex gap-3 mt-4">
                   <button
-                    onClick={() => setPreviewReport(r)}
+                    onClick={() => navigate(`/relatorios/${r.id}`)}
                     className="px-4 py-2 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none font-medium"
                   >
                     Ver Relatório Completo
                   </button>
                   {r.file_url && (
                     <a href={r.file_url} target="_blank" rel="noopener noreferrer" className="px-4 py-2 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors inline-flex items-center gap-1">
-                      📄 Baixar PDF
+                      📥 Baixar PDF
                     </a>
                   )}
                 </div>
@@ -129,47 +123,6 @@ export default function ClientReports() {
           })}
         </div>
       )}
-
-      {/* Preview Modal */}
-      <Dialog open={!!previewReport} onOpenChange={() => setPreviewReport(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {previewReport && (() => {
-            const m = (previewReport.metrics || {}) as Record<string, number>;
-            return (
-              <>
-                <DialogHeader>
-                  <DialogTitle className="text-lg">{previewReport.title}</DialogTitle>
-                  {previewReport.period_start && (
-                    <p className="text-xs text-muted-foreground">{formatDate(previewReport.period_start)} — {formatDate(previewReport.period_end)}</p>
-                  )}
-                </DialogHeader>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 mt-4">
-                  {metricFields.filter(f => m[f.key] !== undefined).map(f => (
-                    <div key={f.key} className="bg-secondary/50 rounded-xl p-4">
-                      <p className="text-[10px] uppercase text-muted-foreground">{f.label}</p>
-                      <p className="text-2xl font-mono font-light text-foreground mt-1">
-                        {f.key === "engagement" || f.key === "ctr" ? m[f.key] + "%" : formatNumber(m[f.key])}
-                      </p>
-                      <MiniBars />
-                    </div>
-                  ))}
-                </div>
-                {previewReport.summary && (
-                  <div className="mt-6">
-                    <p className="text-[11px] uppercase text-muted-foreground mb-2">Resumo</p>
-                    <p className="text-[13px] text-foreground/80 leading-relaxed">{previewReport.summary}</p>
-                  </div>
-                )}
-                {previewReport.file_url && (
-                  <a href={previewReport.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 mt-4 text-[13px] text-primary hover:underline">
-                    📄 Baixar PDF
-                  </a>
-                )}
-              </>
-            );
-          })()}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

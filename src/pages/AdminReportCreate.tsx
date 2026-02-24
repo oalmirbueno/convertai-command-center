@@ -1,0 +1,300 @@
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useProjects, useClients } from "@/hooks/useSupabaseData";
+import { toast } from "sonner";
+import { ArrowLeft, Plus, X, Loader2, Upload } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
+const defaultMetrics = [
+  { key: "reach", label: "Alcance", suffix: "" },
+  { key: "impressions", label: "Impressões", suffix: "" },
+  { key: "engagement", label: "Engajamento", suffix: "%" },
+  { key: "clicks", label: "Cliques", suffix: "" },
+  { key: "ctr", label: "CTR", suffix: "%" },
+  { key: "conversions", label: "Conversões", suffix: "" },
+  { key: "followers_gained", label: "Novos Seguidores", suffix: "" },
+  { key: "ad_spend", label: "Investimento", suffix: "R$" },
+  { key: "cpa", label: "CPA", suffix: "R$" },
+];
+
+interface CustomMetric {
+  label: string;
+  value: number | string;
+}
+
+export default function AdminReportCreate({ editId }: { editId?: string }) {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const { data: projects } = useProjects();
+  const { data: clients } = useClients();
+
+  const [clientId, setClientId] = useState("");
+  const [projectId, setProjectId] = useState("");
+  const [title, setTitle] = useState("");
+  const [periodStart, setPeriodStart] = useState("");
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [summary, setSummary] = useState("");
+  const [highlights, setHighlights] = useState("");
+  const [nextSteps, setNextSteps] = useState("");
+  const [internalNotes, setInternalNotes] = useState("");
+  const [metrics, setMetrics] = useState<Record<string, number>>({});
+  const [customMetrics, setCustomMetrics] = useState<CustomMetric[]>([]);
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [fileUrl, setFileUrl] = useState("");
+  const [fileName, setFileName] = useState("");
+
+  const filteredProjects = (projects || []).filter((p: any) => !clientId || p.client_id === clientId);
+
+  const addCustomMetric = () => {
+    setCustomMetrics(prev => [...prev, { label: "", value: "" }]);
+  };
+
+  const removeCustomMetric = (idx: number) => {
+    setCustomMetrics(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const updateCustomMetric = (idx: number, field: "label" | "value", val: string) => {
+    setCustomMetrics(prev => prev.map((m, i) => i === idx ? { ...m, [field]: field === "value" ? Number(val) || val : val } : m));
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `reports/${Date.now()}.${ext}`;
+      const { error } = await supabase.storage.from("files").upload(path, file);
+      if (error) throw error;
+      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+      setFileUrl(urlData.publicUrl);
+      setFileName(file.name);
+      toast.success("Arquivo enviado!");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleSave = async (status: string) => {
+    if (!clientId || !projectId || !title) {
+      toast.error("Preencha cliente, projeto e título.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const metricsPayload = {
+        ...metrics,
+        custom: customMetrics.filter(m => m.label),
+      };
+
+      const payload: any = {
+        client_id: clientId,
+        project_id: projectId,
+        title,
+        period_start: periodStart || null,
+        period_end: periodEnd || null,
+        summary: summary || null,
+        highlights: highlights || null,
+        next_steps: nextSteps || null,
+        internal_notes: internalNotes || null,
+        metrics: metricsPayload,
+        file_url: fileUrl || null,
+        status,
+        created_by: user!.id,
+      };
+
+      await supabase.from("reports").insert(payload);
+
+      if (status === "published") {
+        await supabase.from("notifications").insert({
+          user_id: clientId,
+          message: `Novo relatório disponível: ${title}`,
+          notification_type: "report",
+          link: "/relatorios",
+        });
+        await supabase.from("updates").insert({
+          project_id: projectId,
+          author_id: user!.id,
+          message: `Relatório publicado: ${title}`,
+          update_type: "milestone",
+        });
+      }
+
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      toast.success(status === "published" ? "Relatório publicado!" : "Rascunho salvo!");
+      navigate("/relatorios");
+    } catch (err: any) {
+      toast.error(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-8 animate-fade-in max-w-3xl mx-auto w-full">
+      <button onClick={() => navigate("/relatorios")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+        <ArrowLeft className="w-4 h-4" /> Voltar aos Relatórios
+      </button>
+
+      <h1 className="text-xl font-semibold text-foreground">Novo Relatório</h1>
+
+      {/* INFORMAÇÕES BÁSICAS */}
+      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Informações Básicas</h2>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Cliente</Label>
+            <Select value={clientId} onValueChange={(v) => { setClientId(v); setProjectId(""); }}>
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {(clients || []).map((c: any) => (
+                  <SelectItem key={c.id} value={c.id}>{c.company_name || c.full_name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Projeto</Label>
+            <Select value={projectId} onValueChange={setProjectId}>
+              <SelectTrigger><SelectValue placeholder="Selecione" /></SelectTrigger>
+              <SelectContent>
+                {filteredProjects.map((p: any) => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Título</Label>
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Relatório Semanal — Redes Sociais" />
+        </div>
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Período Início</Label>
+            <Input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} />
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Período Fim</Label>
+            <Input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} />
+          </div>
+        </div>
+      </section>
+
+      {/* MÉTRICAS */}
+      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Métricas de Performance</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {defaultMetrics.map(m => (
+            <div key={m.key}>
+              <label className="text-[10px] text-muted-foreground uppercase block mb-1">
+                {m.label} {m.suffix && <span className="text-primary">{m.suffix}</span>}
+              </label>
+              <Input
+                type="number"
+                value={metrics[m.key] ?? ""}
+                onChange={e => setMetrics(prev => ({ ...prev, [m.key]: Number(e.target.value) }))}
+                placeholder="0"
+                className="bg-secondary"
+              />
+            </div>
+          ))}
+        </div>
+
+        {customMetrics.length > 0 && (
+          <div className="space-y-2 pt-2 border-t border-border">
+            <p className="text-[10px] text-muted-foreground uppercase">Métricas Personalizadas</p>
+            {customMetrics.map((cm, idx) => (
+              <div key={idx} className="flex gap-2 items-end">
+                <div className="flex-1">
+                  <Input value={cm.label} onChange={e => updateCustomMetric(idx, "label", e.target.value)} placeholder="Nome da métrica" className="bg-secondary" />
+                </div>
+                <div className="w-28">
+                  <Input type="number" value={cm.value} onChange={e => updateCustomMetric(idx, "value", e.target.value)} placeholder="Valor" className="bg-secondary" />
+                </div>
+                <button onClick={() => removeCustomMetric(idx)} className="p-2 text-muted-foreground hover:text-destructive transition-colors cursor-pointer">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        <button onClick={addCustomMetric} className="inline-flex items-center gap-2 text-[12px] text-primary hover:text-primary/80 transition-colors cursor-pointer">
+          <Plus className="w-3 h-3" /> Adicionar métrica personalizada
+        </button>
+      </section>
+
+      {/* ANÁLISE E CONTEÚDO */}
+      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Análise e Conteúdo</h2>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Resumo Executivo</Label>
+          <Textarea value={summary} onChange={e => setSummary(e.target.value)} rows={6} placeholder="Resumo geral do período analisado..." className="bg-secondary" />
+        </div>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Destaques do Período</Label>
+          <Textarea value={highlights} onChange={e => setHighlights(e.target.value)} rows={4} placeholder="🏆 Post com mais engajamento: ...&#10;📈 Melhor dia: ...&#10;🎯 Meta superada: ..." className="bg-secondary" />
+        </div>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Próximos Passos</Label>
+          <Textarea value={nextSteps} onChange={e => setNextSteps(e.target.value)} rows={4} placeholder="→ Aumentar frequência de Reels...&#10;→ Testar novos horários..." className="bg-secondary" />
+        </div>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+            Observações Internas <span className="text-destructive text-[9px]">(não visível ao cliente)</span>
+          </Label>
+          <Textarea value={internalNotes} onChange={e => setInternalNotes(e.target.value)} rows={3} placeholder="Notas internas da equipe..." className="bg-secondary" />
+        </div>
+      </section>
+
+      {/* ANEXOS */}
+      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+        <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Anexos</h2>
+        <div>
+          <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Upload de Relatório Externo (PDF/PPTX)</Label>
+          {fileName ? (
+            <div className="flex items-center gap-2 mt-2 text-sm text-foreground">
+              <span>📄 {fileName}</span>
+              <button onClick={() => { setFileUrl(""); setFileName(""); }} className="text-destructive text-xs hover:underline cursor-pointer">Remover</button>
+            </div>
+          ) : (
+            <label className="mt-2 flex flex-col items-center justify-center border-2 border-dashed border-border rounded-xl p-8 cursor-pointer hover:border-primary/50 transition-colors">
+              {uploading ? <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" /> : <Upload className="w-6 h-6 text-muted-foreground" />}
+              <span className="text-xs text-muted-foreground mt-2">{uploading ? "Enviando..." : "Clique ou arraste um arquivo"}</span>
+              <input type="file" className="hidden" accept=".pdf,.pptx,.doc,.docx" onChange={handleFileUpload} disabled={uploading} />
+            </label>
+          )}
+        </div>
+      </section>
+
+      {/* ACTIONS */}
+      <div className="flex gap-3 pb-8">
+        <button
+          onClick={() => handleSave("draft")}
+          disabled={saving}
+          className="flex-1 px-4 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border-none font-medium"
+        >
+          Salvar Rascunho
+        </button>
+        <button
+          onClick={() => handleSave("published")}
+          disabled={saving}
+          className="flex-1 px-4 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none font-medium"
+        >
+          {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Publicar Relatório"}
+        </button>
+      </div>
+    </div>
+  );
+}
