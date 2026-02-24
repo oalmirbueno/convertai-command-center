@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Loader2, Save, Lock } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Loader2, Save, Lock, Camera } from "lucide-react";
 import { toast } from "sonner";
 
 export default function ProfilePage() {
@@ -14,6 +14,28 @@ export default function ProfilePage() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
+  const [avatarUrl, setAvatarUrl] = useState(profile?.avatar_url || "");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    if (file.size > 5 * 1024 * 1024) { toast.error("Arquivo deve ter no máximo 5MB"); return; }
+    setUploadingAvatar(true);
+    try {
+      const ext = file.name.split(".").pop();
+      const path = `${user.id}/avatar.${ext}`;
+      const { error: upErr } = await supabase.storage.from("avatars").upload(path, file, { upsert: true });
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from("avatars").getPublicUrl(path);
+      const url = `${publicUrl}?t=${Date.now()}`;
+      await supabase.from("profiles").update({ avatar_url: url }).eq("id", user.id);
+      setAvatarUrl(url);
+      toast.success("Foto atualizada!");
+    } catch (err: any) { toast.error(err.message || "Erro ao enviar foto"); }
+    setUploadingAvatar(false);
+  };
 
   const handleSave = async () => {
     if (!fullName.trim()) { toast.error("Nome é obrigatório"); return; }
@@ -61,9 +83,20 @@ export default function ProfilePage() {
 
       <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-4">
-          <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
-            <AvatarFallback className="bg-primary/15 text-primary text-lg font-semibold">{initials}</AvatarFallback>
-          </Avatar>
+          <div className="relative group">
+            <Avatar className="w-12 h-12 sm:w-16 sm:h-16">
+              {avatarUrl && <AvatarImage src={avatarUrl} alt={profile?.full_name} />}
+              <AvatarFallback className="bg-primary/15 text-primary text-lg font-semibold">{initials}</AvatarFallback>
+            </Avatar>
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute inset-0 rounded-full bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center cursor-pointer border-none"
+            >
+              {uploadingAvatar ? <Loader2 className="w-4 h-4 text-white animate-spin" /> : <Camera className="w-4 h-4 text-white" />}
+            </button>
+            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
+          </div>
           <div>
             <p className="text-sm font-medium text-foreground">{profile?.full_name}</p>
             <p className="text-xs text-muted-foreground">{profile?.email}</p>
