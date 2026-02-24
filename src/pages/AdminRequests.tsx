@@ -116,10 +116,10 @@ export default function AdminRequests() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Pedidos de Clientes</p>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 overflow-x-auto scrollbar-hidden">
           {filters.map((f) => (
             <button key={f.value} onClick={() => setFilter(f.value)}
-              className={`px-3 py-1.5 rounded-full text-[12px] transition-colors cursor-pointer border ${filter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
+              className={`px-3 py-1.5 rounded-full text-[12px] transition-colors cursor-pointer border flex-shrink-0 whitespace-nowrap ${filter === f.value ? "bg-primary text-primary-foreground border-primary" : "border-border text-muted-foreground hover:text-foreground bg-transparent"}`}>
               {f.label}
             </button>
           ))}
@@ -163,9 +163,9 @@ export default function AdminRequests() {
 
       {/* Detail Modal */}
       {selected && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setSelected(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[520px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+          <div className="relative bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-[520px] sm:mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-hidden" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-sm font-semibold text-foreground">Detalhes do Pedido</h2>
               <button onClick={() => setSelected(null)} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
@@ -203,7 +203,7 @@ export default function AdminRequests() {
                 </div>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
+            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               {selected.status !== "completed" && (
                 <>
                   <button onClick={handleCreateTask} disabled={saving}

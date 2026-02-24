@@ -17,13 +17,13 @@ export default function WelcomeScreen({ onStart }: Props) {
       <div className="tech-grid-bg" />
 
       <div
-        className="relative z-10 w-full max-w-[800px] rounded-3xl p-10 sm:p-14"
+        className="relative z-10 w-full max-w-[800px] rounded-none sm:rounded-3xl p-6 sm:p-10 md:p-14 min-h-screen sm:min-h-0"
         style={{ background: "#121212", animation: "fadeInUp 0.6s ease-out" }}
       >
         {/* Avatar + greeting */}
         <div className="flex flex-col items-center text-center mb-10">
           <div
-            className="w-24 h-24 rounded-full overflow-hidden border-2 border-primary/30 mb-5 shadow-[0_0_30px_rgba(0,255,102,0.12)]"
+            className="w-16 h-16 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-primary/30 mb-4 sm:mb-5 shadow-[0_0_30px_rgba(0,255,102,0.12)]"
             style={{ animation: "avatarBounce 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both" }}
           >
             <img

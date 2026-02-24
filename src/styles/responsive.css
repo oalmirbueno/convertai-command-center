@@ -1,0 +1,97 @@
+/* ═══ RESPONSIVE UTILITIES ═══ */
+
+/* Performance mobile */
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-overflow-scrolling: touch;
+}
+
+body {
+  overscroll-behavior: none;
+}
+
+* {
+  touch-action: manipulation;
+}
+
+/* GPU acceleration for animated elements */
+.sidebar,
+.notif-panel,
+.modal,
+[data-state="open"] {
+  will-change: transform;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+
+/* ═══ MOBILE (< 768px) ═══ */
+@media (max-width: 768px) {
+  /* Touch targets */
+  button,
+  [role="button"],
+  .chip,
+  a:not(.inline-link) {
+    min-height: 44px;
+  }
+
+  /* Inputs: prevent iOS zoom */
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+
+  /* Modal full-screen from bottom */
+  [data-radix-dialog-content],
+  .modal-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 95vh !important;
+    border-radius: 20px 20px 0 0 !important;
+    margin: 0 !important;
+    animation: slideUp 0.3s ease-out !important;
+  }
+
+  [data-radix-dialog-overlay] {
+    align-items: flex-end !important;
+    display: flex !important;
+  }
+
+  /* Dialog footer buttons stacked */
+  [data-radix-dialog-content] footer,
+  [data-radix-dialog-content] [class*="DialogFooter"] {
+    flex-direction: column !important;
+    gap: 8px !important;
+  }
+
+  [data-radix-dialog-content] footer button,
+  [data-radix-dialog-content] [class*="DialogFooter"] button,
+  [data-radix-dialog-content] [class*="DialogFooter"] a {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+/* ═══ NOTIFICATION PANEL ═══ */
+@media (max-width: 768px) {
+  [data-side="right"][class*="SheetContent"],
+  .notif-panel-responsive {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+}
+
+/* ═══ SAFE AREAS ═══ */
+@supports (padding: max(0px)) {
+  .safe-area-padding {
+    padding-left: max(env(safe-area-inset-left), 16px);
+    padding-right: max(env(safe-area-inset-right), 16px);
+  }
+  .safe-area-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 12px);
+  }
+}

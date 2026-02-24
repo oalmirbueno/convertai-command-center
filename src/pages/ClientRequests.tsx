@@ -135,9 +135,9 @@ export default function ClientRequests() {
 
       {/* Create Modal */}
       {createOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+          <div className="relative bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-[420px] sm:mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-border">
               <h2 className="text-sm font-semibold text-foreground">Novo Pedido</h2>
               <button onClick={() => setCreateOpen(false)} className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
@@ -164,7 +164,7 @@ export default function ClientRequests() {
                 </select>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
+            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button onClick={() => setCreateOpen(false)} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>
               <button onClick={handleCreate} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

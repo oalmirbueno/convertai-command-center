@@ -108,7 +108,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0">
+      <SheetContent side="right" className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0">
         <SheetHeader className="px-5 pt-5 pb-3">
           <div className="flex items-center justify-between">
             <SheetTitle className="label-sm text-foreground">Notificações</SheetTitle>
@@ -120,7 +120,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setTab("all")}
-              className={`text-[12px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+              className={`text-[12px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
                 tab === "all" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
               }`}
             >
@@ -128,7 +128,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
             </button>
             <button
               onClick={() => setTab("unread")}
-              className={`text-[12px] px-3 py-1 rounded-full border cursor-pointer transition-colors ${
+              className={`text-[12px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
                 tab === "unread" ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"
               }`}
             >
