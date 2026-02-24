@@ -3,15 +3,14 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle } from "lucide-react";
-
-const fmt = (v: number) =>
-  new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2 } from "lucide-react";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
   google: "Google Ads",
   tiktok: "TikTok Ads",
+  linkedin: "LinkedIn Ads",
+  other: "Outros",
 };
 
 const typeLabels: Record<string, string> = {
@@ -21,25 +20,28 @@ const typeLabels: Record<string, string> = {
   extra_service: "Serviço Extra",
 };
 
-const formatDate = (d: string) => {
+function formatCurrency(val: number) {
+  return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
+}
+
+function formatDate(d: string) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-};
+}
 
 export default function ClientFinanceiro() {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
 
-  // ── Queries ──────────────────────────────────────────
-  const { data: billing } = useQuery({
+  // ===== QUERIES =====
+  const { data: billing, isLoading: loadingBilling } = useQuery({
     queryKey: ["billing-client", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("billing")
         .select("*")
         .eq("client_id", user!.id)
         .order("due_date", { ascending: false });
-      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -49,11 +51,10 @@ export default function ClientFinanceiro() {
   const { data: wallets } = useQuery({
     queryKey: ["ads-wallet-client", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("ads_wallet")
         .select("*")
         .eq("client_id", user!.id);
-      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -63,73 +64,79 @@ export default function ClientFinanceiro() {
   const { data: rechargeRequests } = useQuery({
     queryKey: ["recharge-requests-client", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { data } = await supabase
         .from("recharge_requests")
-        .select("*, requester:profiles!recharge_requests_requested_by_fkey(full_name)")
+        .select("*")
         .eq("client_id", user!.id)
         .order("created_at", { ascending: false });
-      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
     refetchInterval: 15000,
   });
 
-  // ── Derived data ─────────────────────────────────────
+  // ===== COMPUTED =====
   const showTraffic = (profile as any)?.services_config?.traffic !== false;
   const pendingRecharges = (rechargeRequests || []).filter((r: any) => r.status === "pending");
-
-  // Plan
-  const planBilling = (billing || []).filter(
+  const planBillings = (billing || []).filter(
     (b: any) => b.type === "plan_renewal" || b.type === "renewal"
   );
-  const currentPlan =
-    planBilling.find((b: any) => b.status === "pending") ||
-    planBilling.find((b: any) => b.status === "paid");
+  const latestPlan = planBillings[0];
 
-  const renewalDate = profile?.plan_renewal_date
-    ? new Date(profile.plan_renewal_date)
-    : currentPlan
-      ? new Date(currentPlan.due_date)
-      : null;
-
-  const now = new Date();
+  // Plan time
+  const renewalDateStr = profile?.plan_renewal_date || latestPlan?.due_date;
+  const renewalDate = renewalDateStr ? new Date(renewalDateStr) : null;
+  const today = new Date();
   const daysLeft = renewalDate
-    ? Math.max(Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000), 0)
-    : null;
+    ? Math.max(Math.ceil((renewalDate.getTime() - today.getTime()) / 86400000), 0)
+    : 0;
 
-  // Time progress bar
   const periodStart = renewalDate ? new Date(renewalDate) : null;
   if (periodStart) periodStart.setMonth(periodStart.getMonth() - 1);
   const totalDays =
     periodStart && renewalDate
-      ? Math.ceil((renewalDate.getTime() - periodStart.getTime()) / 86400000)
+      ? (renewalDate.getTime() - periodStart.getTime()) / 86400000
       : 30;
   const passedDays = periodStart
-    ? Math.ceil((now.getTime() - periodStart.getTime()) / 86400000)
+    ? (today.getTime() - periodStart.getTime()) / 86400000
     : 0;
   const timePercent = Math.min(Math.max((passedDays / totalDays) * 100, 0), 100);
+
+  const planStatus =
+    daysLeft > 15 ? "active" : daysLeft > 0 ? "warning" : "overdue";
+  const planStatusLabel =
+    planStatus === "active"
+      ? "Ativo"
+      : planStatus === "warning"
+        ? "Renova em breve"
+        : "Pendente";
+  const planStatusEmoji =
+    planStatus === "active" ? "🟢" : planStatus === "warning" ? "🟡" : "🔴";
+  const planStatusColor =
+    planStatus === "active"
+      ? "bg-success/10 text-success"
+      : planStatus === "warning"
+        ? "bg-warning/10 text-warning"
+        : "bg-destructive/10 text-destructive";
   const barColor =
-    daysLeft !== null && daysLeft > 15
+    planStatus === "active"
       ? "bg-success"
-      : daysLeft !== null && daysLeft > 5
+      : planStatus === "warning"
         ? "bg-warning"
         : "bg-destructive";
 
-  const planStatus =
-    !renewalDate || daysLeft === null
-      ? "unknown"
-      : daysLeft <= 0
-        ? "overdue"
-        : daysLeft <= 15
-          ? "soon"
-          : "active";
-
-  // ── Actions ──────────────────────────────────────────
-  const handleConfirmRecharge = async (requestId: string, amount: number, platform: string) => {
-    await supabase.from("recharge_requests").update({ status: "approved" }).eq("id", requestId);
+  // ===== ACTIONS =====
+  const handleConfirmRecharge = async (
+    requestId: string,
+    amount: number,
+    platform: string
+  ) => {
+    await supabase
+      .from("recharge_requests")
+      .update({ status: "approved" })
+      .eq("id", requestId);
     await notifyAdmin(
-      `${profile?.company_name || profile?.full_name || "Cliente"} confirmou recarga de ${fmt(amount)} para ${platformLabels[platform] || platform}`,
+      `${profile?.company_name || profile?.full_name || "Cliente"} confirmou recarga de ${formatCurrency(amount)} para ${platformLabels[platform] || platform}`,
       "billing",
       "/financeiro"
     );
@@ -138,7 +145,10 @@ export default function ClientFinanceiro() {
   };
 
   const handleRejectRecharge = async (requestId: string) => {
-    await supabase.from("recharge_requests").update({ status: "rejected" }).eq("id", requestId);
+    await supabase
+      .from("recharge_requests")
+      .update({ status: "rejected" })
+      .eq("id", requestId);
     await notifyAdmin(
       `${profile?.company_name || profile?.full_name || "Cliente"} recusou a recarga solicitada`,
       "billing",
@@ -149,185 +159,226 @@ export default function ClientFinanceiro() {
   };
 
   const openWhatsApp = (message: string) => {
-    window.open(`https://wa.me/?text=${encodeURIComponent(message)}`, "_blank");
+    window.open(
+      `https://wa.me/?text=${encodeURIComponent(message)}`,
+      "_blank"
+    );
   };
 
-  // ── Render ───────────────────────────────────────────
-  return (
-    <div className="space-y-8 animate-fade-in">
-      <p className="heading-page">Financeiro</p>
+  // ===== LOADING =====
+  if (loadingBilling) {
+    return (
+      <div className="flex items-center justify-center min-h-[40vh]">
+        <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+        <span className="ml-2 text-sm text-muted-foreground">
+          Carregando dados financeiros...
+        </span>
+      </div>
+    );
+  }
 
-      {/* ─── SEÇÃO 1: MEU PLANO ─── */}
+  // ===== RENDER =====
+  return (
+    <div className="space-y-8 animate-fade-in max-w-3xl">
+      <h1 className="text-xl font-semibold text-foreground">Financeiro</h1>
+
+      {/* ========== SEÇÃO 1: MEU PLANO ========== */}
       <section>
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">Meu Plano</p>
+        <div className="flex items-center gap-2 mb-3">
+          <CreditCard className="w-4 h-4 text-muted-foreground" />
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Meu Plano
+          </span>
+        </div>
+
         <div className="bg-card border border-border rounded-2xl p-6">
-          {currentPlan ? (
+          {latestPlan ? (
             <>
-              <p className="text-lg font-semibold text-foreground">
-                {currentPlan.description || "Plano Mensal"}
-              </p>
-              <p className="text-2xl font-mono font-light text-foreground mt-1">
-                {fmt(Number(currentPlan.amount))}
-                <span className="text-sm text-muted-foreground">/mês</span>
-              </p>
+              <div className="flex items-start justify-between flex-wrap gap-2">
+                <div>
+                  <p className="text-lg font-semibold text-foreground">
+                    {latestPlan.description || "Plano Mensal"}
+                  </p>
+                  <p className="text-2xl font-mono font-light text-foreground mt-1">
+                    {formatCurrency(Number(latestPlan.amount))}
+                    <span className="text-sm text-muted-foreground ml-1">/mês</span>
+                  </p>
+                </div>
+              </div>
 
               <div className="mt-4 flex items-center gap-3 flex-wrap">
-                {planStatus === "active" && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-success/15 text-success">
-                    🟢 Ativo
-                  </span>
-                )}
-                {planStatus === "soon" && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-warning/15 text-warning">
-                    🟡 Renovação em breve
-                  </span>
-                )}
-                {planStatus === "overdue" && (
-                  <span className="text-xs px-2.5 py-1 rounded-full bg-destructive/15 text-destructive">
-                    🔴 Pendente
-                  </span>
-                )}
-                <span className="text-sm text-muted-foreground">
-                  Renovação: {renewalDate ? formatDate(renewalDate.toISOString()) : "—"}
+                <span
+                  className={`text-xs px-2.5 py-1 rounded-full font-medium ${planStatusColor}`}
+                >
+                  {planStatusEmoji} {planStatusLabel}
                 </span>
+                {renewalDate && (
+                  <span className="text-sm text-muted-foreground">
+                    Renovação: {formatDate(renewalDateStr!)}
+                  </span>
+                )}
               </div>
 
               {renewalDate && (
                 <div className="mt-4">
                   <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
                     <div
-                      className={`h-full rounded-full ${barColor} transition-all`}
+                      className={`h-full rounded-full ${barColor} transition-all duration-500`}
                       style={{ width: `${timePercent}%` }}
                     />
                   </div>
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    {daysLeft !== null && daysLeft > 0
-                      ? `${daysLeft} dias restantes`
-                      : "Período vencido"}
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {daysLeft > 0 ? `${daysLeft} dias restantes` : "Período vencido"}
                   </p>
                 </div>
               )}
 
               <button
                 onClick={() =>
-                  openWhatsApp("Olá! Gostaria de falar sobre a renovação do meu plano.")
+                  openWhatsApp(
+                    "Olá! Gostaria de falar sobre a renovação do meu plano."
+                  )
                 }
-                className="inline-flex items-center gap-2 mt-4 px-4 py-2 rounded-xl text-[13px] bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                className="inline-flex items-center gap-2 mt-5 px-4 py-2 rounded-xl text-[13px] bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
               >
                 <MessageCircle className="w-3.5 h-3.5" /> Falar sobre renovação
               </button>
             </>
           ) : (
-            <p className="text-sm text-muted-foreground">Nenhum plano ativo</p>
+            <p className="text-sm text-muted-foreground py-2">
+              Nenhum plano encontrado
+            </p>
           )}
         </div>
       </section>
 
-      {/* ─── SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ─── */}
-      {showTraffic && wallets && wallets.length > 0 && (
+      {/* ========== SEÇÃO 2: INVESTIMENTO EM ANÚNCIOS ========== */}
+      {showTraffic && (wallets || []).length > 0 && (
         <section>
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">
-            Investimento em Anúncios
-          </p>
+          <div className="flex items-center gap-2 mb-3">
+            <Wallet className="w-4 h-4 text-muted-foreground" />
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+              Investimento em Anúncios
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {wallets.map((w: any) => {
+            {(wallets || []).map((w: any) => {
               const balance = Number(w.balance);
-              const pct = Math.min((balance / 2000) * 100, 100);
-              const statusText =
-                balance === 0
-                  ? "Sem saldo ❌"
-                  : balance < 500
-                    ? "Saldo baixo ⚠"
-                    : "Saldo OK ✓";
-              const statusColor =
-                balance === 0
-                  ? "text-destructive"
-                  : balance < 500
-                    ? "text-warning"
-                    : "text-success";
-              const bColor =
-                balance === 0
-                  ? "bg-destructive"
-                  : balance < 500
+              const gaugePercent = Math.min((balance / 2000) * 100, 100);
+              const gaugeColor =
+                balance > 500
+                  ? "bg-success"
+                  : balance > 100
                     ? "bg-warning"
-                    : "bg-success";
+                    : "bg-destructive";
+              const statusText =
+                balance > 500
+                  ? "Saldo OK ✓"
+                  : balance > 100
+                    ? "Saldo baixo ⚠"
+                    : balance === 0
+                      ? "Sem saldo ❌"
+                      : "Saldo crítico ⚠";
+              const statusTextColor =
+                balance > 500
+                  ? "text-success"
+                  : balance > 100
+                    ? "text-warning"
+                    : "text-destructive";
 
               return (
-                <div key={w.id} className="bg-card border border-border rounded-2xl p-5">
+                <div
+                  key={w.id}
+                  className="bg-card border border-border rounded-2xl p-5"
+                >
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {platformLabels[w.platform] || w.platform}
                   </p>
                   <p className="text-xl font-mono font-light text-foreground mt-2">
-                    {fmt(balance)}
+                    {formatCurrency(balance)}
                   </p>
                   <div className="h-1.5 rounded-full bg-secondary overflow-hidden mt-3">
                     <div
-                      className={`h-full rounded-full ${bColor} transition-all`}
-                      style={{ width: `${pct}%` }}
+                      className={`h-full rounded-full ${gaugeColor} transition-all duration-500`}
+                      style={{ width: `${gaugePercent}%` }}
                     />
                   </div>
-                  <p className={`text-[11px] mt-1 ${statusColor}`}>{statusText}</p>
+                  <p className={`text-[11px] mt-1.5 ${statusTextColor}`}>
+                    {statusText}
+                  </p>
+                  {w.last_recharge_date && (
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Última recarga: {formatDate(w.last_recharge_date)}
+                    </p>
+                  )}
                 </div>
               );
             })}
           </div>
-          {wallets.some((w: any) => w.last_recharge_date) && (
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Última recarga:{" "}
-              {formatDate(
-                wallets.find((w: any) => w.last_recharge_date)?.last_recharge_date
-              )}
-            </p>
-          )}
         </section>
       )}
 
-      {/* ─── SEÇÃO 3: RECARGAS PENDENTES ─── */}
+      {/* ========== SEÇÃO 3: RECARGAS PENDENTES ========== */}
       {pendingRecharges.length > 0 && (
         <section>
-          <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">
-            Recargas Pendentes
-          </p>
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangle className="w-4 h-4 text-warning" />
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+              Recargas Pendentes
+            </span>
+          </div>
+
           <div className="space-y-3">
             {pendingRecharges.map((r: any) => (
-              <div key={r.id} className="bg-card border border-warning/30 rounded-2xl p-5">
+              <div
+                key={r.id}
+                className="bg-card border border-warning/30 rounded-2xl p-5"
+              >
                 <div>
                   <p className="text-sm font-medium text-foreground">
                     ⚡ Recarga {platformLabels[r.platform] || r.platform}
                   </p>
                   <p className="text-xl font-mono font-light text-foreground mt-1">
-                    {fmt(Number(r.amount))}
+                    {formatCurrency(Number(r.amount))}
                   </p>
                   {r.reason && (
-                    <p className="text-xs text-muted-foreground mt-2 italic">"{r.reason}"</p>
+                    <p className="text-xs text-muted-foreground mt-2 italic">
+                      "{r.reason}"
+                    </p>
                   )}
                   <p className="text-[11px] text-muted-foreground mt-1">
-                    {r.requester?.full_name && `Solicitado por ${r.requester.full_name} • `}
-                    {formatDate(r.created_at)}
+                    Solicitado em {formatDate(r.created_at)}
                   </p>
                 </div>
+
                 <div className="flex flex-wrap gap-2 mt-4">
                   <button
-                    onClick={() => handleConfirmRecharge(r.id, Number(r.amount), r.platform)}
-                    className="px-4 py-2 rounded-xl text-[13px] font-medium bg-success/90 text-white hover:bg-success transition-colors cursor-pointer border-none"
+                    onClick={() =>
+                      handleConfirmRecharge(r.id, Number(r.amount), r.platform)
+                    }
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none"
                   >
-                    ✅ Confirmar Recarga
+                    <Check className="w-3.5 h-3.5" />
+                    Confirmar Recarga
                   </button>
                   <button
                     onClick={() =>
                       openWhatsApp(
-                        `Olá! Sobre a recarga de ${fmt(Number(r.amount))} para ${platformLabels[r.platform] || r.platform}...`
+                        `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platformLabels[r.platform] || r.platform}...`
                       )
                     }
-                    className="px-4 py-2 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border inline-flex items-center gap-1"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border"
                   >
-                    <MessageCircle className="w-3.5 h-3.5" /> Discutir
+                    <MessageCircle className="w-3.5 h-3.5" />
+                    Discutir
                   </button>
                   <button
                     onClick={() => handleRejectRecharge(r.id)}
-                    className="px-4 py-2 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30"
                   >
-                    ❌ Recusar
+                    <X className="w-3.5 h-3.5" />
+                    Recusar
                   </button>
                 </div>
               </div>
@@ -335,55 +386,73 @@ export default function ClientFinanceiro() {
           </div>
         </section>
       )}
+
       {pendingRecharges.length === 0 && showTraffic && (
-        <div className="text-xs text-muted-foreground/60 text-center py-2">
+        <p className="text-xs text-muted-foreground/60 text-center py-2">
           Nenhuma recarga pendente no momento ✓
-        </div>
+        </p>
       )}
 
-      {/* ─── SEÇÃO 4: HISTÓRICO DE PAGAMENTOS ─── */}
+      {/* ========== SEÇÃO 4: HISTÓRICO ========== */}
       <section>
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground mb-4">
-          Histórico de Pagamentos
-        </p>
-        <div className="bg-card border border-border rounded-2xl divide-y divide-border">
+        <div className="flex items-center gap-2 mb-3">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Histórico de Pagamentos
+          </span>
+        </div>
+
+        <div className="bg-card border border-border rounded-2xl divide-y divide-border overflow-hidden">
           {(!billing || billing.length === 0) ? (
             <p className="text-sm text-muted-foreground text-center py-6">
               Nenhum pagamento registrado
             </p>
           ) : (
             billing.map((b: any) => {
-              const isOverdue = new Date(b.due_date) < now && b.status === "pending";
+              const isOverdue =
+                b.status === "pending" && new Date(b.due_date) < today;
+              const statusLabel =
+                b.status === "paid"
+                  ? "Pago"
+                  : isOverdue
+                    ? "Atrasado"
+                    : "Pendente";
+              const dotColor =
+                b.status === "paid"
+                  ? "bg-success"
+                  : isOverdue
+                    ? "bg-destructive"
+                    : "bg-warning";
+              const badgeColor =
+                b.status === "paid"
+                  ? "bg-success/10 text-success"
+                  : isOverdue
+                    ? "bg-destructive/10 text-destructive"
+                    : "bg-warning/10 text-warning";
+
               return (
-                <div key={b.id} className="flex items-center gap-4 px-5 py-3.5">
+                <div
+                  key={b.id}
+                  className="flex items-center gap-4 px-5 py-3.5"
+                >
                   <div
-                    className={`w-2 h-2 rounded-full shrink-0 ${
-                      b.status === "paid"
-                        ? "bg-success"
-                        : isOverdue
-                          ? "bg-destructive"
-                          : "bg-warning"
-                    }`}
+                    className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
                   />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-foreground">
+                    <p className="text-[13px] text-foreground truncate">
                       {b.description || typeLabels[b.type] || b.type}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
                       {formatDate(b.due_date)}
                     </p>
                   </div>
-                  <p className="text-sm font-mono text-foreground">{fmt(Number(b.amount))}</p>
+                  <p className="text-sm font-mono text-foreground whitespace-nowrap">
+                    {formatCurrency(Number(b.amount))}
+                  </p>
                   <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full ${
-                      b.status === "paid"
-                        ? "bg-success/15 text-success"
-                        : isOverdue
-                          ? "bg-destructive/15 text-destructive"
-                          : "bg-warning/15 text-warning"
-                    }`}
+                    className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}
                   >
-                    {b.status === "paid" ? "Pago" : isOverdue ? "Atrasado" : "Pendente"}
+                    {statusLabel}
                   </span>
                 </div>
               );
