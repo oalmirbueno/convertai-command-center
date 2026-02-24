@@ -148,31 +148,32 @@ export default function Login() {
         <img
           src={consultantHero}
           alt="Consultora Aceleriq"
-          className="absolute left-0 bottom-0 h-[85%] w-auto object-cover object-top pointer-events-none select-none"
+          className="absolute -left-8 bottom-0 h-[85%] w-auto object-cover object-top pointer-events-none select-none"
           style={{
-            maskImage: "linear-gradient(to right, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 95%)",
-            WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 60%, rgba(0,0,0,0) 95%)",
+            maskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 85%)",
+            WebkitMaskImage: "linear-gradient(to right, rgba(0,0,0,1) 50%, rgba(0,0,0,0) 85%)",
             animation: "fadeIn 1s ease-out 0.3s both",
           }}
         />
 
         {/* Content — RIGHT column, no overlap with image */}
         <div className="relative z-10 flex flex-col justify-between h-full ml-auto pr-14 pl-6 py-10" style={{ maxWidth: "340px" }}>
-          {/* Top: Logo / Branding */}
-          <div style={{ animation: "fadeInUp 0.5s ease-out 0.2s both" }}>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(145 100% 32%))" }}>
-                <span className="text-xl font-bold text-primary-foreground">A</span>
-              </div>
-              <div>
-                <span className="font-bold text-[22px] text-foreground">Aceler<span className="text-primary">iq</span></span>
-                <p className="text-[10px] text-muted-foreground/50 tracking-[3px] uppercase -mt-0.5">Performance OS</p>
+          {/* Spacer top */}
+          <div />
+
+          {/* Center: Logo + Welcome + Value props */}
+          <div className="flex-1 flex flex-col justify-center">
+            <div style={{ animation: "fadeInUp 0.5s ease-out 0.2s both" }}>
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(145 100% 32%))" }}>
+                  <span className="text-xl font-bold text-primary-foreground">A</span>
+                </div>
+                <div>
+                  <span className="font-bold text-[22px] text-foreground">Aceler<span className="text-primary">iq</span></span>
+                  <p className="text-[10px] text-muted-foreground/50 tracking-[3px] uppercase -mt-0.5">Performance OS</p>
+                </div>
               </div>
             </div>
-          </div>
-
-          {/* Center: Welcome + Value props */}
-          <div className="flex-1 flex flex-col justify-center">
             <div style={{ animation: "fadeInUp 0.6s ease-out 0.4s both" }}>
               <h2 className="text-[26px] font-bold text-foreground mb-3 leading-tight">
                 Bom te ver<br />por aqui!
