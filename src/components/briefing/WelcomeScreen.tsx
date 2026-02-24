@@ -1,13 +1,14 @@
-import { Clock, Lock, BarChart3 } from "lucide-react";
+import { Clock, Lock, BarChart3, ClipboardList, Brain, Rocket } from "lucide-react";
+import consultantImg from "@/assets/consultant-avatar.jpg";
 
 interface Props {
   onStart: () => void;
 }
 
 const steps = [
-  { num: "①", emoji: "📋", title: "Diagnóstico", desc: "Responda 15 perguntas sobre seu negócio. Leva ~8 min." },
-  { num: "②", emoji: "🧠", title: "Estratégia", desc: "Analisamos cada resposta para mapear a melhor direção." },
-  { num: "③", emoji: "🚀", title: "Proposta", desc: "Em até 48h você recebe um plano personalizado com orçamento." },
+  { icon: ClipboardList, title: "Diagnóstico", desc: "Responda 15 perguntas sobre seu negócio. Leva ~8 min." },
+  { icon: Brain, title: "Estratégia", desc: "Analisamos cada resposta para mapear a melhor direção." },
+  { icon: Rocket, title: "Proposta", desc: "Em até 48h você recebe um plano personalizado com orçamento." },
 ];
 
 export default function WelcomeScreen({ onStart }: Props) {
@@ -19,16 +20,17 @@ export default function WelcomeScreen({ onStart }: Props) {
         className="relative z-10 w-full max-w-[800px] rounded-3xl p-10 sm:p-14"
         style={{ background: "#121212", animation: "fadeInUp 0.6s ease-out" }}
       >
-        {/* Avatar */}
+        {/* Avatar + greeting */}
         <div className="flex flex-col items-center text-center mb-10">
           <div
-            className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-primary-foreground mb-5"
-            style={{
-              background: "linear-gradient(135deg, #00FF66, #00CC52)",
-              animation: "avatarBounce 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both",
-            }}
+            className="w-24 h-24 rounded-full overflow-hidden border-2 border-primary/30 mb-5 shadow-[0_0_30px_rgba(0,255,102,0.12)]"
+            style={{ animation: "avatarBounce 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both" }}
           >
-            EQ
+            <img
+              src={consultantImg}
+              alt="Consultora Aceleriq"
+              className="w-full h-full object-cover"
+            />
           </div>
           <h1
             className="text-xl sm:text-2xl font-bold text-foreground mb-2"
@@ -45,23 +47,27 @@ export default function WelcomeScreen({ onStart }: Props) {
           </p>
         </div>
 
-        {/* 3 Step Cards */}
+        {/* 3 Step Cards with Lucide icons */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-          {steps.map((s, i) => (
-            <div
-              key={i}
-              className="rounded-2xl p-6 border border-border hover:border-primary/40 transition-all hover:-translate-y-0.5 card-hover"
-              style={{
-                background: "#1A1A1A",
-                animation: `fadeInUp 0.5s ease-out ${0.5 + i * 0.15}s both`,
-              }}
-            >
-              <div className="text-2xl font-bold text-primary mb-1">{s.num}</div>
-              <div className="text-3xl mb-2">{s.emoji}</div>
-              <h3 className="text-base font-bold text-foreground mb-1">{s.title}</h3>
-              <p className="text-[13px] text-muted-foreground leading-relaxed">{s.desc}</p>
-            </div>
-          ))}
+          {steps.map((s, i) => {
+            const Icon = s.icon;
+            return (
+              <div
+                key={i}
+                className="rounded-2xl p-6 border border-border hover:border-primary/40 transition-all hover:-translate-y-0.5 card-hover"
+                style={{
+                  background: "#1A1A1A",
+                  animation: `fadeInUp 0.5s ease-out ${0.5 + i * 0.15}s both`,
+                }}
+              >
+                <div className="w-10 h-10 rounded-xl flex items-center justify-center mb-3 bg-primary/10">
+                  <Icon className="w-5 h-5 text-primary" />
+                </div>
+                <h3 className="text-base font-bold text-foreground mb-1">{s.title}</h3>
+                <p className="text-[13px] text-muted-foreground leading-relaxed">{s.desc}</p>
+              </div>
+            );
+          })}
         </div>
 
         {/* Trust badges */}
