@@ -14,12 +14,11 @@ import AdminApprovals from "@/pages/AdminApprovals";
 import ClientDocuments from "@/pages/ClientDocuments";
 import ClientApprovals from "@/pages/ClientApprovals";
 import AdminRequests from "@/pages/AdminRequests";
+import ClientRequests from "@/pages/ClientRequests";
 import Team from "@/pages/Team";
 import BriefingPublic from "@/pages/BriefingPublic";
 import AdminBriefings from "@/pages/AdminBriefings";
 import Projects from "@/pages/Projects";
-import Placeholder from "@/pages/Placeholder";
-import SeedPage from "@/pages/SeedPage";
 import AdminFinanceiro from "@/pages/AdminFinanceiro";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import AdminReports from "@/pages/AdminReports";
@@ -27,6 +26,8 @@ import ClientReports from "@/pages/ClientReports";
 import TimelinePage from "@/pages/TimelinePage";
 import AdminReportCreate from "@/pages/AdminReportCreate";
 import ReportDetail from "@/pages/ReportDetail";
+import ProfilePage from "@/pages/ProfilePage";
+import SettingsPage from "@/pages/SettingsPage";
 import AppLayout from "@/components/AppLayout";
 
 const queryClient = new QueryClient();
@@ -56,7 +57,6 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
-      {/* Public briefing route */}
       <Route path="/briefing/:token" element={<BriefingPublic />} />
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
@@ -65,14 +65,11 @@ function AppRoutes() {
       <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
-      <Route path="/ia-planner" element={<ProtectedRoute><AppLayout><Placeholder title="IA Planner" /></AppLayout></ProtectedRoute>} />
       <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />
-      <Route path="/config" element={<ProtectedRoute><AppLayout><Placeholder title="Configurações" /></AppLayout></ProtectedRoute>} />
-      <Route path="/admin/seed" element={<ProtectedRoute><AppLayout><SeedPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/acompanhamento" element={<ProtectedRoute><AppLayout><Placeholder title="Acompanhamento" /></AppLayout></ProtectedRoute>} />
-      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminRequests /> : <Placeholder title="Pedidos" />}</AppLayout></ProtectedRoute>} />
+      <Route path="/config" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminRequests /> : <ClientRequests />}</AppLayout></ProtectedRoute>} />
       <Route path="/documentos" element={<ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>} />
-      <Route path="/perfil" element={<ProtectedRoute><AppLayout><Placeholder title="Perfil" /></AppLayout></ProtectedRoute>} />
+      <Route path="/perfil" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />
       <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios/novo" element={<ProtectedRoute><AppLayout><AdminReportCreate /></AppLayout></ProtectedRoute>} />

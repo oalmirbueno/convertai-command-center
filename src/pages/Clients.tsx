@@ -35,7 +35,7 @@ export default function Clients() {
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : (clients || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum cliente encontrado. Use a página Seed para popular dados demo.</div>
+        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum cliente encontrado.</div>
       ) : (
         <div className="space-y-1 stagger-children">
           {(clients || []).map((c: any) => (

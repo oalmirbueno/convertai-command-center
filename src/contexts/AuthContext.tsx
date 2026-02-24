@@ -20,18 +20,12 @@ interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
   loading: boolean;
-  login: (role: "admin" | "client") => Promise<void>;
   loginWithCredentials: (email: string, password: string) => Promise<void>;
   signup: (email: string, password: string, fullName: string, companyName?: string) => Promise<void>;
   logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
-
-const DEMO_ACCOUNTS = {
-  admin: { email: "admin@convertai.com", password: "admin123456", name: "Lucas Ferreira", role: "admin" as AppRole, company: null as string | null },
-  client: { email: "maria@acerbi.com.br", password: "client123456", name: "Maria Acerbi", role: "client" as AppRole, company: "Acerbi Associação" },
-};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -150,38 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [getOrCreateProfile]);
 
-  const login = async (role: "admin" | "client"): Promise<void> => {
-    const cred = DEMO_ACCOUNTS[role];
-
-    // Try sign in
-    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
-      email: cred.email,
-      password: cred.password,
-    });
-
-    if (loginData?.user) return; // onAuthStateChange handles the rest
-
-    if (loginError?.message?.includes("Invalid login credentials")) {
-      // User doesn't exist - create
-      const { error: signupError } = await supabase.auth.signUp({
-        email: cred.email,
-        password: cred.password,
-        options: { data: { full_name: cred.name, role: cred.role, company_name: cred.company } },
-      });
-      if (signupError) throw signupError;
-
-      // Sign in after signup
-      const { error: reloginError } = await supabase.auth.signInWithPassword({
-        email: cred.email,
-        password: cred.password,
-      });
-      if (reloginError) throw reloginError;
-      return;
-    }
-
-    if (loginError) throw loginError;
-  };
-
   const loginWithCredentials = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     if (error) throw error;
@@ -212,7 +174,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, login, loginWithCredentials, signup, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, loginWithCredentials, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );
