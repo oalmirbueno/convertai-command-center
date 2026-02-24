@@ -30,6 +30,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [planName, setPlanName] = useState("");
+  const [clientPassword, setClientPassword] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
 
@@ -53,6 +54,10 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const handleSave = async () => {
     if (!fullName.trim() || !company.trim()) {
       toast.error("Preencha nome e empresa");
+      return;
+    }
+    if (clientPassword && clientPassword.length < 6) {
+      toast.error("Senha deve ter no mínimo 6 caracteres");
       return;
     }
     setSaving(true);
@@ -84,8 +89,17 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         if (removed.length) await notifyUser(client.id, `Serviços desativados: ${removed.join(", ")}`, "project", "/dashboard");
       }
 
+      // Update password if provided
+      if (clientPassword) {
+        const res = await supabase.functions.invoke("manage-team", {
+          body: { action: "update_password", user_id: client.id, password: clientPassword },
+        });
+        if (res.data?.error) throw new Error(res.data.error);
+      }
+
       toast.success("Cliente atualizado!");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      setClientPassword("");
       onClose();
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
@@ -152,6 +166,11 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Plano</label>
               <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex: Básico, Pro, Premium"
+                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nova Senha</label>
+              <input value={clientPassword} onChange={(e) => setClientPassword(e.target.value)} type="password" placeholder="Deixe vazio para manter atual"
                 className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
             </div>
 
