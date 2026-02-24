@@ -168,7 +168,7 @@ export default function BriefingPublic() {
         </div>
         <p className="text-xl font-semibold" style={{ color: "#fafafa" }}>Briefing enviado com sucesso!</p>
         <p className="text-sm" style={{ color: "hsl(240 4% 52%)" }}>Vamos analisar suas respostas e entrar em contato em breve.</p>
-        <p className="text-xs mt-6" style={{ color: "hsl(240 4% 30%)" }}>ConvertAI — Client Execution OS</p>
+        <p className="text-xs mt-6" style={{ color: "hsl(0 0% 30%)" }}>Aceleriq — Performance OS</p>
       </div>
     </div>
   );
@@ -353,16 +353,16 @@ export default function BriefingPublic() {
       <div className="fixed top-0 left-0 right-0 z-50" style={{ height: 3 }}>
         <div
           className="h-full transition-all duration-500 ease-out"
-          style={{ width: `${progress}%`, background: "hsl(263 70% 66%)" }}
+          style={{ width: `${progress}%`, background: "#00FF66" }}
         />
       </div>
 
       {/* Logo */}
       <div className="fixed top-5 left-6 z-40 flex items-center gap-2">
-        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "hsl(263 70% 66%)" }}>
-          <span className="text-xs font-bold" style={{ color: "#fff" }}>C</span>
+        <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
+          <span className="text-xs font-bold" style={{ color: "#0D0D0D" }}>A</span>
         </div>
-        <span className="text-sm font-semibold hidden sm:inline" style={{ color: "hsl(240 5% 65%)" }}>ConvertAI</span>
+        <span className="text-sm font-semibold hidden sm:inline" style={{ color: "hsl(0 0% 63%)" }}>Aceler<span style={{ color: "#00FF66" }}>iq</span></span>
       </div>
 
       {/* Step content */}

@@ -76,7 +76,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background tech-grid-bg">
       {/* Floating TopNav */}
       <nav className="fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4"
         style={{
@@ -89,10 +89,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Left: Logo */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg bg-primary flex items-center justify-center">
-            <span className="text-xs font-bold text-primary-foreground">C</span>
+          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #00FF66, #00CC52)' }}>
+            <span className="text-xs font-bold text-primary-foreground">A</span>
           </div>
-          <span className="font-semibold text-[15px] text-foreground hidden sm:inline">ConvertAI</span>
+          <span className="font-semibold text-[15px] text-foreground hidden sm:inline">Aceler<span className="text-primary">iq</span></span>
         </div>
 
         {/* Center: Nav links (desktop) */}
@@ -162,7 +162,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           >
             <Bell className="w-4 h-4" />
             {unreadCount > 0 && (
-              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1">
+              <span className="absolute -top-0.5 -right-0.5 min-w-[16px] h-4 rounded-full bg-primary text-primary-foreground text-[9px] font-bold flex items-center justify-center px-1 notif-badge">
                 {unreadCount > 9 ? "9+" : unreadCount}
               </span>
             )}

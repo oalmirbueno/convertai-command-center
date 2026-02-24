@@ -4,48 +4,48 @@
 
 @layer base {
   :root {
-    --background: 240 6% 4%;
-    --foreground: 0 0% 98%;
+    --background: 0 0% 5%;
+    --foreground: 0 0% 100%;
 
-    --card: 240 5% 7%;
-    --card-foreground: 0 0% 98%;
+    --card: 0 0% 10%;
+    --card-foreground: 0 0% 100%;
 
-    --popover: 240 6% 10%;
-    --popover-foreground: 0 0% 98%;
+    --popover: 0 0% 7%;
+    --popover-foreground: 0 0% 100%;
 
-    --primary: 263 70% 66%;
-    --primary-foreground: 0 0% 100%;
+    --primary: 145 100% 50%;
+    --primary-foreground: 0 0% 5%;
 
-    --secondary: 240 4% 16%;
-    --secondary-foreground: 240 5% 65%;
+    --secondary: 0 0% 13%;
+    --secondary-foreground: 0 0% 63%;
 
-    --muted: 240 4% 16%;
-    --muted-foreground: 240 4% 52%;
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 40%;
 
-    --accent: 188 94% 43%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 145 100% 50%;
+    --accent-foreground: 0 0% 5%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 100% 62%;
     --destructive-foreground: 0 0% 100%;
 
-    --success: 142 71% 45%;
-    --warning: 38 92% 50%;
-    --info: 188 94% 43%;
+    --success: 145 100% 50%;
+    --warning: 43 100% 50%;
+    --info: 200 100% 50%;
 
-    --border: 240 4% 16%;
-    --input: 240 4% 16%;
-    --ring: 263 70% 66%;
+    --border: 0 0% 17%;
+    --input: 0 0% 17%;
+    --ring: 145 100% 50%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 240 6% 4%;
-    --sidebar-foreground: 240 4% 52%;
-    --sidebar-primary: 263 70% 66%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 4% 16%;
-    --sidebar-accent-foreground: 0 0% 98%;
-    --sidebar-border: 240 4% 16%;
-    --sidebar-ring: 263 70% 66%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 40%;
+    --sidebar-primary: 145 100% 50%;
+    --sidebar-primary-foreground: 0 0% 5%;
+    --sidebar-accent: 0 0% 13%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 17%;
+    --sidebar-ring: 145 100% 50%;
   }
 }
 
@@ -76,6 +76,12 @@
   }
 }
 
+/* Selection */
+::selection {
+  background: rgba(0, 255, 102, 0.2);
+  color: #FFFFFF;
+}
+
 /* Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
@@ -85,11 +91,11 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(240 4% 26%);
+  background: hsl(0 0% 20%);
   border-radius: 999px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(240 4% 35%);
+  background: hsl(145 100% 50%);
 }
 
 /* Grid perspective for login */
@@ -104,13 +110,40 @@
   position: absolute;
   inset: -50%;
   background-image:
-    linear-gradient(hsl(0 0% 100% / 0.03) 1px, transparent 1px),
-    linear-gradient(90deg, hsl(0 0% 100% / 0.03) 1px, transparent 1px);
+    linear-gradient(rgba(0, 255, 102, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 102, 0.03) 1px, transparent 1px);
   background-size: 60px 60px;
   transform: perspective(500px) rotateX(60deg);
   transform-origin: center center;
   mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black, transparent);
   -webkit-mask-image: radial-gradient(ellipse 60% 50% at 50% 50%, black, transparent);
+}
+
+/* Login orb glow */
+.login-orb {
+  position: absolute;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(0, 255, 102, 0.06) 0%, transparent 70%);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Tech grid background for app layout */
+.tech-grid-bg::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0, 255, 102, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 102, 0.02) 1px, transparent 1px);
+  background-size: 60px 60px;
+  pointer-events: none;
+  z-index: 0;
 }
 
 /* Pulse dot for active status */
@@ -175,8 +208,8 @@
 
 /* Pulse milestone */
 @keyframes milestone-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 hsl(263 70% 66% / 0.4); }
-  50% { box-shadow: 0 0 0 6px hsl(263 70% 66% / 0); }
+  0%, 100% { box-shadow: 0 0 0 0 hsl(145 100% 50% / 0.4); }
+  50% { box-shadow: 0 0 0 6px hsl(145 100% 50% / 0); }
 }
 .milestone-pulse {
   animation: milestone-pulse 2s ease-in-out infinite;
@@ -191,6 +224,70 @@
   display: none;
 }
 
+/* Login card animation */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.login-card { animation: fadeInUp 0.6s ease-out; }
+.login-form { animation: fadeInUp 0.6s ease-out 0.15s both; }
+
+/* Login button subtle pulse */
+@keyframes subtlePulse {
+  0%, 100% { box-shadow: 0 0 15px rgba(0, 255, 102, 0.15); }
+  50% { box-shadow: 0 0 25px rgba(0, 255, 102, 0.3); }
+}
+.login-btn { animation: subtlePulse 3s ease-in-out infinite; }
+
+/* Card hover effect */
+.card-hover {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s, box-shadow 0.2s;
+}
+.card-hover:hover {
+  transform: translateY(-3px);
+  border-color: hsl(145 100% 50% / 0.3);
+  box-shadow: 0 8px 30px rgba(0, 255, 102, 0.08);
+}
+
+/* Empty state float */
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.empty-state-icon { animation: float 3s ease-in-out infinite; }
+
+/* Notification badge bounce */
+@keyframes notifBounce {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.2); }
+}
+.notif-badge {
+  animation: notifBounce 3s ease-in-out infinite;
+}
+
+/* Progress bar shimmer */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+.progress-shimmer {
+  background: linear-gradient(90deg, hsl(145 100% 50%), hsl(145 100% 40%), hsl(145 100% 50%));
+  background-size: 400px 100%;
+  animation: shimmer 2s linear infinite;
+}
+
+/* Button interactions */
+.btn-interactive {
+  transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.15s;
+}
+.btn-interactive:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 0 20px rgba(0, 255, 102, 0.3);
+}
+.btn-interactive:active {
+  transform: scale(0.97);
+}
+
 /* Print styles for reports */
 @media print {
   nav, .topnav, .sidebar, .no-print, button, [role="navigation"] { display: none !important; }
@@ -199,4 +296,12 @@
   .bg-card { background: white !important; border: 1px solid #ddd !important; }
   .text-foreground { color: black !important; }
   .text-muted-foreground { color: #666 !important; }
+}
+
+/* Respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }
