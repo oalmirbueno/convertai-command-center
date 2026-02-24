@@ -30,7 +30,17 @@ export default function OnboardingTour({ steps, isOpen, onClose, storageKey }: O
     }
     const el = document.querySelector(step.target);
     if (el) {
+      // Scroll into view if not visible
       const rect = el.getBoundingClientRect();
+      const isVisible = rect.top >= 0 && rect.bottom <= window.innerHeight;
+      if (!isVisible) {
+        el.scrollIntoView({ behavior: "smooth", block: "center" });
+        // Wait for scroll to finish before measuring
+        const timer = setTimeout(() => {
+          setTargetRect(el.getBoundingClientRect());
+        }, 350);
+        return () => clearTimeout(timer);
+      }
       setTargetRect(rect);
     } else {
       setTargetRect(null);
