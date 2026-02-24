@@ -1,12 +1,13 @@
 import { useState, useEffect } from "react";
-import { X, Loader2, Trash2 } from "lucide-react";
+import { X, Loader2, Trash2, FileText } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
+import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
@@ -43,7 +44,24 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [clientPassword, setClientPassword] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [briefingOpen, setBriefingOpen] = useState(false);
 
+  // Fetch client's briefing
+  const { data: clientBriefing } = useQuery({
+    queryKey: ["client-briefing", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("briefings")
+        .select("*")
+        .eq("client_id", client.id)
+        .eq("submitted", true)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!client?.id,
+  });
   useEffect(() => {
     if (client) {
       setFullName(client.full_name || "");
@@ -225,6 +243,23 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </div>
             </div>
 
+            {/* Briefing */}
+            {clientBriefing && (
+              <div className="pt-2">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Briefing</label>
+                <button
+                  onClick={() => setBriefingOpen(true)}
+                  className="inline-flex items-center gap-2 w-full px-4 py-3 rounded-xl text-[13px] text-foreground bg-secondary/70 border border-border hover:border-primary/30 hover:bg-secondary transition-colors cursor-pointer"
+                >
+                  <FileText className="w-4 h-4 text-primary" />
+                  <span className="flex-1 text-left">Ver Diagnóstico Estratégico</span>
+                  <span className="text-[10px] text-muted-foreground">
+                    {new Date(clientBriefing.created_at).toLocaleDateString("pt-BR")}
+                  </span>
+                </button>
+              </div>
+            )}
+
             {client.projectCount !== undefined && (
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Projetos</label>
@@ -264,6 +299,13 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
           onCancel={() => setConfirmDelete(false)}
         />
       )}
+
+      <BriefingPdfModal
+        open={briefingOpen}
+        onClose={() => setBriefingOpen(false)}
+        briefing={clientBriefing}
+        clientName={client.company_name || client.full_name}
+      />
     </>
   );
 }

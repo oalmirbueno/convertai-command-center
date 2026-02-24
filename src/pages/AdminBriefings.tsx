@@ -5,7 +5,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Eye, FolderPlus, X, Loader2 } from "lucide-react";
+import { Eye, FolderPlus, X, Loader2, Download } from "lucide-react";
+import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 
 const typeLabels: Record<string, string> = {
   social_media: "Social Media", trafego: "Tráfego Pago", automacao: "Automação",
@@ -147,21 +148,13 @@ export default function AdminBriefings() {
         </div>
       )}
 
-      {/* View Responses Modal */}
-      {viewBriefing && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setViewBriefing(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[540px] mx-4" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-              <h2 className="text-sm font-semibold text-foreground">Respostas do Briefing</h2>
-              <button onClick={() => setViewBriefing(null)} className="text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="px-6 py-5 max-h-[70vh] overflow-y-auto">
-              {renderResponses(viewBriefing.responses)}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* View Briefing with PDF */}
+      <BriefingPdfModal
+        open={!!viewBriefing}
+        onClose={() => setViewBriefing(null)}
+        briefing={viewBriefing}
+        clientName={viewBriefing?.client?.company_name || viewBriefing?.client?.full_name || (viewBriefing?.responses as any)?.contato?.nome}
+      />
 
       {/* Generate Project Modal */}
       {generateBriefing && (
