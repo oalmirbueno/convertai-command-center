@@ -101,7 +101,7 @@ export default function AdminDashboard() {
       <p className="heading-page">Dashboard</p>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children" data-tour="dash-stats">
         {stats.map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors">
             <p className="label-sm">{s.label}</p>
@@ -112,7 +112,7 @@ export default function AdminDashboard() {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2" data-tour="dash-quick-actions">
         {quickActions.map((a) => (
           <button
             key={a.label}

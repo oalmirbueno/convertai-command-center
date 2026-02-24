@@ -49,7 +49,7 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
   };
 
   return (
-    <div className="animate-fade-in">
+    <div className="animate-fade-in" data-tour="client-canvas">
       {/* Greeting */}
       <div className="mb-8">
         <h1 className="text-xl font-semibold text-foreground">

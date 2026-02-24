@@ -123,7 +123,7 @@ export default function Kanban() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <p className="heading-page text-[16px] md:text-[14px]">Kanban</p>
+      <p className="heading-page text-[16px] md:text-[14px]" data-tour="kanban-create-btn">Kanban</p>
 
       {/* Filters */}
       <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden md:flex-wrap md:gap-3 md:overflow-visible md:pb-0">
@@ -218,7 +218,7 @@ export default function Kanban() {
         </div>
       ) : (
         /* ═══ DESKTOP: Columns layout ═══ */
-        <div className="flex gap-6 overflow-x-auto pb-4" style={{ scrollSnapType: 'x mandatory' }}>
+        <div className="flex gap-6 overflow-x-auto pb-4" data-tour="kanban-board" style={{ scrollSnapType: 'x mandatory' }}>
           {columns.map((col) => {
             const colTasks = filteredTasks.filter((t: any) => t.status === col.id);
             return (

@@ -53,6 +53,7 @@ export default function Projects() {
         <p className="heading-page">Projetos</p>
         {isAdmin && (
           <button onClick={() => setCreateOpen(true)}
+            data-tour="projects-create-btn"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
             <Plus className="w-3.5 h-3.5" /> Novo Projeto
           </button>
@@ -74,7 +75,7 @@ export default function Projects() {
       ) : filtered.length === 0 ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
       ) : (
-        <div className="space-y-1 stagger-children">
+        <div className="space-y-1 stagger-children" data-tour="projects-list">
           {filtered.map((p: any) => (
             <div key={p.id}
               className="bg-card border border-border rounded-xl px-5 py-4 hover:border-muted-foreground/30 transition-colors relative"
