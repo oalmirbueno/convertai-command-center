@@ -374,6 +374,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          onboarding_done: boolean
           phone: string | null
           plan_name: string | null
           plan_renewal_date: string | null
@@ -388,6 +389,7 @@ export type Database = {
           email: string
           full_name: string
           id: string
+          onboarding_done?: boolean
           phone?: string | null
           plan_name?: string | null
           plan_renewal_date?: string | null
@@ -402,6 +404,7 @@ export type Database = {
           email?: string
           full_name?: string
           id?: string
+          onboarding_done?: boolean
           phone?: string | null
           plan_name?: string | null
           plan_renewal_date?: string | null
