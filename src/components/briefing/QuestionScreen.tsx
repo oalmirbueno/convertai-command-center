@@ -177,7 +177,7 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
       </div>
 
       {/* Content */}
-      <div className="flex-1 flex items-center justify-center px-6 py-16 relative z-10">
+      <div className="flex-1 flex items-center justify-center px-4 sm:px-6 py-12 sm:py-16 relative z-10">
         <div
           key={idx}
           className={cn("w-full max-w-[560px]", shake && "animate-shake")}
@@ -195,7 +195,7 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
           </div>
 
           {/* Question */}
-          <h2 className="text-2xl sm:text-[28px] font-semibold text-foreground mb-2 leading-tight">
+          <h2 className="text-xl sm:text-2xl md:text-[28px] font-semibold text-foreground mb-2 leading-tight">
             {q.question}
           </h2>
 
@@ -208,8 +208,8 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
       </div>
 
       {/* Nav */}
-      <div className="sticky bottom-0 z-40 px-6 py-5" style={{ background: "rgba(13,13,13,0.9)", backdropFilter: "blur(12px)" }}>
-        <div className="max-w-[560px] mx-auto flex items-center justify-between">
+      <div className="sticky bottom-0 z-40 px-4 sm:px-6 py-4 sm:py-5 safe-area-bottom" style={{ background: "rgba(13,13,13,0.9)", backdropFilter: "blur(12px)" }}>
+        <div className="max-w-[560px] mx-auto flex flex-col-reverse sm:flex-row items-center justify-between gap-3">
           {idx > 0 ? (
             <button
               onClick={goPrev}
@@ -219,12 +219,12 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
             </button>
           ) : <div />}
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-4 w-full sm:w-auto">
             <span className="text-[11px] text-muted-foreground/30 hidden sm:inline">⌨ Enter para avançar</span>
             <button
               onClick={goNext}
               disabled={q.required && !canAdvance()}
-              className="px-8 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer border-none disabled:opacity-40 bg-primary text-primary-foreground hover:opacity-90 btn-interactive"
+              className="w-full sm:w-auto px-8 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer border-none disabled:opacity-40 bg-primary text-primary-foreground hover:opacity-90 btn-interactive"
             >
               {idx === total - 1 ? "Finalizar ✓" : "Próxima →"}
             </button>

@@ -59,10 +59,10 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
       </div>
 
       {/* Stats inline */}
-      <div className="flex items-center gap-2 text-[13px] text-muted-foreground mb-8">
-        <span>Projetos Ativos: <span className="text-foreground font-medium">{activeProjects.length}</span></span>
+      <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground mb-8">
+        <span>Ativos: <span className="text-foreground font-medium">{activeProjects.length}</span></span>
         <span className="text-border">•</span>
-        <span>Aguardando Aprovação: <span className="text-foreground font-medium">{reviewProjects.length}</span></span>
+        <span>Aprovação: <span className="text-foreground font-medium">{reviewProjects.length}</span></span>
         <span className="text-border">•</span>
         <span>Concluídos: <span className="text-foreground font-medium">{doneProjects.length}</span></span>
       </div>
@@ -80,13 +80,13 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
             Nenhum projeto encontrado.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5 canvas-stagger">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-5 canvas-stagger">
             {projects.map((p: any) => (
               <div
                 key={p.id}
                 onClick={() => onSelectProject(p)}
-                className="group bg-card border border-border rounded-2xl p-6 cursor-pointer hover:border-muted-foreground/40 hover:-translate-y-0.5 transition-all duration-200"
-                style={{ width: "100%", maxWidth: 280 }}
+                className="group bg-card border border-border rounded-2xl p-5 sm:p-6 cursor-pointer hover:border-muted-foreground/40 hover:-translate-y-0.5 transition-all duration-200"
+                style={{ width: "100%" }}
               >
                 {/* Type + Status */}
                 <div className="flex items-center gap-2 mb-4">

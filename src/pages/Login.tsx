@@ -137,7 +137,7 @@ export default function Login() {
   const labelCls = "text-[11px] uppercase tracking-[0.5px] text-muted-foreground font-semibold mb-1.5 block";
 
   return (
-    <div className="relative min-h-screen flex overflow-hidden bg-background">
+    <div className="relative min-h-screen flex flex-col lg:flex-row overflow-hidden bg-background">
       {/* ═══ LEFT PANEL ═══ */}
       <div className="hidden lg:flex w-[55%] relative overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
         <div className="tech-grid-bg" />
@@ -219,7 +219,7 @@ export default function Login() {
       </div>
 
       {/* ═══ RIGHT PANEL ═══ */}
-      <div className="flex-1 flex items-center justify-center px-6 py-12" style={{ background: "#121212" }}>
+      <div className="flex-1 flex items-center justify-center px-5 sm:px-6 py-8 sm:py-12 min-h-screen lg:min-h-0" style={{ background: "#121212" }}>
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-6" style={{ animation: "fadeInUp 0.4s ease-out" }}>

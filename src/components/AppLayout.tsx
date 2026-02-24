@@ -237,7 +237,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="pt-20 pb-8 px-4 md:px-6 max-w-[1280px] mx-auto">
+      <main className="pt-20 pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding">
         {children}
       </main>
 

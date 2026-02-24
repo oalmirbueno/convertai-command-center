@@ -181,7 +181,7 @@ export default function AdminFinanceiro() {
       <p className="heading-page">Financeiro</p>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 gap-3">
         {[
           { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
           { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
@@ -216,7 +216,7 @@ export default function AdminFinanceiro() {
           </div>
           <div className="space-y-2 stagger-children">
             {(billing || []).map((b: any) => (
-              <div key={b.id} className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 flex-wrap">
+              <div key={b.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
                 <span className="text-lg">{typeIcon(b.type)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>

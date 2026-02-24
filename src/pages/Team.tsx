@@ -108,11 +108,11 @@ export default function Team() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Equipe</p>
         <button onClick={() => { closeModal(); setCreateOpen(true); }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-          <UserPlus className="w-3.5 h-3.5" /> Novo Membro
+          className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+          <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Novo</span> Membro
         </button>
       </div>
 
@@ -125,7 +125,7 @@ export default function Team() {
           {(members || []).map((m: any) => {
             const badge = roleBadge[m.role] || roleBadge.admin;
             return (
-              <div key={m.id} className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4">
+              <div key={m.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
                 <Avatar className="w-10 h-10 shrink-0">
                   <AvatarFallback className="bg-primary/15 text-primary text-sm font-semibold">
                     {m.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
@@ -162,12 +162,12 @@ export default function Team() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+            <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border">
               <h2 className="text-sm font-semibold text-foreground">{editMember ? "Editar Membro" : "Novo Membro"}</h2>
               <button onClick={closeModal} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
             </div>
-            <div className="px-6 py-5 space-y-4">
+            <div className="px-5 sm:px-6 py-5 space-y-4">
               <div className="space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo</label>
                 <input value={name} onChange={e => setName(e.target.value)} className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
@@ -186,7 +186,7 @@ export default function Team() {
                 </select>
               </div>
             </div>
-            <div className="px-6 py-4 border-t border-border flex justify-end gap-3">
+            <div className="px-5 sm:px-6 py-4 border-t border-border flex flex-col sm:flex-row justify-end gap-2 sm:gap-3">
               <button onClick={closeModal} className="px-4 py-2 rounded-[10px] text-[13px] text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border border-border">Cancelar</button>
               <button onClick={editMember ? handleEdit : handleCreate} disabled={saving} className="px-5 py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 cursor-pointer disabled:opacity-50 flex items-center gap-2">
                 {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

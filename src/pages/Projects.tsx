@@ -60,10 +60,10 @@ export default function Projects() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-1.5 flex-wrap">
+      <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hidden md:flex-wrap md:overflow-visible md:pb-0">
         {STATUS_OPTIONS.map(s => (
           <button key={s.value} onClick={() => setFilter(s.value)}
-            className={`px-3 py-1.5 rounded-full text-[12px] cursor-pointer transition-colors border ${filter === s.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-muted-foreground border-border hover:text-foreground"}`}>
+            className={`px-3 py-1.5 rounded-full text-[12px] cursor-pointer transition-colors border flex-shrink-0 whitespace-nowrap ${filter === s.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-muted-foreground border-border hover:text-foreground"}`}>
             {s.label}
           </button>
         ))}
