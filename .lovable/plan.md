@@ -1,82 +1,85 @@
 
 
-# ConvertAI ClientOS — Painel de Gestão para Agência Digital
+# Login Page - Layout Reorganization
 
-## Visão Geral
-Sistema de gestão de projetos premium para agência digital com dois perfis de acesso (Admin e Cliente), visual dark sofisticado estilo "command center" e navegação completa.
+## Current Issues
+- Logo is small and tucked in the top-left corner -- user wants it big and centered/prominent
+- The consultant image is barely visible due to aggressive masking -- needs to be more present but pushed to the edge
+- Text content floats in the middle and overlaps with the faded image zone
+- The woman in the image should be looking forward (facing camera)
 
----
+## Changes
 
-## Design System
-- **Tema escuro** com fundo `#0a0b0f`, cards `#181920`
-- **Fonte Outfit** (Google Fonts) em todo o sistema
-- **Cor principal** roxo `#6c5ce7` com efeitos de glow
-- Cards com bordas arredondadas de 16px e glassmorphism no header
-- Animações de entrada fade + slide em todas as páginas
-- Visual premium, zero aparência de template genérico
+### 1. Generate new consultant image
+- Generate a new hero image of a professional woman looking directly at the camera (forward-facing), arms crossed, confident pose
+- Save as `src/assets/consultant-hero-flipped.jpg` (replacing current)
 
----
+### 2. Restructure the left panel layout into clear zones
 
-## Páginas e Funcionalidades
+The left panel will be reorganized into a **two-column internal layout** that prevents any overlap:
 
-### 1. Tela de Login
-- Logo "ConvertAI" com ícone gradiente roxo e subtítulo "Client Execution OS"
-- Campos visuais de email e senha
-- Botões de acesso rápido: "Entrar como Admin" e "Entrar como Cliente" (login mock via useState)
-- Fundo com grid animado sutil e orbs de luz roxo/verde
+```text
++-----------------------------------------------+
+|                                                |
+|   [WOMAN IMAGE]        [CONTENT AREA]          |
+|   Positioned at        Centered vertically:    |
+|   far-left edge,                               |
+|   bottom-aligned,       - Big Logo (48px icon)  |
+|   ~45% of panel         - "Aceleriq" (24px)    |
+|   width, masked          - "Performance OS"    |
+|   on right edge                                |
+|                         - Welcome heading      |
+|                         - Description text     |
+|                                                |
+|                         - 3 value props        |
+|                           with Lucide icons    |
+|                                                |
+|                         - Metrics footer       |
+|                         - Copyright            |
++-----------------------------------------------+
+```
 
-### 2. Dashboard Admin
-- 4 cards de estatísticas no topo: Projetos Ativos, Clientes, Tarefas Pendentes, Em Revisão (com ícones e números em fonte mono)
-- Barra de ações rápidas: Novo Projeto, Novo Cliente, Gerar Plano IA, Upload Documento
-- Grid de projetos ativos como cards com badge de tipo, status, barra de progresso e prazo
-- Seções "Atualizações Recentes" (feed com dots coloridos) e "Tarefas Urgentes" lado a lado
+### 3. Specific layout changes in `src/pages/Login.tsx`
 
-### 3. Dashboard Cliente
-- Mensagem de boas-vindas personalizada com nome da empresa
-- Cards resumo: Projetos Ativos, Aguardando Aprovação, Concluídas
-- Cards de projetos grandes e clicáveis
-- Feed de atualizações recentes
-- Somente visualização — sem edição
+**Image positioning:**
+- Keep `absolute left-0 bottom-0` but with `h-[85%]` so she's prominent
+- Keep the right-fade mask but less aggressive: fade starts at 60% instead of 50%
+- This keeps the woman visible but cleanly fading before the text zone
 
-### 4. Sidebar Dinâmica
-- Muda itens conforme perfil logado (Admin ou Cliente)
-- **Admin:** Dashboard, Projetos, Kanban, Clientes, Equipe, Aprovações, IA Planner, Relatórios, Timeline, Financeiro, Arquivos, Config
-- **Cliente:** Dashboard, Meus Projetos, Acompanhamento, Aprovações, Relatórios, Timeline, Pedidos, Documentos, Financeiro, Perfil
-- Indicador de notificações não lidas no ícone do sino
-- Rodapé com avatar, nome do usuário e botão de logout
+**Content area (right side of left panel):**
+- All content (logo, text, value props, metrics) lives in a single column on the right side of the left panel
+- Uses `ml-auto` with fixed `max-width: 320px` and `pr-12 pl-6`
+- This ensures zero overlap with the image
 
-### 5. Kanban (Admin)
-- Board estilo Trello com 4 colunas: Backlog, Em Andamento, Revisão, Concluído
-- Cards com título, projeto, prazo, badge de prioridade e avatar do responsável
-- Arrastar/mover cards entre colunas
+**Logo/Branding -- big and prominent:**
+- Move the logo from top-left into the content column, at the top of the vertically-centered block
+- Icon: 48px square with green gradient
+- Text: "Aceleriq" at ~22px bold, "Performance OS" subtitle
+- This makes the branding the first thing you see in the content area
 
-### 6. Página de Clientes (Admin)
-- Tabela com avatar, empresa, email, badges de serviços ativos, quantidade de projetos e status
-- Botões "Novo Cliente" e "Gerar Link Briefing"
+**Welcome text:**
+- "Bom te ver por aqui!" heading
+- Short description paragraph
+- Positioned below logo with proper spacing
 
-### 7. Painel de Notificações
-- Slide panel pela direita ao clicar no sino (header)
-- Lista de notificações com indicador de lida/não lida
-- Tipos: aprovação, relatório, cobrança, pedido
+**Value props:**
+- 3 items with Lucide icons (BarChart3, Zap, Target) -- no emojis
+- Compact spacing below the welcome text
 
-### 8. Páginas Placeholder (Fase 2)
-- IA Planner, Relatórios, Timeline, Financeiro, Arquivos, Config, Equipe, Aprovações, Pedidos, Documentos, Perfil, Acompanhamento
-- Tela bonita com ícone e mensagem "Em construção — Fase 2"
+**Footer metrics + copyright:**
+- Pinned to the bottom of the content column
+- Animated counter numbers
 
----
+### 4. No changes to the right panel (form side)
+The login/signup form stays exactly as-is.
 
-## Dados Mock
-- 2 clientes: "Acerbi Associação" e "Cresol Cooperativa"
-- 4 projetos: Social Media, Evento, Automação, Site
-- 8 tarefas distribuídas nas colunas do Kanban
-- 5 notificações e 4 atualizações no feed
+## Technical Details
 
----
+### Files Modified
+- `src/pages/Login.tsx` -- restructure left panel layout only
+- `src/assets/consultant-hero-flipped.jpg` -- new forward-facing image
 
-## Técnico
-- Autenticação mock com useState (sem backend)
-- React Router para todas as rotas
-- Tailwind CSS + shadcn/ui
-- Responsivo (mobile-first)
-- Transições suaves entre páginas
-
+### Key CSS/Layout Approach
+- The image and content never overlap because the content column uses `ml-auto` with a fixed max-width, occupying only the right ~40% of the left panel
+- The image occupies the left portion with a gradient mask that fades before reaching the content zone
+- The logo moves from a separate top-left position into the main content flow for better visual hierarchy
