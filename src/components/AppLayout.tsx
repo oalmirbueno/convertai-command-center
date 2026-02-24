@@ -1,11 +1,11 @@
 import { useState, useRef, useEffect } from "react";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
-import { adminTourSteps, clientTourSteps, teamTourSteps } from "@/components/onboarding/tourConfigs";
+import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, Menu, X, MoreHorizontal, Search } from "lucide-react";
 import {
@@ -57,11 +57,13 @@ const clientMoreNav: NavItem[] = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, logout } = useAuth();
+  const location = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
+  const [tourMode, setTourMode] = useState<"full" | "page">("full");
   const moreRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
@@ -73,8 +75,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
-  const tourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
+  const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
   const tourKey = `onboarding_done_${role}`;
+
+  // Page-specific tour
+  const pageSteps = getPageTour(location.pathname, role);
+  const pageTourConfig = pageTours.find(p => location.pathname.startsWith(p.route));
+  const activeTourSteps = tourMode === "page" && pageSteps ? pageSteps : fullTourSteps;
+  const activeTourKey = tourMode === "page" ? `page_tour_${location.pathname}` : tourKey;
 
   // Auto-start tour on first visit
   useEffect(() => {
@@ -268,14 +276,20 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Onboarding Tour */}
       <OnboardingTour
-        steps={tourSteps}
+        steps={activeTourSteps}
         isOpen={tourOpen}
         onClose={() => setTourOpen(false)}
-        storageKey={tourKey}
+        storageKey={activeTourKey}
       />
 
       {/* Help button to restart tour */}
-      {!tourOpen && <HelpButton onClick={() => { localStorage.removeItem(tourKey); setTourOpen(true); }} />}
+      {!tourOpen && (
+        <HelpButton
+          onFullTour={() => { setTourMode("full"); localStorage.removeItem(tourKey); setTourOpen(true); }}
+          onPageTour={pageSteps ? () => { setTourMode("page"); setTourOpen(true); } : null}
+          pageTourLabel={pageTourConfig?.label}
+        />
+      )}
     </div>
   );
 }
