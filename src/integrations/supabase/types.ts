@@ -375,6 +375,7 @@ export type Database = {
           full_name: string
           id: string
           phone: string | null
+          plan_name: string | null
           plan_renewal_date: string | null
           plan_status: string
           services_config: Json | null
@@ -388,6 +389,7 @@ export type Database = {
           full_name: string
           id: string
           phone?: string | null
+          plan_name?: string | null
           plan_renewal_date?: string | null
           plan_status?: string
           services_config?: Json | null
@@ -401,6 +403,7 @@ export type Database = {
           full_name?: string
           id?: string
           phone?: string | null
+          plan_name?: string | null
           plan_renewal_date?: string | null
           plan_status?: string
           services_config?: Json | null
