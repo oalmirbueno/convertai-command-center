@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { X, Loader2, Trash2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { notifyUser } from "@/lib/notifyHelpers";
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
@@ -56,6 +57,11 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     }
     setSaving(true);
     try {
+      // Detect what changed for notification
+      const planChanged = (planName.trim() || "") !== (client.plan_name || "");
+      const oldServices = client.services_config || {};
+      const servicesChanged = JSON.stringify(services) !== JSON.stringify(oldServices);
+
       const { error } = await supabase.from("profiles").update({
         full_name: fullName.trim(),
         company_name: company.trim(),
@@ -65,6 +71,19 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       } as any).eq("id", client.id);
 
       if (error) throw error;
+
+      // Notify client about plan/service changes
+      if (planChanged && planName.trim()) {
+        await notifyUser(client.id, `Seu plano foi atualizado para "${planName.trim()}"`, "project", "/dashboard");
+      }
+      if (servicesChanged) {
+        const LABELS: Record<string, string> = { trafego: "Tráfego Pago", social: "Social Media", automacao: "Automação", site: "Site / Landing Page", relatorios: "Relatórios", cobranca: "Cobrança" };
+        const added = Object.keys(services).filter(k => services[k] && !oldServices[k]).map(k => LABELS[k] || k);
+        const removed = Object.keys(oldServices).filter(k => oldServices[k] && !services[k]).map(k => LABELS[k] || k);
+        if (added.length) await notifyUser(client.id, `Serviços ativados: ${added.join(", ")}`, "project", "/dashboard");
+        if (removed.length) await notifyUser(client.id, `Serviços desativados: ${removed.join(", ")}`, "project", "/dashboard");
+      }
+
       toast.success("Cliente atualizado!");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
       onClose();
