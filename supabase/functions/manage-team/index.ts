@@ -38,7 +38,6 @@ Deno.serve(async (req) => {
       const { email, full_name, role } = payload;
       if (!email || !full_name || !role) throw new Error("Missing fields");
 
-      // Create auth user
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
         password: "Temp@2026!",
@@ -47,14 +46,12 @@ Deno.serve(async (req) => {
       });
       if (createError) throw createError;
 
-      // Ensure profile exists
       await adminClient.from("profiles").upsert({
         id: newUser.user.id,
         email,
         full_name,
       }, { onConflict: "id" });
 
-      // Ensure role exists
       await adminClient.from("user_roles").upsert({
         user_id: newUser.user.id,
         role,
@@ -70,13 +67,14 @@ Deno.serve(async (req) => {
       if (!user_id) throw new Error("Missing user_id");
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
-      // Delete auth user (cascades to profiles and roles via FK)
+      // Delete related data FIRST (service role bypasses RLS)
+      await adminClient.from("user_roles").delete().eq("user_id", user_id);
+      await adminClient.from("notifications").delete().eq("user_id", user_id);
+      await adminClient.from("profiles").delete().eq("id", user_id);
+
+      // Now delete auth user
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);
       if (deleteError) throw deleteError;
-
-      // Clean up in case cascade didn't cover everything
-      await adminClient.from("user_roles").delete().eq("user_id", user_id);
-      await adminClient.from("profiles").delete().eq("id", user_id);
 
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -85,6 +83,7 @@ Deno.serve(async (req) => {
 
     throw new Error("Invalid action");
   } catch (err: any) {
+    console.error("manage-team error:", err);
     return new Response(JSON.stringify({ error: err.message }), {
       status: 400,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
