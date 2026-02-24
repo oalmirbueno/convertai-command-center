@@ -3,7 +3,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, ArrowRight, Eye, EyeOff, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
-import consultantImg from "@/assets/consultant-avatar.jpg";
+import consultantHero from "@/assets/consultant-hero.jpg";
 
 type Mode = "login" | "signup";
 
@@ -139,64 +139,71 @@ export default function Login() {
   return (
     <div className="relative min-h-screen flex overflow-hidden bg-background">
       {/* ═══ LEFT PANEL ═══ */}
-      <div className="hidden lg:flex w-[55%] relative items-center justify-center overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
+      <div className="hidden lg:flex w-[55%] relative flex-col overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
         <div className="tech-grid-bg" />
-        {/* Orb */}
-        <div className="absolute w-[400px] h-[400px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.04) 0%, transparent 70%)", top: "15%", left: "50%", transform: "translateX(-50%)" }} />
+        {/* Orb behind image */}
+        <div className="absolute w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.05) 0%, transparent 70%)", top: "30%", left: "50%", transform: "translateX(-50%)" }} />
 
-        <div className="relative z-10 max-w-[480px] px-12 flex flex-col">
-          {/* Avatar + greeting */}
-          <div className="mb-10">
-            <div className="relative inline-block mb-5">
-              <div className="w-[88px] h-[88px] rounded-full overflow-hidden border-2 border-primary/30 shadow-[0_0_30px_rgba(0,255,102,0.1)]" style={{ animation: "bounceIn 0.6s cubic-bezier(0.68,-0.55,0.265,1.55)" }}>
-                <img src={consultantImg} alt="Consultora Aceleriq" className="w-full h-full object-cover" />
-              </div>
-              {/* Online dot */}
-              <div className="absolute bottom-1 right-1 w-3 h-3 rounded-full bg-primary border-2 border-[#0D0D0D] status-online" />
-            </div>
-
-            <h1 className="text-[32px] font-bold text-foreground leading-tight mb-3" style={{ animation: "fadeInUp 0.6s ease-out" }}>
-              Bom te ver por aqui!
-            </h1>
-            <p className="text-[15px] text-muted-foreground leading-[1.7] max-w-[380px]" style={{ animation: "fadeIn 0.8s ease-out 0.3s both" }}>
-              Seu diagnóstico está seguro com a gente. Acesse sua conta para acompanhar tudo.
-            </p>
+        {/* Logo top-left */}
+        <div className="relative z-10 px-10 pt-8 flex items-center gap-2.5" style={{ animation: "fadeIn 0.5s ease-out" }}>
+          <div className="w-9 h-9 rounded-xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
+            <span className="text-sm font-bold text-primary-foreground">A</span>
           </div>
+          <span className="font-semibold text-sm text-foreground">Aceler<span className="text-primary">iq</span></span>
+        </div>
 
-          {/* Testimonial */}
-          <div className="rounded-2xl p-6 border border-[#1A1A1A] mb-10 testimonial-card" style={{ background: "#121212" }}>
-            <span className="text-[28px] text-primary leading-none">"</span>
-            <p className="text-sm text-[#CCCCCC] italic leading-[1.7] mt-1 mb-4">
-              Em 3 meses a Aceleriq transformou completamente nossa presença digital. Os resultados vieram rápido e com clareza.
-            </p>
-            <div className="flex items-center gap-3">
-              <div className="w-8 h-8 rounded-full bg-[#1A1A1A] flex items-center justify-center text-xs font-semibold text-muted-foreground">RM</div>
-              <div>
-                <p className="text-[13px] font-semibold text-foreground">Roberto M.</p>
-                <p className="text-[12px] text-muted-foreground/60">CEO, Distribuidora Vittal</p>
+        {/* Main content area */}
+        <div className="relative z-10 flex-1 flex items-center px-12">
+          <div className="flex gap-10 items-center w-full max-w-[560px] mx-auto">
+            {/* Consultant image */}
+            <div className="shrink-0" style={{ animation: "bounceIn 0.6s cubic-bezier(0.68,-0.55,0.265,1.55)" }}>
+              <div className="w-[200px] h-[280px] rounded-2xl overflow-hidden border border-primary/20 shadow-[0_0_40px_rgba(0,255,102,0.08)]">
+                <img src={consultantHero} alt="Consultora Aceleriq" className="w-full h-full object-cover" />
               </div>
             </div>
-          </div>
 
-          {/* Metrics */}
-          <div className="flex justify-center gap-10 mb-10" style={{ animation: "fadeIn 0.5s ease-out 0.7s both" }}>
+            {/* Text content */}
+            <div className="flex-1 min-w-0">
+              <h1 className="text-[28px] font-bold text-foreground leading-tight mb-3" style={{ animation: "fadeInUp 0.6s ease-out 0.2s both" }}>
+                Bom te ver<br />por aqui!
+              </h1>
+              <p className="text-[14px] text-muted-foreground leading-[1.7] mb-8" style={{ animation: "fadeIn 0.6s ease-out 0.4s both" }}>
+                Seu diagnóstico está seguro com a gente. Acesse sua conta para acompanhar tudo.
+              </p>
+
+              {/* Testimonial inline */}
+              <div className="rounded-xl p-5 border border-[#1A1A1A] testimonial-card" style={{ background: "#121212" }}>
+                <span className="text-xl text-primary leading-none">"</span>
+                <p className="text-[13px] text-[#CCCCCC] italic leading-[1.6] mt-1 mb-3">
+                  Em 3 meses a Aceleriq transformou nossa presença digital. Resultados rápidos e com clareza.
+                </p>
+                <div className="flex items-center gap-2.5">
+                  <div className="w-7 h-7 rounded-full bg-[#1A1A1A] flex items-center justify-center text-[10px] font-semibold text-muted-foreground">RM</div>
+                  <div>
+                    <p className="text-[12px] font-semibold text-foreground">Roberto M.</p>
+                    <p className="text-[11px] text-muted-foreground/60">CEO, Distribuidora Vittal</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bottom: Metrics + footer */}
+        <div className="relative z-10 px-12 pb-8">
+          <div className="flex justify-center gap-10 mb-5" style={{ animation: "fadeIn 0.5s ease-out 0.8s both" }}>
             {[
-              { value: `+${empresas}`, label: "empresas\natendidas" },
-              { value: `${satisfacao}%`, label: "satisfação\ndos clientes" },
-              { value: `${(avaliacao / 10).toFixed(1)}★`, label: "avaliação\nmédia" },
+              { value: `+${empresas}`, label: "empresas atendidas" },
+              { value: `${satisfacao}%`, label: "satisfação" },
+              { value: `${(avaliacao / 10).toFixed(1)}★`, label: "avaliação média" },
             ].map((m, i) => (
               <div key={i} className="text-center">
-                <div className="text-primary text-2xl font-bold font-mono">{m.value}</div>
-                <div className="text-[11px] text-muted-foreground/50 uppercase whitespace-pre-line leading-tight mt-1">{m.label}</div>
+                <div className="text-primary text-lg font-bold font-mono">{m.value}</div>
+                <div className="text-[10px] text-muted-foreground/50 uppercase mt-0.5">{m.label}</div>
               </div>
             ))}
           </div>
-
-          {/* Footer */}
-          <div className="mt-auto" style={{ animation: "fadeIn 0.5s ease-out 1s both" }}>
-            <p className="text-sm opacity-50 text-foreground">Aceler<span className="text-primary">iq</span></p>
-            <p className="text-[11px] text-muted-foreground/30 mt-1">© 2026 Aceleriq. Todos os direitos reservados.</p>
-          </div>
+          <p className="text-[11px] text-muted-foreground/25 text-center">© 2026 Aceleriq. Todos os direitos reservados.</p>
         </div>
       </div>
 
