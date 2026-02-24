@@ -3,6 +3,9 @@ import { NavLink } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import NotificationsPanel from "@/components/NotificationsPanel";
+import OnboardingTour from "@/components/onboarding/OnboardingTour";
+import HelpButton from "@/components/onboarding/HelpButton";
+import { adminTourSteps, clientTourSteps, teamTourSteps } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Bell, LogOut, Menu, X, MoreHorizontal, Search } from "lucide-react";
 import {
@@ -58,13 +61,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
   const moreRef = useRef<HTMLDivElement>(null);
   const userRef = useRef<HTMLDivElement>(null);
 
-  const mainNav = profile?.role === "admin" ? adminMainNav : clientMainNav;
-  const moreNav = profile?.role === "admin" ? adminMoreNav : clientMoreNav;
+  const role = profile?.role || "client";
+  const isAdmin = role === "admin";
+  const isTeam = ["design", "traffic", "manager"].includes(role);
+  const mainNav = isAdmin ? adminMainNav : clientMainNav;
+  const moreNav = isAdmin ? adminMoreNav : clientMoreNav;
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
+
+  const tourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
+  const tourKey = `onboarding_done_${role}`;
+
+  // Auto-start tour on first visit
+  useEffect(() => {
+    if (profile && !localStorage.getItem(tourKey)) {
+      const timer = setTimeout(() => setTourOpen(true), 800);
+      return () => clearTimeout(timer);
+    }
+  }, [profile, tourKey]);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -76,7 +94,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background tech-grid-bg">
+    <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav */}
       <nav className="fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4"
         style={{
@@ -97,28 +115,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
         {/* Center: Nav links (desktop) */}
         <div className="hidden md:flex items-center gap-1 flex-1 justify-center">
-          {mainNav.map((item) => (
-            <NavLink
-              key={item.url}
-              to={item.url}
-              className={({ isActive }) => cn(
-                "relative px-3 py-1.5 text-[13px] rounded-md transition-colors",
-                isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {({ isActive }) => (
-                <>
-                  {item.title}
-                  {isActive && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-                  )}
-                </>
-              )}
-            </NavLink>
-          ))}
+          {mainNav.map((item) => {
+            const tourId = item.url.replace("/", "nav-");
+            return (
+              <NavLink
+                key={item.url}
+                to={item.url}
+                data-tour={tourId}
+                className={({ isActive }) => cn(
+                  "relative px-3 py-1.5 text-[13px] rounded-md transition-colors",
+                  isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {({ isActive }) => (
+                  <>
+                    {item.title}
+                    {isActive && (
+                      <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
+                    )}
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
 
           {/* More dropdown */}
-          <div className="relative" ref={moreRef}>
+          <div className="relative" ref={moreRef} data-tour="nav-more">
             <button
               onClick={() => setMoreOpen(!moreOpen)}
               className="px-2 py-1.5 text-muted-foreground hover:text-foreground transition-colors"
@@ -157,6 +179,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Search className="w-4 h-4" />
           </button>
           <button
+            data-tour="nav-notifications"
             className="relative w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setNotifOpen(true)}
           >
@@ -169,7 +192,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
 
           {/* User dropdown */}
-          <div className="relative" ref={userRef}>
+          <div className="relative" ref={userRef} data-tour="nav-user">
             <button onClick={() => setUserMenuOpen(!userMenuOpen)}>
               <Avatar className="w-7 h-7 cursor-pointer">
                 <AvatarFallback className="bg-primary/15 text-primary text-[10px] font-semibold">
@@ -237,11 +260,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="pt-20 pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding">
+      <main className="pt-20 pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding" data-tour="finish">
         {children}
       </main>
 
       <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />
+
+      {/* Onboarding Tour */}
+      <OnboardingTour
+        steps={tourSteps}
+        isOpen={tourOpen}
+        onClose={() => setTourOpen(false)}
+        storageKey={tourKey}
+      />
+
+      {/* Help button to restart tour */}
+      {!tourOpen && <HelpButton onClick={() => { localStorage.removeItem(tourKey); setTourOpen(true); }} />}
     </div>
   );
 }
