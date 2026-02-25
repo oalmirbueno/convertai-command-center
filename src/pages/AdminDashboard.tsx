@@ -1,5 +1,6 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet } from "@/hooks/useFinancialData";
+import { useAuth } from "@/contexts/AuthContext";
 import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -39,6 +40,8 @@ const STATUS_OPTIONS = [
 ];
 
 export default function AdminDashboard() {
+  const { profile } = useAuth();
+  const isAdmin = profile?.role === "admin";
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: updates, isLoading: loadingUpdates } = useUpdates();
   const { data: allTasks } = useTasks();
@@ -141,7 +144,8 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Finance Stats */}
+      {/* Finance Stats - admin only */}
+      {isAdmin && (
       <div>
         <p className="label-sm mb-3 flex items-center gap-2">
           <DollarSign className="w-3.5 h-3.5 text-success" />
@@ -157,6 +161,7 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+      )}
 
       {/* Quick Actions */}
       <div className="flex flex-wrap gap-2" data-tour="dash-quick-actions">
