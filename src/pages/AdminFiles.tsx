@@ -311,22 +311,39 @@ export default function AdminFiles() {
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="truncate pr-6">{previewFile?.file_name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
+            <DialogTitle className="truncate pr-6 text-base">{previewFile?.file_name}</DialogTitle>
+          </DialogHeader>
           {previewFile && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
-              <p className="text-xs text-muted-foreground">
-                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
-              </p>
-              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
                   {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
                 </span>
+                <span className="text-xs text-muted-foreground">
+                  Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+                </span>
               </div>
+              {previewFile.caption && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p>
+                  <p className="text-sm text-foreground">{previewFile.caption}</p>
+                </div>
+              )}
+              {previewFile.carousel_text && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p>
+                </div>
+              )}
+              {previewFile.description && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p>
+                  <p className="text-sm text-foreground">{previewFile.description}</p>
+                </div>
+              )}
               {previewFile.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
@@ -335,7 +352,7 @@ export default function AdminFiles() {
               )}
             </div>
           )}
-          <DialogFooter className="flex gap-2">
+          <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
             {previewFile?.approval_status === "rejected" && previewFile?.project_id && (
               <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"
                 onClick={async () => {
@@ -353,7 +370,7 @@ export default function AdminFiles() {
               </Button>
             )}
             <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" className="gap-2"><Download className="w-3.5 h-3.5" /> Baixar</Button>
+              <Button variant="outline" size="sm" className="gap-2"><Download className="w-3.5 h-3.5" /> Baixar</Button>
             </a>
           </DialogFooter>
         </DialogContent>
@@ -361,11 +378,11 @@ export default function AdminFiles() {
 
       {/* Upload Modal */}
       <Dialog open={uploadOpen} onOpenChange={(o) => { if (!uploading) { setUploadOpen(o); if (!o) resetUploadForm(); } }}>
-        <DialogContent className="max-w-lg bg-card border-border max-h-[85vh] flex flex-col">
-          <DialogHeader>
+        <DialogContent className="max-w-lg p-0 gap-0 flex flex-col max-h-[85vh]">
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
             <DialogTitle>Upload de Arquivo</DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 overflow-y-auto flex-1 pr-1">
+          <div className="space-y-4 overflow-y-auto flex-1 px-6 py-4">
             {/* Drag & Drop zone */}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -455,7 +472,7 @@ export default function AdminFiles() {
 
             {uploading && <Progress value={uploadProgress} className="h-2 rounded-full" />}
           </div>
-          <DialogFooter>
+          <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
             <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
             <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
               {uploading ? "Enviando..." : "Enviar"}
