@@ -165,7 +165,7 @@ export default function AdminDashboard() {
       )}
 
       {/* Ads Wallet Summary - team members */}
-      {isTeam && (wallets || []).length > 0 && (
+      {(isAdmin || isTeam) && (wallets || []).length > 0 && (
         <div>
           <p className="label-sm mb-3 flex items-center gap-2">
             <Wallet className="w-3.5 h-3.5 text-info" />
