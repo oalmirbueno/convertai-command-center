@@ -1,5 +1,6 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
-import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2 } from "lucide-react";
+import { useBilling, useAdsWallet } from "@/hooks/useFinancialData";
+import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -42,6 +43,8 @@ export default function AdminDashboard() {
   const { data: updates, isLoading: loadingUpdates } = useUpdates();
   const { data: allTasks } = useTasks();
   const { data: clients } = useClients();
+  const { data: billing } = useBilling();
+  const { data: wallets } = useAdsWallet();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<any>(null);
@@ -52,14 +55,36 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
+  const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+  const now = new Date();
+  const thisMonth = now.getMonth();
+  const thisYear = now.getFullYear();
+
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
   const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
+
+  const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
+  const paidBills = (billing || []).filter((b: any) => b.status === "paid" && b.type !== "ads_recharge");
+  const pendingTotal = pendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const receivedTotal = paidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const overdueTotal = pendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const monthlyRevenue = paidBills
+    .filter((b: any) => new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
+    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   const stats = [
     { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
     { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
     { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
     { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
+  ];
+
+  const financeStats = [
+    { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
+    { label: "A Receber", value: fmt(pendingTotal), color: "bg-warning" },
+    { label: "Total Recebido", value: fmt(receivedTotal), color: "bg-info" },
+    { label: "Atrasado", value: fmt(overdueTotal), color: "bg-destructive" },
   ];
 
   const formatDate = (d: string) => {
@@ -114,6 +139,23 @@ export default function AdminDashboard() {
             <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
           </div>
         ))}
+      </div>
+
+      {/* Finance Stats */}
+      <div>
+        <p className="label-sm mb-3 flex items-center gap-2">
+          <DollarSign className="w-3.5 h-3.5 text-success" />
+          Financeiro
+        </p>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children">
+          {financeStats.map((s) => (
+            <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer" onClick={() => navigate("/financeiro")}>
+              <p className="label-sm">{s.label}</p>
+              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{s.value}</p>
+              <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Quick Actions */}
