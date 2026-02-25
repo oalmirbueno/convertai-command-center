@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserPlus, Link2 } from "lucide-react";
+import { UserPlus, Link2, CalendarClock } from "lucide-react";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -108,6 +108,17 @@ export default function Clients() {
                 <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
                   {(c as any).plan_name}
                 </span>
+              )}
+              {(c as any).plan_renewal_date && (
+                <div className="text-right hidden md:flex items-center gap-1.5 text-muted-foreground">
+                  <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                  <div>
+                    <p className="text-xs font-mono text-foreground">
+                      {new Date((c as any).plan_renewal_date).toLocaleDateString("pt-BR")}
+                    </p>
+                    <p className="text-[10px]">vencimento</p>
+                  </div>
+                </div>
               )}
               <div className="text-right hidden md:block">
                 <p className="text-xs font-mono text-foreground">{c.projectCount}</p>
