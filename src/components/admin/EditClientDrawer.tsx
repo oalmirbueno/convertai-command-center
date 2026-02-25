@@ -43,6 +43,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [planStatus, setPlanStatus] = useState("active");
   const [clientPassword, setClientPassword] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
+  const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
@@ -73,6 +74,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       setPhone(client.phone || "");
       setPlanName((client as any).plan_name || "");
       setPlanStatus(client.plan_status || "active");
+      setRenewalDate(client.plan_renewal_date || "");
       setServices(client.services_config || {});
       setClientPassword("");
       setAvatarUrl(client.avatar_url || "");
@@ -128,9 +130,10 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         services_config: services,
       };
 
-      // Only admin can change plan name
+      // Only admin can change plan name and renewal date
       if (isAdmin) {
         updatePayload.plan_name = planName.trim() || null;
+        updatePayload.plan_renewal_date = renewalDate || null;
       }
 
       const { error } = await supabase.from("profiles").update(updatePayload).eq("id", client.id);
@@ -272,6 +275,11 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Plano</label>
                   <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex: Básico, Pro, Premium"
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Data de Vencimento</label>
+                  <input type="date" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)}
+                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nova Senha</label>
