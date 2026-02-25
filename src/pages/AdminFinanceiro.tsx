@@ -43,6 +43,7 @@ export default function AdminFinanceiro() {
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
+  const [receivedFilter, setReceivedFilter] = useState<string>("all");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
@@ -356,25 +357,56 @@ export default function AdminFinanceiro() {
 
           {/* Já Recebido */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="w-2 h-2 rounded-full bg-success" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Já Recebido ({paidBills.length})
+                Já Recebido
               </span>
               <span className="text-xs font-mono text-success ml-auto">{fmt(receivedTotal)}</span>
             </div>
-            {paidBills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento recebido ainda.</p>}
-            {paidBills.map((b: any) => (
-              <div key={b.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                <span className="text-lg">{typeIcon(b.type)}</span>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                  <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Pago em {b.paid_date ? new Date(b.paid_date).toLocaleDateString("pt-BR") : "—"}</p>
-                </div>
-                <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
-                {statusBadge(b.status)}
-              </div>
-            ))}
+            {/* Filter */}
+            <div className="flex gap-1.5 flex-wrap">
+              {[
+                { value: "all", label: "Todos" },
+                { value: "month", label: "Este mês" },
+                { value: "last3", label: "Últimos 3 meses" },
+                { value: "year", label: "Este ano" },
+              ].map((f) => (
+                <button key={f.value} onClick={() => setReceivedFilter(f.value)}
+                  className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            {(() => {
+              const filtered = paidBills.filter((b: any) => {
+                const paidDate = new Date(b.paid_date || b.due_date);
+                if (receivedFilter === "month") return paidDate.getMonth() === thisMonth && paidDate.getFullYear() === thisYear;
+                if (receivedFilter === "last3") { const d = new Date(); d.setMonth(d.getMonth() - 3); return paidDate >= d; }
+                if (receivedFilter === "year") return paidDate.getFullYear() === thisYear;
+                return true;
+              });
+              const filteredTotal = filtered.reduce((s: number, b: any) => s + Number(b.amount), 0);
+              return (
+                <>
+                  {receivedFilter !== "all" && (
+                    <p className="text-[11px] text-muted-foreground">Filtrado: <span className="font-mono text-success">{fmt(filteredTotal)}</span> ({filtered.length} pagamentos)</p>
+                  )}
+                  {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento neste período.</p>}
+                  {filtered.map((b: any) => (
+                    <div key={b.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                      <span className="text-lg">{typeIcon(b.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
+                        <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Pago em {b.paid_date ? new Date(b.paid_date).toLocaleDateString("pt-BR") : "—"}</p>
+                      </div>
+                      <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
+                      {statusBadge(b.status)}
+                    </div>
+                  ))}
+                </>
+              );
+            })()}
           </div>
 
           {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (
@@ -384,10 +416,30 @@ export default function AdminFinanceiro() {
 
         {/* Tab: Ads Wallet */}
         <TabsContent value="ads" className="space-y-4">
+          {/* Total Geral Ads */}
+          {isAdmin && Object.entries(walletsByClient).length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-2">
+                <DollarSign className="w-4 h-4 text-info" />
+                <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Total Geral Ads Wallet</span>
+              </div>
+              <p className="text-2xl font-mono font-light text-foreground">{fmt(totalAds)}</p>
+              <p className="text-[11px] text-muted-foreground mt-1">{Object.entries(walletsByClient).length} clientes • {(wallets || []).length} carteiras</p>
+            </div>
+          )}
+
           {Object.entries(walletsByClient).length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Nenhum wallet de anúncios cadastrado.</p>}
-          {Object.entries(walletsByClient).map(([clientId, clientWallets]) => (
+          {Object.entries(walletsByClient).map(([clientId, clientWallets]) => {
+            const clientTotal = clientWallets.reduce((s: number, w: any) => s + Number(w.balance), 0);
+            // Calculate total invested from completed recharges for this client
+            const clientRecharges = (recharges || []).filter((r: any) => r.client_id === clientId && r.status === "completed");
+            const totalInvested = clientRecharges.reduce((s: number, r: any) => s + Number(r.amount), 0);
+            return (
             <div key={clientId} className="bg-card border border-border rounded-xl p-5 space-y-3">
-              <p className="text-sm font-medium text-foreground">{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-foreground">{clientWallets[0]?.client?.company_name || clientWallets[0]?.client?.full_name}</p>
+                <span className="text-xs font-mono text-info">{fmt(clientTotal)}</span>
+              </div>
               <div className="space-y-2">
                 {clientWallets.map((w: any) => (
                   <div key={w.id} className="flex items-center gap-3">
@@ -400,11 +452,15 @@ export default function AdminFinanceiro() {
                   </div>
                 ))}
               </div>
+              {totalInvested > 0 && (
+                <p className="text-[11px] text-muted-foreground">💰 Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
+              )}
               {clientWallets[0]?.last_recharge_date && (
                 <p className="text-[11px] text-muted-foreground">Última recarga: {new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}</p>
               )}
             </div>
-          ))}
+            );
+          })}
 
           {/* Recharge requests */}
           {(recharges || []).length > 0 && (
