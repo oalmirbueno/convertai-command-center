@@ -35,14 +35,14 @@ Deno.serve(async (req) => {
     const { action, ...payload } = await req.json();
 
     if (action === "create") {
-      const { email, full_name, role, password } = payload;
+      const { email, full_name, role, password, company_name } = payload;
       if (!email || !full_name || !role) throw new Error("Missing fields");
 
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
         password: password || "Temp@2026!",
         email_confirm: true,
-        user_metadata: { full_name, role },
+        user_metadata: { full_name, role, company_name: company_name || null },
       });
       if (createError) throw createError;
 
@@ -50,6 +50,7 @@ Deno.serve(async (req) => {
         id: newUser.user.id,
         email,
         full_name,
+        company_name: company_name || null,
       }, { onConflict: "id" });
 
       await adminClient.from("user_roles").upsert({
