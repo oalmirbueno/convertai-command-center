@@ -69,6 +69,35 @@ export default function AdminFinanceiro() {
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
+
+    // If it's a renewal, advance the renewal date by 1 month and clear overdue
+    if (bill?.client_id && bill?.type === "renewal") {
+      const client = (clients || []).find((c: any) => c.id === bill.client_id);
+      if (client?.plan_renewal_date) {
+        const currentDate = new Date(client.plan_renewal_date + "T00:00:00");
+        currentDate.setMonth(currentDate.getMonth() + 1);
+        const newDate = currentDate.toISOString().split("T")[0];
+        await supabase.from("profiles").update({
+          plan_renewal_date: newDate,
+          overdue_since: null,
+        } as any).eq("id", bill.client_id);
+
+        // Reactivate paused projects
+        const { data: pausedProjects } = await supabase
+          .from("projects")
+          .select("id")
+          .eq("client_id", bill.client_id)
+          .eq("status", "paused");
+        if (pausedProjects && pausedProjects.length > 0) {
+          for (const p of pausedProjects) {
+            await supabase.from("projects").update({ status: "in_progress" }).eq("id", p.id);
+          }
+        }
+
+        queryClient.invalidateQueries({ queryKey: ["clients"] });
+      }
+    }
+
     // Notify client
     if (bill?.client_id) {
       await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado ✅`, "billing", "/financeiro");
@@ -343,6 +372,9 @@ export default function AdminFinanceiro() {
                 </div>
                 {clientBilling && (
                   <p className="text-xs text-muted-foreground">{clientBilling.description || "Plano"} • {fmt(Number(clientBilling.amount))}/mês</p>
+                )}
+                {!clientBilling && (c as any).plan_value && (
+                  <p className="text-xs text-muted-foreground">Valor do plano: {fmt(Number((c as any).plan_value))}/mês</p>
                 )}
                 {renewalDate && (
                   <p className="text-xs text-muted-foreground">Renovação: {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</p>

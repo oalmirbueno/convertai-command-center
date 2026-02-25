@@ -40,6 +40,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [planName, setPlanName] = useState("");
+  const [planValue, setPlanValue] = useState("");
   const [planStatus, setPlanStatus] = useState("active");
   const [clientPassword, setClientPassword] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
@@ -73,6 +74,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       setEmail(client.email || "");
       setPhone(client.phone || "");
       setPlanName((client as any).plan_name || "");
+      setPlanValue((client as any).plan_value != null ? String((client as any).plan_value) : "");
       setPlanStatus(client.plan_status || "active");
       setRenewalDate(client.plan_renewal_date || "");
       setServices(client.services_config || {});
@@ -133,6 +135,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       // Only admin can change plan name and renewal date
       if (isAdmin) {
         updatePayload.plan_name = planName.trim() || null;
+        updatePayload.plan_value = planValue ? parseFloat(planValue) : null;
         updatePayload.plan_renewal_date = renewalDate || null;
       }
 
@@ -274,6 +277,11 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Plano</label>
                   <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex: Básico, Pro, Premium"
+                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Valor do Plano (R$)</label>
+                  <input type="number" step="0.01" value={planValue} onChange={(e) => setPlanValue(e.target.value)} placeholder="Ex: 1500.00"
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
                 <div className="space-y-1.5">
