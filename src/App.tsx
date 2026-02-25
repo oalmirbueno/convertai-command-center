@@ -29,15 +29,14 @@ import ReportDetail from "@/pages/ReportDetail";
 import ProfilePage from "@/pages/ProfilePage";
 import SettingsPage from "@/pages/SettingsPage";
 import AppLayout from "@/components/AppLayout";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 const queryClient = new QueryClient();
 
 function LoadingScreen() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-      <div className="w-9 h-9 rounded-[10px] bg-primary flex items-center justify-center animate-pulse">
-        <span className="text-base font-bold text-primary-foreground">A</span>
-      </div>
+      <img src={aceleriqLogo} alt="Aceleriq" className="h-12 w-auto animate-pulse" />
       <p className="text-xs text-muted-foreground">Carregando...</p>
     </div>
   );
