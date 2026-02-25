@@ -2,10 +2,25 @@ import { useState } from "react";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserPlus, Link2, CalendarClock } from "lucide-react";
+import { UserPlus, Link2, CalendarClock, AlertTriangle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
+
+function getRenewalStatus(dateStr: string | null | undefined) {
+  if (!dateStr) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const renewal = new Date(dateStr + "T00:00:00");
+  const diffMs = renewal.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffDays < 0) return { level: "expired", label: `Vencido há ${Math.abs(diffDays)} dia(s)`, color: "text-destructive", bg: "bg-destructive/10 border-destructive/30", icon: true };
+  if (diffDays <= 7) return { level: "urgent", label: `Vence em ${diffDays} dia(s)`, color: "text-warning", bg: "bg-warning/10 border-warning/30", icon: true };
+  if (diffDays <= 15) return { level: "soon", label: `Vence em ${diffDays} dias`, color: "text-muted-foreground", bg: "", icon: false };
+  return { level: "ok", label: "", color: "text-muted-foreground", bg: "", icon: false };
+}
 
 const STATUS_TABS = [
   { value: "active", label: "Ativos" },
@@ -109,17 +124,36 @@ export default function Clients() {
                   {(c as any).plan_name}
                 </span>
               )}
-              {(c as any).plan_renewal_date && (
-                <div className="text-right hidden md:flex items-center gap-1.5 text-muted-foreground">
-                  <CalendarClock className="w-3.5 h-3.5 shrink-0" />
-                  <div>
-                    <p className="text-xs font-mono text-foreground">
-                      {new Date((c as any).plan_renewal_date).toLocaleDateString("pt-BR")}
-                    </p>
-                    <p className="text-[10px]">vencimento</p>
-                  </div>
-                </div>
-              )}
+              {(c as any).plan_renewal_date && (() => {
+                const status = getRenewalStatus((c as any).plan_renewal_date);
+                const isAlert = status?.level === "expired" || status?.level === "urgent";
+                return (
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className={`text-right hidden md:flex items-center gap-1.5 px-2 py-1 rounded-lg border border-transparent ${isAlert ? status.bg : ""} ${status?.color || "text-muted-foreground"}`}>
+                          {status?.icon ? (
+                            <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                          ) : (
+                            <CalendarClock className="w-3.5 h-3.5 shrink-0" />
+                          )}
+                          <div>
+                            <p className={`text-xs font-mono ${isAlert ? status.color : "text-foreground"}`}>
+                              {new Date((c as any).plan_renewal_date).toLocaleDateString("pt-BR")}
+                            </p>
+                            <p className="text-[10px]">vencimento</p>
+                          </div>
+                        </div>
+                      </TooltipTrigger>
+                      {status?.label && (
+                        <TooltipContent side="top">
+                          <p className="text-xs">{status.label}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
+                );
+              })()}
               <div className="text-right hidden md:block">
                 <p className="text-xs font-mono text-foreground">{c.projectCount}</p>
                 <p className="text-[10px] text-muted-foreground">projetos</p>
