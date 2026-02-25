@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -11,6 +11,7 @@ import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -294,6 +295,52 @@ export default function AdminFinanceiro() {
           </div>
         </div>
       )}
+
+      {/* Revenue Chart - monthly comparison */}
+      {isAdmin && (() => {
+        const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        const chartData: { name: string; recebido: number; pendente: number }[] = [];
+        const currentYear = now.getFullYear();
+        for (let m = 0; m < 12; m++) {
+          const received = (billing || [])
+            .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
+            .filter((b: any) => { const d = new Date(b.paid_date || b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+            .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          const pending = (billing || [])
+            .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
+            .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+            .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          if (received > 0 || pending > 0 || m <= now.getMonth()) {
+            chartData.push({ name: MONTHS[m], recebido: received, pendente: pending });
+          }
+        }
+        return chartData.length > 0 ? (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
+                <TrendingUp className="w-3.5 h-3.5 text-success" />
+                Receita {currentYear} — Mês a Mês
+              </p>
+            </div>
+            <div className="h-[220px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={chartData} barGap={2}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} tickFormatter={(v) => `R$${(v / 1000).toFixed(v >= 1000 ? 1 : 0)}${v >= 1000 ? 'k' : ''}`} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                    formatter={(value: number, name: string) => [fmt(value), name === "recebido" ? "Recebido" : "Pendente"]}
+                  />
+                  <Legend formatter={(value) => value === "recebido" ? "Recebido" : "Pendente"} wrapperStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="recebido" fill="hsl(var(--success))" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="pendente" fill="hsl(var(--warning))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        ) : null;
+      })()}
 
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
