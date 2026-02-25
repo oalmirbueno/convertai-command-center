@@ -71,37 +71,44 @@ export default function CreateClientModal({ open, onClose }: Props) {
     setSaving(true);
     try {
       const password = generatePassword();
-      const { data: currentSession } = await supabase.auth.getSession();
 
-      const { data: signupData, error: signupErr } = await supabase.auth.signUp({
-        email: email.trim(),
-        password,
-        options: { data: { full_name: fullName.trim(), role: "client", company_name: company.trim() } },
+      // Use edge function to create user server-side (avoids session swap)
+      const { data: result, error: fnError } = await supabase.functions.invoke("manage-team", {
+        body: {
+          action: "create",
+          email: email.trim(),
+          full_name: fullName.trim(),
+          role: "client",
+          password,
+        },
       });
 
-      if (signupErr) {
-        if (signupErr.message?.includes("already registered")) {
+      if (fnError) {
+        toast.error(fnError.message || "Erro ao criar cliente");
+        setSaving(false);
+        return;
+      }
+
+      if (result?.error) {
+        const msg = result.error;
+        if (msg.includes("already") || msg.includes("exists")) {
           toast.error("Este email já está cadastrado");
         } else {
-          toast.error(signupErr.message);
+          toast.error(msg);
         }
         setSaving(false);
         return;
       }
 
-      if (signupData?.user) {
+      const newUserId = result?.user_id;
+
+      // Update profile with extra fields
+      if (newUserId) {
         await supabase.from("profiles").update({
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
-        }).eq("id", signupData.user.id);
-      }
-
-      if (currentSession?.session) {
-        await supabase.auth.setSession({
-          access_token: currentSession.session.access_token,
-          refresh_token: currentSession.session.refresh_token,
-        });
+        }).eq("id", newUserId);
       }
 
       setGeneratedPassword(password);
@@ -109,9 +116,9 @@ export default function CreateClientModal({ open, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: ["clients"] });
 
       // Fire webhook (fire and forget)
-      if (signupData?.user) {
+      if (newUserId) {
         fireWebhook(webhooks.onboardClient, {
-          client_id: signupData.user.id,
+          client_id: newUserId,
           name: fullName.trim(),
           email: email.trim(),
           company: company.trim(),
