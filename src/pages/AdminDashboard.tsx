@@ -1,4 +1,4 @@
-import { useProjects, useUpdates, useTasks } from "@/hooks/useSupabaseData";
+import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2 } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -41,6 +41,7 @@ export default function AdminDashboard() {
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: updates, isLoading: loadingUpdates } = useUpdates();
   const { data: allTasks } = useTasks();
+  const { data: clients } = useClients();
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<any>(null);
@@ -56,7 +57,7 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
-    { label: "Clientes", value: "—", color: "bg-success" },
+    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
     { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
     { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
   ];
