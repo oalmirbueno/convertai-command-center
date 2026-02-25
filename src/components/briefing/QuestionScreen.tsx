@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ChevronLeft } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { QUESTIONS, type Question } from "./questions";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 interface Props {
   answers: Record<string, any>;
@@ -171,7 +172,10 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
         />
       </div>
 
-      {/* Question counter */}
+      {/* Logo + Question counter */}
+      <div className="fixed top-3 left-4 z-50">
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-7 w-auto" />
+      </div>
       <div className="fixed top-3 right-4 z-50 text-xs text-muted-foreground/50">
         Pergunta {idx + 1} de {total}
       </div>
