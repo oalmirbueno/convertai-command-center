@@ -1,5 +1,6 @@
 import { Clock, Lock, BarChart3, ClipboardList, Brain, Rocket } from "lucide-react";
 import consultantImg from "@/assets/consultant-avatar.jpg";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 interface Props {
   onStart: () => void;
@@ -20,23 +21,19 @@ export default function WelcomeScreen({ onStart }: Props) {
         className="relative z-10 w-full max-w-[800px] rounded-none sm:rounded-3xl p-6 sm:p-10 md:p-14 min-h-screen sm:min-h-0"
         style={{ background: "#121212", animation: "fadeInUp 0.6s ease-out" }}
       >
-        {/* Avatar + greeting */}
+        {/* Logo + greeting */}
         <div className="flex flex-col items-center text-center mb-10">
-          <div
-            className="w-16 h-16 sm:w-24 sm:h-24 rounded-full overflow-hidden border-2 border-primary/30 mb-4 sm:mb-5 shadow-[0_0_30px_rgba(0,255,102,0.12)]"
+          <img
+            src={aceleriqLogo}
+            alt="Aceleriq"
+            className="h-16 sm:h-20 w-auto mb-5"
             style={{ animation: "avatarBounce 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both" }}
-          >
-            <img
-              src={consultantImg}
-              alt="Consultora Aceleriq"
-              className="w-full h-full object-cover"
-            />
-          </div>
+          />
           <h1
             className="text-xl sm:text-2xl font-bold text-foreground mb-2"
             style={{ animation: "fadeIn 0.5s ease-out 0.4s both" }}
           >
-            Olá! Eu sou o diagnóstico inteligente da Aceler<span className="text-primary">iq</span>.
+            Diagnóstico inteligente da Aceler<span className="text-primary">iq</span>
           </h1>
           <p
             className="text-sm text-muted-foreground max-w-md leading-relaxed"

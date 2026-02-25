@@ -4,6 +4,7 @@ import { Loader2, ArrowRight, Eye, EyeOff, Check, BarChart3, Zap, Target } from 
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import consultantHero from "@/assets/consultant-hero-flipped.jpg";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 type Mode = "login" | "signup";
 
@@ -71,9 +72,7 @@ export default function Login() {
   if (loading || (user && profile)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <div className="w-9 h-9 rounded-[10px] flex items-center justify-center animate-pulse" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
-          <span className="text-base font-bold text-primary-foreground">A</span>
-        </div>
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-12 w-auto animate-pulse" />
         <p className="text-xs text-muted-foreground">{loading ? "Carregando..." : "Redirecionando..."}</p>
       </div>
     );
@@ -164,14 +163,8 @@ export default function Login() {
           {/* Center: Logo + Welcome + Value props */}
           <div className="flex-1 flex flex-col justify-center">
             <div style={{ animation: "fadeInUp 0.5s ease-out 0.2s both" }}>
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-12 h-12 rounded-2xl flex items-center justify-center" style={{ background: "linear-gradient(135deg, hsl(var(--primary)), hsl(145 100% 32%))" }}>
-                  <span className="text-xl font-bold text-primary-foreground">A</span>
-                </div>
-                <div>
-                  <span className="font-bold text-[22px] text-foreground">Aceler<span className="text-primary">iq</span></span>
-                  <p className="text-[10px] text-muted-foreground/50 tracking-[3px] uppercase -mt-0.5">Performance OS</p>
-                </div>
+              <div className="mb-6">
+                <img src={aceleriqLogo} alt="Aceleriq" className="h-14 w-auto" />
               </div>
             </div>
             <div style={{ animation: "fadeInUp 0.6s ease-out 0.4s both" }}>
@@ -223,11 +216,7 @@ export default function Login() {
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-6" style={{ animation: "fadeInUp 0.4s ease-out" }}>
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-[14px] mb-3" style={{ background: "linear-gradient(135deg, #00FF66, #00CC52)" }}>
-              <span className="text-xl font-bold text-primary-foreground">A</span>
-            </div>
-            <h1 className="text-xl font-bold text-foreground">Aceler<span className="text-primary">iq</span></h1>
-            <p className="text-muted-foreground text-xs tracking-[3px] uppercase mt-1">Performance OS</p>
+            <img src={aceleriqLogo} alt="Aceleriq" className="h-14 w-auto mx-auto" />
           </div>
 
           <div className={cn("login-card", shake && "animate-shake")}>

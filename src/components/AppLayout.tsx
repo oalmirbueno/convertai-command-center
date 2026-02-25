@@ -16,6 +16,7 @@ import {
   Eye, ShoppingBag, FileText, UserCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 interface NavItem {
   title: string;
@@ -145,11 +146,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         }}
       >
         {/* Left: Logo */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #00FF66, #00CC52)' }}>
-            <span className="text-xs font-bold text-primary-foreground">A</span>
-          </div>
-          <span className="font-semibold text-[15px] text-foreground hidden sm:inline">Aceler<span className="text-primary">iq</span></span>
+        <div className="flex items-center shrink-0">
+          <img src={aceleriqLogo} alt="Aceleriq" className="h-8 w-auto" />
         </div>
 
         {/* Center: Nav links (desktop) */}

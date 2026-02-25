@@ -1,4 +1,5 @@
 import { CheckCircle } from "lucide-react";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 const timelineSteps = [
   { title: "Análise do diagnóstico", desc: "Nossa equipe analisa suas respostas detalhadamente. Prazo: até 24h.", active: true },
@@ -11,15 +12,23 @@ export default function CompletionScreen() {
     <div className="min-h-screen flex items-center justify-center px-6 py-12" style={{ background: "#0D0D0D" }}>
       <div className="tech-grid-bg" />
       <div className="relative z-10 text-center max-w-lg w-full">
+        {/* Logo */}
+        <img
+          src={aceleriqLogo}
+          alt="Aceleriq"
+          className="h-14 sm:h-16 w-auto mx-auto mb-6"
+          style={{ animation: "checkBounce 0.8s cubic-bezier(0.34,1.56,0.64,1)" }}
+        />
+
         {/* Check icon */}
         <div
-          className="w-24 h-24 rounded-full flex items-center justify-center mx-auto mb-6"
+          className="w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6"
           style={{
             background: "rgba(0,255,102,0.12)",
-            animation: "checkBounce 0.8s cubic-bezier(0.34,1.56,0.64,1)",
+            animation: "checkBounce 0.8s cubic-bezier(0.34,1.56,0.64,1) 0.3s both",
           }}
         >
-          <CheckCircle className="w-12 h-12 text-primary" />
+          <CheckCircle className="w-10 h-10 text-primary" />
         </div>
 
         <h1
