@@ -2,3 +2,9 @@ project_id = "gicbrgagstyvbaaumprj"
 
 [functions.check-renewals]
 verify_jwt = false
+
+[functions.manage-team]
+verify_jwt = false
+
+[functions.process-meeting-notes]
+verify_jwt = false
