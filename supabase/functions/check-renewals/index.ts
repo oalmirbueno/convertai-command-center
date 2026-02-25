@@ -36,7 +36,7 @@ Deno.serve(async (req) => {
     // Clients with renewal date between today and 7 days from now
     const { data: clients } = await supabase
       .from("profiles")
-      .select("id, full_name, company_name, plan_renewal_date")
+      .select("id, full_name, company_name, plan_renewal_date, plan_value")
       .gte("plan_renewal_date", todayStr)
       .lte("plan_renewal_date", in7Str)
       .neq("plan_status", "inactive");
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     // Clients already expired (past due)
     const { data: expired } = await supabase
       .from("profiles")
-      .select("id, full_name, company_name, plan_renewal_date")
+      .select("id, full_name, company_name, plan_renewal_date, plan_value, overdue_since")
       .lt("plan_renewal_date", todayStr)
       .neq("plan_status", "inactive");
 
@@ -61,6 +61,7 @@ Deno.serve(async (req) => {
     );
 
     const notifications: any[] = [];
+    let pausedCount = 0;
 
     for (const c of clients || []) {
       const name = c.company_name || c.full_name;
@@ -68,10 +69,11 @@ Deno.serve(async (req) => {
       const diffDays = Math.ceil(
         (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
       );
+      const valueStr = c.plan_value ? ` — R$ ${Number(c.plan_value).toFixed(2)}` : "";
       const msg =
         diffDays === 0
-          ? `⚠️ O plano de "${name}" vence HOJE!`
-          : `📅 O plano de "${name}" vence em ${diffDays} dia(s) (${date.toLocaleDateString("pt-BR")})`;
+          ? `⚠️ O plano de "${name}" vence HOJE!${valueStr}`
+          : `📅 O plano de "${name}" vence em ${diffDays} dia(s) (${date.toLocaleDateString("pt-BR")})${valueStr}`;
 
       if (!existingMessages.has(msg)) {
         notifications.push({
@@ -91,8 +93,61 @@ Deno.serve(async (req) => {
           (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
         )
       );
-      const msg = `🔴 O plano de "${name}" está vencido há ${diffDays} dia(s)!`;
+      const valueStr = c.plan_value ? ` — R$ ${Number(c.plan_value).toFixed(2)}` : "";
 
+      // Set overdue_since if not already set
+      if (!c.overdue_since) {
+        await supabase
+          .from("profiles")
+          .update({ overdue_since: c.plan_renewal_date })
+          .eq("id", c.id);
+      }
+
+      // Check if overdue for 30+ days → pause projects
+      const overdueStart = c.overdue_since || c.plan_renewal_date;
+      const overdueDays = Math.ceil(
+        (today.getTime() - new Date(overdueStart + "T00:00:00").getTime()) / (1000 * 60 * 60 * 24)
+      );
+
+      if (overdueDays >= 30) {
+        // Pause all active projects for this client
+        const { data: activeProjects } = await supabase
+          .from("projects")
+          .select("id, name")
+          .eq("client_id", c.id)
+          .neq("status", "paused")
+          .neq("status", "completed");
+
+        if (activeProjects && activeProjects.length > 0) {
+          for (const proj of activeProjects) {
+            await supabase
+              .from("projects")
+              .update({ status: "paused" })
+              .eq("id", proj.id);
+          }
+          pausedCount += activeProjects.length;
+
+          const pauseMsg = `🚫 Projetos de "${name}" foram PAUSADOS por inadimplência (${overdueDays} dias)`;
+          if (!existingMessages.has(pauseMsg)) {
+            notifications.push({
+              user_id: adminId,
+              message: pauseMsg,
+              notification_type: "billing",
+              link: "/clientes",
+            });
+          }
+
+          // Notify client too
+          await supabase.from("notifications").insert({
+            user_id: c.id,
+            message: `⚠️ Seus projetos foram pausados por pendência financeira. Entre em contato para regularizar.`,
+            notification_type: "billing",
+            link: "/financeiro",
+          });
+        }
+      }
+
+      const msg = `🔴 O plano de "${name}" está vencido há ${diffDays} dia(s)!${valueStr}`;
       if (!existingMessages.has(msg)) {
         notifications.push({
           user_id: adminId,
@@ -112,6 +167,7 @@ Deno.serve(async (req) => {
         sent: notifications.length,
         upcoming: (clients || []).length,
         expired: (expired || []).length,
+        paused_projects: pausedCount,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

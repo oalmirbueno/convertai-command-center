@@ -119,9 +119,9 @@ export default function Clients() {
                 <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
                 <p className="text-[11px] text-muted-foreground">{c.email}</p>
               </div>
-              {(c as any).plan_name && isAdmin && (
+              {isAdmin && ((c as any).plan_name || (c as any).plan_value) && (
                 <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
-                  {(c as any).plan_name}
+                  {(c as any).plan_name || ""}{(c as any).plan_value ? ` • R$ ${Number((c as any).plan_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
                 </span>
               )}
               {(c as any).plan_renewal_date && (() => {
