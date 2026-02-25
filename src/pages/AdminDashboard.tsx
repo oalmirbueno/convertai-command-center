@@ -89,7 +89,6 @@ export default function AdminDashboard() {
     { label: "A Receber", value: fmt(pendingTotal), color: "bg-warning" },
     { label: "Total Recebido", value: fmt(receivedTotal), color: "bg-info" },
     { label: "Atrasado", value: fmt(overdueTotal), color: "bg-destructive" },
-    { label: "Saldo Ads Total", value: fmt(totalAds), color: "bg-primary" },
   ];
 
   const formatDate = (d: string) => {
