@@ -295,7 +295,7 @@ export default function AdminFinanceiro() {
       {isAdmin && (
         <div className="grid grid-cols-2 gap-3">
           {[
-           { label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), icon: TrendingUp, color: "text-success" },
+           { label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)}`, icon: TrendingUp, color: "text-success" },
             { label: "A Receber", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
             { label: "Total Recebido", value: fmt(receivedTotal), icon: CheckCircle2, color: "text-info" },
             { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
@@ -306,6 +306,7 @@ export default function AdminFinanceiro() {
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
               </div>
               <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
+              {(s as any).sub && <p className="text-[11px] text-muted-foreground mt-0.5">{(s as any).sub}</p>}
             </div>
           ))}
         </div>
