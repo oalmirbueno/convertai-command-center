@@ -224,15 +224,34 @@ export default function ClientDocuments() {
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="truncate pr-6">{previewFile?.file_name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
+            <DialogTitle className="truncate pr-6 text-base">{previewFile?.file_name}</DialogTitle>
+          </DialogHeader>
           {previewFile && (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
-              <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
-              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              <p className="text-xs text-muted-foreground">
+                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+              </p>
+              {previewFile.caption && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p>
+                  <p className="text-sm text-foreground">{previewFile.caption}</p>
+                </div>
+              )}
+              {previewFile.carousel_text && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p>
+                  <p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p>
+                </div>
+              )}
+              {previewFile.description && (
+                <div className="space-y-0.5">
+                  <p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p>
+                  <p className="text-sm text-foreground">{previewFile.description}</p>
+                </div>
+              )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
@@ -242,7 +261,7 @@ export default function ClientDocuments() {
             </div>
           )}
           {previewFile?.approval_status === "pending" && (
-            <DialogFooter>
+            <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
                 ❌ Solicitar Ajuste
