@@ -12,7 +12,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen } from "lucide-react";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
 const CLIENT_FOLDERS = [
   { id: "estrategicos", label: "📁 Estratégicos" },
@@ -223,23 +224,11 @@ export default function ClientDocuments() {
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="truncate pr-6">{previewFile?.file_name}</DialogTitle></DialogHeader>
           {previewFile && (
             <div className="space-y-4">
-              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
-                {isImage(previewFile.file_name) ? (
-                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
-                ) : isPdf(previewFile.file_name) ? (
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
-                    <ExternalLink className="w-4 h-4" /> Abrir PDF
-                  </a>
-                ) : (
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
-                    <ExternalLink className="w-4 h-4" /> Baixar arquivo
-                  </a>
-                )}
-              </div>
+              <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
               <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
