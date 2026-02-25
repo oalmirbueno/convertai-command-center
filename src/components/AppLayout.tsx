@@ -3,6 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
+import { getAdminId } from "@/lib/notifyHelpers";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
@@ -91,6 +92,29 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       return () => clearTimeout(timer);
     }
   }, [profile]);
+
+  // Notify admin when a client or team member accesses the panel (once per session)
+  useEffect(() => {
+    if (!user || !profile || profile.role === "admin") return;
+    const key = `login_notified_${user.id}`;
+    if (sessionStorage.getItem(key)) return;
+    sessionStorage.setItem(key, "1");
+
+    const roleLabel = profile.role === "client" ? "Cliente" : "Equipe";
+    const name = profile.full_name || profile.email;
+    const company = profile.company_name ? ` (${profile.company_name})` : "";
+
+    (async () => {
+      const adminId = await getAdminId();
+      if (!adminId) return;
+      await supabase.from("notifications").insert({
+        user_id: adminId,
+        message: `🔑 ${roleLabel} "${name}"${company} acessou o painel`,
+        notification_type: "update",
+        link: profile.role === "client" ? "/clientes" : "/equipe",
+      });
+    })();
+  }, [user, profile]);
 
   const handleTourClose = useCallback(() => {
     setTourOpen(false);
