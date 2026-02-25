@@ -187,6 +187,7 @@ export default function Team() {
               <div className="space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Função</label>
                 <select value={role} onChange={e => setRole(e.target.value)} className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+                  <option value="admin">Admin</option>
                   <option value="design">Design</option>
                   <option value="traffic">Tráfego</option>
                   <option value="manager">Manager</option>
