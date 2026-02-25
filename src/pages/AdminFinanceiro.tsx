@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -50,18 +50,20 @@ export default function AdminFinanceiro() {
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
   const [syncing, setSyncing] = useState(false);
+  const autoSyncDone = useRef(false);
 
   const now = new Date();
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
 
   // Auto-sync: create billing entries for clients with plan_value + plan_renewal_date but no billing record
-  const handleSyncBilling = async () => {
+  const handleSyncBilling = async (silent = false) => {
     if (!clients || !billing) return;
     setSyncing(true);
     let created = 0;
     for (const c of clients as any[]) {
       if (!c.plan_value || !c.plan_renewal_date) continue;
+      if (c.plan_status !== "active") continue;
       const existingBill = (billing || []).find(
         (b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "pending"
       );
@@ -78,17 +80,37 @@ export default function AdminFinanceiro() {
     }
     if (created > 0) {
       queryClient.invalidateQueries({ queryKey: ["billing"] });
-      toast.success(`${created} cobrança(s) gerada(s) automaticamente`);
+      if (!silent) toast.success(`${created} cobrança(s) gerada(s) automaticamente`);
     } else {
-      toast.info("Todas as cobranças já estão sincronizadas");
+      if (!silent) toast.info("Todas as cobranças já estão sincronizadas");
     }
     setSyncing(false);
   };
 
-  // Computed totals
+  // Auto-sync on first load when billing is empty but clients have plan data
+  useEffect(() => {
+    if (autoSyncDone.current || !isAdmin || !clients || !billing) return;
+    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active");
+    const hasPendingRenewals = (billing || []).some((b: any) => b.type === "renewal" && b.status === "pending");
+    if (activeWithPlan.length > 0 && !hasPendingRenewals) {
+      autoSyncDone.current = true;
+      handleSyncBilling(true);
+    } else {
+      autoSyncDone.current = true;
+    }
+  }, [clients, billing, isAdmin]);
+
+  // Computed totals — combine billing + client plan data for accurate stats
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
   const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
+
+  // "A Receber" — from billing pending + active clients with plan_value not yet in billing
+  const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
+    c.plan_value && c.plan_status === "active" &&
+    !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
+  );
+  const extraPending = clientsWithPlanNotInBilling.reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   const monthlyRevenue = paidBills
     .filter((b: any) => b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
@@ -96,7 +118,7 @@ export default function AdminFinanceiro() {
 
   const pendingTotal = pendingBills
     .filter((b: any) => b.type !== "ads_recharge")
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+    .reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
 
   const overdueTotal = overdueBills
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
@@ -104,6 +126,11 @@ export default function AdminFinanceiro() {
   const receivedTotal = paidBills
     .filter((b: any) => b.type !== "ads_recharge")
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
+
+  // Receita Mensal Esperada = soma dos plan_value de clientes ativos
+  const expectedMonthlyRevenue = (clients || [])
+    .filter((c: any) => c.plan_value && c.plan_status === "active")
+    .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
@@ -268,7 +295,7 @@ export default function AdminFinanceiro() {
       {isAdmin && (
         <div className="grid grid-cols-2 gap-3">
           {[
-           { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
+           { label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), icon: TrendingUp, color: "text-success" },
             { label: "A Receber", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
             { label: "Total Recebido", value: fmt(receivedTotal), icon: CheckCircle2, color: "text-info" },
             { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
@@ -354,7 +381,7 @@ export default function AdminFinanceiro() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">Controle Financeiro</span>
             <div className="flex gap-2">
-              <button onClick={handleSyncBilling} disabled={syncing}
+              <button onClick={() => handleSyncBilling()} disabled={syncing}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border">
                 <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} /> Sincronizar
               </button>
