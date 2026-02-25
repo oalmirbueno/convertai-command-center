@@ -47,21 +47,60 @@ export default function AdminFinanceiro() {
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
+  const [syncing, setSyncing] = useState(false);
 
   const now = new Date();
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
 
-  const monthlyRevenue = (billing || [])
-    .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
+  // Auto-sync: create billing entries for clients with plan_value + plan_renewal_date but no billing record
+  const handleSyncBilling = async () => {
+    if (!clients || !billing) return;
+    setSyncing(true);
+    let created = 0;
+    for (const c of clients as any[]) {
+      if (!c.plan_value || !c.plan_renewal_date) continue;
+      const existingBill = (billing || []).find(
+        (b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "pending"
+      );
+      if (!existingBill) {
+        await supabase.from("billing").insert({
+          client_id: c.id,
+          type: "renewal",
+          amount: Number(c.plan_value),
+          due_date: c.plan_renewal_date,
+          description: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
+        });
+        created++;
+      }
+    }
+    if (created > 0) {
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      toast.success(`${created} cobrança(s) gerada(s) automaticamente`);
+    } else {
+      toast.info("Todas as cobranças já estão sincronizadas");
+    }
+    setSyncing(false);
+  };
+
+  // Computed totals
+  const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
+  const paidBills = (billing || []).filter((b: any) => b.status === "paid");
+  const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
+
+  const monthlyRevenue = paidBills
+    .filter((b: any) => b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
-  const pendingTotal = (billing || [])
-    .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
+  const pendingTotal = pendingBills
+    .filter((b: any) => b.type !== "ads_recharge")
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
-  const overdueTotal = (billing || [])
-    .filter((b: any) => b.status === "pending" && new Date(b.due_date) < now)
+  const overdueTotal = overdueBills
+    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+
+  const receivedTotal = paidBills
+    .filter((b: any) => b.type !== "ads_recharge")
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
@@ -227,9 +266,9 @@ export default function AdminFinanceiro() {
       {isAdmin && (
         <div className="grid grid-cols-2 gap-3">
           {[
-            { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
-            { label: "Pendente", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
-            { label: "Investimento Ads", value: fmt(totalAds), icon: DollarSign, color: "text-info" },
+           { label: "Receita Mensal", value: fmt(monthlyRevenue), icon: TrendingUp, color: "text-success" },
+            { label: "A Receber", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
+            { label: "Total Recebido", value: fmt(receivedTotal), icon: CheckCircle2, color: "text-info" },
             { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
           ].map((s, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-4">
@@ -263,45 +302,84 @@ export default function AdminFinanceiro() {
         </TabsList>
 
         {/* Tab: Overview */}
-        <TabsContent value="overview" className="space-y-4">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Transações recentes</span>
-            <button onClick={() => setNewBillingOpen(true)}
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
-              <Plus className="w-3 h-3" /> Nova Cobrança
-            </button>
+        <TabsContent value="overview" className="space-y-6">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <span className="text-sm text-muted-foreground">Controle Financeiro</span>
+            <div className="flex gap-2">
+              <button onClick={handleSyncBilling} disabled={syncing}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border">
+                <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} /> Sincronizar
+              </button>
+              <button onClick={() => setNewBillingOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
+                <Plus className="w-3 h-3" /> Nova Cobrança
+              </button>
+            </div>
           </div>
-          <div className="space-y-2 stagger-children">
-            {(billing || []).map((b: any) => (
+
+          {/* Pendentes a Receber */}
+          {pendingBills.length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-warning" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Pendentes a Receber ({pendingBills.length})
+                </span>
+                <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingTotal)}</span>
+              </div>
+              {pendingBills.map((b: any) => {
+                const isOverdue = new Date(b.due_date) < now;
+                return (
+                  <div key={b.id} className={`bg-card border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap ${isOverdue ? "border-destructive/30" : "border-border"}`}>
+                    <span className="text-lg">{typeIcon(b.type)}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
+                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {new Date(b.due_date).toLocaleDateString("pt-BR")}</p>
+                    </div>
+                    <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
+                    {statusBadge(b.status, b.due_date)}
+                    <div className="flex gap-1.5">
+                      <button onClick={() => handleMarkPaid(b.id)}
+                        className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none">
+                        Marcar como Pago
+                      </button>
+                      <button onClick={() => openWhatsAppReminder(b.client, b)}
+                        className="text-[11px] px-2 py-1 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none">
+                        <MessageCircle className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Já Recebido */}
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full bg-success" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                Já Recebido ({paidBills.length})
+              </span>
+              <span className="text-xs font-mono text-success ml-auto">{fmt(receivedTotal)}</span>
+            </div>
+            {paidBills.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento recebido ainda.</p>}
+            {paidBills.map((b: any) => (
               <div key={b.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
                 <span className="text-lg">{typeIcon(b.type)}</span>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                  <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {new Date(b.due_date).toLocaleDateString("pt-BR")}</p>
+                  <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Pago em {b.paid_date ? new Date(b.paid_date).toLocaleDateString("pt-BR") : "—"}</p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
-                  {b.type === "ads_recharge" && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-info/15 text-info font-medium">📢 Ads</span>
-                  )}
-                </div>
-                {statusBadge(b.status, b.due_date)}
-                {b.status === "pending" && (
-                  <div className="flex gap-1.5">
-                    <button onClick={() => handleMarkPaid(b.id)}
-                      className="text-[11px] px-3 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none">
-                      Marcar como Pago
-                    </button>
-                    <button onClick={() => openWhatsAppReminder(b.client, b)}
-                      className="text-[11px] px-2 py-1 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none">
-                      <MessageCircle className="w-3 h-3" />
-                    </button>
-                  </div>
-                )}
+                <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
+                {statusBadge(b.status)}
               </div>
             ))}
-            {(!billing || billing.length === 0) && <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada.</p>}
           </div>
+
+          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (
+            <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
+          )}
         </TabsContent>
 
         {/* Tab: Ads Wallet */}
