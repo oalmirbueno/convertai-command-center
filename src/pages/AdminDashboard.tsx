@@ -1,7 +1,7 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
-import { useBilling, useAdsWallet } from "@/hooks/useFinancialData";
+import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
-import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign } from "lucide-react";
+import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet } from "lucide-react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +48,7 @@ export default function AdminDashboard() {
   const { data: clients } = useClients();
   const { data: billing } = useBilling();
   const { data: wallets } = useAdsWallet();
+  const isTeam = ["design", "traffic", "manager"].includes(profile?.role || "");
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
   const [editProject, setEditProject] = useState<any>(null);
@@ -161,6 +162,32 @@ export default function AdminDashboard() {
           ))}
         </div>
       </div>
+      )}
+
+      {/* Ads Wallet Summary - team members */}
+      {isTeam && (wallets || []).length > 0 && (
+        <div>
+          <p className="label-sm mb-3 flex items-center gap-2">
+            <Wallet className="w-3.5 h-3.5 text-info" />
+            Ads Wallet
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
+            {(wallets || []).map((w: any) => (
+              <div
+                key={w.id}
+                className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer"
+                onClick={() => navigate("/financeiro")}
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[13px] text-muted-foreground truncate">{w.client?.company_name || w.client?.full_name}</p>
+                  <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{w.platform}</span>
+                </div>
+                <p className="font-mono font-light text-[22px] leading-none text-foreground">{fmt(Number(w.balance))}</p>
+                <div className={`h-0.5 w-8 rounded-full mt-3 opacity-60 ${Number(w.balance) < 100 ? "bg-warning" : "bg-info"}`} />
+              </div>
+            ))}
+          </div>
+        </div>
       )}
 
       {/* Quick Actions */}
