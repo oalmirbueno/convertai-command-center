@@ -1,4 +1,4 @@
-const WEBHOOK_BASE = import.meta.env.VITE_WEBHOOK_URL || '';
+const WEBHOOK_BASE = import.meta.env.VITE_WEBHOOK_URL || 'https://n8n.srv1353465.hstgr.cloud/webhook';
 
 export const webhooks = {
   onboardClient:     `${WEBHOOK_BASE}/onboard-client`,
