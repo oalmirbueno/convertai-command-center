@@ -9,10 +9,11 @@ import { toast } from "sonner";
 import {
   Check, Plus, GitBranch, Loader2, X, Clock, Circle,
   Calendar, Flag, ChevronDown, ChevronUp, Pencil, RefreshCw,
-  GripVertical, AlertCircle, ListTodo, Save,
+  GripVertical, AlertCircle, ListTodo, Save, Trash2,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const MAX_MILESTONES = 4;
 
@@ -130,6 +131,8 @@ export default function TimelinePage() {
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
   const [dragOverId, setDragOverId] = useState<string | null>(null);
+  // Delete milestone state
+  const [deleteMilestone, setDeleteMilestone] = useState<any>(null);
 
   const filteredProjects = filterProject === "all"
     ? (projects || [])
@@ -312,6 +315,17 @@ export default function TimelinePage() {
     toast.success("Ordem atualizada!");
     setDragId(null); setDragOverId(null);
   };
+  const handleDeleteMilestone = async () => {
+    if (!deleteMilestone) return;
+    // Delete tasks associated with this milestone first
+    await supabase.from("tasks").delete().eq("milestone_id", deleteMilestone.id);
+    await supabase.from("milestones").delete().eq("id", deleteMilestone.id);
+    queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+    queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+    toast.success("Milestone excluído!");
+    setDeleteMilestone(null);
+  };
+
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   if (loadingProjects || loadingMilestones) {
@@ -617,11 +631,14 @@ export default function TimelinePage() {
                               )}
                               {isAdmin && (
                                 <>
-                                  <button onClick={() => openEdit(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
+                                  <button onClick={() => openEdit(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none" title="Editar">
                                     <Pencil className="w-3.5 h-3.5" />
                                   </button>
                                   <button onClick={() => handleCycleMilestoneStatus(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none" title="Alterar status">
                                     <RefreshCw className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => setDeleteMilestone(m)} className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none" title="Excluir">
+                                    <Trash2 className="w-3.5 h-3.5" />
                                   </button>
                                 </>
                               )}
@@ -1001,6 +1018,16 @@ export default function TimelinePage() {
           </div>
         </div>
       )}
+
+      {/* ========== DELETE MILESTONE CONFIRM ========== */}
+      <ConfirmModal
+        open={!!deleteMilestone}
+        title="Excluir Milestone"
+        description={`Tem certeza que deseja excluir "${deleteMilestone?.title}"? Todas as tarefas associadas também serão removidas.`}
+        confirmLabel="Excluir Milestone"
+        onConfirm={handleDeleteMilestone}
+        onCancel={() => setDeleteMilestone(null)}
+      />
     </div>
   );
 }
