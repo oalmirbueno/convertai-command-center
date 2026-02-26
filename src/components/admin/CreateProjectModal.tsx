@@ -135,7 +135,8 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
             // Admin is the current user as fallback
             if (!roleMap["admin"]) roleMap["admin"] = user!.id;
 
-            for (let mIdx = 0; mIdx < templates.length; mIdx++) {
+            const maxMilestones = Math.min(templates.length, 4);
+            for (let mIdx = 0; mIdx < maxMilestones; mIdx++) {
               const tmpl = templates[mIdx];
               const targetDate = format(addDays(projectStartDate, tmpl.offsetDays), "yyyy-MM-dd");
 
