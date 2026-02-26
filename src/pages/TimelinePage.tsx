@@ -3,13 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
+import { notifyUser } from "@/lib/notifyHelpers";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   Check, Plus, GitBranch, Loader2, X, Clock, Circle,
   Calendar, Flag, ChevronDown, ChevronUp, Pencil, RefreshCw,
-  GripVertical, AlertCircle, ListTodo, Save, Trash2,
+  GripVertical, AlertCircle, ListTodo, Save, Trash2, User,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -101,6 +102,16 @@ export default function TimelinePage() {
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: clients } = useClients();
 
+  // Fetch team members for assignment
+  const { data: teamMembers } = useQuery({
+    queryKey: ["team-members-timeline"],
+    queryFn: async () => {
+      const { data } = await supabase.from("profiles").select("id, full_name");
+      return data || [];
+    },
+    enabled: !!user,
+  });
+
   const [filterProject, setFilterProject] = useState("all");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [expandedMilestones, setExpandedMilestones] = useState<string[]>([]);
@@ -126,6 +137,8 @@ export default function TimelinePage() {
   const [editTaskTitle, setEditTaskTitle] = useState("");
   const [editTaskDesc, setEditTaskDesc] = useState("");
   const [editTaskPriority, setEditTaskPriority] = useState("medium");
+  const [editTaskAssignedTo, setEditTaskAssignedTo] = useState("");
+  const [editTaskDueDate, setEditTaskDueDate] = useState("");
   const [savingTask, setSavingTask] = useState(false);
 
   // Drag state
@@ -139,6 +152,8 @@ export default function TimelinePage() {
   const [addTaskMilestone, setAddTaskMilestone] = useState<string | null>(null);
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("medium");
+  const [newTaskAssignedTo, setNewTaskAssignedTo] = useState("");
+  const [newTaskDueDate, setNewTaskDueDate] = useState("");
   const [savingNewTask, setSavingNewTask] = useState(false);
 
   const filteredProjects = filterProject === "all"
@@ -208,17 +223,32 @@ export default function TimelinePage() {
     setEditTaskTitle(t.title);
     setEditTaskDesc(t.description || "");
     setEditTaskPriority(t.priority || "medium");
+    setEditTaskAssignedTo(t.assigned_to || "");
+    setEditTaskDueDate(t.due_date || "");
   };
 
   const handleSaveTask = async () => {
     if (!editTaskTitle.trim()) return;
     setSavingTask(true);
     try {
+      const previousAssignedTo = editingTask.assigned_to;
       await supabase.from("tasks").update({
         title: editTaskTitle.trim(),
         description: editTaskDesc.trim() || null,
         priority: editTaskPriority,
+        assigned_to: editTaskAssignedTo || null,
+        due_date: editTaskDueDate || null,
       }).eq("id", editingTask.id);
+      // Notify new assignee if changed
+      if (editTaskAssignedTo && editTaskAssignedTo !== previousAssignedTo) {
+        const project = (projects || []).find((p: any) => p.id === editingTask.project_id);
+        await notifyUser(
+          editTaskAssignedTo,
+          `Nova tarefa atribuída: "${editTaskTitle.trim()}"${project ? ` no projeto ${project.name}` : ""}`,
+          "task",
+          "/kanban"
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
       toast.success("Tarefa atualizada!");
       setEditingTask(null);
@@ -342,14 +372,28 @@ export default function TimelinePage() {
         milestone_id: milestoneId,
         title: newTaskTitle.trim(),
         priority: newTaskPriority,
+        assigned_to: newTaskAssignedTo || null,
+        due_date: newTaskDueDate || null,
         status: "backlog",
         task_order: existingTasks.length + 1,
       });
+      // Notify assignee
+      if (newTaskAssignedTo) {
+        const project = (projects || []).find((p: any) => p.id === projectId);
+        await notifyUser(
+          newTaskAssignedTo,
+          `Nova tarefa atribuída: "${newTaskTitle.trim()}"${project ? ` no projeto ${project.name}` : ""}`,
+          "task",
+          "/kanban"
+        );
+      }
       queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
       queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
       toast.success("Tarefa criada!");
       setNewTaskTitle("");
       setNewTaskPriority("medium");
+      setNewTaskAssignedTo("");
+      setNewTaskDueDate("");
       setAddTaskMilestone(null);
     } catch (err: any) { toast.error(err.message); }
     finally { setSavingNewTask(false); }
@@ -730,42 +774,65 @@ export default function TimelinePage() {
 
                               {/* Add task inline */}
                               {isAdmin && addTaskMilestone === m.id ? (
-                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
-                                  <input
-                                    autoFocus
-                                    value={newTaskTitle}
-                                    onChange={(e) => setNewTaskTitle(e.target.value)}
-                                    onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(m.id, project.id); if (e.key === "Escape") setAddTaskMilestone(null); }}
-                                    placeholder="Nome da tarefa..."
-                                    className="flex-1 text-[12px] bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60"
-                                  />
-                                  <select
-                                    value={newTaskPriority}
-                                    onChange={(e) => setNewTaskPriority(e.target.value)}
-                                    className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-0.5 text-foreground cursor-pointer"
-                                  >
-                                    <option value="low">Baixa</option>
-                                    <option value="medium">Média</option>
-                                    <option value="high">Alta</option>
-                                    <option value="urgent">Urgente</option>
-                                  </select>
-                                  <button
-                                    onClick={() => handleAddTask(m.id, project.id)}
-                                    disabled={savingNewTask}
-                                    className="p-1 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
-                                  >
-                                    {savingNewTask ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
-                                  </button>
-                                  <button
-                                    onClick={() => { setAddTaskMilestone(null); setNewTaskTitle(""); }}
-                                    className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none"
-                                  >
-                                    <X className="w-3 h-3" />
-                                  </button>
+                                <div className="space-y-2 px-3 py-3 rounded-lg bg-primary/5 border border-primary/20">
+                                  <div className="flex items-center gap-2">
+                                    <input
+                                      autoFocus
+                                      value={newTaskTitle}
+                                      onChange={(e) => setNewTaskTitle(e.target.value)}
+                                      onKeyDown={(e) => { if (e.key === "Escape") setAddTaskMilestone(null); }}
+                                      placeholder="Nome da tarefa..."
+                                      className="flex-1 text-[12px] bg-secondary border border-border rounded-lg px-2.5 py-1.5 outline-none text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50"
+                                    />
+                                  </div>
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <select
+                                      value={newTaskPriority}
+                                      onChange={(e) => setNewTaskPriority(e.target.value)}
+                                      className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-1 text-foreground cursor-pointer"
+                                    >
+                                      <option value="low">🟢 Baixa</option>
+                                      <option value="medium">🔵 Média</option>
+                                      <option value="high">🟡 Alta</option>
+                                      <option value="urgent">🔴 Urgente</option>
+                                    </select>
+                                    <select
+                                      value={newTaskAssignedTo}
+                                      onChange={(e) => setNewTaskAssignedTo(e.target.value)}
+                                      className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-1 text-foreground cursor-pointer min-w-[100px]"
+                                    >
+                                      <option value="">Sem responsável</option>
+                                      {(teamMembers || []).map((m: any) => (
+                                        <option key={m.id} value={m.id}>{m.full_name}</option>
+                                      ))}
+                                    </select>
+                                    <input
+                                      type="date"
+                                      value={newTaskDueDate}
+                                      onChange={(e) => setNewTaskDueDate(e.target.value)}
+                                      className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-1 text-foreground cursor-pointer"
+                                      placeholder="Prazo"
+                                    />
+                                    <div className="flex items-center gap-1 ml-auto">
+                                      <button
+                                        onClick={() => handleAddTask(m.id, project.id)}
+                                        disabled={savingNewTask}
+                                        className="p-1 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
+                                      >
+                                        {savingNewTask ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                      </button>
+                                      <button
+                                        onClick={() => { setAddTaskMilestone(null); setNewTaskTitle(""); setNewTaskAssignedTo(""); setNewTaskDueDate(""); }}
+                                        className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none"
+                                      >
+                                        <X className="w-3 h-3" />
+                                      </button>
+                                    </div>
+                                  </div>
                                 </div>
                               ) : isAdmin ? (
                                 <button
-                                  onClick={() => { setAddTaskMilestone(m.id); setNewTaskTitle(""); setNewTaskPriority("medium"); }}
+                                  onClick={() => { setAddTaskMilestone(m.id); setNewTaskTitle(""); setNewTaskPriority("medium"); setNewTaskAssignedTo(""); setNewTaskDueDate(""); }}
                                   className="w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-dashed border-border hover:border-primary/30"
                                 >
                                   <Plus className="w-3 h-3" /> Adicionar tarefa
@@ -1055,35 +1122,49 @@ export default function TimelinePage() {
                   className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 resize-none"
                   placeholder="Detalhes da tarefa..." />
               </div>
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Prioridade</label>
-                <div className="flex gap-2 flex-wrap">
-                  {(["low", "medium", "high", "urgent"] as const).map(p => (
-                    <button key={p} onClick={() => setEditTaskPriority(p)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] cursor-pointer border transition-colors ${
-                        editTaskPriority === p
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-                      }`}>
-                      {priorityLabels[p]}
-                    </button>
-                  ))}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Prioridade</label>
+                  <select value={editTaskPriority} onChange={e => setEditTaskPriority(e.target.value)}
+                    className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
+                    <option value="low">🟢 Baixa</option>
+                    <option value="medium">🔵 Média</option>
+                    <option value="high">🟡 Alta</option>
+                    <option value="urgent">🔴 Urgente</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Status</label>
+                  <select
+                    value={editingTask.status}
+                    onChange={(e) => {
+                      handleChangeTaskStatus(editingTask, e.target.value);
+                      setEditingTask({ ...editingTask, status: e.target.value });
+                    }}
+                    className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                  >
+                    {taskStatusOrder.map(s => (
+                      <option key={s} value={s}>{taskStatusLabels[s]}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
-              <div>
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Status</label>
-                <select
-                  value={editingTask.status}
-                  onChange={(e) => {
-                    handleChangeTaskStatus(editingTask, e.target.value);
-                    setEditingTask({ ...editingTask, status: e.target.value });
-                  }}
-                  className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
-                >
-                  {taskStatusOrder.map(s => (
-                    <option key={s} value={s}>{taskStatusLabels[s]}</option>
-                  ))}
-                </select>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-1">Responsável</label>
+                  <select value={editTaskAssignedTo} onChange={e => setEditTaskAssignedTo(e.target.value)}
+                    className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
+                    <option value="">Sem responsável</option>
+                    {(teamMembers || []).map((m: any) => (
+                      <option key={m.id} value={m.id}>{m.full_name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-1">Prazo</label>
+                  <input type="date" value={editTaskDueDate} onChange={e => setEditTaskDueDate(e.target.value)}
+                    className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50" />
+                </div>
               </div>
             </div>
             <div className="flex gap-3 mt-6">
