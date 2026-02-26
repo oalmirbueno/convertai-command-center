@@ -112,6 +112,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     setSaving(true);
     try {
       const previousAssignedTo = task.assigned_to;
+      const previousStatus = task.status;
       await supabase.from("tasks").update({
         title: title.trim(),
         description: description.trim() || null,
@@ -120,9 +121,28 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         due_date: dueDate || null,
       }).eq("id", task.id);
 
+      const { data: { user } } = await supabase.auth.getUser();
+
       if (assignedTo && assignedTo !== previousAssignedTo) {
         const project = projects.find((p: any) => p.id === task.project_id);
         await notifyUser(assignedTo, `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`, "task", "/kanban");
+      }
+
+      // Notify on status change to done
+      if (status === "done" && previousStatus !== "done") {
+        const { notifyAdmin } = await import("@/lib/notifyHelpers");
+        if (user) {
+          await notifyAdmin(`Tarefa "${title.trim()}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
+        }
+        if (assignedTo && user && assignedTo !== user.id) {
+          await notifyUser(assignedTo, `Tarefa "${title.trim()}" marcada como concluída`, "task", "/kanban");
+        }
+      }
+
+      // Notify assignee about status change
+      if (previousStatus !== status && status !== "done" && assignedTo && user && assignedTo !== user.id) {
+        const statusName = statusLabels[status] || status;
+        await notifyUser(assignedTo, `Tarefa "${title.trim()}" movida para ${statusName}`, "task", "/kanban");
       }
 
       queryClient.invalidateQueries({ queryKey: ["tasks"] });

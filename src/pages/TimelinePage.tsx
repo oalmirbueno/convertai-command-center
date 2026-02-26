@@ -102,11 +102,17 @@ export default function TimelinePage() {
   const { data: projects, isLoading: loadingProjects } = useProjects();
   const { data: clients } = useClients();
 
-  // Fetch team members for assignment
+  // Fetch team members for assignment (only non-client roles)
   const { data: teamMembers } = useQuery({
     queryKey: ["team-members-timeline"],
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("id, full_name");
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .neq("role", "client");
+      const userIds = roles?.map((r: any) => r.user_id) || [];
+      if (userIds.length === 0) return [];
+      const { data } = await supabase.from("profiles").select("id, full_name").in("id", userIds);
       return data || [];
     },
     enabled: !!user,

@@ -90,14 +90,17 @@ export default function Kanban() {
   const handleDrop = async (column: string) => {
     if (isClient || !draggedTask) return;
     const task = (tasks || []).find((t: any) => t.id === draggedTask);
+    if (!task) return;
+    const previousStatus = task.status;
     await supabase.from("tasks").update({ status: column }).eq("id", draggedTask);
 
-    if (column === "review" && task?.project_id) {
+    const { data: { user: authUser } } = await supabase.auth.getUser();
+
+    if (column === "review" && task.project_id) {
       const { data: project } = await supabase.from("projects").select("client_id, name").eq("id", task.project_id).maybeSingle();
       if (project?.client_id) {
         await notifyUser(project.client_id, `Tarefa "${task.title}" enviada para revisão`, "task", "/dashboard");
       }
-      const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
         await supabase.from("updates").insert({
           project_id: task.project_id, author_id: authUser.id,
@@ -105,16 +108,36 @@ export default function Kanban() {
         });
       }
     }
-    if (column === "done" && task?.project_id) {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (user) {
+
+    if (column === "done" && task.project_id) {
+      if (authUser) {
         await supabase.from("updates").insert({
-          project_id: task.project_id,
-          author_id: user.id,
-          message: `"${task.title}" concluída`,
-          update_type: "task",
+          project_id: task.project_id, author_id: authUser.id,
+          message: `"${task.title}" concluída`, update_type: "task",
         });
       }
+      // Notify assignee that task is done
+      if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
+        await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
+      }
+      // Notify admin about task completion
+      const { notifyAdmin } = await import("@/lib/notifyHelpers");
+      if (authUser) {
+        await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
+      }
+    }
+
+    // Notify admin about any status change in kanban
+    if (previousStatus !== column && column !== "done") {
+      const { notifyAdmin } = await import("@/lib/notifyHelpers");
+      if (authUser && !profile?.role?.includes("admin")) {
+        await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" → ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+      }
+    }
+
+    // Notify assignee about status change
+    if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
+      await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
     }
 
     setDraggedTask(null);
