@@ -8,6 +8,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
+import ProjectDrawer from "@/components/admin/ProjectDrawer";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import MeetingNotesModal from "@/components/admin/MeetingNotesModal";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
@@ -56,6 +57,7 @@ export default function AdminDashboard() {
   const [createClientOpen, setCreateClientOpen] = useState(false);
   const [meetingNotesOpen, setMeetingNotesOpen] = useState(false);
   const [briefingLinkOpen, setBriefingLinkOpen] = useState(false);
+  const [drawerProject, setDrawerProject] = useState<any>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -220,7 +222,7 @@ export default function AdminDashboard() {
                 <div
                   key={p.id}
                   className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative"
-                  onClick={() => navigate("/projetos")}
+                  onClick={() => setDrawerProject(p)}
                   onMouseEnter={() => setHoveredProject(p.id)}
                   onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
                 >
@@ -356,6 +358,13 @@ export default function AdminDashboard() {
       <CreateClientModal open={createClientOpen} onClose={() => setCreateClientOpen(false)} />
       <MeetingNotesModal open={meetingNotesOpen} onClose={() => setMeetingNotesOpen(false)} />
       <BriefingLinkModal open={briefingLinkOpen} onClose={() => setBriefingLinkOpen(false)} />
+
+      <ProjectDrawer
+        project={drawerProject}
+        open={!!drawerProject}
+        onClose={() => setDrawerProject(null)}
+        onEdit={(p) => { setDrawerProject(null); setEditProject(p); }}
+      />
 
       <ConfirmModal
         open={!!confirmDeleteProject}
