@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { notifyAdmin } from "@/lib/notifyHelpers";
+import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -56,6 +57,18 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
 
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
       queryClient.invalidateQueries({ queryKey: ["project-updates"] });
+
+      // Fire webhook
+      fireWebhook(webhooks.clientRequest, {
+        request_id: crypto.randomUUID(),
+        client_id: user.id,
+        client_name: profile?.full_name || '',
+        company: profile?.company_name || '',
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+      });
+
       toast({ title: "Pedido enviado com sucesso", description: "Vamos analisar sua solicitação em breve." });
       setOpen(false);
       setTitle("");
