@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -56,7 +57,8 @@ export default function Kanban() {
   const [viewTask, setViewTask] = useState<any>(null);
 
   // Filters
-  const [filterProject, setFilterProject] = useState("");
+  const [searchParams] = useSearchParams();
+  const [filterProject, setFilterProject] = useState(searchParams.get("project") || "");
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
 
