@@ -147,7 +147,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Left: Logo */}
         <div className="flex items-center shrink-0">
-          <img src={aceleriqLogo} alt="Aceleriq" className="h-20 w-auto" />
+          <img src={aceleriqLogo} alt="Aceleriq" className="h-28 w-auto" />
         </div>
 
         {/* Center: Nav links (desktop) */}
