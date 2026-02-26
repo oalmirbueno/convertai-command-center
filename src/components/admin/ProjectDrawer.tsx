@@ -6,7 +6,7 @@ import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle } from "lucide-react";
+import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const STATUS_OPTIONS = [
@@ -261,6 +261,10 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
             <button onClick={() => { onClose(); onEdit(project); }}
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
               <Edit3 className="w-3.5 h-3.5" /> Editar Projeto
+            </button>
+            <button onClick={() => { onClose(); navigate(`/kanban?project=${project.id}`); }}
+              className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
+              <LayoutGrid className="w-3.5 h-3.5" /> Abrir Kanban
             </button>
             <button onClick={() => { onClose(); navigate("/dashboard"); }}
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
