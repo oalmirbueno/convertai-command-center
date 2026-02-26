@@ -3,6 +3,8 @@ import { Check, ChevronDown, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
+const INITIAL_VISIBLE = 4;
+
 const statusLabels: Record<string, string> = {
   completed: "Concluído",
   in_progress: "Em andamento",
@@ -35,6 +37,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
   const { data: milestones, isLoading: loadingMilestones } = useMilestones(projectId);
   const { data: tasks, isLoading: loadingTasks } = useTasks(projectId);
   const [expandedMilestone, setExpandedMilestone] = useState<string | null>(null);
+  const [showAll, setShowAll] = useState(false);
 
   const formatDate = (d: string) => {
     if (!d) return "";
@@ -64,11 +67,13 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
 
   const lastCompletedIdx = milestones.reduce((acc: number, m: any, i: number) => m.status === "completed" ? i : acc, -1);
 
+  const visibleMilestones = showAll ? milestones : milestones.slice(0, INITIAL_VISIBLE);
+  const hasMore = milestones.length > INITIAL_VISIBLE;
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4">Acompanhe o cronograma e progresso de cada etapa</p>
 
-      {milestones.map((m: any, i: number) => {
+      {visibleMilestones.map((m: any, i: number) => {
         const milestoneTasks = tasksByMilestone[m.id] || [];
         const doneTasks = milestoneTasks.filter((t: any) => t.status === "done").length;
         const totalTasks = milestoneTasks.length;
@@ -78,7 +83,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
         return (
           <div key={m.id} className="relative">
             {/* Connecting line */}
-            {i < milestones.length - 1 && (
+            {i < visibleMilestones.length - 1 && (
               <div className={`absolute left-[15px] top-[32px] w-[2px] h-[calc(100%-16px)] ${i <= lastCompletedIdx ? "bg-primary" : "bg-border"}`} />
             )}
 
@@ -149,6 +154,17 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
           </div>
         );
       })}
+
+      {/* Show more / show less button */}
+      {hasMore && (
+        <button
+          onClick={() => setShowAll(!showAll)}
+          className="w-full flex items-center justify-center gap-1.5 py-2.5 mt-1 rounded-xl text-[12px] font-medium text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-border"
+        >
+          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showAll ? "rotate-180" : ""}`} />
+          {showAll ? "Ver menos" : `Ver mais ${milestones.length - INITIAL_VISIBLE} milestones`}
+        </button>
+      )}
     </div>
   );
 }
