@@ -16,7 +16,7 @@ export default function CompletionScreen() {
         <img
           src={aceleriqLogo}
           alt="Aceleriq"
-          className="h-14 sm:h-16 w-auto mx-auto mb-6"
+          className="h-20 sm:h-24 w-auto mx-auto mb-6"
           style={{ animation: "checkBounce 0.8s cubic-bezier(0.34,1.56,0.64,1)" }}
         />
 

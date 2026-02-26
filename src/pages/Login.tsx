@@ -72,7 +72,7 @@ export default function Login() {
   if (loading || (user && profile)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-12 w-auto animate-pulse" />
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-20 w-auto animate-pulse" />
         <p className="text-xs text-muted-foreground">{loading ? "Carregando..." : "Redirecionando..."}</p>
       </div>
     );
