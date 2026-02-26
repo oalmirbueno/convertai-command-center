@@ -174,7 +174,7 @@ export default function QuestionScreen({ answers, onUpdate, onComplete }: Props)
 
       {/* Logo + Question counter */}
       <div className="fixed top-3 left-4 z-50">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-12 w-auto" />
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-16 w-auto" />
       </div>
       <div className="fixed top-3 right-4 z-50 text-xs text-muted-foreground/50">
         Pergunta {idx + 1} de {total}

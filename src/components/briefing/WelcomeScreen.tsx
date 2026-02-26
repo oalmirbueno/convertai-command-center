@@ -26,7 +26,7 @@ export default function WelcomeScreen({ onStart }: Props) {
           <img
             src={aceleriqLogo}
             alt="Aceleriq"
-            className="h-20 sm:h-28 w-auto mb-5"
+            className="h-28 sm:h-36 w-auto mb-5"
             style={{ animation: "avatarBounce 0.5s cubic-bezier(0.34,1.56,0.64,1) 0.2s both" }}
           />
           <h1
