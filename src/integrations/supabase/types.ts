@@ -636,6 +636,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          milestone_id: string | null
           priority: string
           project_id: string
           status: string
@@ -649,6 +650,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          milestone_id?: string | null
           priority?: string
           project_id: string
           status?: string
@@ -662,6 +664,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          milestone_id?: string | null
           priority?: string
           project_id?: string
           status?: string
@@ -675,6 +678,13 @@ export type Database = {
             columns: ["assigned_to"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_milestone_id_fkey"
+            columns: ["milestone_id"]
+            isOneToOne: false
+            referencedRelation: "milestones"
             referencedColumns: ["id"]
           },
           {

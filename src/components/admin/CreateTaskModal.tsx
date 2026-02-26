@@ -2,8 +2,9 @@ import { useState, useEffect } from "react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
@@ -27,22 +28,36 @@ interface Props {
 
 export default function CreateTaskModal({ open, onClose, defaultStatus = "backlog", editTask, teamMembers = [] }: Props) {
   const { data: projects } = useProjects();
+  const { user } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
 
   const [title, setTitle] = useState("");
   const [projectId, setProjectId] = useState("");
+  const [milestoneId, setMilestoneId] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
   const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [confirmDelete, setConfirmDelete] = useState(false);
 
+  // Fetch milestones for selected project
+  const { data: projectMilestones } = useQuery({
+    queryKey: ["milestones-for-task", projectId],
+    queryFn: async () => {
+      if (!projectId) return [];
+      const { data } = await supabase.from("milestones").select("id, title, milestone_order").eq("project_id", projectId).order("milestone_order", { ascending: true });
+      return data || [];
+    },
+    enabled: !!projectId,
+  });
+
   // BUG 3 FIX: populate fields when editing
   useEffect(() => {
     if (editTask) {
       setTitle(editTask.title || "");
       setProjectId(editTask.project_id || "");
+      setMilestoneId(editTask.milestone_id || "");
       setDescription(editTask.description || "");
       setPriority(editTask.priority || "medium");
       setAssignedTo(editTask.assigned_to || "");
@@ -50,6 +65,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
     } else {
       setTitle("");
       setProjectId("");
+      setMilestoneId("");
       setDescription("");
       setPriority("medium");
       setAssignedTo("");
@@ -77,6 +93,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       const payload = {
         title: title.trim(),
         project_id: projectId,
+        milestone_id: milestoneId || null,
         description: description.trim() || null,
         priority,
         assigned_to: assignedTo || null,
@@ -155,6 +172,19 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
               ))}
             </select>
           </div>
+
+          {projectId && (projectMilestones || []).length > 0 && (
+            <div className="space-y-1.5">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestone</label>
+              <select value={milestoneId} onChange={(e) => setMilestoneId(e.target.value)}
+                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+                <option value="">Sem milestone</option>
+                {(projectMilestones || []).map((m: any) => (
+                  <option key={m.id} value={m.id}>{m.title}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div className="space-y-1.5">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</label>

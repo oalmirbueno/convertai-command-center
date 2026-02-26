@@ -51,6 +51,11 @@ export default function TabKanban({ projectId }: { projectId: string }) {
     >
       <div className="p-3.5 space-y-2.5">
         <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
+        {task.milestone?.title && (
+          <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block">
+            {task.milestone.title}
+          </span>
+        )}
         <div className="flex items-center justify-between">
           {task.due_date && (
             <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">

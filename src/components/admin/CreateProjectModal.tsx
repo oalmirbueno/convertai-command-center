@@ -3,13 +3,14 @@ import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { useClients } from "@/hooks/useSupabaseData";
+import { useClients, useTeamMembers } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { projectTemplates } from "@/lib/projectTemplates";
 
 const PROJECT_TYPES = [
   { value: "social_media", label: "Social Media" },
@@ -30,8 +31,10 @@ interface Props {
 export default function CreateProjectModal({ open, onClose, editProject }: Props) {
   const { user } = useAuth();
   const { data: clients } = useClients();
+  const { data: teamMembers } = useTeamMembers();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
+  const [useTemplates, setUseTemplates] = useState(true);
 
   const [clientId, setClientId] = useState("");
   const [name, setName] = useState("");
@@ -116,6 +119,49 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
             message: `Projeto "${name.trim()}" criado`,
             update_type: "system",
           });
+
+          // Auto-generate milestones & tasks from templates
+          if (useTemplates && projectTemplates[projectType]) {
+            const templates = projectTemplates[projectType];
+            const projectStartDate = startDate || new Date();
+
+            // Find team members by role for auto-assignment
+            const roleMap: Record<string, string | null> = {};
+            for (const member of (teamMembers || [])) {
+              if (!roleMap[member.role]) {
+                roleMap[member.role] = member.id;
+              }
+            }
+            // Admin is the current user as fallback
+            if (!roleMap["admin"]) roleMap["admin"] = user!.id;
+
+            for (let mIdx = 0; mIdx < templates.length; mIdx++) {
+              const tmpl = templates[mIdx];
+              const targetDate = format(addDays(projectStartDate, tmpl.offsetDays), "yyyy-MM-dd");
+
+              const { data: milestone } = await supabase.from("milestones").insert({
+                project_id: newProject.id,
+                title: tmpl.title,
+                target_date: targetDate,
+                status: "pending",
+                milestone_order: mIdx + 1,
+              }).select().single();
+
+              if (milestone) {
+                const taskInserts = tmpl.tasks.map((t, tIdx) => ({
+                  project_id: newProject.id,
+                  milestone_id: milestone.id,
+                  title: t.title,
+                  description: t.description || null,
+                  priority: t.priority,
+                  assigned_to: roleMap[t.role] || null,
+                  status: "backlog" as string,
+                  task_order: tIdx + 1,
+                }));
+                await supabase.from("tasks").insert(taskInserts);
+              }
+            }
+          }
         }
 
         toast.success("Projeto criado com sucesso!");
@@ -176,6 +222,19 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
               ))}
             </select>
           </div>
+
+          {!isEdit && projectTemplates[projectType] && (
+            <label className="flex items-center gap-2.5 p-3 rounded-[10px] bg-primary/5 border border-primary/20 cursor-pointer">
+              <input type="checkbox" checked={useTemplates} onChange={(e) => setUseTemplates(e.target.checked)}
+                className="accent-primary w-4 h-4" />
+              <div>
+                <p className="text-[13px] font-medium text-foreground">Gerar milestones e tarefas automaticamente</p>
+                <p className="text-[11px] text-muted-foreground">
+                  {projectTemplates[projectType].length} milestones · {projectTemplates[projectType].reduce((sum, m) => sum + m.tasks.length, 0)} tarefas com atribuição automática por função
+                </p>
+              </div>
+            </label>
+          )}
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1.5">
