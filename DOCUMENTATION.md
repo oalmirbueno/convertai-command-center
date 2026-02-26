@@ -629,10 +629,21 @@ $$;
 
 | Componente | Descrição |
 |-----------|-----------|
-| `WelcomeScreen` | Tela de boas-vindas com foto da consultora |
-| `QuestionScreen` | 15 perguntas sequenciais com barra de progresso |
-| `CompletionScreen` | Tela de conclusão |
-| `questions.ts` | Definição das 15 perguntas do diagnóstico |
+| `WelcomeScreen` | Tela de boas-vindas com logo Aceleriq proeminente. Detecta progresso salvo e exibe "Continuar Diagnóstico →" |
+| `QuestionScreen` | 15 perguntas sequenciais com barra de progresso, navegação por dots clicáveis para saltar entre perguntas, botão "Voltar", atalhos de teclado (Enter/Esc) e salvamento automático de progresso via `localStorage` |
+| `CompletionScreen` | Tela de conclusão com timeline dos próximos passos |
+| `questions.ts` | Definição das 15 perguntas do diagnóstico organizadas em 5 blocos |
+
+### Briefing — Funcionalidades
+
+| Feature | Descrição |
+|---------|-----------|
+| **Navegação por dots** | Barra de indicadores clicáveis no topo. Pergunta atual = pill verde, respondidas = verde suave, pendentes = cinza. Permite saltar para qualquer pergunta já respondida |
+| **Auto-save (localStorage)** | Respostas e índice atual são salvos automaticamente no `localStorage` a cada alteração, vinculados ao token do briefing |
+| **Restaurar progresso** | Ao reabrir o link, o WelcomeScreen detecta progresso salvo e exibe mensagem + botão "Continuar Diagnóstico →". O QuestionScreen retoma na última pergunta |
+| **Salvar manual** | Botão "Salvar" no topo com feedback visual "Salvo ✓" |
+| **Limpeza automática** | Progresso é removido do `localStorage` ao finalizar ou quando o briefing já foi enviado |
+| **Navegação por teclado** | Enter = próxima, Esc = voltar |
 
 ### Onboarding
 
@@ -800,6 +811,14 @@ Arquivos são enviados para Supabase Storage e a URL é salva na tabela `files`.
 
 Função para gerenciamento de equipe (criar/remover membros). Executa com `SUPABASE_SERVICE_ROLE_KEY` para operações administrativas.
 
+### `supabase/functions/check-renewals/index.ts`
+
+Função para verificar renovações de planos de clientes e disparar notificações/alertas de vencimento.
+
+### `supabase/functions/process-meeting-notes/index.ts`
+
+Função para processar atas de reunião com IA e gerar planos de projeto automaticamente.
+
 ---
 
 ## 16. Variáveis de Ambiente
@@ -875,7 +894,8 @@ LOVABLE_API_KEY
 │   ├── assets/                    # Imagens estáticas
 │   │   ├── consultant-hero.jpg
 │   │   ├── consultant-hero-flipped.jpg
-│   │   └── consultant-avatar.jpg
+│   │   ├── consultant-avatar.jpg
+│   │   └── logo-aceleriq.png       # Logo oficial (usada em TopNav, Login, Loading, Briefing)
 │   ├── components/
 │   │   ├── admin/                 # Modais e drawers administrativos
 │   │   │   ├── BriefingLinkModal.tsx
@@ -963,8 +983,12 @@ LOVABLE_API_KEY
 ├── supabase/
 │   ├── config.toml                # Config Supabase
 │   ├── functions/
-│   │   └── manage-team/
-│   │       └── index.ts           # Edge function de equipe
+│   │   ├── check-renewals/
+│   │   │   └── index.ts           # Edge function de renovações
+│   │   ├── manage-team/
+│   │   │   └── index.ts           # Edge function de equipe
+│   │   └── process-meeting-notes/
+│   │       └── index.ts           # Edge function de atas de reunião
 │   └── migrations/                # Migrações SQL
 ├── .env                           # Variáveis de ambiente (auto-gerado)
 ├── components.json                # Config shadcn/ui
