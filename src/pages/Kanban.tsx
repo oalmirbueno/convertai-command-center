@@ -5,9 +5,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
+import { Clock, Plus, Filter, X, Paperclip } from "lucide-react";
+import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
+import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 
@@ -51,10 +52,20 @@ export default function Kanban() {
 
   const isClient = profile?.role === "client";
 
-  // Modals
+  // Fetch attachment counts per task
+  const { data: attachmentCounts } = useQuery({
+    queryKey: ["task-attachment-counts"],
+    queryFn: async () => {
+      const { data } = await supabase.from("task_attachments").select("task_id");
+      const counts: Record<string, number> = {};
+      (data || []).forEach((a: any) => { counts[a.task_id] = (counts[a.task_id] || 0) + 1; });
+      return counts;
+    },
+  });
+
+  // Modals & drawer
   const [createStatus, setCreateStatus] = useState<string | null>(null);
-  const [editTask, setEditTask] = useState<any>(null);
-  const [viewTask, setViewTask] = useState<any>(null);
+  const [detailTask, setDetailTask] = useState<any>(null);
 
   // Filters
   const [searchParams] = useSearchParams();
@@ -119,11 +130,7 @@ export default function Kanban() {
   };
 
   const handleCardClick = (task: any) => {
-    if (isClient) {
-      setViewTask(task);
-    } else {
-      setEditTask(task);
-    }
+    setDetailTask(task);
   };
 
   return (
@@ -208,9 +215,17 @@ export default function Kanban() {
                     )}
                   </div>
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                      <Clock className="w-3 h-3" />
-                      {formatDate(task.due_date)}
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                        <Clock className="w-3 h-3" />
+                        {formatDate(task.due_date)}
+                      </div>
+                      {(attachmentCounts || {})[task.id] > 0 && (
+                        <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                          <Paperclip className="w-3 h-3" />
+                          {(attachmentCounts || {})[task.id]}
+                        </div>
+                      )}
                     </div>
                     <Avatar className="w-6 h-6">
                       <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
@@ -270,9 +285,17 @@ export default function Kanban() {
                           )}
                         </div>
                         <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {formatDate(task.due_date)}
+                          <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(task.due_date)}
+                            </div>
+                            {(attachmentCounts || {})[task.id] > 0 && (
+                              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                <Paperclip className="w-3 h-3" />
+                                {(attachmentCounts || {})[task.id]}
+                              </div>
+                            )}
                           </div>
                           <Avatar className="w-6 h-6">
                             <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
@@ -290,79 +313,24 @@ export default function Kanban() {
         </div>
       )}
 
-      {/* View-only modal for clients */}
-      {viewTask && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setViewTask(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4 animate-in fade-in zoom-in-95 duration-200">
-            <button onClick={() => setViewTask(null)} className="absolute top-4 right-4 text-muted-foreground hover:text-foreground cursor-pointer bg-transparent border-none p-1">
-              <X className="w-4 h-4" />
-            </button>
-            <div className="space-y-4">
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Título</p>
-                <p className="text-sm font-medium text-foreground mt-1">{viewTask.title}</p>
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Descrição</p>
-                <p className="text-sm text-muted-foreground mt-1">{viewTask.description || "—"}</p>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prioridade</p>
-                  <span className={`inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full ${
-                    viewTask.priority === "urgent" ? "bg-destructive/10 text-destructive" :
-                    viewTask.priority === "high" ? "bg-warning/10 text-warning" :
-                    "bg-secondary text-muted-foreground"
-                  }`}>
-                    {priorityLabels[viewTask.priority] || viewTask.priority}
-                  </span>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Status</p>
-                  <span className="inline-block mt-1 text-[11px] px-2 py-0.5 rounded-full bg-secondary text-foreground">
-                    {statusLabels[viewTask.status] || viewTask.status}
-                  </span>
-                </div>
-              </div>
-              {viewTask.due_date && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Prazo</p>
-                  <p className="text-sm text-foreground mt-1">{new Date(viewTask.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}</p>
-                </div>
-              )}
-              {viewTask.assignee?.full_name && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</p>
-                  <p className="text-sm text-foreground mt-1">{viewTask.assignee.full_name}</p>
-                </div>
-              )}
-              {viewTask.project?.name && (
-                <div>
-                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</p>
-                  <p className="text-sm text-foreground mt-1">{viewTask.project.name}</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
+      {/* Task Detail Drawer */}
+      {detailTask && (
+        <TaskDetailDrawer
+          task={detailTask}
+          onClose={() => setDetailTask(null)}
+          teamMembers={teamMembers || []}
+          projects={projects || []}
+          readOnly={isClient}
+        />
       )}
 
       {!isClient && (
-        <>
-          <CreateTaskModal
-            open={!!createStatus}
-            onClose={() => setCreateStatus(null)}
-            defaultStatus={createStatus || "backlog"}
-            teamMembers={teamMembers || []}
-          />
-          <CreateTaskModal
-            open={!!editTask}
-            onClose={() => setEditTask(null)}
-            editTask={editTask}
-            teamMembers={teamMembers || []}
-          />
-        </>
+        <CreateTaskModal
+          open={!!createStatus}
+          onClose={() => setCreateStatus(null)}
+          defaultStatus={createStatus || "backlog"}
+          teamMembers={teamMembers || []}
+        />
       )}
     </div>
   );
