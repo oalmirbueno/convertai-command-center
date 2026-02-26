@@ -220,6 +220,7 @@ export default function AdminDashboard() {
                 <div
                   key={p.id}
                   className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative"
+                  onClick={() => navigate("/projetos")}
                   onMouseEnter={() => setHoveredProject(p.id)}
                   onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
                 >
