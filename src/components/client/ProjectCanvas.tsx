@@ -39,9 +39,10 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
   const { profile } = useAuth();
   const { data: projects, isLoading } = useProjects();
 
-  const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
-  const reviewProjects = projects?.filter((p: any) => p.status === "review") || [];
-  const doneProjects = projects?.filter((p: any) => p.status === "done") || [];
+  const allProjects = projects || [];
+  const activeProjects = allProjects.filter((p: any) => p.status !== "done");
+  const reviewProjects = allProjects.filter((p: any) => p.status === "review");
+  const doneProjects = allProjects.filter((p: any) => p.status === "done");
 
   const formatDate = (d: string) => {
     if (!d) return "";
@@ -60,6 +61,8 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
 
       {/* Stats inline */}
       <div className="flex flex-wrap items-center gap-2 text-[13px] text-muted-foreground mb-8">
+        <span>Total: <span className="text-foreground font-medium">{allProjects.length}</span></span>
+        <span className="text-border">•</span>
         <span>Ativos: <span className="text-foreground font-medium">{activeProjects.length}</span></span>
         <span className="text-border">•</span>
         <span>Aprovação: <span className="text-foreground font-medium">{reviewProjects.length}</span></span>
