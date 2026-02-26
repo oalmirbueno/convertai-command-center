@@ -72,7 +72,7 @@ export default function Login() {
   if (loading || (user && profile)) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-20 w-auto animate-pulse" />
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-28 w-auto animate-pulse" />
         <p className="text-xs text-muted-foreground">{loading ? "Carregando..." : "Redirecionando..."}</p>
       </div>
     );
@@ -164,7 +164,7 @@ export default function Login() {
           <div className="flex-1 flex flex-col justify-center">
             <div style={{ animation: "fadeInUp 0.5s ease-out 0.2s both" }}>
               <div className="mb-6">
-                <img src={aceleriqLogo} alt="Aceleriq" className="h-56 w-auto" />
+                <img src={aceleriqLogo} alt="Aceleriq" className="h-64 w-auto" />
               </div>
             </div>
             <div style={{ animation: "fadeInUp 0.6s ease-out 0.4s both" }}>
@@ -216,7 +216,7 @@ export default function Login() {
         <div className="w-full max-w-[420px]">
           {/* Mobile logo */}
           <div className="lg:hidden text-center mb-6" style={{ animation: "fadeInUp 0.4s ease-out" }}>
-            <img src={aceleriqLogo} alt="Aceleriq" className="h-56 w-auto mx-auto" />
+            <img src={aceleriqLogo} alt="Aceleriq" className="h-64 w-auto mx-auto" />
           </div>
 
           <div className={cn("login-card", shake && "animate-shake")}>
