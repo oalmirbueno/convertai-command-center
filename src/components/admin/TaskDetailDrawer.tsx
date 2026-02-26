@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,6 +59,10 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   // Comment state
   const [commentText, setCommentText] = useState("");
   const [sendingComment, setSendingComment] = useState(false);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const mentionDropdownRef = useRef<HTMLDivElement>(null);
 
   // Checklist state
   const [newCheckItem, setNewCheckItem] = useState("");
@@ -131,6 +135,63 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     finally { setSaving(false); }
   };
 
+  // ── Mention helpers ──
+  const filteredMentions = mentionQuery !== null
+    ? teamMembers.filter((m: any) => m.full_name?.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5)
+    : [];
+
+  const getMentionContext = useCallback(() => {
+    const el = commentRef.current;
+    if (!el) return null;
+    const cursor = el.selectionStart;
+    const textBefore = commentText.slice(0, cursor);
+    const match = textBefore.match(/@(\w*)$/);
+    return match ? { query: match[1], start: cursor - match[0].length, end: cursor } : null;
+  }, [commentText]);
+
+  const handleCommentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    setCommentText(e.target.value);
+    setTimeout(() => {
+      const ctx = getMentionContext();
+      if (ctx) {
+        setMentionQuery(ctx.query);
+        setMentionIndex(0);
+      } else {
+        setMentionQuery(null);
+      }
+    }, 0);
+  };
+
+  const insertMention = (member: any) => {
+    const el = commentRef.current;
+    if (!el) return;
+    const cursor = el.selectionStart;
+    const textBefore = commentText.slice(0, cursor);
+    const match = textBefore.match(/@(\w*)$/);
+    if (!match) return;
+    const start = cursor - match[0].length;
+    const mentionText = `@${member.full_name} `;
+    const newText = commentText.slice(0, start) + mentionText + commentText.slice(cursor);
+    setCommentText(newText);
+    setMentionQuery(null);
+    setTimeout(() => {
+      el.focus();
+      const pos = start + mentionText.length;
+      el.setSelectionRange(pos, pos);
+    }, 0);
+  };
+
+  // Parse @mentions from text and return mentioned member IDs
+  const parseMentions = (text: string): string[] => {
+    const ids: string[] = [];
+    teamMembers.forEach((m: any) => {
+      if (text.includes(`@${m.full_name}`)) {
+        ids.push(m.id);
+      }
+    });
+    return ids;
+  };
+
   // ── Comments ──
   const handleSendComment = async () => {
     if (!commentText.trim()) return;
@@ -138,16 +199,29 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Não autenticado");
+      const content = commentText.trim();
       await supabase.from("task_comments").insert({
         task_id: task.id,
         author_id: user.id,
-        content: commentText.trim(),
+        content,
       });
       setCommentText("");
+      setMentionQuery(null);
       queryClient.invalidateQueries({ queryKey: ["task-comments", task.id] });
 
-      // Notify assignee if commenter is not the assignee
-      if (task.assigned_to && task.assigned_to !== user.id) {
+      // Notify mentioned users
+      const mentionedIds = parseMentions(content);
+      const notifiedSet = new Set<string>();
+
+      for (const mid of mentionedIds) {
+        if (mid !== user.id && !notifiedSet.has(mid)) {
+          notifiedSet.add(mid);
+          await notifyUser(mid, `Você foi mencionado em "${task.title}"`, "task", "/kanban");
+        }
+      }
+
+      // Notify assignee if not already notified
+      if (task.assigned_to && task.assigned_to !== user.id && !notifiedSet.has(task.assigned_to)) {
         await notifyUser(task.assigned_to, `Novo comentário em "${task.title}"`, "task", "/kanban");
       }
     } catch (err: any) { toast.error(err.message); }
@@ -158,6 +232,29 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     await supabase.from("task_comments").delete().eq("id", commentId);
     queryClient.invalidateQueries({ queryKey: ["task-comments", task.id] });
     toast.success("Comentário removido");
+  };
+
+  // Render comment with highlighted @mentions
+  const renderCommentWithMentions = (text: string) => {
+    const mentionPattern = /@([A-Za-zÀ-ÿ\s]+?)(?=\s@|\s[^A-Za-zÀ-ÿ]|$)/g;
+    const parts: React.ReactNode[] = [];
+    let lastIndex = 0;
+    let match;
+    while ((match = mentionPattern.exec(text)) !== null) {
+      const name = match[1].trim();
+      const isMember = teamMembers.some((m: any) => m.full_name === name);
+      if (isMember) {
+        if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
+        parts.push(
+          <span key={match.index} className="text-primary font-semibold bg-primary/10 px-0.5 rounded">
+            @{name}
+          </span>
+        );
+        lastIndex = match.index + match[0].length;
+      }
+    }
+    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
+    return parts.length > 0 ? parts : text;
   };
 
   // ── Checklist ──
@@ -567,27 +664,59 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                               </button>
                             )}
                           </div>
-                          <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed mt-0.5">{c.content}</p>
+                          <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed mt-0.5">
+                            {renderCommentWithMentions(c.content)}
+                          </p>
                         </div>
                       </div>
                     ))}
                   </div>
                 )}
 
-                {/* Comment input */}
-                <div className="flex items-end gap-2">
-                  <textarea
-                    value={commentText}
-                    onChange={e => setCommentText(e.target.value)}
-                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-                    placeholder="Escreva um comentário..."
-                    rows={2}
-                    className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                  />
-                  <button onClick={handleSendComment} disabled={sendingComment || !commentText.trim()}
-                    className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 shrink-0">
-                    {sendingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                  </button>
+                {/* Comment input with @mention */}
+                <div className="relative">
+                  {mentionQuery !== null && filteredMentions.length > 0 && (
+                    <div ref={mentionDropdownRef}
+                      className="absolute bottom-full mb-1 left-0 w-full bg-card border border-border rounded-xl shadow-lg z-10 max-h-[160px] overflow-y-auto py-1">
+                      {filteredMentions.map((m: any, i: number) => (
+                        <button key={m.id}
+                          onClick={() => insertMention(m)}
+                          className={`w-full flex items-center gap-2 px-3 py-2 text-left text-[12px] cursor-pointer border-none transition-colors ${
+                            i === mentionIndex ? "bg-primary/10 text-primary" : "text-foreground hover:bg-secondary"
+                          } bg-transparent`}>
+                          <Avatar className="w-5 h-5">
+                            <AvatarFallback className="text-[8px] bg-secondary text-muted-foreground">
+                              {m.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">{m.full_name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex items-end gap-2">
+                    <textarea
+                      ref={commentRef}
+                      value={commentText}
+                      onChange={handleCommentChange}
+                      onKeyDown={e => {
+                        if (mentionQuery !== null && filteredMentions.length > 0) {
+                          if (e.key === "ArrowDown") { e.preventDefault(); setMentionIndex(i => Math.min(i + 1, filteredMentions.length - 1)); return; }
+                          if (e.key === "ArrowUp") { e.preventDefault(); setMentionIndex(i => Math.max(i - 1, 0)); return; }
+                          if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); insertMention(filteredMentions[mentionIndex]); return; }
+                          if (e.key === "Escape") { e.preventDefault(); setMentionQuery(null); return; }
+                        }
+                        if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
+                      }}
+                      placeholder="Escreva um comentário... use @ para mencionar"
+                      rows={2}
+                      className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                    />
+                    <button onClick={handleSendComment} disabled={sendingComment || !commentText.trim()}
+                      className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 shrink-0">
+                      {sendingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                    </button>
+                  </div>
                 </div>
               </div>
             )}
