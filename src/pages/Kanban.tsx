@@ -5,12 +5,16 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X, Paperclip } from "lucide-react";
+import { Clock, Plus, Filter, X, Paperclip, CalendarIcon } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
 import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { format } from "date-fns";
+import { cn } from "@/lib/utils";
+import { Calendar } from "@/components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 const columns = [
   { id: "backlog", title: "Backlog", dotColor: "bg-muted-foreground" },
@@ -72,13 +76,22 @@ export default function Kanban() {
   const [filterProject, setFilterProject] = useState(searchParams.get("project") || "");
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
+  const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
+  const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(undefined);
 
-  const hasFilters = filterProject || filterAssignee || filterPriority;
+  const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo;
 
   const filteredTasks = (tasks || []).filter((t: any) => {
     if (filterProject && t.project_id !== filterProject) return false;
     if (filterAssignee && t.assigned_to !== filterAssignee) return false;
     if (filterPriority && t.priority !== filterPriority) return false;
+    if (filterDateFrom && t.due_date) {
+      if (new Date(t.due_date) < filterDateFrom) return false;
+    }
+    if (filterDateTo && t.due_date) {
+      if (new Date(t.due_date) > filterDateTo) return false;
+    }
+    if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
   });
 
@@ -187,8 +200,37 @@ export default function Kanban() {
           <option value="medium">Média</option>
           <option value="low">Baixa</option>
         </select>
+        {/* Date range filters */}
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className={cn(
+              "bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0 flex items-center gap-1.5",
+              !filterDateFrom && "text-muted-foreground"
+            )}>
+              <CalendarIcon className="w-3 h-3" />
+              {filterDateFrom ? format(filterDateFrom, "dd/MM") : "De"}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={filterDateFrom} onSelect={setFilterDateFrom} className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
+        <Popover>
+          <PopoverTrigger asChild>
+            <button className={cn(
+              "bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0 flex items-center gap-1.5",
+              !filterDateTo && "text-muted-foreground"
+            )}>
+              <CalendarIcon className="w-3 h-3" />
+              {filterDateTo ? format(filterDateTo, "dd/MM") : "Até"}
+            </button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} className={cn("p-3 pointer-events-auto")} />
+          </PopoverContent>
+        </Popover>
         {hasFilters && (
-          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); }}
+          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); }}
             className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer bg-transparent border-none">
             <X className="w-3 h-3" /> Limpar
           </button>
