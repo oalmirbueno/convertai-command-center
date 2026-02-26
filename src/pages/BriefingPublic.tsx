@@ -9,27 +9,41 @@ import CompletionScreen from "@/components/briefing/CompletionScreen";
 
 type Phase = "loading" | "invalid" | "welcome" | "questions" | "complete";
 
+const DEFAULT_ANSWERS: Record<string, any> = {
+  companyName: "",
+  segment: "",
+  companyAge: "",
+  companyDescription: "",
+  digitalPresence: [],
+  paidTraffic: "",
+  digitalLevel: "",
+  objectives: [],
+  expectedResults: "",
+  biggestChallenge: "",
+  idealClient: "",
+  region: "",
+  howClientsFind: [],
+  budget: "",
+  additionalNotes: "",
+};
+
 export default function BriefingPublic() {
   const { token } = useParams<{ token: string }>();
   const [phase, setPhase] = useState<Phase>("loading");
   const [briefingId, setBriefingId] = useState<string | null>(null);
+  const [hasRestoredProgress, setHasRestoredProgress] = useState(false);
 
-  const [answers, setAnswers] = useState<Record<string, any>>({
-    companyName: "",
-    segment: "",
-    companyAge: "",
-    companyDescription: "",
-    digitalPresence: [],
-    paidTraffic: "",
-    digitalLevel: "",
-    objectives: [],
-    expectedResults: "",
-    biggestChallenge: "",
-    idealClient: "",
-    region: "",
-    howClientsFind: [],
-    budget: "",
-    additionalNotes: "",
+  const [answers, setAnswers] = useState<Record<string, any>>(() => {
+    if (!token) return { ...DEFAULT_ANSWERS };
+    const saved = localStorage.getItem(`briefing_answers_${token}`);
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setHasRestoredProgress(true);
+        return { ...DEFAULT_ANSWERS, ...parsed };
+      } catch { /* ignore */ }
+    }
+    return { ...DEFAULT_ANSWERS };
   });
 
   useEffect(() => {
@@ -40,8 +54,20 @@ export default function BriefingPublic() {
       .eq("token", token)
       .maybeSingle()
       .then(({ data }) => {
-        if (!data || data.submitted) setPhase("invalid");
-        else { setBriefingId(data.id); setPhase("welcome"); }
+        if (!data || data.submitted) {
+          // Clean up any saved progress for submitted briefings
+          localStorage.removeItem(`briefing_answers_${token}`);
+          localStorage.removeItem(`briefing_idx_${token}`);
+          setPhase("invalid");
+        } else {
+          setBriefingId(data.id);
+          // Check if there's saved progress
+          const savedIdx = localStorage.getItem(`briefing_idx_${token}`);
+          if (savedIdx && parseInt(savedIdx, 10) > 0) {
+            setHasRestoredProgress(true);
+          }
+          setPhase("welcome");
+        }
       });
   }, [token]);
 
@@ -52,6 +78,13 @@ export default function BriefingPublic() {
   const handleComplete = async () => {
     if (!briefingId) return;
     await supabase.from("briefings").update({ responses: answers, submitted: true }).eq("id", briefingId);
+    
+    // Clean up saved progress
+    if (token) {
+      localStorage.removeItem(`briefing_answers_${token}`);
+      localStorage.removeItem(`briefing_idx_${token}`);
+    }
+
     const { data: adminId } = await supabase.rpc("get_admin_user_id");
     if (adminId) {
       await supabase.from("notifications").insert({
@@ -71,6 +104,10 @@ export default function BriefingPublic() {
     });
 
     setPhase("complete");
+  };
+
+  const handleStartQuestions = () => {
+    setPhase("questions");
   };
 
   if (phase === "loading") {
@@ -93,7 +130,12 @@ export default function BriefingPublic() {
   }
 
   if (phase === "welcome") {
-    return <WelcomeScreen onStart={() => setPhase("questions")} />;
+    return (
+      <WelcomeScreen
+        onStart={handleStartQuestions}
+        hasRestoredProgress={hasRestoredProgress}
+      />
+    );
   }
 
   if (phase === "questions") {
@@ -102,6 +144,7 @@ export default function BriefingPublic() {
         answers={answers}
         onUpdate={updateAnswer}
         onComplete={handleComplete}
+        storageKey={token}
       />
     );
   }
