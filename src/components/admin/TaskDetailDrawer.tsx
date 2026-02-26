@@ -4,13 +4,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
-import { format } from "date-fns";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
   FileText, Image, Film, Download, ChevronDown, ChevronUp,
-  Clock, Flag, User, Folder, Calendar,
+  Clock, Flag, User, Folder, Calendar, MessageSquare,
+  CheckSquare, Square, Plus, Send,
 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -50,8 +51,18 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [saving, setSaving] = useState(false);
   const [descExpanded, setDescExpanded] = useState(true);
   const [attachExpanded, setAttachExpanded] = useState(true);
+  const [checklistExpanded, setChecklistExpanded] = useState(true);
+  const [commentsExpanded, setCommentsExpanded] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+
+  // Comment state
+  const [commentText, setCommentText] = useState("");
+  const [sendingComment, setSendingComment] = useState(false);
+
+  // Checklist state
+  const [newCheckItem, setNewCheckItem] = useState("");
+  const [addingCheck, setAddingCheck] = useState(false);
 
   // Fetch attachments
   const { data: attachments, isLoading: loadingAttachments } = useQuery({
@@ -66,6 +77,32 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     },
   });
 
+  // Fetch comments
+  const { data: comments, isLoading: loadingComments } = useQuery({
+    queryKey: ["task-comments", task.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("task_comments")
+        .select("*, author:profiles!task_comments_author_id_fkey(full_name)")
+        .eq("task_id", task.id)
+        .order("created_at", { ascending: true });
+      return data || [];
+    },
+  });
+
+  // Fetch checklist
+  const { data: checklistItems, isLoading: loadingChecklist } = useQuery({
+    queryKey: ["task-checklist", task.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("task_checklist_items")
+        .select("*, creator:profiles!task_checklist_items_created_by_fkey(full_name)")
+        .eq("task_id", task.id)
+        .order("item_order", { ascending: true });
+      return data || [];
+    },
+  });
+
   const handleSave = async () => {
     if (!title.trim()) { toast.error("Título obrigatório"); return; }
     setSaving(true);
@@ -74,21 +111,14 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       await supabase.from("tasks").update({
         title: title.trim(),
         description: description.trim() || null,
-        priority,
-        status,
+        priority, status,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
       }).eq("id", task.id);
 
-      // Notify new assignee
       if (assignedTo && assignedTo !== previousAssignedTo) {
         const project = projects.find((p: any) => p.id === task.project_id);
-        await notifyUser(
-          assignedTo,
-          `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`,
-          "task",
-          "/kanban"
-        );
+        await notifyUser(assignedTo, `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`, "task", "/kanban");
       }
 
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -101,6 +131,66 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     finally { setSaving(false); }
   };
 
+  // ── Comments ──
+  const handleSendComment = async () => {
+    if (!commentText.trim()) return;
+    setSendingComment(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      await supabase.from("task_comments").insert({
+        task_id: task.id,
+        author_id: user.id,
+        content: commentText.trim(),
+      });
+      setCommentText("");
+      queryClient.invalidateQueries({ queryKey: ["task-comments", task.id] });
+
+      // Notify assignee if commenter is not the assignee
+      if (task.assigned_to && task.assigned_to !== user.id) {
+        await notifyUser(task.assigned_to, `Novo comentário em "${task.title}"`, "task", "/kanban");
+      }
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSendingComment(false); }
+  };
+
+  const handleDeleteComment = async (commentId: string) => {
+    await supabase.from("task_comments").delete().eq("id", commentId);
+    queryClient.invalidateQueries({ queryKey: ["task-comments", task.id] });
+    toast.success("Comentário removido");
+  };
+
+  // ── Checklist ──
+  const handleAddCheckItem = async () => {
+    if (!newCheckItem.trim()) return;
+    setAddingCheck(true);
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Não autenticado");
+      const order = (checklistItems || []).length;
+      await supabase.from("task_checklist_items").insert({
+        task_id: task.id,
+        title: newCheckItem.trim(),
+        item_order: order,
+        created_by: user.id,
+      });
+      setNewCheckItem("");
+      queryClient.invalidateQueries({ queryKey: ["task-checklist", task.id] });
+    } catch (err: any) { toast.error(err.message); }
+    finally { setAddingCheck(false); }
+  };
+
+  const handleToggleCheck = async (item: any) => {
+    await supabase.from("task_checklist_items").update({ checked: !item.checked }).eq("id", item.id);
+    queryClient.invalidateQueries({ queryKey: ["task-checklist", task.id] });
+  };
+
+  const handleDeleteCheckItem = async (itemId: string) => {
+    await supabase.from("task_checklist_items").delete().eq("id", itemId);
+    queryClient.invalidateQueries({ queryKey: ["task-checklist", task.id] });
+  };
+
+  // ── File Upload ──
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
@@ -108,34 +198,23 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Não autenticado");
-
       for (const file of Array.from(files)) {
-        if (file.size > 50 * 1024 * 1024) {
-          toast.error(`${file.name} excede 50MB`);
-          continue;
-        }
+        if (file.size > 50 * 1024 * 1024) { toast.error(`${file.name} excede 50MB`); continue; }
         const ext = file.name.split(".").pop();
         const path = `task-attachments/${task.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("files").upload(path, file);
         if (uploadError) { toast.error(`Erro ao enviar ${file.name}`); continue; }
-
         const { data: { publicUrl } } = supabase.storage.from("files").getPublicUrl(path);
         await supabase.from("task_attachments").insert({
-          task_id: task.id,
-          file_name: file.name,
-          file_url: publicUrl,
-          file_type: file.type,
-          file_size: file.size,
-          uploaded_by: user.id,
+          task_id: task.id, file_name: file.name, file_url: publicUrl,
+          file_type: file.type, file_size: file.size, uploaded_by: user.id,
         });
       }
       queryClient.invalidateQueries({ queryKey: ["task-attachments", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-attachment-counts"] });
       toast.success("Arquivo(s) anexado(s)!");
     } catch (err: any) { toast.error(err.message); }
-    finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
+    finally { setUploading(false); if (fileInputRef.current) fileInputRef.current.value = ""; }
   };
 
   const handleDeleteAttachment = async () => {
@@ -143,6 +222,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     try {
       await supabase.from("task_attachments").delete().eq("id", confirmDelete);
       queryClient.invalidateQueries({ queryKey: ["task-attachments", task.id] });
+      queryClient.invalidateQueries({ queryKey: ["task-attachment-counts"] });
       toast.success("Anexo removido!");
     } catch (err: any) { toast.error(err.message); }
     finally { setConfirmDelete(null); }
@@ -163,6 +243,10 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
   const assignee = teamMembers.find((m: any) => m.id === (editing ? assignedTo : task.assigned_to));
   const project = projects.find((p: any) => p.id === task.project_id);
+
+  const checkedCount = (checklistItems || []).filter((i: any) => i.checked).length;
+  const totalCheck = (checklistItems || []).length;
+  const checkPercent = totalCheck > 0 ? Math.round((checkedCount / totalCheck) * 100) : 0;
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
@@ -203,42 +287,30 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
           {/* Meta grid */}
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <Flag className="w-3 h-3" /> Status
-              </p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Flag className="w-3 h-3" /> Status</p>
               {editing ? (
                 <select value={status} onChange={e => setStatus(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
                   {statusOrder.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}
                 </select>
               ) : (
-                <span className="text-[12px] px-2 py-0.5 rounded-full bg-secondary text-foreground inline-block">
-                  {statusLabels[task.status]}
-                </span>
+                <span className="text-[12px] px-2 py-0.5 rounded-full bg-secondary text-foreground inline-block">{statusLabels[task.status]}</span>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <Clock className="w-3 h-3" /> Prioridade
-              </p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Clock className="w-3 h-3" /> Prioridade</p>
               {editing ? (
                 <select value={priority} onChange={e => setPriority(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
-                  <option value="low">🟢 Baixa</option>
-                  <option value="medium">🔵 Média</option>
-                  <option value="high">🟡 Alta</option>
-                  <option value="urgent">🔴 Urgente</option>
+                  <option value="low">🟢 Baixa</option><option value="medium">🔵 Média</option>
+                  <option value="high">🟡 Alta</option><option value="urgent">🔴 Urgente</option>
                 </select>
               ) : (
-                <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[task.priority]}`}>
-                  {priorityLabels[task.priority]}
-                </span>
+                <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[task.priority]}`}>{priorityLabels[task.priority]}</span>
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <User className="w-3 h-3" /> Responsável
-              </p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" /> Responsável</p>
               {editing ? (
                 <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
@@ -250,9 +322,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               )}
             </div>
             <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <Calendar className="w-3 h-3" /> Prazo
-              </p>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Calendar className="w-3 h-3" /> Prazo</p>
               {editing ? (
                 <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
@@ -266,12 +336,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
           {task.milestone?.title && (
             <div className="space-y-1">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-                <Folder className="w-3 h-3" /> Milestone
-              </p>
-              <span className="text-[12px] px-2.5 py-1 rounded-full bg-primary/10 text-primary inline-block">
-                {task.milestone.title}
-              </span>
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><Folder className="w-3 h-3" /> Milestone</p>
+              <span className="text-[12px] px-2.5 py-1 rounded-full bg-primary/10 text-primary inline-block">{task.milestone.title}</span>
             </div>
           )}
 
@@ -286,7 +352,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               editing ? (
                 <textarea value={description} onChange={e => setDescription(e.target.value)} rows={6}
                   className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 resize-none"
-                  placeholder="Descreva as instruções detalhadas da tarefa, passo a passo, objetivos, critérios de pronto..." />
+                  placeholder="Descreva as instruções detalhadas da tarefa..." />
               ) : (
                 <div className="bg-secondary/30 rounded-xl p-4 min-h-[80px]">
                   {task.description ? (
@@ -296,6 +362,77 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   )}
                 </div>
               )
+            )}
+          </div>
+
+          {/* ═══ Checklist section ═══ */}
+          <div className="space-y-3">
+            <button onClick={() => setChecklistExpanded(!checklistExpanded)}
+              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                <CheckSquare className="w-3.5 h-3.5" /> Checklist
+                {totalCheck > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
+                    {checkedCount}/{totalCheck}
+                  </span>
+                )}
+              </p>
+              {checklistExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+            </button>
+
+            {checklistExpanded && (
+              <div className="space-y-2">
+                {/* Progress bar */}
+                {totalCheck > 0 && (
+                  <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden">
+                    <div className="h-full bg-primary rounded-full transition-all duration-300" style={{ width: `${checkPercent}%` }} />
+                  </div>
+                )}
+
+                {loadingChecklist ? (
+                  <p className="text-[12px] text-muted-foreground text-center py-2">Carregando...</p>
+                ) : (
+                  <div className="space-y-1">
+                    {(checklistItems || []).map((item: any) => (
+                      <div key={item.id} className="flex items-center gap-2 group px-2 py-1.5 rounded-lg hover:bg-secondary/50 transition-colors">
+                        <button onClick={() => handleToggleCheck(item)}
+                          className="shrink-0 cursor-pointer bg-transparent border-none p-0 text-foreground">
+                          {item.checked
+                            ? <CheckSquare className="w-4 h-4 text-primary" />
+                            : <Square className="w-4 h-4 text-muted-foreground" />
+                          }
+                        </button>
+                        <span className={`text-[13px] flex-1 ${item.checked ? "line-through text-muted-foreground" : "text-foreground"}`}>
+                          {item.title}
+                        </span>
+                        {!readOnly && (
+                          <button onClick={() => handleDeleteCheckItem(item.id)}
+                            className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all cursor-pointer bg-transparent border-none">
+                            <X className="w-3 h-3" />
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Add checklist item */}
+                {!readOnly && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      value={newCheckItem}
+                      onChange={e => setNewCheckItem(e.target.value)}
+                      onKeyDown={e => e.key === "Enter" && handleAddCheckItem()}
+                      placeholder="Adicionar item..."
+                      className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+                    />
+                    <button onClick={handleAddCheckItem} disabled={addingCheck || !newCheckItem.trim()}
+                      className="p-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
+                      {addingCheck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                    </button>
+                  </div>
+                )}
+              </div>
             )}
           </div>
 
@@ -316,7 +453,6 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
             {attachExpanded && (
               <div className="space-y-2">
-                {/* Upload button */}
                 {!readOnly && (
                   <div>
                     <input ref={fileInputRef} type="file" multiple onChange={handleFileUpload} className="hidden"
@@ -324,19 +460,17 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                     <button onClick={() => fileInputRef.current?.click()} disabled={uploading}
                       className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-border hover:border-primary/40 hover:bg-primary/5 text-muted-foreground hover:text-primary transition-all cursor-pointer bg-transparent disabled:opacity-50">
                       {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                      <span className="text-[12px] font-medium">{uploading ? "Enviando..." : "Anexar arquivos (fotos, vídeos, docs)"}</span>
+                      <span className="text-[12px] font-medium">{uploading ? "Enviando..." : "Anexar arquivos"}</span>
                     </button>
                   </div>
                 )}
 
-                {/* Attachment list */}
                 {loadingAttachments ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4">Carregando anexos...</p>
                 ) : (attachments || []).length === 0 ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum anexo</p>
                 ) : (
                   <div className="space-y-2">
-                    {/* Image/video previews */}
                     {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).length > 0 && (
                       <div className="grid grid-cols-3 gap-2">
                         {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).map((a: any) => (
@@ -355,16 +489,13 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                       </div>
                     )}
 
-                    {/* File list */}
                     {(attachments || []).filter((a: any) => !a.file_type?.startsWith("image/")).map((a: any) => (
                       <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors group">
                         {a.file_type?.startsWith("video/") ? (
                           <div className="w-16 h-10 rounded-lg overflow-hidden bg-secondary shrink-0">
                             <video src={a.file_url} className="w-full h-full object-cover" muted />
                           </div>
-                        ) : (
-                          getFileIcon(a.file_type)
-                        )}
+                        ) : getFileIcon(a.file_type)}
                         <div className="flex-1 min-w-0">
                           <p className="text-[12px] text-foreground truncate">{a.file_name}</p>
                           <p className="text-[10px] text-muted-foreground">
@@ -387,6 +518,77 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                     ))}
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* ═══ Comments / Activity section ═══ */}
+          <div className="space-y-3">
+            <button onClick={() => setCommentsExpanded(!commentsExpanded)}
+              className="flex items-center gap-2 w-full text-left cursor-pointer bg-transparent border-none p-0">
+              <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold flex items-center gap-1.5">
+                <MessageSquare className="w-3.5 h-3.5" /> Comentários
+                {(comments || []).length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-mono">
+                    {(comments || []).length}
+                  </span>
+                )}
+              </p>
+              {commentsExpanded ? <ChevronUp className="w-3.5 h-3.5 text-muted-foreground" /> : <ChevronDown className="w-3.5 h-3.5 text-muted-foreground" />}
+            </button>
+
+            {commentsExpanded && (
+              <div className="space-y-3">
+                {loadingComments ? (
+                  <p className="text-[12px] text-muted-foreground text-center py-4">Carregando...</p>
+                ) : (comments || []).length === 0 ? (
+                  <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum comentário ainda.</p>
+                ) : (
+                  <div className="space-y-3 max-h-[300px] overflow-y-auto" style={{ scrollbarWidth: "thin" }}>
+                    {(comments || []).map((c: any) => (
+                      <div key={c.id} className="flex gap-2.5 group">
+                        <Avatar className="w-7 h-7 shrink-0 mt-0.5">
+                          <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                            {c.author?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[12px] font-semibold text-foreground">{c.author?.full_name}</span>
+                            <span className="text-[10px] text-muted-foreground">
+                              {new Date(c.created_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                              {" "}
+                              {new Date(c.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                            </span>
+                            {(c.author_id === profile?.id || profile?.role === "admin") && (
+                              <button onClick={() => handleDeleteComment(c.id)}
+                                className="p-0.5 rounded text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-all cursor-pointer bg-transparent border-none ml-auto">
+                                <Trash2 className="w-3 h-3" />
+                              </button>
+                            )}
+                          </div>
+                          <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed mt-0.5">{c.content}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Comment input */}
+                <div className="flex items-end gap-2">
+                  <textarea
+                    value={commentText}
+                    onChange={e => setCommentText(e.target.value)}
+                    onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
+                    placeholder="Escreva um comentário..."
+                    rows={2}
+                    className="flex-1 bg-secondary border border-border rounded-xl px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                  />
+                  <button onClick={handleSendComment} disabled={sendingComment || !commentText.trim()}
+                    className="p-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 shrink-0">
+                    {sendingComment ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                  </button>
+                </div>
               </div>
             )}
           </div>
