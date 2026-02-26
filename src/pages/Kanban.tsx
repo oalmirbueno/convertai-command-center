@@ -106,6 +106,9 @@ export default function Kanban() {
 
     setDraggedTask(null);
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
+    queryClient.invalidateQueries({ queryKey: ["milestones"] });
+    queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+    queryClient.invalidateQueries({ queryKey: ["projects"] });
   };
 
   const formatDate = (d: string) => {
@@ -196,6 +199,11 @@ export default function Kanban() {
                   <div>
                     <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
                     <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
+                    {task.milestone?.title && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                        {task.milestone.title}
+                      </span>
+                    )}
                   </div>
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
@@ -253,6 +261,11 @@ export default function Kanban() {
                         <div>
                           <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
                           <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
+                          {task.milestone?.title && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                              {task.milestone.title}
+                            </span>
+                          )}
                         </div>
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">

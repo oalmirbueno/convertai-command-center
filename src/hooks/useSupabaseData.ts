@@ -27,7 +27,7 @@ export function useTasks(projectId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("tasks")
-        .select("*, project:projects(name), assignee:profiles!tasks_assigned_to_fkey(full_name)")
+        .select("*, project:projects(name), assignee:profiles!tasks_assigned_to_fkey(full_name), milestone:milestones!tasks_milestone_id_fkey(id, title)")
         .order("task_order", { ascending: true });
       if (projectId) query = query.eq("project_id", projectId);
       const { data, error } = await query;
