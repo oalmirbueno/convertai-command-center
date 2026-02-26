@@ -135,6 +135,11 @@ export default function TimelinePage() {
   const [deleteMilestone, setDeleteMilestone] = useState<any>(null);
   // Delete task state
   const [deleteTask, setDeleteTask] = useState<any>(null);
+  // Add task inline state
+  const [addTaskMilestone, setAddTaskMilestone] = useState<string | null>(null);
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("medium");
+  const [savingNewTask, setSavingNewTask] = useState(false);
 
   const filteredProjects = filterProject === "all"
     ? (projects || [])
@@ -325,6 +330,29 @@ export default function TimelinePage() {
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     toast.success("Tarefa excluída!");
     setDeleteTask(null);
+  };
+
+  const handleAddTask = async (milestoneId: string, projectId: string) => {
+    if (!newTaskTitle.trim()) { toast.error("Informe o título da tarefa"); return; }
+    setSavingNewTask(true);
+    try {
+      const existingTasks = (allTasks || []).filter((t: any) => t.milestone_id === milestoneId);
+      await supabase.from("tasks").insert({
+        project_id: projectId,
+        milestone_id: milestoneId,
+        title: newTaskTitle.trim(),
+        priority: newTaskPriority,
+        status: "backlog",
+        task_order: existingTasks.length + 1,
+      });
+      queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+      queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+      toast.success("Tarefa criada!");
+      setNewTaskTitle("");
+      setNewTaskPriority("medium");
+      setAddTaskMilestone(null);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSavingNewTask(false); }
   };
 
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
@@ -621,11 +649,11 @@ export default function TimelinePage() {
                               }`}>
                                 {statusLabels[m.status]}
                               </span>
-                              {mTasks.length > 0 && (
+                              {(mTasks.length > 0 || isAdmin) && (
                                 <button
                                   onClick={() => toggleMilestoneExpand(m.id)}
                                   className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none"
-                                  title="Ver tarefas"
+                                  title={mTasks.length > 0 ? "Ver tarefas" : "Adicionar tarefas"}
                                 >
                                   <ListTodo className="w-3.5 h-3.5" />
                                 </button>
@@ -647,7 +675,7 @@ export default function TimelinePage() {
                           </div>
 
                           {/* Expanded tasks for this milestone */}
-                          {isMilestoneExpanded && mTasks.length > 0 && (
+                          {isMilestoneExpanded && (
                             <div className="border border-t-0 border-border rounded-b-xl bg-card p-3 space-y-2 animate-in slide-in-from-top-1 duration-150">
                               {mTasks.map((t: any) => (
                                 <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
@@ -663,7 +691,6 @@ export default function TimelinePage() {
                                       </span>
                                     </div>
                                   </div>
-                                  {/* Status selector */}
                                   {isAdmin ? (
                                     <select
                                       value={t.status}
@@ -700,6 +727,50 @@ export default function TimelinePage() {
                                   )}
                                 </div>
                               ))}
+
+                              {/* Add task inline */}
+                              {isAdmin && addTaskMilestone === m.id ? (
+                                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20">
+                                  <input
+                                    autoFocus
+                                    value={newTaskTitle}
+                                    onChange={(e) => setNewTaskTitle(e.target.value)}
+                                    onKeyDown={(e) => { if (e.key === "Enter") handleAddTask(m.id, project.id); if (e.key === "Escape") setAddTaskMilestone(null); }}
+                                    placeholder="Nome da tarefa..."
+                                    className="flex-1 text-[12px] bg-transparent border-none outline-none text-foreground placeholder:text-muted-foreground/60"
+                                  />
+                                  <select
+                                    value={newTaskPriority}
+                                    onChange={(e) => setNewTaskPriority(e.target.value)}
+                                    className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-0.5 text-foreground cursor-pointer"
+                                  >
+                                    <option value="low">Baixa</option>
+                                    <option value="medium">Média</option>
+                                    <option value="high">Alta</option>
+                                    <option value="urgent">Urgente</option>
+                                  </select>
+                                  <button
+                                    onClick={() => handleAddTask(m.id, project.id)}
+                                    disabled={savingNewTask}
+                                    className="p-1 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
+                                  >
+                                    {savingNewTask ? <Loader2 className="w-3 h-3 animate-spin" /> : <Check className="w-3 h-3" />}
+                                  </button>
+                                  <button
+                                    onClick={() => { setAddTaskMilestone(null); setNewTaskTitle(""); }}
+                                    className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none"
+                                  >
+                                    <X className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              ) : isAdmin ? (
+                                <button
+                                  onClick={() => { setAddTaskMilestone(m.id); setNewTaskTitle(""); setNewTaskPriority("medium"); }}
+                                  className="w-full flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] text-muted-foreground hover:text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-dashed border-border hover:border-primary/30"
+                                >
+                                  <Plus className="w-3 h-3" /> Adicionar tarefa
+                                </button>
+                              ) : null}
                             </div>
                           )}
                         </div>
