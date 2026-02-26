@@ -121,6 +121,7 @@ export default function TimelinePage() {
   const [filterProject, setFilterProject] = useState("all");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [expandedMilestones, setExpandedMilestones] = useState<string[]>([]);
+  const [showAllMilestones, setShowAllMilestones] = useState<string[]>([]);
   const [selectedMilestone, setSelectedMilestone] = useState<any>(null);
 
   // Add milestone state
@@ -448,7 +449,10 @@ export default function TimelinePage() {
         const doneTasks = projectTasks.filter((t: any) => t.status === "done").length;
         const clientProfile = (clients || []).find((c: any) => c.id === project.client_id);
         const isExpanded = expanded.includes(project.id);
-        
+        const INITIAL_MILESTONES = 4;
+        const showAll = showAllMilestones.includes(project.id);
+        const visibleMilestones = showAll ? milestones : milestones.slice(0, INITIAL_MILESTONES);
+        const hasMoreMilestones = milestones.length > INITIAL_MILESTONES;
 
         return (
           <div key={project.id} className="bg-card border border-border rounded-2xl p-6 space-y-5">
@@ -499,7 +503,7 @@ export default function TimelinePage() {
             ) : isMobile ? (
               /* Mobile vertical timeline */
               <div className="space-y-0 pl-5 border-l-2 border-border relative">
-                {milestones.map((m: any) => {
+                {visibleMilestones.map((m: any) => {
                   const mTasks = (allTasks || []).filter((t: any) => t.milestone_id === m.id);
                   const mDone = mTasks.filter((t: any) => t.status === "done").length;
                   const days = daysUntilDate(m.target_date);
@@ -543,7 +547,7 @@ export default function TimelinePage() {
               /* Desktop horizontal timeline */
               <div className="overflow-x-auto pb-2 scrollbar-hidden">
                 <div className="flex items-start min-w-max px-2 py-4">
-                  {milestones.map((m: any, i: number) => {
+                  {visibleMilestones.map((m: any, i: number) => {
                     const mTasks = (allTasks || []).filter((t: any) => t.milestone_id === m.id);
                     const mDone = mTasks.filter((t: any) => t.status === "done").length;
                     const days = daysUntilDate(m.target_date);
@@ -593,6 +597,17 @@ export default function TimelinePage() {
                   })}
                 </div>
               </div>
+            )}
+
+            {/* Show more milestones */}
+            {hasMoreMilestones && (
+              <button
+                onClick={() => setShowAllMilestones(prev => prev.includes(project.id) ? prev.filter(x => x !== project.id) : [...prev, project.id])}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-border"
+              >
+                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showAll ? "rotate-180" : ""}`} />
+                {showAll ? "Ver menos" : `Ver mais ${milestones.length - INITIAL_MILESTONES} milestones`}
+              </button>
             )}
 
             {/* Expand toggle */}
