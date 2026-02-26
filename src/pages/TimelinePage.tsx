@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import {
   Check, Plus, GitBranch, Loader2, X, Clock, Circle,
-  Calendar, Flag, ChevronDown, ChevronUp, Pencil, RefreshCw,
+  Calendar, Flag, ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Pencil, RefreshCw,
   GripVertical, AlertCircle, ListTodo, Save, Trash2, User,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -121,7 +121,7 @@ export default function TimelinePage() {
   const [filterProject, setFilterProject] = useState("all");
   const [expanded, setExpanded] = useState<string[]>([]);
   const [expandedMilestones, setExpandedMilestones] = useState<string[]>([]);
-  const [showAllMilestones, setShowAllMilestones] = useState<string[]>([]);
+  const [milestonePageIndex, setMilestonePageIndex] = useState<Record<string, number>>({});
   const [selectedMilestone, setSelectedMilestone] = useState<any>(null);
 
   // Add milestone state
@@ -450,9 +450,10 @@ export default function TimelinePage() {
         const clientProfile = (clients || []).find((c: any) => c.id === project.client_id);
         const isExpanded = expanded.includes(project.id);
         const INITIAL_MILESTONES = 4;
-        const showAll = showAllMilestones.includes(project.id);
-        const visibleMilestones = showAll ? milestones : milestones.slice(0, INITIAL_MILESTONES);
-        const hasMoreMilestones = milestones.length > INITIAL_MILESTONES;
+        const pageIdx = milestonePageIndex[project.id] || 0;
+        const visibleMilestones = milestones.slice(pageIdx, pageIdx + INITIAL_MILESTONES);
+        const canGoPrev = pageIdx > 0;
+        const canGoNext = pageIdx + INITIAL_MILESTONES < milestones.length;
 
         return (
           <div key={project.id} className="bg-card border border-border rounded-2xl p-6 space-y-5">
@@ -599,15 +600,27 @@ export default function TimelinePage() {
               </div>
             )}
 
-            {/* Show more milestones */}
-            {hasMoreMilestones && (
-              <button
-                onClick={() => setShowAllMilestones(prev => prev.includes(project.id) ? prev.filter(x => x !== project.id) : [...prev, project.id])}
-                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-xl text-[12px] font-medium text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-border"
-              >
-                <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showAll ? "rotate-180" : ""}`} />
-                {showAll ? "Ver menos" : `Ver mais ${milestones.length - INITIAL_MILESTONES} milestones`}
-              </button>
+            {/* Carousel navigation arrows */}
+            {milestones.length > INITIAL_MILESTONES && (
+              <div className="flex items-center justify-center gap-3 pt-1">
+                <button
+                  disabled={!canGoPrev}
+                  onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: Math.max(0, pageIdx - INITIAL_MILESTONES) }))}
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[11px] text-muted-foreground">
+                  {pageIdx + 1}–{Math.min(pageIdx + INITIAL_MILESTONES, milestones.length)} de {milestones.length}
+                </span>
+                <button
+                  disabled={!canGoNext}
+                  onClick={() => setMilestonePageIndex(prev => ({ ...prev, [project.id]: pageIdx + INITIAL_MILESTONES }))}
+                  className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
             )}
 
             {/* Expand toggle */}

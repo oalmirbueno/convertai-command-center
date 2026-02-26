@@ -1,9 +1,9 @@
 import { useMilestones, useTasks } from "@/hooks/useSupabaseData";
-import { Check, ChevronDown, ChevronRight } from "lucide-react";
+import { Check, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState } from "react";
 
-const INITIAL_VISIBLE = 4;
+const PAGE_SIZE = 4;
 
 const statusLabels: Record<string, string> = {
   completed: "Concluído",
@@ -37,7 +37,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
   const { data: milestones, isLoading: loadingMilestones } = useMilestones(projectId);
   const { data: tasks, isLoading: loadingTasks } = useTasks(projectId);
   const [expandedMilestone, setExpandedMilestone] = useState<string | null>(null);
-  const [showAll, setShowAll] = useState(false);
+  const [pageIndex, setPageIndex] = useState(0);
 
   const formatDate = (d: string) => {
     if (!d) return "";
@@ -67,8 +67,9 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
 
   const lastCompletedIdx = milestones.reduce((acc: number, m: any, i: number) => m.status === "completed" ? i : acc, -1);
 
-  const visibleMilestones = showAll ? milestones : milestones.slice(0, INITIAL_VISIBLE);
-  const hasMore = milestones.length > INITIAL_VISIBLE;
+  const visibleMilestones = milestones.slice(pageIndex, pageIndex + PAGE_SIZE);
+  const canGoPrev = pageIndex > 0;
+  const canGoNext = pageIndex + PAGE_SIZE < milestones.length;
   return (
     <div className="space-y-1">
       <p className="text-xs text-muted-foreground mb-4">Acompanhe o cronograma e progresso de cada etapa</p>
@@ -155,15 +156,27 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
         );
       })}
 
-      {/* Show more / show less button */}
-      {hasMore && (
-        <button
-          onClick={() => setShowAll(!showAll)}
-          className="w-full flex items-center justify-center gap-1.5 py-2.5 mt-1 rounded-xl text-[12px] font-medium text-primary hover:bg-primary/5 transition-colors cursor-pointer bg-transparent border border-border"
-        >
-          <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${showAll ? "rotate-180" : ""}`} />
-          {showAll ? "Ver menos" : `Ver mais ${milestones.length - INITIAL_VISIBLE} milestones`}
-        </button>
+      {/* Carousel navigation */}
+      {milestones.length > PAGE_SIZE && (
+        <div className="flex items-center justify-center gap-3 pt-2">
+          <button
+            disabled={!canGoPrev}
+            onClick={() => setPageIndex(Math.max(0, pageIndex - PAGE_SIZE))}
+            className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <span className="text-[11px] text-muted-foreground">
+            {pageIndex + 1}–{Math.min(pageIndex + PAGE_SIZE, milestones.length)} de {milestones.length}
+          </span>
+          <button
+            disabled={!canGoNext}
+            onClick={() => setPageIndex(pageIndex + PAGE_SIZE)}
+            className="w-8 h-8 rounded-full border border-border flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+        </div>
       )}
     </div>
   );
