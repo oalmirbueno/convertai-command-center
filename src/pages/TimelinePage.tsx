@@ -133,6 +133,8 @@ export default function TimelinePage() {
   const [dragOverId, setDragOverId] = useState<string | null>(null);
   // Delete milestone state
   const [deleteMilestone, setDeleteMilestone] = useState<any>(null);
+  // Delete task state
+  const [deleteTask, setDeleteTask] = useState<any>(null);
 
   const filteredProjects = filterProject === "all"
     ? (projects || [])
@@ -315,6 +317,14 @@ export default function TimelinePage() {
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     toast.success("Milestone excluído!");
     setDeleteMilestone(null);
+  };
+
+  const handleDeleteTask = async () => {
+    if (!deleteTask) return;
+    await supabase.from("tasks").delete().eq("id", deleteTask.id);
+    queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+    toast.success("Tarefa excluída!");
+    setDeleteTask(null);
   };
 
   const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
@@ -671,12 +681,22 @@ export default function TimelinePage() {
                                     </span>
                                   )}
                                   {isAdmin && (
-                                    <button
-                                      onClick={() => openEditTask(t)}
-                                      className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
-                                    >
-                                      <Pencil className="w-3 h-3" />
-                                    </button>
+                                    <>
+                                      <button
+                                        onClick={() => openEditTask(t)}
+                                        className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
+                                        title="Editar"
+                                      >
+                                        <Pencil className="w-3 h-3" />
+                                      </button>
+                                      <button
+                                        onClick={() => setDeleteTask(t)}
+                                        className="p-1 rounded-lg hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
+                                        title="Excluir tarefa"
+                                      >
+                                        <Trash2 className="w-3 h-3" />
+                                      </button>
+                                    </>
                                   )}
                                 </div>
                               ))}
@@ -1018,6 +1038,16 @@ export default function TimelinePage() {
         confirmLabel="Excluir Milestone"
         onConfirm={handleDeleteMilestone}
         onCancel={() => setDeleteMilestone(null)}
+      />
+
+      {/* ========== DELETE TASK CONFIRM ========== */}
+      <ConfirmModal
+        open={!!deleteTask}
+        title="Excluir Tarefa"
+        description={`Tem certeza que deseja excluir a tarefa "${deleteTask?.title}"?`}
+        confirmLabel="Excluir Tarefa"
+        onConfirm={handleDeleteTask}
+        onCancel={() => setDeleteTask(null)}
       />
     </div>
   );
