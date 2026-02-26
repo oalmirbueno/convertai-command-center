@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Skeleton } from "@/components/ui/skeleton";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
-const MAX_MILESTONES = 4;
+
 
 const statusLabels: Record<string, string> = {
   completed: "Concluído",
@@ -220,11 +220,6 @@ export default function TimelinePage() {
   };
 
   const handleOpenAddMilestone = (projectId: string) => {
-    const existing = (allMilestones || []).filter((m: any) => m.project_id === projectId);
-    if (existing.length >= MAX_MILESTONES) {
-      toast.error(`Máximo de ${MAX_MILESTONES} milestones por projeto`);
-      return;
-    }
     setAddMilestoneProject(projectId);
     setNewOrder(null);
   };
@@ -232,10 +227,6 @@ export default function TimelinePage() {
   const handleAddMilestone = async () => {
     if (!newTitle.trim() || !newDate) { toast.error("Preencha título e data"); return; }
     const existing = (allMilestones || []).filter((m: any) => m.project_id === addMilestoneProject);
-    if (existing.length >= MAX_MILESTONES) {
-      toast.error(`Máximo de ${MAX_MILESTONES} milestones atingido`);
-      return;
-    }
     setSaving(true);
     try {
       const insertOrder = newOrder !== null ? newOrder : existing.length + 1;
@@ -369,7 +360,7 @@ export default function TimelinePage() {
         const doneTasks = projectTasks.filter((t: any) => t.status === "done").length;
         const clientProfile = (clients || []).find((c: any) => c.id === project.client_id);
         const isExpanded = expanded.includes(project.id);
-        const canAddMore = milestones.length < MAX_MILESTONES;
+        
 
         return (
           <div key={project.id} className="bg-card border border-border rounded-2xl p-6 space-y-5">
@@ -387,13 +378,13 @@ export default function TimelinePage() {
                   <span className="text-[11px] text-muted-foreground">{project.progress}% concluído</span>
                   {isAdmin && (
                     <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
-                      {milestones.length}/{MAX_MILESTONES} milestones
+                      {milestones.length} milestones
                     </span>
                   )}
                 </div>
               </div>
               <div className="flex items-center gap-3 shrink-0 mt-2">
-                {isAdmin && canAddMore && (
+                {isAdmin && (
                   <button
                     onClick={() => handleOpenAddMilestone(project.id)}
                     className="text-[11px] text-primary hover:text-primary/80 cursor-pointer bg-transparent border border-primary/30 rounded-lg px-2.5 py-1 flex items-center gap-1 hover:bg-primary/5 transition-colors"
@@ -835,7 +826,7 @@ export default function TimelinePage() {
             <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4 max-h-[85vh] overflow-y-auto">
               <p className="text-base font-semibold text-foreground mb-1">Novo Milestone</p>
               <p className="text-[11px] text-muted-foreground mb-4">
-                {existingMilestones.length}/{MAX_MILESTONES} milestones utilizados
+                {existingMilestones.length} milestones existentes
               </p>
               <div className="space-y-4">
                 <div>
