@@ -1,4 +1,4 @@
-import { useState, Fragment, useRef } from "react";
+import { useState, Fragment } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import {
   Check, Plus, GitBranch, Loader2, X, Clock, Circle,
   Calendar, Flag, ChevronDown, ChevronUp, Pencil, RefreshCw,
-  GripVertical, AlertCircle,
+  GripVertical, AlertCircle, ListTodo, Save,
 } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -20,6 +20,38 @@ const statusLabels: Record<string, string> = {
   completed: "Concluído",
   in_progress: "Em andamento",
   pending: "Pendente",
+};
+
+const taskStatusLabels: Record<string, string> = {
+  backlog: "Backlog",
+  doing: "Em Andamento",
+  review: "Revisão",
+  approved: "Aprovado",
+  done: "Concluído",
+};
+
+const taskStatusDot: Record<string, string> = {
+  backlog: "bg-muted-foreground",
+  doing: "bg-blue-500",
+  review: "bg-yellow-500",
+  approved: "bg-primary",
+  done: "bg-success",
+};
+
+const taskStatusOrder = ["backlog", "doing", "review", "approved", "done"];
+
+const priorityLabels: Record<string, string> = {
+  low: "Baixa",
+  medium: "Média",
+  high: "Alta",
+  urgent: "Urgente",
+};
+
+const priorityColors: Record<string, string> = {
+  low: "text-muted-foreground",
+  medium: "text-blue-500",
+  high: "text-warning",
+  urgent: "text-destructive",
 };
 
 const typeLabels: Record<string, string> = {
@@ -70,6 +102,7 @@ export default function TimelinePage() {
 
   const [filterProject, setFilterProject] = useState("all");
   const [expanded, setExpanded] = useState<string[]>([]);
+  const [expandedMilestones, setExpandedMilestones] = useState<string[]>([]);
   const [selectedMilestone, setSelectedMilestone] = useState<any>(null);
 
   // Add milestone state
@@ -86,6 +119,13 @@ export default function TimelinePage() {
   const [editTitle, setEditTitle] = useState("");
   const [editDate, setEditDate] = useState("");
   const [editDesc, setEditDesc] = useState("");
+
+  // Edit task state
+  const [editingTask, setEditingTask] = useState<any>(null);
+  const [editTaskTitle, setEditTaskTitle] = useState("");
+  const [editTaskDesc, setEditTaskDesc] = useState("");
+  const [editTaskPriority, setEditTaskPriority] = useState("medium");
+  const [savingTask, setSavingTask] = useState(false);
 
   // Drag state
   const [dragId, setDragId] = useState<string | null>(null);
@@ -110,7 +150,10 @@ export default function TimelinePage() {
   const { data: allTasks } = useQuery({
     queryKey: ["tasks-timeline"],
     queryFn: async () => {
-      const { data } = await supabase.from("tasks").select("id, project_id, milestone_id, status");
+      const { data } = await supabase
+        .from("tasks")
+        .select("*, assignee:profiles!tasks_assigned_to_fkey(full_name)")
+        .order("task_order", { ascending: true });
       return data || [];
     },
     enabled: !!user,
@@ -118,6 +161,10 @@ export default function TimelinePage() {
 
   const toggleExpand = (id: string) => {
     setExpanded(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleMilestoneExpand = (id: string) => {
+    setExpandedMilestones(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
   const handleCycleMilestoneStatus = async (milestone: any) => {
@@ -134,8 +181,39 @@ export default function TimelinePage() {
       });
     }
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+    queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     toast.success("Status: " + statusLabels[next]);
     setSelectedMilestone(null);
+  };
+
+  const handleChangeTaskStatus = async (task: any, newStatus: string) => {
+    await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
+    queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+    queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+    toast.success(`Tarefa → ${taskStatusLabels[newStatus]}`);
+  };
+
+  const openEditTask = (t: any) => {
+    setEditingTask(t);
+    setEditTaskTitle(t.title);
+    setEditTaskDesc(t.description || "");
+    setEditTaskPriority(t.priority || "medium");
+  };
+
+  const handleSaveTask = async () => {
+    if (!editTaskTitle.trim()) return;
+    setSavingTask(true);
+    try {
+      await supabase.from("tasks").update({
+        title: editTaskTitle.trim(),
+        description: editTaskDesc.trim() || null,
+        priority: editTaskPriority,
+      }).eq("id", editingTask.id);
+      queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
+      toast.success("Tarefa atualizada!");
+      setEditingTask(null);
+    } catch (err: any) { toast.error(err.message); }
+    finally { setSavingTask(false); }
   };
 
   const handleOpenAddMilestone = (projectId: string) => {
@@ -157,10 +235,8 @@ export default function TimelinePage() {
     }
     setSaving(true);
     try {
-      // If newOrder is set, shift existing milestones
       const insertOrder = newOrder !== null ? newOrder : existing.length + 1;
       if (newOrder !== null) {
-        // Shift milestones at or after this position
         const toShift = existing.filter((m: any) => (m.milestone_order || 0) >= insertOrder);
         for (const m of toShift) {
           await supabase.from("milestones").update({ milestone_order: (m.milestone_order || 0) + 1 }).eq("id", m.id);
@@ -217,48 +293,26 @@ export default function TimelinePage() {
   };
 
   // Drag and drop handlers
-  const handleDragStart = (milestoneId: string) => {
-    setDragId(milestoneId);
-  };
-
+  const handleDragStart = (milestoneId: string) => { setDragId(milestoneId); };
   const handleDragOver = (e: React.DragEvent, milestoneId: string) => {
     e.preventDefault();
     if (milestoneId !== dragId) setDragOverId(milestoneId);
   };
-
   const handleDrop = async (e: React.DragEvent, targetMilestone: any, milestones: any[]) => {
     e.preventDefault();
-    if (!dragId || dragId === targetMilestone.id) {
-      setDragId(null);
-      setDragOverId(null);
-      return;
-    }
-
+    if (!dragId || dragId === targetMilestone.id) { setDragId(null); setDragOverId(null); return; }
     const dragIndex = milestones.findIndex((m: any) => m.id === dragId);
     const dropIndex = milestones.findIndex((m: any) => m.id === targetMilestone.id);
     if (dragIndex === -1 || dropIndex === -1) return;
-
-    // Reorder
     const reordered = [...milestones];
     const [moved] = reordered.splice(dragIndex, 1);
     reordered.splice(dropIndex, 0, moved);
-
-    // Update orders in DB
-    const updates = reordered.map((m, i) =>
-      supabase.from("milestones").update({ milestone_order: i + 1 }).eq("id", m.id)
-    );
-    await Promise.all(updates);
-
+    await Promise.all(reordered.map((m, i) => supabase.from("milestones").update({ milestone_order: i + 1 }).eq("id", m.id)));
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
     toast.success("Ordem atualizada!");
-    setDragId(null);
-    setDragOverId(null);
+    setDragId(null); setDragOverId(null);
   };
-
-  const handleDragEnd = () => {
-    setDragId(null);
-    setDragOverId(null);
-  };
+  const handleDragEnd = () => { setDragId(null); setDragOverId(null); };
 
   if (loadingProjects || loadingMilestones) {
     return (
@@ -324,8 +378,18 @@ export default function TimelinePage() {
                   )}
                 </div>
               </div>
-              <div className="w-24 h-2 rounded-full bg-secondary overflow-hidden shrink-0 mt-2">
-                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${project.progress}%` }} />
+              <div className="flex items-center gap-3 shrink-0 mt-2">
+                {isAdmin && canAddMore && (
+                  <button
+                    onClick={() => handleOpenAddMilestone(project.id)}
+                    className="text-[11px] text-primary hover:text-primary/80 cursor-pointer bg-transparent border border-primary/30 rounded-lg px-2.5 py-1 flex items-center gap-1 hover:bg-primary/5 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" /> Milestone
+                  </button>
+                )}
+                <div className="w-24 h-2 rounded-full bg-secondary overflow-hidden">
+                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${project.progress}%` }} />
+                </div>
               </div>
             </div>
 
@@ -374,21 +438,13 @@ export default function TimelinePage() {
                         </div>
                         {mTasks.length > 0 && (
                           <div className="h-1 w-20 rounded-full bg-secondary mt-1.5 overflow-hidden">
-                            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${mTasks.length > 0 ? (mDone / mTasks.length) * 100 : 0}%` }} />
+                            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
                           </div>
                         )}
                       </div>
                     </button>
                   );
                 })}
-                {isAdmin && canAddMore && (
-                  <button onClick={() => handleOpenAddMilestone(project.id)} className="relative pl-4 text-[12px] text-muted-foreground hover:text-primary cursor-pointer bg-transparent border-none p-0 flex items-center gap-1">
-                    <div className="absolute -left-[9px] w-4 h-4 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center">
-                      <Plus className="w-2.5 h-2.5" />
-                    </div>
-                    <span className="ml-4">Adicionar</span>
-                  </button>
-                )}
               </div>
             ) : (
               /* Desktop horizontal timeline */
@@ -442,20 +498,6 @@ export default function TimelinePage() {
                       </Fragment>
                     );
                   })}
-                  {isAdmin && canAddMore && (
-                    <>
-                      <div className="h-[3px] w-16 mt-[14px] bg-border rounded-full" />
-                      <div className="flex flex-col items-center gap-2">
-                        <button
-                          onClick={() => handleOpenAddMilestone(project.id)}
-                          className="w-8 h-8 rounded-full border-2 border-dashed border-muted-foreground flex items-center justify-center text-muted-foreground hover:border-primary hover:text-primary transition-colors cursor-pointer bg-transparent"
-                        >
-                          <Plus className="w-4 h-4" />
-                        </button>
-                        <p className="text-[10px] text-muted-foreground">Adicionar</p>
-                      </div>
-                    </>
-                  )}
                 </div>
               </div>
             )}
@@ -492,11 +534,11 @@ export default function TimelinePage() {
                   </div>
                 </div>
 
-                {/* Milestone detail list with drag & drop */}
+                {/* Milestone detail list with drag & drop + tasks */}
                 {milestones.length > 0 && (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Detalhes dos Milestones</p>
+                      <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Milestones e Tarefas</p>
                       {isAdmin && <p className="text-[10px] text-muted-foreground">Arraste para reordenar</p>}
                     </div>
                     {milestones.map((m: any) => {
@@ -504,71 +546,132 @@ export default function TimelinePage() {
                       const mDone = mTasks.filter((t: any) => t.status === "done").length;
                       const days = daysUntilDate(m.target_date);
                       const isDragOver = dragOverId === m.id;
+                      const isMilestoneExpanded = expandedMilestones.includes(m.id);
 
                       return (
-                        <div
-                          key={m.id}
-                          draggable={isAdmin}
-                          onDragStart={() => handleDragStart(m.id)}
-                          onDragOver={(e) => handleDragOver(e, m.id)}
-                          onDrop={(e) => handleDrop(e, m, milestones)}
-                          onDragEnd={handleDragEnd}
-                          className={`flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all ${
-                            isAdmin ? "cursor-grab active:cursor-grabbing" : ""
-                          } ${isDragOver ? "ring-2 ring-primary/50 bg-primary/5" : ""} ${dragId === m.id ? "opacity-50" : ""}`}
-                        >
-                          {isAdmin && (
-                            <div className="shrink-0 mt-1 text-muted-foreground/50">
-                              <GripVertical className="w-4 h-4" />
-                            </div>
-                          )}
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
-                            m.status === "completed" ? "bg-success text-white" :
-                            m.status === "in_progress" ? "border-2 border-primary" : "bg-secondary"
-                          }`}>
-                            {m.status === "completed" && <Check className="w-3 h-3" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium text-foreground">{m.title}</p>
-                            <div className="flex items-center gap-3 mt-0.5">
-                              <p className="text-[11px] text-muted-foreground">
-                                {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
-                              </p>
-                              {mTasks.length > 0 && (
-                                <span className="text-[10px] text-muted-foreground">{mDone}/{mTasks.length} tarefas</span>
-                              )}
-                              {m.status !== "completed" && days < 0 && (
-                                <span className="text-[10px] text-destructive flex items-center gap-0.5">
-                                  <AlertCircle className="w-3 h-3" /> {Math.abs(days)}d atrasado
-                                </span>
-                              )}
-                              {m.status !== "completed" && days > 0 && days <= 3 && (
-                                <span className="text-[10px] text-warning flex items-center gap-0.5">
-                                  <Clock className="w-3 h-3" /> {days}d restantes
-                                </span>
-                              )}
-                            </div>
-                            {m.description && <p className="text-[12px] text-muted-foreground mt-1">{m.description}</p>}
-                            {mTasks.length > 0 && (
-                              <div className="h-1.5 w-full max-w-[180px] rounded-full bg-secondary mt-2 overflow-hidden">
-                                <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
+                        <div key={m.id} className="space-y-0">
+                          <div
+                            draggable={isAdmin}
+                            onDragStart={() => handleDragStart(m.id)}
+                            onDragOver={(e) => handleDragOver(e, m.id)}
+                            onDrop={(e) => handleDrop(e, m, milestones)}
+                            onDragEnd={handleDragEnd}
+                            className={`flex items-start gap-3 p-3 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-all ${
+                              isAdmin ? "cursor-grab active:cursor-grabbing" : ""
+                            } ${isDragOver ? "ring-2 ring-primary/50 bg-primary/5" : ""} ${dragId === m.id ? "opacity-50" : ""}
+                            ${isMilestoneExpanded ? "rounded-b-none" : ""}`}
+                          >
+                            {isAdmin && (
+                              <div className="shrink-0 mt-1 text-muted-foreground/50">
+                                <GripVertical className="w-4 h-4" />
                               </div>
                             )}
+                            <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                              m.status === "completed" ? "bg-success text-white" :
+                              m.status === "in_progress" ? "border-2 border-primary" : "bg-secondary"
+                            }`}>
+                              {m.status === "completed" && <Check className="w-3 h-3" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] font-medium text-foreground">{m.title}</p>
+                              <div className="flex items-center gap-3 mt-0.5 flex-wrap">
+                                <p className="text-[11px] text-muted-foreground">
+                                  {new Date(m.target_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" })}
+                                </p>
+                                {mTasks.length > 0 && (
+                                  <span className="text-[10px] text-muted-foreground">{mDone}/{mTasks.length} tarefas</span>
+                                )}
+                                {m.status !== "completed" && days < 0 && (
+                                  <span className="text-[10px] text-destructive flex items-center gap-0.5">
+                                    <AlertCircle className="w-3 h-3" /> {Math.abs(days)}d atrasado
+                                  </span>
+                                )}
+                                {m.status !== "completed" && days > 0 && days <= 3 && (
+                                  <span className="text-[10px] text-warning flex items-center gap-0.5">
+                                    <Clock className="w-3 h-3" /> {days}d restantes
+                                  </span>
+                                )}
+                              </div>
+                              {m.description && <p className="text-[12px] text-muted-foreground mt-1">{m.description}</p>}
+                              {mTasks.length > 0 && (
+                                <div className="h-1.5 w-full max-w-[180px] rounded-full bg-secondary mt-2 overflow-hidden">
+                                  <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full ${
+                                m.status === "completed" ? "bg-success/10 text-success" :
+                                m.status === "in_progress" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
+                              }`}>
+                                {statusLabels[m.status]}
+                              </span>
+                              {mTasks.length > 0 && (
+                                <button
+                                  onClick={() => toggleMilestoneExpand(m.id)}
+                                  className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none"
+                                  title="Ver tarefas"
+                                >
+                                  <ListTodo className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => openEdit(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
+                                    <Pencil className="w-3.5 h-3.5" />
+                                  </button>
+                                  <button onClick={() => handleCycleMilestoneStatus(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none" title="Alterar status">
+                                    <RefreshCw className="w-3.5 h-3.5" />
+                                  </button>
+                                </>
+                              )}
+                            </div>
                           </div>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${
-                            m.status === "completed" ? "bg-success/10 text-success" :
-                            m.status === "in_progress" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
-                          }`}>
-                            {statusLabels[m.status]}
-                          </span>
-                          {isAdmin && (
-                            <div className="flex gap-1 shrink-0">
-                              <button onClick={() => openEdit(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-                                <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button onClick={() => handleCycleMilestoneStatus(m)} className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none" title="Alterar status">
-                                <RefreshCw className="w-3.5 h-3.5" />
-                              </button>
+
+                          {/* Expanded tasks for this milestone */}
+                          {isMilestoneExpanded && mTasks.length > 0 && (
+                            <div className="border border-t-0 border-border rounded-b-xl bg-card p-3 space-y-2 animate-in slide-in-from-top-1 duration-150">
+                              {mTasks.map((t: any) => (
+                                <div key={t.id} className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors group">
+                                  <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${taskStatusDot[t.status] || "bg-muted-foreground"}`} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-[12px] text-foreground truncate">{t.title}</p>
+                                    <div className="flex items-center gap-2 mt-0.5">
+                                      {t.assignee?.full_name && (
+                                        <span className="text-[10px] text-muted-foreground">{t.assignee.full_name}</span>
+                                      )}
+                                      <span className={`text-[10px] ${priorityColors[t.priority] || "text-muted-foreground"}`}>
+                                        {priorityLabels[t.priority] || t.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {/* Status selector */}
+                                  {isAdmin ? (
+                                    <select
+                                      value={t.status}
+                                      onChange={(e) => handleChangeTaskStatus(t, e.target.value)}
+                                      className="text-[10px] bg-secondary border border-border rounded-lg px-2 py-1 text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      {taskStatusOrder.map(s => (
+                                        <option key={s} value={s}>{taskStatusLabels[s]}</option>
+                                      ))}
+                                    </select>
+                                  ) : (
+                                    <span className="text-[10px] text-muted-foreground shrink-0">
+                                      {taskStatusLabels[t.status] || t.status}
+                                    </span>
+                                  )}
+                                  {isAdmin && (
+                                    <button
+                                      onClick={() => openEditTask(t)}
+                                      className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none opacity-0 group-hover:opacity-100"
+                                    >
+                                      <Pencil className="w-3 h-3" />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
                             </div>
                           )}
                         </div>
@@ -587,7 +690,7 @@ export default function TimelinePage() {
 
                 {/* Links */}
                 <div className="flex gap-3 pt-1">
-                  <button onClick={() => navigate("/kanban")} className="text-[12px] text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
+                  <button onClick={() => navigate(`/kanban?project=${project.id}`)} className="text-[12px] text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
                     Ver tarefas no Kanban →
                   </button>
                   <button onClick={() => navigate("/relatorios")} className="text-[12px] text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
@@ -609,7 +712,7 @@ export default function TimelinePage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedMilestone(null)} />
-            <div className="relative bg-card border border-border rounded-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200 mx-4">
+            <div className="relative bg-card border border-border rounded-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200 mx-4 max-h-[85vh] overflow-y-auto">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${
                 selectedMilestone.status === "completed" ? "bg-success text-white" :
                 selectedMilestone.status === "in_progress" ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
@@ -644,15 +747,36 @@ export default function TimelinePage() {
                     <p className="text-[13px] text-muted-foreground mt-1">{selectedMilestone.description}</p>
                   </div>
                 )}
-                {/* Tasks progress in modal */}
+                {/* Tasks list in modal */}
                 {mTasks.length > 0 && (
-                  <div className="bg-secondary/30 rounded-xl p-3 space-y-2">
+                  <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <p className="text-[11px] text-muted-foreground">Tarefas</p>
-                      <p className="text-[11px] font-medium text-foreground">{mDone}/{mTasks.length} concluídas</p>
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Tarefas</p>
+                      <p className="text-[11px] font-medium text-foreground">{mDone}/{mTasks.length}</p>
                     </div>
                     <div className="h-2 w-full rounded-full bg-secondary overflow-hidden">
                       <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${(mDone / mTasks.length) * 100}%` }} />
+                    </div>
+                    <div className="space-y-1.5 mt-2">
+                      {mTasks.map((t: any) => (
+                        <div key={t.id} className="flex items-center gap-2 px-2.5 py-2 rounded-lg bg-secondary/30">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${taskStatusDot[t.status] || "bg-muted-foreground"}`} />
+                          <p className="text-[11px] text-foreground flex-1 min-w-0 truncate">{t.title}</p>
+                          {isAdmin ? (
+                            <select
+                              value={t.status}
+                              onChange={(e) => handleChangeTaskStatus(t, e.target.value)}
+                              className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-0.5 text-foreground focus:outline-none cursor-pointer"
+                            >
+                              {taskStatusOrder.map(s => (
+                                <option key={s} value={s}>{taskStatusLabels[s]}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <span className="text-[10px] text-muted-foreground shrink-0">{taskStatusLabels[t.status]}</span>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -691,7 +815,7 @@ export default function TimelinePage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAddMilestoneProject(null)} />
-            <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4">
+            <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4 max-h-[85vh] overflow-y-auto">
               <p className="text-base font-semibold text-foreground mb-1">Novo Milestone</p>
               <p className="text-[11px] text-muted-foreground mb-4">
                 {existingMilestones.length}/{MAX_MILESTONES} milestones utilizados
@@ -709,34 +833,36 @@ export default function TimelinePage() {
                     className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50" />
                 </div>
                 {/* Position selector */}
-                <div>
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Posição na Timeline</label>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      onClick={() => setNewOrder(null)}
-                      className={`px-3 py-1.5 rounded-lg text-[12px] cursor-pointer border transition-colors ${
-                        newOrder === null
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-transparent border-border text-muted-foreground hover:text-foreground"
-                      }`}
-                    >
-                      No final
-                    </button>
-                    {existingMilestones.map((m: any, i: number) => (
+                {existingMilestones.length > 0 && (
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Posição na Timeline</label>
+                    <div className="flex flex-wrap gap-2">
                       <button
-                        key={m.id}
-                        onClick={() => setNewOrder(m.milestone_order || i + 1)}
+                        onClick={() => setNewOrder(null)}
                         className={`px-3 py-1.5 rounded-lg text-[12px] cursor-pointer border transition-colors ${
-                          newOrder === (m.milestone_order || i + 1)
+                          newOrder === null
                             ? "bg-primary text-primary-foreground border-primary"
                             : "bg-transparent border-border text-muted-foreground hover:text-foreground"
                         }`}
                       >
-                        Antes de "{m.title}"
+                        No final
                       </button>
-                    ))}
+                      {existingMilestones.map((m: any, i: number) => (
+                        <button
+                          key={m.id}
+                          onClick={() => setNewOrder(m.milestone_order || i + 1)}
+                          className={`px-3 py-1.5 rounded-lg text-[12px] cursor-pointer border transition-colors ${
+                            newOrder === (m.milestone_order || i + 1)
+                              ? "bg-primary text-primary-foreground border-primary"
+                              : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          Antes de "{m.title}"
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
                 <div>
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-1">Descrição (opcional)</label>
                   <textarea value={newDesc} onChange={e => setNewDesc(e.target.value)} rows={3}
@@ -805,6 +931,71 @@ export default function TimelinePage() {
               <button onClick={handleSaveEdit} disabled={saving || !editTitle || !editDate}
                 className="flex-1 py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
                 {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Salvar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========== EDIT TASK MODAL ========== */}
+      {editingTask && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingTask(null)} />
+          <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4">
+            <p className="text-base font-semibold text-foreground mb-4">Editar Tarefa</p>
+            <div className="space-y-4">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-1">Título</label>
+                <input value={editTaskTitle} onChange={e => setEditTaskTitle(e.target.value)}
+                  className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50"
+                  placeholder="Título da tarefa" />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-1">Descrição</label>
+                <textarea value={editTaskDesc} onChange={e => setEditTaskDesc(e.target.value)} rows={3}
+                  className="w-full bg-secondary border border-border rounded-xl px-4 py-3 text-sm text-foreground focus:outline-none focus:border-primary/50 resize-none"
+                  placeholder="Detalhes da tarefa..." />
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Prioridade</label>
+                <div className="flex gap-2 flex-wrap">
+                  {(["low", "medium", "high", "urgent"] as const).map(p => (
+                    <button key={p} onClick={() => setEditTaskPriority(p)}
+                      className={`px-3 py-1.5 rounded-lg text-[12px] cursor-pointer border transition-colors ${
+                        editTaskPriority === p
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+                      }`}>
+                      {priorityLabels[p]}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Status</label>
+                <select
+                  value={editingTask.status}
+                  onChange={(e) => {
+                    handleChangeTaskStatus(editingTask, e.target.value);
+                    setEditingTask({ ...editingTask, status: e.target.value });
+                  }}
+                  className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                >
+                  {taskStatusOrder.map(s => (
+                    <option key={s} value={s}>{taskStatusLabels[s]}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-6">
+              <button onClick={() => setEditingTask(null)}
+                className="flex-1 py-2.5 rounded-xl text-[13px] text-muted-foreground border border-border hover:text-foreground transition-colors cursor-pointer bg-transparent">
+                Cancelar
+              </button>
+              <button onClick={handleSaveTask} disabled={savingTask || !editTaskTitle}
+                className="flex-1 py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2">
+                {savingTask ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                {savingTask ? "Salvando..." : "Salvar"}
               </button>
             </div>
           </div>
