@@ -1,6 +1,7 @@
-import { useState } from "react";
-import { X, Loader2, Sparkles } from "lucide-react";
+import { useState, useRef } from "react";
+import { X, Loader2, Sparkles, Upload, FileText, Trash2 } from "lucide-react";
 import { useClients } from "@/hooks/useSupabaseData";
+import { supabase } from "@/integrations/supabase/client";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { toast } from "sonner";
 
@@ -14,6 +15,16 @@ const PROJECT_TYPES = [
   "Outro",
 ];
 
+const ACCEPTED_TYPES = [
+  "application/pdf",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "text/plain",
+  "text/markdown",
+];
+
+const ACCEPTED_EXTENSIONS = ".pdf,.doc,.docx,.txt,.md";
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -24,36 +35,87 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
   const [clientId, setClientId] = useState("");
   const [projectType, setProjectType] = useState("");
   const [meetingNotes, setMeetingNotes] = useState("");
+  const [files, setFiles] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   if (!open) return null;
 
+  const handleFilesSelected = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selected = Array.from(e.target.files || []);
+    const valid = selected.filter(
+      (f) => ACCEPTED_TYPES.includes(f.type) || f.name.endsWith(".md")
+    );
+    if (valid.length < selected.length) {
+      toast.error("Apenas PDF, DOC, DOCX, TXT e MD são aceitos");
+    }
+    setFiles((prev) => [...prev, ...valid]);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (index: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const uploadFiles = async (): Promise<string[]> => {
+    const urls: string[] = [];
+    for (const file of files) {
+      const path = `estrategicos/${Date.now()}_${file.name}`;
+      const { error } = await supabase.storage.from("files").upload(path, file);
+      if (error) {
+        console.error("Upload error:", error);
+        continue;
+      }
+      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+      urls.push(urlData.publicUrl);
+    }
+    return urls;
+  };
+
   const handleGenerate = async () => {
-    if (!clientId || !projectType || !meetingNotes.trim()) {
-      toast.error("Preencha todos os campos obrigatórios");
+    if (!clientId || !projectType || (!meetingNotes.trim() && files.length === 0)) {
+      toast.error("Preencha o cliente, tipo e cole anotações ou envie documentos");
       return;
     }
     setLoading(true);
 
-    fireWebhook(webhooks.meetingToPlan, {
-      client_id: clientId,
-      project_type: projectType,
-      meeting_notes: meetingNotes.trim(),
-    });
+    try {
+      let fileUrls: string[] = [];
+      if (files.length > 0) {
+        fileUrls = await uploadFiles();
+      }
 
-    setTimeout(() => {
+      fireWebhook(webhooks.meetingToPlan, {
+        client_id: clientId,
+        project_type: projectType,
+        meeting_notes: meetingNotes.trim(),
+        file_urls: fileUrls,
+      });
+
+      setTimeout(() => {
+        setLoading(false);
+        toast.success("Plano sendo gerado pela IA. Você será notificado quando estiver pronto!");
+        handleClose();
+      }, 2000);
+    } catch (err) {
       setLoading(false);
-      toast.success("Plano sendo gerado pela IA. Você será notificado quando estiver pronto!");
-      handleClose();
-    }, 2000);
+      toast.error("Erro ao enviar documentos");
+    }
   };
 
   const handleClose = () => {
     setClientId("");
     setProjectType("");
     setMeetingNotes("");
+    setFiles([]);
     setLoading(false);
     onClose();
+  };
+
+  const formatFileSize = (bytes: number) => {
+    if (bytes < 1024) return `${bytes}B`;
+    if (bytes < 1048576) return `${(bytes / 1024).toFixed(0)}KB`;
+    return `${(bytes / 1048576).toFixed(1)}MB`;
   };
 
   return (
@@ -67,7 +129,7 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
           <div>
             <h2 className="text-sm font-semibold text-foreground">Gerar Projeto com IA</h2>
             <p className="text-[11px] text-muted-foreground mt-0.5">
-              Cole suas anotações de reunião e a IA cria o projeto completo.
+              Cole anotações ou envie documentos e a IA cria o projeto completo.
             </p>
           </div>
           <button
@@ -111,16 +173,60 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
             </select>
           </div>
 
+          {/* File upload */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Documentos</label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={ACCEPTED_EXTENSIONS}
+              multiple
+              onChange={handleFilesSelected}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="w-full flex items-center justify-center gap-2 bg-secondary border border-dashed border-border rounded-[10px] px-3.5 py-3 text-sm text-muted-foreground hover:text-foreground hover:border-primary/50 transition-colors cursor-pointer"
+            >
+              <Upload className="w-4 h-4" />
+              Enviar PDF, DOC, TXT ou MD
+            </button>
+
+            {files.length > 0 && (
+              <div className="space-y-1.5 mt-2">
+                {files.map((f, i) => (
+                  <div
+                    key={i}
+                    className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg px-3 py-2"
+                  >
+                    <FileText className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{formatFileSize(f.size)}</span>
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-0.5"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {/* Meeting notes textarea */}
           <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Anotações da reunião *</label>
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              Anotações da reunião {files.length === 0 ? "*" : "(opcional)"}
+            </label>
             <div className="relative">
               <textarea
                 value={meetingNotes}
                 onChange={(e) => setMeetingNotes(e.target.value)}
                 placeholder="Cole aqui as anotações, transcrição ou resumo da reunião com o cliente..."
-                rows={8}
-                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none min-h-[200px]"
+                rows={6}
+                className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none min-h-[150px]"
               />
               <span className="absolute bottom-2 right-3 text-[10px] text-muted-foreground/50">
                 {meetingNotes.length} caracteres
@@ -145,7 +251,7 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
             {loading ? (
               <>
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                IA analisando...
+                {files.length > 0 ? "Enviando..." : "IA analisando..."}
               </>
             ) : (
               <>
