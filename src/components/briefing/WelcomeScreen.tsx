@@ -4,6 +4,7 @@ import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 interface Props {
   onStart: () => void;
+  hasRestoredProgress?: boolean;
 }
 
 const steps = [
@@ -12,7 +13,7 @@ const steps = [
   { icon: Rocket, title: "Proposta", desc: "Em até 48h você recebe um plano personalizado com orçamento." },
 ];
 
-export default function WelcomeScreen({ onStart }: Props) {
+export default function WelcomeScreen({ onStart, hasRestoredProgress }: Props) {
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12" style={{ background: "#0D0D0D" }}>
       <div className="tech-grid-bg" />
@@ -77,13 +78,22 @@ export default function WelcomeScreen({ onStart }: Props) {
           <span className="flex items-center gap-1.5"><BarChart3 className="w-3.5 h-3.5 text-primary" /> 100% personalizado</span>
         </div>
 
+        {hasRestoredProgress && (
+          <div
+            className="mb-4 py-3 px-4 rounded-xl border border-primary/20 bg-primary/5 text-center text-sm text-primary"
+            style={{ animation: "fadeIn 0.5s ease-out 1s both" }}
+          >
+            Você tem um progresso salvo. Clique abaixo para continuar de onde parou.
+          </div>
+        )}
+
         {/* CTA */}
         <button
           onClick={onStart}
           className="w-full py-[18px] rounded-xl text-base font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all cursor-pointer border-none login-btn btn-interactive"
           style={{ animation: "fadeIn 0.5s ease-out 1.1s both" }}
         >
-          Iniciar Diagnóstico →
+          {hasRestoredProgress ? "Continuar Diagnóstico →" : "Iniciar Diagnóstico →"}
         </button>
 
         <p className="text-center text-[13px] text-muted-foreground/50 mt-5" style={{ animation: "fadeIn 0.5s ease-out 1.3s both" }}>
