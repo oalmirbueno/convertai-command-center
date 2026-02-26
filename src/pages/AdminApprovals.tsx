@@ -137,15 +137,15 @@ export default function AdminApprovals() {
       ) : filtered.length === 0 ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhuma aprovação encontrada</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start stagger-children">
           {filtered.map((f: any) => {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
+              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors flex flex-col"
                 onClick={() => setPreviewFile(f)}>
                 {/* Preview */}
-                <div className="h-32 bg-secondary flex items-center justify-center">
+                <div className="h-32 bg-secondary flex items-center justify-center shrink-0">
                   {isImage(f.file_name) ? (
                     <img src={f.file_url} alt={f.file_name} className="w-full h-full object-cover" />
                   ) : (
@@ -153,28 +153,28 @@ export default function AdminApprovals() {
                   )}
                 </div>
 
-                <div className="p-4 space-y-2">
+                <div className="p-4 space-y-2 flex-1 flex flex-col">
                   <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
-                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                    <span>{f.project?.name || "—"}</span>
+                  <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+                    <span className="truncate max-w-[120px]">{f.project?.name || "—"}</span>
                     <span>•</span>
-                    <span>{f.client?.company_name || f.client?.full_name || "—"}</span>
+                    <span className="truncate max-w-[120px]">{f.client?.company_name || f.client?.full_name || "—"}</span>
                   </div>
                   <p className="text-[11px] font-mono text-muted-foreground">{formatDate(f.created_at)}</p>
 
-                  <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border ${badge.cls}`}>
+                  <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border self-start ${badge.cls}`}>
                     {badge.label}
                   </span>
 
                   {f.approval_status === "rejected" && f.feedback && (
-                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mt-2">
+                    <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mt-auto">
                       <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
-                      <p className="text-xs text-foreground">{f.feedback}</p>
+                      <p className="text-xs text-foreground line-clamp-3">{f.feedback}</p>
                     </div>
                   )}
 
                   {f.approval_status === "rejected" && (
-                    <div className="flex gap-2 pt-1">
+                    <div className="flex gap-2 pt-1 flex-wrap">
                       <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1"
                         onClick={(e) => { e.stopPropagation(); handleResend(f.id); }}>
                         <RefreshCw className="w-3 h-3" /> Reenviar
