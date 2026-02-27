@@ -44,6 +44,13 @@ export default function TabKanban({ projectId }: { projectId: string }) {
     );
   }
 
+  const sortedTasks = (tasks || []).slice().sort((a: any, b: any) => {
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+  });
+
   const renderCard = (task: any) => (
     <div
       key={task.id}
@@ -79,14 +86,14 @@ export default function TabKanban({ projectId }: { projectId: string }) {
     <div>
       <p className="text-xs text-muted-foreground mb-4">Acompanhe o andamento das tarefas do seu projeto</p>
       
-      {!tasks?.length ? (
+      {!sortedTasks?.length ? (
         <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma tarefa encontrada.</p>
       ) : isMobile ? (
         /* Mobile: tabs */
         <div>
           <div className="flex overflow-x-auto border-b border-border mb-4 scrollbar-hidden -mx-4 px-4">
             {columns.map(col => {
-              const count = tasks.filter((t: any) => t.status === col.id).length;
+              const count = sortedTasks.filter((t: any) => t.status === col.id).length;
               if (count === 0 && col.id !== "backlog" && col.id !== "doing") return null;
               return (
                 <button
@@ -104,8 +111,8 @@ export default function TabKanban({ projectId }: { projectId: string }) {
             })}
           </div>
           <div className="space-y-2">
-            {tasks.filter((t: any) => t.status === mobileTab).map(renderCard)}
-            {tasks.filter((t: any) => t.status === mobileTab).length === 0 && (
+            {sortedTasks.filter((t: any) => t.status === mobileTab).map(renderCard)}
+            {sortedTasks.filter((t: any) => t.status === mobileTab).length === 0 && (
               <p className="text-sm text-muted-foreground py-6 text-center">Nenhuma tarefa.</p>
             )}
           </div>
@@ -114,7 +121,7 @@ export default function TabKanban({ projectId }: { projectId: string }) {
         /* Desktop: columns */
         <div className="flex gap-5 overflow-x-auto pb-4">
           {columns.map(col => {
-            const colTasks = tasks.filter((t: any) => t.status === col.id);
+            const colTasks = sortedTasks.filter((t: any) => t.status === col.id);
             if (colTasks.length === 0 && col.id !== "backlog" && col.id !== "doing") return null;
             return (
               <div key={col.id} className="min-w-[260px] max-w-[280px] flex-shrink-0 space-y-2.5">
