@@ -93,6 +93,11 @@ export default function Kanban() {
     }
     if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
+  }).sort((a: any, b: any) => {
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
   });
 
   const handleDragStart = (taskId: string) => {
