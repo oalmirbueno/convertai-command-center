@@ -5,7 +5,7 @@ export const webhooks = {
   processDiagnostic: `${WEBHOOK_BASE}/process-diagnostic`,
   meetingToPlan:     `${WEBHOOK_BASE}/meeting-to-plan`,
   creativeApproval:  `${WEBHOOK_BASE}/creative-approval`,
-  clientRequest:     `${WEBHOOK_BASE}/client-request`,
+  clientRequest:     `${WEBHOOK_BASE}/client-request-v2`,
   adsRecharge:       `${WEBHOOK_BASE}/ads-recharge`,
 };
 
