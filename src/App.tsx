@@ -28,6 +28,7 @@ import AdminReportCreate from "@/pages/AdminReportCreate";
 import ReportDetail from "@/pages/ReportDetail";
 import ProfilePage from "@/pages/ProfilePage";
 import SettingsPage from "@/pages/SettingsPage";
+import AdminViewAsClient from "@/pages/AdminViewAsClient";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -74,6 +75,7 @@ function AppRoutes() {
       <Route path="/relatorios/novo" element={<ProtectedRoute><AppLayout><AdminReportCreate /></AppLayout></ProtectedRoute>} />
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout><TimelinePage /></AppLayout></ProtectedRoute>} />
+      <Route path="/ver-como-cliente" element={<ProtectedRoute><AppLayout><AdminViewAsClient /></AppLayout></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
