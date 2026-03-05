@@ -263,9 +263,16 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Valor Total</p>
             <p className="text-xl font-semibold text-foreground">{formatCurrency(payment.total_value)}</p>
           </div>
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Pago</p>
-            <p className="text-xl font-semibold text-success">{formatCurrency(paidTotal)}</p>
+          <div className="flex items-center gap-3">
+            <div className="text-right">
+              <p className="text-xs text-muted-foreground uppercase tracking-wider">Pago</p>
+              <p className="text-xl font-semibold text-success">{formatCurrency(paidTotal)}</p>
+            </div>
+            {isAdmin && (
+              <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={openEditDialog}>
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </Button>
+            )}
           </div>
         </div>
         <div>
@@ -281,6 +288,8 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           <span>Entrada: {payment.entry_percentage}% ({formatCurrency(payment.entry_amount)})</span>
           <span>•</span>
           <span>{payment.installments_count}x restante</span>
+          <span>•</span>
+          <span className="text-foreground font-medium">Falta: {formatCurrency(payment.total_value - paidTotal)}</span>
         </div>
         {payment.notes && <p className="text-xs text-muted-foreground italic">{payment.notes}</p>}
       </div>
