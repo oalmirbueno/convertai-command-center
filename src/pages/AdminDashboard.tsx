@@ -51,6 +51,17 @@ export default function AdminDashboard() {
   const { data: clients } = useClients();
   const { data: billing } = useBilling();
   const { data: wallets } = useAdsWallet();
+  const { data: projectPayments } = useQuery({
+    queryKey: ["all-project-payments"],
+    queryFn: async () => {
+      const { data: payments, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), client:profiles!project_payments_client_id_fkey(full_name, company_name), installments:payment_installments(*)");
+      if (error) throw error;
+      return payments || [];
+    },
+    enabled: isAdmin,
+  });
   const isTeam = ["design", "traffic", "manager"].includes(profile?.role || "");
   const [hoveredProject, setHoveredProject] = useState<string | null>(null);
   const [menuProject, setMenuProject] = useState<string | null>(null);
