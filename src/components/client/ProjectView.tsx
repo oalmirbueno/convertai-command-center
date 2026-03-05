@@ -17,6 +17,8 @@ const statusLabels: Record<string, string> = {
   paused: "Pausado",
 };
 
+const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "other"];
+
 const typeLabels: Record<string, string> = {
   social_media: "Social Media",
   traffic: "Tráfego",
@@ -72,18 +74,19 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="w-full">
-        <TabsList className="bg-transparent h-auto p-0 gap-8 border-b border-border rounded-none w-full justify-start">
+        <TabsList className="bg-transparent h-auto p-0 gap-8 border-b border-border rounded-none w-full justify-start overflow-x-auto">
           {[
             { value: "overview", label: "Visão Geral" },
             { value: "kanban", label: "Kanban" },
             { value: "timeline", label: "Timeline" },
             { value: "deliveries", label: "Entregas" },
+            ...(NON_RECURRING_TYPES.includes(project.project_type) ? [{ value: "payments", label: "Pagamentos" }] : []),
             { value: "updates", label: "Atualizações" },
           ].map(tab => (
             <TabsTrigger
               key={tab.value}
               value={tab.value}
-              className="bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none text-muted-foreground text-[13px] font-normal px-0 pb-3 pt-0 hover:text-foreground/70 transition-colors"
+              className="bg-transparent rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:text-foreground data-[state=active]:bg-transparent data-[state=active]:shadow-none text-muted-foreground text-[13px] font-normal px-0 pb-3 pt-0 hover:text-foreground/70 transition-colors whitespace-nowrap"
             >
               {tab.label}
             </TabsTrigger>
