@@ -191,7 +191,62 @@ export default function AdminDashboard() {
       </div>
       )}
 
-      {/* Ads Wallet Summary - team members */}
+      {/* Individual Project Payments - admin only */}
+      {isAdmin && (projectPayments || []).length > 0 && (
+        <div>
+          <p className="label-sm mb-3 flex items-center gap-2">
+            <Briefcase className="w-3.5 h-3.5 text-primary" />
+            Projetos Individuais
+          </p>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children mb-4">
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm">Total Contratado</p>
+              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualTotal)}</p>
+              <div className="h-0.5 w-8 bg-primary rounded-full mt-3 opacity-60" />
+            </div>
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm">Recebido</p>
+              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPaid)}</p>
+              <div className="h-0.5 w-8 bg-success rounded-full mt-3 opacity-60" />
+            </div>
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm">Pendente</p>
+              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualPending)}</p>
+              <div className="h-0.5 w-8 bg-warning rounded-full mt-3 opacity-60" />
+            </div>
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm">Atrasado</p>
+              <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{fmt(individualOverdue)}</p>
+              <div className="h-0.5 w-8 bg-destructive rounded-full mt-3 opacity-60" />
+            </div>
+          </div>
+          <div className="space-y-1">
+            {(projectPayments || []).map((pp: any) => {
+              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+              return (
+                <div key={pp.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
+                    <p className="text-[11px] text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
+                  </div>
+                  <div className="w-24 hidden sm:block">
+                    <Progress value={pct} className="h-1.5" />
+                    <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
+                  </div>
+                  <div className="text-right hidden md:block">
+                    <p className="text-xs font-mono text-success">{fmt(paid)}</p>
+                    <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                  </div>
+                  {hasOverdue && <AlertTriangle className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {(isAdmin || isTeam) && (wallets || []).length > 0 && (
         <div>
           <p className="label-sm mb-3 flex items-center gap-2">
