@@ -356,6 +356,54 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </div>
             )}
 
+            {/* Pagamentos de projetos não recorrentes */}
+            {isAdmin && hasNonRecurringServices && nonRecurringProjects && nonRecurringProjects.length > 0 && (
+              <div className="pt-2">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">
+                  <DollarSign className="w-3 h-3 inline mr-1" />Pagamentos de Projetos
+                </label>
+                <div className="space-y-2">
+                  {nonRecurringProjects.map((proj: any) => {
+                    const pay = proj.payment;
+                    if (!pay) {
+                      return (
+                        <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border text-[13px]">
+                          <p className="font-medium text-foreground">{proj.name}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Sem plano de pagamento — configure na aba Pagamentos do projeto</p>
+                        </div>
+                      );
+                    }
+                    const installments = pay.installments || [];
+                    const paidTotal = installments.filter((i: any) => i.status === "paid").reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+                    const remaining = pay.total_value - paidTotal;
+                    const paidCount = installments.filter((i: any) => i.status === "paid").length;
+                    const totalCount = installments.length;
+                    const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
+
+                    return (
+                      <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
+                          {hasOverdue && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Atrasado</span>}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span>Total: <strong className="text-foreground">R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></span>
+                          <span>•</span>
+                          <span className="text-success">Pago: R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <span>•</span>
+                          <span className={remaining > 0 ? "text-warning" : "text-success"}>Falta: R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{paidCount}/{totalCount} parcelas pagas • Entrada: {pay.entry_percentage}%</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {client.projectCount !== undefined && (
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Projetos</label>
