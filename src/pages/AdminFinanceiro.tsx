@@ -317,9 +317,9 @@ export default function AdminFinanceiro() {
         <div className="grid grid-cols-2 gap-3">
           {[
            { label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)}`, icon: TrendingUp, color: "text-success" },
-            { label: "A Receber", value: fmt(pendingTotal), icon: CreditCard, color: "text-warning" },
-            { label: "Total Recebido", value: fmt(receivedTotal), icon: CheckCircle2, color: "text-info" },
-            { label: "Atrasado", value: fmt(overdueTotal), icon: CreditCard, color: "text-destructive" },
+            { label: "A Receber", value: fmt(pendingTotal + indivPending), sub: `Mensal ${fmt(pendingTotal)} + Individual ${fmt(indivPending)}`, icon: CreditCard, color: "text-warning" },
+            { label: "Total Recebido", value: fmt(receivedTotal + indivPaid), sub: `Mensal ${fmt(receivedTotal)} + Individual ${fmt(indivPaid)}`, icon: CheckCircle2, color: "text-info" },
+            { label: "Atrasado", value: fmt(overdueTotal + indivOverdue), sub: `Mensal ${fmt(overdueTotal)} + Individual ${fmt(indivOverdue)}`, icon: CreditCard, color: "text-destructive" },
           ].map((s, i) => (
             <div key={i} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
