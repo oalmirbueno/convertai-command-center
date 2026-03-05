@@ -54,6 +54,16 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
 
+  // Payment management state
+  const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
+  const [payTotal, setPayTotal] = useState("");
+  const [payEntryPct, setPayEntryPct] = useState("50");
+  const [payInstCount, setPayInstCount] = useState("1");
+  const [payNotes, setPayNotes] = useState("");
+  const [paySubmitting, setPaySubmitting] = useState(false);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [markPaidId, setMarkPaidId] = useState<string | null>(null);
+
   // Fetch client's briefing
   const { data: clientBriefing } = useQuery({
     queryKey: ["client-briefing", client?.id],
