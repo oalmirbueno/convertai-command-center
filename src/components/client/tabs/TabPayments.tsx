@@ -128,6 +128,73 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     setSubmitting(false);
   };
 
+  const handleEdit = async () => {
+    const total = parseFloat(totalValue);
+    const entryPct = parseFloat(entryPercentage);
+    const count = parseInt(installmentsCount);
+    if (!total || !entryPct || !count || !payment) return;
+
+    setSubmitting(true);
+    try {
+      const entryAmount = (total * entryPct) / 100;
+      const remaining = total - entryAmount;
+      const perInstallment = count > 0 ? remaining / count : 0;
+
+      // Update payment plan
+      const { error: paymentError } = await supabase
+        .from("project_payments")
+        .update({
+          total_value: total,
+          entry_percentage: entryPct,
+          entry_amount: entryAmount,
+          installments_count: count,
+          notes: notes.trim() || null,
+        })
+        .eq("id", payment.id);
+
+      if (paymentError) throw paymentError;
+
+      // Delete old installments and recreate
+      await supabase.from("payment_installments").delete().eq("payment_id", payment.id);
+
+      const installmentRows: any[] = [
+        {
+          payment_id: payment.id,
+          installment_number: 0,
+          amount: entryAmount,
+          due_date: new Date().toISOString().split("T")[0],
+          status: "pending",
+          description: `Entrada (${entryPct}%)`,
+        },
+      ];
+
+      for (let i = 1; i <= count; i++) {
+        const dueDate = new Date();
+        dueDate.setMonth(dueDate.getMonth() + i);
+        installmentRows.push({
+          payment_id: payment.id,
+          installment_number: i,
+          amount: perInstallment,
+          due_date: dueDate.toISOString().split("T")[0],
+          status: "pending",
+          description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
+        });
+      }
+
+      const { error: instError } = await supabase.from("payment_installments").insert(installmentRows);
+      if (instError) throw instError;
+
+      queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
+      toast({ title: "Plano de pagamento atualizado!" });
+      setEditOpen(false);
+      resetForm();
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
+    }
+    setSubmitting(false);
+  };
+
   const handleMarkPaid = async () => {
     if (!markPaidId) return;
     setSubmitting(true);
@@ -144,6 +211,16 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     }
     setSubmitting(false);
     setMarkPaidId(null);
+  };
+
+  const openEditDialog = () => {
+    if (payment) {
+      setTotalValue(String(payment.total_value));
+      setEntryPercentage(String(payment.entry_percentage));
+      setInstallmentsCount(String(payment.installments_count));
+      setNotes(payment.notes || "");
+    }
+    setEditOpen(true);
   };
 
   const resetForm = () => {
