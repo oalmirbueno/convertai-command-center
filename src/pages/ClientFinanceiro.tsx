@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2 } from "lucide-react";
+import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
@@ -69,6 +70,20 @@ export default function ClientFinanceiro() {
         .select("*")
         .eq("client_id", user!.id)
         .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!user,
+    refetchInterval: 15000,
+  });
+
+  const { data: myProjectPayments } = useQuery({
+    queryKey: ["client-project-payments", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), installments:payment_installments(*)")
+        .eq("client_id", user!.id);
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -391,6 +406,73 @@ export default function ClientFinanceiro() {
         <p className="text-xs text-muted-foreground/60 text-center py-2">
           Nenhuma recarga pendente no momento ✓
         </p>
+      )}
+
+      {/* ========== SEÇÃO: PROJETOS INDIVIDUAIS ========== */}
+      {(myProjectPayments || []).length > 0 && (
+        <section>
+          <div className="flex items-center gap-2 mb-3">
+            <Briefcase className="w-4 h-4 text-muted-foreground" />
+            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+              Projetos Individuais
+            </span>
+          </div>
+
+          <div className="space-y-3">
+            {(myProjectPayments || []).map((pp: any) => {
+              const installments = pp.installments || [];
+              const paid = installments.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+              const remaining = Number(pp.total_value) - paid;
+              const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
+
+              return (
+                <div key={pp.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                  <div className="flex items-start justify-between flex-wrap gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
+                      <p className="text-xl font-mono font-light text-foreground mt-1">{formatCurrency(Number(pp.total_value))}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs text-success font-mono">{formatCurrency(paid)} pago</p>
+                      {remaining > 0 && <p className="text-xs text-warning font-mono">{formatCurrency(remaining)} restante</p>}
+                    </div>
+                  </div>
+
+                  <div>
+                    <Progress value={pct} className="h-1.5" />
+                    <p className="text-[11px] text-muted-foreground mt-1">{pct}% concluído</p>
+                  </div>
+
+                  <div className="divide-y divide-border">
+                    {sortedInstallments.map((inst: any) => {
+                      const isOverdue = inst.status === "pending" && new Date(inst.due_date) < today;
+                      const statusLabel = inst.status === "paid" ? "Pago" : isOverdue ? "Atrasado" : "Pendente";
+                      const dotColor = inst.status === "paid" ? "bg-success" : isOverdue ? "bg-destructive" : "bg-warning";
+                      const badgeColor = inst.status === "paid" ? "bg-success/10 text-success" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
+
+                      return (
+                        <div key={inst.id} className="flex items-center gap-3 py-2.5">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] text-foreground">
+                              {inst.installment_number === 0 ? "Entrada" : `Parcela ${inst.installment_number}`}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">{formatDate(inst.due_date)}</p>
+                          </div>
+                          <p className="text-sm font-mono text-foreground">{formatCurrency(Number(inst.amount))}</p>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}>
+                            {statusLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* ========== SEÇÃO 4: HISTÓRICO ========== */}

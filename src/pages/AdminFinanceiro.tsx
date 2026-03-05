@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
+import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +8,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -40,6 +42,17 @@ export default function AdminFinanceiro() {
   const { data: wallets } = useAdsWallet();
   const { data: recharges } = useRechargeRequests();
   const { data: clients } = useClients();
+  const { data: projectPayments } = useQuery({
+    queryKey: ["all-project-payments-finance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), client:profiles!project_payments_client_id_fkey(full_name, company_name), installments:payment_installments(*)");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
@@ -133,6 +146,14 @@ export default function AdminFinanceiro() {
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
+
+  // Individual project payments totals
+  const indivPaid = (projectPayments || []).reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+  const indivTotal = (projectPayments || []).reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
+  const indivPending = indivTotal - indivPaid;
+  const indivOverdue = (projectPayments || []).reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now).reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
@@ -484,7 +505,61 @@ export default function AdminFinanceiro() {
             })()}
           </div>
 
-          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (
+          {/* Projetos Individuais */}
+          {(projectPayments || []).length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Projetos Individuais
+                </span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
+                  { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
+                  { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
+                  { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
+                ].map((s) => (
+                  <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                    <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+              {(projectPayments || []).map((pp: any) => {
+                const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+                const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+                const remaining = Number(pp.total_value) - paid;
+                return (
+                  <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
+                      <p className="text-xs text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
+                    </div>
+                    <div className="w-20 hidden sm:block">
+                      <Progress value={pct} className="h-1.5" />
+                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-mono text-success">{fmt(paid)}</p>
+                      <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                    </div>
+                    {remaining > 0 && (
+                      <div className="text-right hidden md:block">
+                        <p className="text-xs font-mono text-warning">{fmt(remaining)}</p>
+                        <p className="text-[10px] text-muted-foreground">falta</p>
+                      </div>
+                    )}
+                    {hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
           )}
         </TabsContent>
