@@ -366,6 +366,50 @@ export type Database = {
           },
         ]
       }
+      payment_installments: {
+        Row: {
+          amount: number
+          created_at: string
+          description: string | null
+          due_date: string
+          id: string
+          installment_number: number
+          paid_date: string | null
+          payment_id: string
+          status: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          description?: string | null
+          due_date: string
+          id?: string
+          installment_number: number
+          paid_date?: string | null
+          payment_id: string
+          status?: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          description?: string | null
+          due_date?: string
+          id?: string
+          installment_number?: number
+          paid_date?: string | null
+          payment_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_installments_payment_id_fkey"
+            columns: ["payment_id"]
+            isOneToOne: false
+            referencedRelation: "project_payments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -419,6 +463,67 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      project_payments: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          entry_amount: number
+          entry_percentage: number
+          id: string
+          installments_count: number
+          notes: string | null
+          project_id: string
+          total_value: number
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          entry_amount: number
+          entry_percentage?: number
+          id?: string
+          installments_count?: number
+          notes?: string | null
+          project_id: string
+          total_value: number
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          entry_amount?: number
+          entry_percentage?: number
+          id?: string
+          installments_count?: number
+          notes?: string | null
+          project_id?: string
+          total_value?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_payments_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_payments_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_payments_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       projects: {
         Row: {
