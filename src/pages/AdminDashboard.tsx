@@ -113,9 +113,9 @@ export default function AdminDashboard() {
 
   const financeStats = [
     { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
-    { label: "A Receber", value: fmt(pendingTotal), color: "bg-warning" },
-    { label: "Total Recebido", value: fmt(receivedTotal), color: "bg-info" },
-    { label: "Atrasado", value: fmt(overdueTotal), color: "bg-destructive" },
+    { label: "A Receber", value: fmt(pendingTotal + individualPending), color: "bg-warning" },
+    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info" },
+    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive" },
   ];
 
   const formatDate = (d: string) => {
