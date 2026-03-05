@@ -559,6 +559,7 @@ export default function AdminFinanceiro() {
             </div>
           )}
 
+          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
           )}
         </TabsContent>
