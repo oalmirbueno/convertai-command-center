@@ -16,7 +16,8 @@ const SERVICES = [
   { key: "site", label: "Site / Landing Page" },
   { key: "relatorios", label: "Relatórios" },
   { key: "cobranca", label: "Cobrança" },
-];
+const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "other"];
+const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 
 const CLIENT_STATUS_OPTIONS = [
   { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
