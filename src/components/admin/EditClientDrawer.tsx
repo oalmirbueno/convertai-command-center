@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -53,6 +53,16 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  // Payment management state
+  const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
+  const [payTotal, setPayTotal] = useState("");
+  const [payEntryPct, setPayEntryPct] = useState("50");
+  const [payInstCount, setPayInstCount] = useState("1");
+  const [payNotes, setPayNotes] = useState("");
+  const [paySubmitting, setPaySubmitting] = useState(false);
+  const [expandedProject, setExpandedProject] = useState<string | null>(null);
+  const [markPaidId, setMarkPaidId] = useState<string | null>(null);
 
   // Fetch client's briefing
   const { data: clientBriefing } = useQuery({
@@ -217,6 +227,46 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     }
   };
 
+  const handleCreatePayment = async (projectId: string) => {
+    const total = parseFloat(payTotal);
+    const entryPct = parseFloat(payEntryPct);
+    const count = parseInt(payInstCount);
+    if (!total || !entryPct || !count) return;
+    setPaySubmitting(true);
+    try {
+      const entryAmount = (total * entryPct) / 100;
+      const remaining = total - entryAmount;
+      const perInstallment = count > 0 ? remaining / count : 0;
+      const { data: paymentData, error: paymentError } = await supabase
+        .from("project_payments")
+        .insert({ project_id: projectId, client_id: client.id, total_value: total, entry_percentage: entryPct, entry_amount: entryAmount, installments_count: count, notes: payNotes.trim() || null, created_by: profile?.id })
+        .select().single();
+      if (paymentError) throw paymentError;
+      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: new Date().toISOString().split("T")[0], status: "pending", description: `Entrada (${entryPct}%)` }];
+      for (let i = 1; i <= count; i++) {
+        const d = new Date(); d.setMonth(d.getMonth() + i);
+        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: d.toISOString().split("T")[0], status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
+      }
+      const { error: instErr } = await supabase.from("payment_installments").insert(rows);
+      if (instErr) throw instErr;
+      queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+      toast.success("Plano de pagamento criado!");
+      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes("");
+    } catch (err: any) { toast.error(err.message || "Erro ao criar plano"); }
+    setPaySubmitting(false);
+  };
+
+  const handleMarkInstallmentPaid = async (installmentId: string) => {
+    setPaySubmitting(true);
+    try {
+      await supabase.from("payment_installments").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", installmentId);
+      queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
+      toast.success("Pagamento registrado!");
+    } catch { toast.error("Erro ao registrar pagamento"); }
+    setPaySubmitting(false);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex justify-end">
@@ -362,14 +412,63 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 <div className="space-y-2">
                   {nonRecurringProjects.map((proj: any) => {
                     const pay = proj.payment;
+                    const isExpanded = expandedProject === proj.id;
+
                     if (!pay) {
                       return (
-                        <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border text-[13px]">
-                          <p className="font-medium text-foreground">{proj.name}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">Sem plano de pagamento — configure na aba Pagamentos do projeto</p>
+                        <div key={proj.id} className="rounded-xl bg-secondary/50 border border-border">
+                          <div className="px-4 py-3 text-[13px]">
+                            <p className="font-medium text-foreground">{proj.name}</p>
+                            {payCreateForProject === proj.id ? (
+                              <div className="mt-3 space-y-3">
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground">Valor Total (R$)</label>
+                                  <input type="number" placeholder="5000" value={payTotal} onChange={e => setPayTotal(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
+                                </div>
+                                <div className="flex gap-2">
+                                  <div className="flex-1">
+                                    <label className="text-[10px] text-muted-foreground">Entrada (%)</label>
+                                    <input type="number" min="0" max="100" value={payEntryPct} onChange={e => setPayEntryPct(e.target.value)}
+                                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
+                                  </div>
+                                  <div className="flex-1">
+                                    <label className="text-[10px] text-muted-foreground">Parcelas</label>
+                                    <input type="number" min="1" max="24" value={payInstCount} onChange={e => setPayInstCount(e.target.value)}
+                                      className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
+                                  </div>
+                                </div>
+                                <div>
+                                  <label className="text-[10px] text-muted-foreground">Observações</label>
+                                  <input placeholder="Opcional" value={payNotes} onChange={e => setPayNotes(e.target.value)}
+                                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50" />
+                                </div>
+                                {parseFloat(payTotal) > 0 && (
+                                  <div className="bg-background rounded-lg p-2 text-[11px] text-muted-foreground space-y-0.5">
+                                    <p>Entrada: <strong>R$ {((parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong> ({payEntryPct}%)</p>
+                                    <p>Restante: <strong>{payInstCount}x de R$ {(((parseFloat(payTotal) - (parseFloat(payTotal) * parseFloat(payEntryPct || "0")) / 100) / (parseInt(payInstCount) || 1))).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></p>
+                                  </div>
+                                )}
+                                <div className="flex gap-2">
+                                  <button onClick={() => { setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                    className="flex-1 px-3 py-1.5 rounded-lg text-[12px] border border-border text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent">Cancelar</button>
+                                  <button onClick={() => handleCreatePayment(proj.id)} disabled={paySubmitting || !parseFloat(payTotal)}
+                                    className="flex-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50 border-none">
+                                    {paySubmitting ? "Criando..." : "Criar Plano"}
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              <button onClick={() => { setPayCreateForProject(proj.id); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes(""); }}
+                                className="mt-2 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] text-primary border border-primary/30 hover:bg-primary/5 transition-colors cursor-pointer bg-transparent">
+                                <Plus className="w-3 h-3" /> Criar Plano de Pagamento
+                              </button>
+                            )}
+                          </div>
                         </div>
                       );
                     }
+
                     const installments = pay.installments || [];
                     const paidTotal = installments.filter((i: any) => i.status === "paid").reduce((sum: number, i: any) => sum + Number(i.amount), 0);
                     const remaining = pay.total_value - paidTotal;
@@ -378,22 +477,60 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                     const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
 
                     return (
-                      <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border space-y-2">
-                        <div className="flex items-center justify-between">
-                          <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
-                          {hasOverdue && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Atrasado</span>}
-                        </div>
-                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                          <span>Total: <strong className="text-foreground">R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></span>
-                          <span>•</span>
-                          <span className="text-success">Pago: R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                          <span>•</span>
-                          <span className={remaining > 0 ? "text-warning" : "text-success"}>Falta: R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                        </div>
-                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
-                          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
-                        </div>
-                        <p className="text-[10px] text-muted-foreground">{paidCount}/{totalCount} parcelas pagas • Entrada: {pay.entry_percentage}%</p>
+                      <div key={proj.id} className="rounded-xl bg-secondary/50 border border-border">
+                        <button onClick={() => setExpandedProject(isExpanded ? null : proj.id)}
+                          className="w-full px-4 py-3 flex items-center justify-between cursor-pointer bg-transparent border-none text-left">
+                          <div className="flex-1 min-w-0 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
+                              {hasOverdue && <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Atrasado</span>}
+                            </div>
+                            <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                              <span className="text-success">R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              <span>/</span>
+                              <span>R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                              <span className="text-warning">• Falta R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                              <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
+                            </div>
+                          </div>
+                          {isExpanded ? <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0 ml-2" /> : <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0 ml-2" />}
+                        </button>
+
+                        {isExpanded && (
+                          <div className="px-4 pb-3 space-y-1.5 border-t border-border pt-2">
+                            <p className="text-[10px] text-muted-foreground">{paidCount}/{totalCount} parcelas • Entrada: {pay.entry_percentage}%</p>
+                            {installments
+                              .sort((a: any, b: any) => a.installment_number - b.installment_number)
+                              .map((inst: any) => {
+                                const isPaid = inst.status === "paid";
+                                const isOverdue = !isPaid && new Date(inst.due_date) < new Date();
+                                return (
+                                  <div key={inst.id} className="flex items-center gap-2 py-1.5">
+                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${isPaid ? "text-success bg-success/10" : isOverdue ? "text-destructive bg-destructive/10" : "text-warning bg-warning/10"}`}>
+                                      {isPaid ? <CheckCircle2 className="w-3 h-3" /> : isOverdue ? <AlertCircle className="w-3 h-3" /> : <Clock className="w-3 h-3" />}
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-[12px] text-foreground">{inst.description}</p>
+                                      <p className="text-[10px] text-muted-foreground">
+                                        {new Date(inst.due_date).toLocaleDateString("pt-BR")}
+                                        {inst.paid_date && ` • Pago ${new Date(inst.paid_date).toLocaleDateString("pt-BR")}`}
+                                      </p>
+                                    </div>
+                                    <span className="text-[12px] font-medium text-foreground whitespace-nowrap">R$ {Number(inst.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                                    {!isPaid && (
+                                      <button onClick={(e) => { e.stopPropagation(); handleMarkInstallmentPaid(inst.id); }}
+                                        disabled={paySubmitting}
+                                        className="text-[10px] px-2 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none whitespace-nowrap">
+                                        Pago ✓
+                                      </button>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
