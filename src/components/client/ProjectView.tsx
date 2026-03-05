@@ -6,6 +6,7 @@ import TabKanban from "./tabs/TabKanban";
 import TabTimeline from "./tabs/TabTimeline";
 import TabDeliveries from "./tabs/TabDeliveries";
 import TabUpdates from "./tabs/TabUpdates";
+import TabPayments from "./tabs/TabPayments";
 import RequestButton from "./RequestButton";
 
 const statusLabels: Record<string, string> = {
