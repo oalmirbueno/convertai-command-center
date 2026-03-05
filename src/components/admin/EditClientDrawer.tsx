@@ -354,7 +354,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
             )}
 
             {/* Pagamentos de projetos não recorrentes */}
-            {isAdmin && hasNonRecurringServices && nonRecurringProjects && nonRecurringProjects.length > 0 && (
+            {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">
                   <DollarSign className="w-3 h-3 inline mr-1" />Pagamentos de Projetos
