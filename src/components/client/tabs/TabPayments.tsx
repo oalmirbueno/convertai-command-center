@@ -35,6 +35,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const { toast } = useToast();
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [totalValue, setTotalValue] = useState("");
   const [entryPercentage, setEntryPercentage] = useState("50");
   const [installmentsCount, setInstallmentsCount] = useState("1");
