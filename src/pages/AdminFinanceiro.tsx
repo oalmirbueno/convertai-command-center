@@ -505,7 +505,60 @@ export default function AdminFinanceiro() {
             })()}
           </div>
 
-          {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (
+          {/* Projetos Individuais */}
+          {(projectPayments || []).length > 0 && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-3.5 h-3.5 text-primary" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Projetos Individuais
+                </span>
+              </div>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {[
+                  { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
+                  { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
+                  { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
+                  { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
+                ].map((s) => (
+                  <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                    <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+                  </div>
+                ))}
+              </div>
+              {(projectPayments || []).map((pp: any) => {
+                const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+                const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+                const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+                const remaining = Number(pp.total_value) - paid;
+                return (
+                  <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
+                      <p className="text-xs text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
+                    </div>
+                    <div className="w-20 hidden sm:block">
+                      <Progress value={pct} className="h-1.5" />
+                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-xs font-mono text-success">{fmt(paid)}</p>
+                      <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                    </div>
+                    {remaining > 0 && (
+                      <div className="text-right hidden md:block">
+                        <p className="text-xs font-mono text-warning">{fmt(remaining)}</p>
+                        <p className="text-[10px] text-muted-foreground">falta</p>
+                      </div>
+                    )}
+                    {hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
           )}
         </TabsContent>
