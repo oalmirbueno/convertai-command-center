@@ -70,6 +70,33 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     },
     enabled: !!client?.id,
   });
+
+  // Check if client has non-recurring services
+  const hasNonRecurringServices = NON_RECURRING_SERVICE_KEYS.some(k => services[k]);
+
+  // Fetch non-recurring projects with payments
+  const { data: nonRecurringProjects } = useQuery({
+    queryKey: ["client-nonrecurring-projects", client?.id],
+    queryFn: async () => {
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("id, name, project_type")
+        .eq("client_id", client.id)
+        .in("project_type", NON_RECURRING_TYPES);
+      if (!projects?.length) return [];
+
+      const { data: payments } = await supabase
+        .from("project_payments")
+        .select("*, installments:payment_installments(*)")
+        .in("project_id", projects.map(p => p.id));
+
+      return projects.map(p => ({
+        ...p,
+        payment: (payments || []).find((pay: any) => pay.project_id === p.id) || null,
+      }));
+    },
+    enabled: !!client?.id && hasNonRecurringServices,
+  });
   useEffect(() => {
     if (client) {
       setFullName(client.full_name || "");
