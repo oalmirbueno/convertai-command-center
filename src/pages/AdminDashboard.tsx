@@ -99,6 +99,18 @@ export default function AdminDashboard() {
     { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
   ];
 
+  // Individual project payments summary
+  const individualPaid = (projectPayments || []).reduce((sum: number, pp: any) => {
+    const paidInstallments = (pp.installments || []).filter((i: any) => i.status === "paid");
+    return sum + paidInstallments.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  }, 0);
+  const individualTotal = (projectPayments || []).reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
+  const individualPending = individualTotal - individualPaid;
+  const individualOverdue = (projectPayments || []).reduce((sum: number, pp: any) => {
+    const overdue = (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+    return sum + overdue.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  }, 0);
+
   const financeStats = [
     { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
     { label: "A Receber", value: fmt(pendingTotal), color: "bg-warning" },
