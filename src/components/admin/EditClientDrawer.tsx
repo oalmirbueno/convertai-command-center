@@ -71,10 +71,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     enabled: !!client?.id,
   });
 
-  // Check if client has non-recurring services
-  const hasNonRecurringServices = NON_RECURRING_SERVICE_KEYS.some(k => services[k]);
-
-  // Fetch non-recurring projects with payments
+  // Fetch non-recurring projects with payments (always query, regardless of services_config)
   const { data: nonRecurringProjects } = useQuery({
     queryKey: ["client-nonrecurring-projects", client?.id],
     queryFn: async () => {
@@ -95,7 +92,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         payment: (payments || []).find((pay: any) => pay.project_id === p.id) || null,
       }));
     },
-    enabled: !!client?.id && hasNonRecurringServices,
+    enabled: !!client?.id,
   });
   useEffect(() => {
     if (client) {
@@ -357,7 +354,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
             )}
 
             {/* Pagamentos de projetos não recorrentes */}
-            {isAdmin && hasNonRecurringServices && nonRecurringProjects && nonRecurringProjects.length > 0 && (
+            {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">
                   <DollarSign className="w-3 h-3 inline mr-1" />Pagamentos de Projetos
