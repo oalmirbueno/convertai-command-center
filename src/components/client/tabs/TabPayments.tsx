@@ -344,6 +344,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       </Dialog>
 
       {renderCreateDialog()}
+      {renderEditDialog()}
     </div>
   );
 
