@@ -266,7 +266,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
               <LayoutGrid className="w-3.5 h-3.5" /> Abrir Kanban
             </button>
-            <button onClick={() => { onClose(); navigate("/dashboard"); }}
+            <button onClick={() => { onClose(); navigate(`/ver-como-cliente?project=${project.id}`); }}
               className="flex items-center gap-2.5 w-full px-3 py-2 rounded-lg text-[13px] text-muted-foreground hover:text-foreground hover:bg-secondary/50 cursor-pointer bg-transparent border-none text-left transition-colors">
               <Eye className="w-3.5 h-3.5" /> Ver como Cliente
             </button>
