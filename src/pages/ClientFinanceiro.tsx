@@ -76,6 +76,20 @@ export default function ClientFinanceiro() {
     refetchInterval: 15000,
   });
 
+  const { data: myProjectPayments } = useQuery({
+    queryKey: ["client-project-payments", user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), installments:payment_installments(*)")
+        .eq("client_id", user!.id);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user,
+    refetchInterval: 15000,
+  });
+
   // ===== COMPUTED =====
   const showTraffic = (profile as any)?.services_config?.traffic !== false;
   const pendingRecharges = (rechargeRequests || []).filter((r: any) => r.status === "pending");
