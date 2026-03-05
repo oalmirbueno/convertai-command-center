@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
