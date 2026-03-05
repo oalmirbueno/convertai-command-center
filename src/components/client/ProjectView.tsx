@@ -105,6 +105,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
         <TabsContent value="deliveries" className="mt-6">
           <TabDeliveries projectId={project.id} />
         </TabsContent>
+        {NON_RECURRING_TYPES.includes(project.project_type) && (
+          <TabsContent value="payments" className="mt-6">
+            <TabPayments projectId={project.id} clientId={project.client_id} projectName={project.name} />
+          </TabsContent>
+        )}
         <TabsContent value="updates" className="mt-6">
           <TabUpdates projectId={project.id} />
         </TabsContent>
