@@ -3,7 +3,8 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2 } from "lucide-react";
+import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
