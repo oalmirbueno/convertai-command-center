@@ -42,6 +42,17 @@ export default function AdminFinanceiro() {
   const { data: wallets } = useAdsWallet();
   const { data: recharges } = useRechargeRequests();
   const { data: clients } = useClients();
+  const { data: projectPayments } = useQuery({
+    queryKey: ["all-project-payments-finance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), client:profiles!project_payments_client_id_fkey(full_name, company_name), installments:payment_installments(*)");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
