@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
+import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +8,8 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
