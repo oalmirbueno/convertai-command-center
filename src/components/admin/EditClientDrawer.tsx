@@ -227,6 +227,46 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     }
   };
 
+  const handleCreatePayment = async (projectId: string) => {
+    const total = parseFloat(payTotal);
+    const entryPct = parseFloat(payEntryPct);
+    const count = parseInt(payInstCount);
+    if (!total || !entryPct || !count) return;
+    setPaySubmitting(true);
+    try {
+      const entryAmount = (total * entryPct) / 100;
+      const remaining = total - entryAmount;
+      const perInstallment = count > 0 ? remaining / count : 0;
+      const { data: paymentData, error: paymentError } = await supabase
+        .from("project_payments")
+        .insert({ project_id: projectId, client_id: client.id, total_value: total, entry_percentage: entryPct, entry_amount: entryAmount, installments_count: count, notes: payNotes.trim() || null, created_by: profile?.id })
+        .select().single();
+      if (paymentError) throw paymentError;
+      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: new Date().toISOString().split("T")[0], status: "pending", description: `Entrada (${entryPct}%)` }];
+      for (let i = 1; i <= count; i++) {
+        const d = new Date(); d.setMonth(d.getMonth() + i);
+        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: d.toISOString().split("T")[0], status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
+      }
+      const { error: instErr } = await supabase.from("payment_installments").insert(rows);
+      if (instErr) throw instErr;
+      queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
+      queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+      toast.success("Plano de pagamento criado!");
+      setPayCreateForProject(null); setPayTotal(""); setPayEntryPct("50"); setPayInstCount("1"); setPayNotes("");
+    } catch (err: any) { toast.error(err.message || "Erro ao criar plano"); }
+    setPaySubmitting(false);
+  };
+
+  const handleMarkInstallmentPaid = async (installmentId: string) => {
+    setPaySubmitting(true);
+    try {
+      await supabase.from("payment_installments").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", installmentId);
+      queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
+      toast.success("Pagamento registrado!");
+    } catch { toast.error("Erro ao registrar pagamento"); }
+    setPaySubmitting(false);
+  };
+
   return (
     <>
       <div className="fixed inset-0 z-50 flex justify-end">
