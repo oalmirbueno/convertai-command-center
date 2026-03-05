@@ -395,4 +395,53 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       </Dialog>
     );
   }
+
+  function renderEditDialog() {
+    const total = parseFloat(totalValue) || 0;
+    const entryPct = parseFloat(entryPercentage) || 0;
+    const count = parseInt(installmentsCount) || 1;
+    const entryAmount = (total * entryPct) / 100;
+    const remaining = total - entryAmount;
+    const perInstallment = count > 0 ? remaining / count : 0;
+
+    return (
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Editar Plano de Pagamento</DialogTitle></DialogHeader>
+          <p className="text-xs text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>
+          <div className="space-y-4">
+            <div>
+              <Label className="text-xs">Valor Total do Projeto (R$)</Label>
+              <Input type="number" placeholder="5000" value={totalValue} onChange={e => setTotalValue(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Percentual de Entrada (%)</Label>
+              <Input type="number" min="0" max="100" placeholder="50" value={entryPercentage} onChange={e => setEntryPercentage(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Número de Parcelas (restante)</Label>
+              <Input type="number" min="1" max="24" placeholder="1" value={installmentsCount} onChange={e => setInstallmentsCount(e.target.value)} />
+            </div>
+            <div>
+              <Label className="text-xs">Observações</Label>
+              <Textarea placeholder="Ex: Pagamento na entrega do projeto" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
+            </div>
+
+            {total > 0 && (
+              <div className="bg-secondary/50 rounded-lg p-3 space-y-1 text-xs">
+                <p><strong>Entrada:</strong> {formatCurrency(entryAmount)} ({entryPct}%)</p>
+                <p><strong>Restante:</strong> {formatCurrency(remaining)} em {count}x de {formatCurrency(perInstallment)}</p>
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>Cancelar</Button>
+            <Button onClick={handleEdit} disabled={submitting || !total || !entryPct}>
+              {submitting ? "Salvando..." : "Salvar Alterações"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 }
