@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -17,6 +17,9 @@ const SERVICES = [
   { key: "relatorios", label: "Relatórios" },
   { key: "cobranca", label: "Cobrança" },
 ];
+
+const NON_RECURRING_TYPES = ["automation", "site", "landing_page", "event", "other"];
+const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 
 const CLIENT_STATUS_OPTIONS = [
   { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
@@ -66,6 +69,33 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       return data;
     },
     enabled: !!client?.id,
+  });
+
+  // Check if client has non-recurring services
+  const hasNonRecurringServices = NON_RECURRING_SERVICE_KEYS.some(k => services[k]);
+
+  // Fetch non-recurring projects with payments
+  const { data: nonRecurringProjects } = useQuery({
+    queryKey: ["client-nonrecurring-projects", client?.id],
+    queryFn: async () => {
+      const { data: projects } = await supabase
+        .from("projects")
+        .select("id, name, project_type")
+        .eq("client_id", client.id)
+        .in("project_type", NON_RECURRING_TYPES);
+      if (!projects?.length) return [];
+
+      const { data: payments } = await supabase
+        .from("project_payments")
+        .select("*, installments:payment_installments(*)")
+        .in("project_id", projects.map(p => p.id));
+
+      return projects.map(p => ({
+        ...p,
+        payment: (payments || []).find((pay: any) => pay.project_id === p.id) || null,
+      }));
+    },
+    enabled: !!client?.id && hasNonRecurringServices,
   });
   useEffect(() => {
     if (client) {
@@ -323,6 +353,54 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                     {new Date(clientBriefing.created_at).toLocaleDateString("pt-BR")}
                   </span>
                 </button>
+              </div>
+            )}
+
+            {/* Pagamentos de projetos não recorrentes */}
+            {isAdmin && hasNonRecurringServices && nonRecurringProjects && nonRecurringProjects.length > 0 && (
+              <div className="pt-2">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">
+                  <DollarSign className="w-3 h-3 inline mr-1" />Pagamentos de Projetos
+                </label>
+                <div className="space-y-2">
+                  {nonRecurringProjects.map((proj: any) => {
+                    const pay = proj.payment;
+                    if (!pay) {
+                      return (
+                        <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border text-[13px]">
+                          <p className="font-medium text-foreground">{proj.name}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">Sem plano de pagamento — configure na aba Pagamentos do projeto</p>
+                        </div>
+                      );
+                    }
+                    const installments = pay.installments || [];
+                    const paidTotal = installments.filter((i: any) => i.status === "paid").reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+                    const remaining = pay.total_value - paidTotal;
+                    const paidCount = installments.filter((i: any) => i.status === "paid").length;
+                    const totalCount = installments.length;
+                    const hasOverdue = installments.some((i: any) => i.status !== "paid" && new Date(i.due_date) < new Date());
+
+                    return (
+                      <div key={proj.id} className="px-4 py-3 rounded-xl bg-secondary/50 border border-border space-y-2">
+                        <div className="flex items-center justify-between">
+                          <p className="text-[13px] font-medium text-foreground">{proj.name}</p>
+                          {hasOverdue && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-destructive/10 text-destructive">Atrasado</span>}
+                        </div>
+                        <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
+                          <span>Total: <strong className="text-foreground">R$ {Number(pay.total_value).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</strong></span>
+                          <span>•</span>
+                          <span className="text-success">Pago: R$ {paidTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                          <span>•</span>
+                          <span className={remaining > 0 ? "text-warning" : "text-success"}>Falta: R$ {remaining.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        </div>
+                        <div className="h-1.5 rounded-full bg-secondary overflow-hidden">
+                          <div className="h-full rounded-full bg-success transition-all" style={{ width: `${pay.total_value > 0 ? Math.round((paidTotal / pay.total_value) * 100) : 0}%` }} />
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">{paidCount}/{totalCount} parcelas pagas • Entrada: {pay.entry_percentage}%</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             )}
 
