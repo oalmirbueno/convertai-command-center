@@ -727,7 +727,8 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           </div>
         </div>
       </div>
-    </div>
+      </FadeUp>
+    </StaggerContainer>
   );
 }
 
