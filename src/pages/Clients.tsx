@@ -1,8 +1,9 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserPlus, Link2, CalendarClock, AlertTriangle } from "lucide-react";
+import { UserPlus, Link2, CalendarClock, AlertTriangle, Eye } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
