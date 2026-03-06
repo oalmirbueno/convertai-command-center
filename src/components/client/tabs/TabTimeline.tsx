@@ -306,7 +306,12 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
               )}
 
               {/* Main card */}
-              <div className={`relative rounded-xl border ${sc.border} ${m.status === "in_progress" ? "bg-primary/[0.02]" : "bg-card"} transition-all hover:shadow-sm`}>
+              <motion.div
+                whileHover={{ scale: 1.015, y: -2 }}
+                whileTap={{ scale: 0.995 }}
+                transition={{ type: "spring", stiffness: 400, damping: 25 }}
+                className={`relative rounded-xl border ${sc.border} ${m.status === "in_progress" ? "bg-primary/[0.02]" : "bg-card"} transition-colors hover:shadow-md hover:border-muted-foreground/20`}
+              >
                 {/* Active glow */}
                 {m.status === "in_progress" && (
                   <div className="absolute inset-0 rounded-xl border border-primary/20 animate-pulse pointer-events-none" />
@@ -482,7 +487,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
                       })}
                   </div>
                 )}
-              </div>
+              </motion.div>
             </motion.div>
           );
         })}
