@@ -1,58 +1,20 @@
-import { useQuery } from "@tanstack/react-query";
-import { supabase } from "@/integrations/supabase/client";
-import { useAuth } from "@/contexts/AuthContext";
 import CircularProgress from "./CircularProgress";
 import { Skeleton } from "@/components/ui/skeleton";
+import AutoSummaryCard from "./AutoSummaryCard";
 import {
   CheckCircle2, Clock, AlertCircle, FileCheck, TrendingUp,
   Zap, Target, CalendarDays, MessageSquare,
   ArrowUpRight, Layers, Activity, Award, BarChart3,
   PackageCheck, ListChecks, Sparkles, Timer, Briefcase,
-  CircleCheck, CircleDot, Circle, FileImage,
+  CircleCheck, CircleDot, Circle, FileImage, BookOpen,
+  ClipboardList, Eye, FolderOpen,
 } from "lucide-react";
-
-/* ───────── Helpers ───────── */
-
-const statusLabels: Record<string, string> = {
-  active: "Em execução", review: "Em Revisão", planning: "Planejamento",
-  done: "Concluído", paused: "Pausado",
-};
-
-const typeLabels: Record<string, string> = {
-  social_media: "Social Media", traffic: "Tráfego", automation: "Automação",
-  site: "Site", landing_page: "Landing Page", event: "Evento", other: "Outro",
-};
-
-const taskStatusLabels: Record<string, string> = {
-  doing: "Em execução", review: "Em revisão", done: "Concluída", backlog: "Planejada", todo: "A fazer",
-};
-
-function relativeTime(dateStr: string): string {
-  const now = new Date();
-  const date = new Date(dateStr);
-  const diffMs = now.getTime() - date.getTime();
-  const diffMinutes = Math.floor(diffMs / 60000);
-  const diffHours = Math.floor(diffMs / 3600000);
-  const diffDays = Math.floor(diffMs / 86400000);
-  if (diffMinutes < 1) return "agora";
-  if (diffMinutes < 60) return `${diffMinutes}min atrás`;
-  if (diffHours < 24) return `${diffHours}h atrás`;
-  if (diffDays < 7) return `${diffDays}d atrás`;
-  return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-}
-
-function daysUntil(dateStr: string): number {
-  const now = new Date();
-  const d = new Date(dateStr);
-  return Math.ceil((d.getTime() - now.getTime()) / 86400000);
-}
+import { useClientDashboardData, typeLabels, relativeTime, daysUntil, formatDate, formatDateShort, type DashboardData } from "./dashboardHelpers";
 
 const updateIcons: Record<string, typeof Activity> = {
   creative: FileImage, task: CheckCircle2, alert: AlertCircle,
   milestone: Target, system: Zap, report: TrendingUp,
 };
-
-/* ───────── Props ───────── */
 
 interface Props {
   clientId: string;
@@ -62,126 +24,18 @@ interface Props {
 }
 
 export default function ClientJourneyDashboard({ clientId, clientName, onSelectProject, isImpersonation }: Props) {
-  const { user } = useAuth();
+  const { loadingProjects, data } = useClientDashboardData(clientId);
 
-  /* ── Queries ── */
-  const { data: projects, isLoading: loadingProjects } = useQuery({
-    queryKey: ["client-projects", clientId],
-    queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
-    },
-    enabled: !!user && !!clientId,
-    refetchInterval: 15000,
-  });
+  const {
+    projects: allProjects, activeProjects, doneProjects, avgProgress,
+    tasks, doingTasks, reviewTasks, doneTasks, totalTasks,
+    milestones, completedMilestonesCount, totalMilestones,
+    pendingFiles, deliveredFiles, approvedFiles, totalFiles,
+    recentUpdates,
+  } = data;
 
-  const projectIds = (projects || []).map((p: any) => p.id);
-
-  const { data: recentUpdates } = useQuery({
-    queryKey: ["client-updates-all", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("updates")
-        .select("*, author:profiles!updates_author_id_fkey(full_name), project:projects!updates_project_id_fkey(name)")
-        .in("project_id", projectIds).order("created_at", { ascending: false }).limit(10);
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-    refetchInterval: 15000,
-  });
-
-  const { data: milestones } = useQuery({
-    queryKey: ["client-milestones-all", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones")
-        .select("*, project:projects!milestones_project_id_fkey(name)")
-        .in("project_id", projectIds).order("target_date", { ascending: true }).limit(8);
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-  });
-
-  const { data: completedMilestones } = useQuery({
-    queryKey: ["client-done-milestones", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones")
-        .select("id").in("project_id", projectIds).eq("status", "completed");
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-  });
-
-  const { data: pendingFiles } = useQuery({
-    queryKey: ["client-pending-approvals", clientId],
-    queryFn: async () => {
-      const { data } = await supabase.from("files")
-        .select("id, file_name, created_at, project:projects!files_project_id_fkey(name)")
-        .eq("client_id", clientId).eq("approval_status", "pending")
-        .order("created_at", { ascending: false }).limit(5);
-      return data || [];
-    },
-    enabled: !!user && !!clientId,
-  });
-
-  // All tasks with details for richer display
-  const { data: allTasks } = useQuery({
-    queryKey: ["client-all-tasks-detail", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("tasks")
-        .select("id, title, status, due_date, priority, project_id, updated_at, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name), project:projects!tasks_project_id_fkey(name)")
-        .in("project_id", projectIds)
-        .order("updated_at", { ascending: false });
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-    refetchInterval: 15000,
-  });
-
-  // Delivered files count
-  const { data: deliveredFiles } = useQuery({
-    queryKey: ["client-delivered-files", clientId],
-    queryFn: async () => {
-      const { data } = await supabase.from("files")
-        .select("id, approval_status")
-        .eq("client_id", clientId);
-      return data || [];
-    },
-    enabled: !!user && !!clientId,
-  });
-
-  /* ── Computed ── */
-  const allProjects = projects || [];
-  const activeProjects = allProjects.filter((p: any) => p.status !== "done");
-  const doneProjects = allProjects.filter((p: any) => p.status === "done");
-  const avgProgress = activeProjects.length > 0
-    ? Math.round(activeProjects.reduce((s: number, p: any) => s + (p.progress || 0), 0) / activeProjects.length) : 0;
-
-  const tasks = allTasks || [];
-  const doingTasks = tasks.filter((t: any) => t.status === "doing");
-  const reviewTasks = tasks.filter((t: any) => t.status === "review");
-  const doneTasks = tasks.filter((t: any) => t.status === "done");
-  const totalTasks = tasks.length;
   const recentlyDoneTasks = doneTasks.slice(0, 5);
-
-  const totalFiles = (deliveredFiles || []).length;
-  const approvedFiles = (deliveredFiles || []).filter((f: any) => f.approval_status === "approved").length;
-  const totalMilestones = (milestones || []).length + (completedMilestones || []).length;
-  const completedMilestonesCount = (completedMilestones || []).length;
-
   const firstName = clientName.split(" ")[0];
-
-  const formatDate = (d: string) => {
-    if (!d) return "";
-    return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-  };
-  const formatDateShort = (d: string) => {
-    if (!d) return "";
-    return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
-  };
 
   if (loadingProjects) {
     return (
@@ -214,7 +68,6 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
               Bem-vindo de volta, {firstName}
             </h1>
 
-            {/* Summary sentence */}
             <p className="text-muted-foreground text-sm max-w-lg leading-relaxed">
               {activeProjects.length === 0 && doneProjects.length === 0
                 ? "Seu painel está limpo. Novos projetos aparecerão aqui assim que forem criados."
@@ -223,12 +76,11 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                       <>{activeProjects.length === 1 ? "1 projeto ativo" : `${activeProjects.length} projetos ativos`} com {avgProgress}% de progresso. </>
                     )}
                     {doingTasks.length > 0 && <>{doingTasks.length} {doingTasks.length === 1 ? "tarefa sendo executada" : "tarefas sendo executadas"} agora. </>}
-                    {(pendingFiles?.length || 0) > 0 && <>{pendingFiles!.length} {pendingFiles!.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua aprovação.</>}
+                    {pendingFiles.length > 0 && <>{pendingFiles.length} {pendingFiles.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua aprovação.</>}
                   </>
               }
             </p>
 
-            {/* Quick highlight chips */}
             {totalTasks > 0 && (
               <div className="flex flex-wrap gap-2 mt-4">
                 {doneTasks.length > 0 && (
@@ -253,7 +105,6 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             )}
           </div>
 
-          {/* Progress ring */}
           {activeProjects.length > 0 && (
             <div className="hidden sm:flex flex-col items-center gap-1.5 shrink-0">
               <CircularProgress progress={avgProgress} size={80} strokeWidth={5} />
@@ -263,13 +114,13 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
         </div>
       </div>
 
-      {/* ══════════ METRICS GRID ══════════ */}
+      {/* ══════════ METRICS ══════════ */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: "Projetos Ativos", value: activeProjects.length, sub: doneProjects.length > 0 ? `+${doneProjects.length} concluídos` : "", icon: Briefcase, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Tarefas em Execução", value: doingTasks.length + reviewTasks.length, sub: `de ${totalTasks} total`, icon: ListChecks, color: "text-sky-400", bg: "bg-sky-500/10" },
+          { label: "Tarefas em Execução", value: doingTasks.length + reviewTasks.length, sub: `de ${totalTasks} no total`, icon: ListChecks, color: "text-sky-400", bg: "bg-sky-500/10" },
           { label: "Entregas Realizadas", value: totalFiles, sub: approvedFiles > 0 ? `${approvedFiles} aprovadas` : "", icon: PackageCheck, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Aprovações Pendentes", value: (pendingFiles || []).length, sub: (pendingFiles || []).length > 0 ? "Ação necessária" : "Tudo ok", icon: FileCheck, color: "text-amber-400", bg: "bg-amber-500/10" },
+          { label: "Aprovações Pendentes", value: pendingFiles.length, sub: pendingFiles.length > 0 ? "Ação necessária" : "Nenhuma pendência", icon: FileCheck, color: "text-amber-400", bg: "bg-amber-500/10" },
         ].map((stat) => (
           <div key={stat.label} className="bg-card border border-border rounded-xl p-4 sm:p-5 hover:border-border/80 transition-colors group">
             <div className="flex items-center justify-between mb-2">
@@ -284,13 +135,16 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
         ))}
       </div>
 
+      {/* ══════════ AUTO SUMMARY ══════════ */}
+      <AutoSummaryCard data={data} firstName={firstName} />
+
       {/* ══════════ MAIN GRID ══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* LEFT COLUMN */}
         <div className="lg:col-span-2 space-y-6">
 
-          {/* ── Active Projects ── */}
+          {/* Active Projects */}
           {activeProjects.length > 0 && (
             <section>
               <SectionHeader icon={Activity} color="text-primary" title="Projetos em Andamento" count={activeProjects.length} />
@@ -299,6 +153,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                   const projectTasks = tasks.filter((t: any) => t.project_id === p.id);
                   const projectDoing = projectTasks.filter((t: any) => t.status === "doing" || t.status === "review");
                   const projectDone = projectTasks.filter((t: any) => t.status === "done");
+                  const projectTotal = projectTasks.length;
                   const dl = daysUntil(p.deadline);
                   return (
                     <div
@@ -319,15 +174,20 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                           </div>
                           <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
 
-                          {/* Task mini-stats */}
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-muted-foreground">
+                          {/* Description */}
+                          {p.description && (
+                            <p className="text-[11px] text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">{p.description}</p>
+                          )}
+
+                          {/* Task stats */}
+                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-[11px] text-muted-foreground">
                             <span className="flex items-center gap-1">
                               <Zap className="w-3 h-3 text-sky-400" />
                               {projectDoing.length} em execução
                             </span>
                             <span className="flex items-center gap-1">
                               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              {projectDone.length} concluídas
+                              {projectDone.length}/{projectTotal} concluídas
                             </span>
                             <span className={`flex items-center gap-1 ${dl <= 7 && dl >= 0 ? "text-amber-400" : dl < 0 ? "text-destructive" : ""}`}>
                               <Timer className="w-3 h-3" />
@@ -335,7 +195,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                             </span>
                           </div>
 
-                          {/* Progress bar with animation */}
+                          {/* Progress bar */}
                           <div className="h-1.5 w-full rounded-full bg-secondary mt-3 overflow-hidden">
                             <div
                               className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-700 ease-out"
@@ -343,16 +203,24 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                             />
                           </div>
 
-                          {/* Currently doing task names */}
+                          {/* Currently doing */}
                           {projectDoing.length > 0 && (
                             <div className="mt-2.5 flex flex-col gap-1">
                               {projectDoing.slice(0, 2).map((t: any) => (
                                 <span key={t.id} className="text-[11px] text-primary/80 flex items-center gap-1.5 truncate">
                                   <Sparkles className="w-3 h-3 shrink-0" />
                                   {t.title}
-                                  {t.assignee?.full_name && <span className="text-muted-foreground/50">— {t.assignee.full_name}</span>}
+                                  {t.assignee?.full_name && <span className="text-muted-foreground/50 ml-1">por {t.assignee.full_name}</span>}
                                 </span>
                               ))}
+                            </div>
+                          )}
+
+                          {/* Objectives if available */}
+                          {p.objectives && (
+                            <div className="mt-3 pt-2.5 border-t border-border/50">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Objetivo</p>
+                              <p className="text-[11px] text-foreground/60 line-clamp-2 leading-relaxed">{p.objectives}</p>
                             </div>
                           )}
                         </div>
@@ -365,17 +233,17 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </section>
           )}
 
-          {/* ── Journey Timeline (milestones) ── */}
-          {(milestones || []).length > 0 && (
+          {/* Journey Timeline */}
+          {milestones.length > 0 && (
             <section>
               <SectionHeader icon={Target} color="text-sky-400" title="Jornada do Projeto" count={totalMilestones} />
               <div className="bg-card border border-border rounded-xl p-5">
                 <div className="relative">
                   <div className="absolute left-[15px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-primary/40 via-border to-border" />
                   <div className="space-y-1">
-                    {(milestones || []).map((m: any, i: number) => {
+                    {milestones.map((m: any, i: number) => {
                       const isDone = m.status === "completed";
-                      const isActive = m.status === "in_progress" || i === 0;
+                      const isActive = m.status === "in_progress" || (!isDone && i === 0);
                       return (
                         <div key={m.id} className="flex gap-4 py-2.5 relative">
                           <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 z-10 transition-all ${
@@ -395,22 +263,25 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                               {(m as any).project?.name} · {formatDateShort(m.target_date)}
                               {isDone && " · Concluído"}
                             </p>
+                            {m.description && !isDone && (
+                              <p className="text-[11px] text-muted-foreground/60 mt-1 line-clamp-1">{m.description}</p>
+                            )}
                           </div>
                         </div>
                       );
                     })}
                   </div>
                 </div>
-                {completedMilestonesCount > 0 && (
+                {totalMilestones > 0 && (
                   <div className="mt-4 pt-3 border-t border-border flex items-center gap-2">
                     <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
-                        style={{ width: `${totalMilestones > 0 ? (completedMilestonesCount / totalMilestones) * 100 : 0}%` }}
+                        style={{ width: `${(completedMilestonesCount / totalMilestones) * 100}%` }}
                       />
                     </div>
                     <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                      {completedMilestonesCount}/{totalMilestones}
+                      {completedMilestonesCount}/{totalMilestones} etapas
                     </span>
                   </div>
                 )}
@@ -418,7 +289,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </section>
           )}
 
-          {/* ── Recently completed tasks ── */}
+          {/* Recently completed tasks */}
           {recentlyDoneTasks.length > 0 && (
             <section>
               <SectionHeader icon={CheckCircle2} color="text-emerald-400" title="Concluídos Recentemente" />
@@ -438,7 +309,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </section>
           )}
 
-          {/* ── Completed Projects ── */}
+          {/* Completed Projects */}
           {doneProjects.length > 0 && (
             <section>
               <SectionHeader icon={Award} color="text-emerald-400" title="Projetos Concluídos" count={doneProjects.length} />
@@ -480,7 +351,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
         {/* RIGHT COLUMN */}
         <div className="space-y-6">
 
-          {/* ── What's happening now ── */}
+          {/* What's happening now */}
           {doingTasks.length > 0 && (
             <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
@@ -490,7 +361,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                 <h3 className="text-sm font-semibold text-foreground">Trabalhando Agora</h3>
               </div>
               <div className="space-y-2.5">
-                {doingTasks.slice(0, 4).map((t: any) => (
+                {doingTasks.slice(0, 5).map((t: any) => (
                   <div key={t.id} className="flex items-start gap-2.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0 animate-pulse" />
                     <div className="min-w-0">
@@ -506,8 +377,56 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </div>
           )}
 
-          {/* ── Pending approvals ── */}
-          {(pendingFiles || []).length > 0 && (
+          {/* Overview of all tasks */}
+          {totalTasks > 0 && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <div className="w-6 h-6 rounded-md bg-sky-500/10 flex items-center justify-center">
+                  <ClipboardList className="w-3.5 h-3.5 text-sky-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Visão Geral das Tarefas</h3>
+              </div>
+              {(() => {
+                const backlog = tasks.filter((t: any) => t.status === "backlog" || t.status === "todo").length;
+                const doing = doingTasks.length;
+                const review = reviewTasks.length;
+                const done = doneTasks.length;
+                const segments = [
+                  { label: "Concluídas", value: done, color: "bg-emerald-500", textColor: "text-emerald-400" },
+                  { label: "Em revisão", value: review, color: "bg-amber-400", textColor: "text-amber-400" },
+                  { label: "Em execução", value: doing, color: "bg-sky-400", textColor: "text-sky-400" },
+                  { label: "Planejadas", value: backlog, color: "bg-muted-foreground/30", textColor: "text-muted-foreground" },
+                ];
+                return (
+                  <>
+                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden flex">
+                      {segments.map((s) => (
+                        s.value > 0 && (
+                          <div
+                            key={s.label}
+                            className={`h-full ${s.color} transition-all duration-500`}
+                            style={{ width: `${(s.value / totalTasks) * 100}%` }}
+                          />
+                        )
+                      ))}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 mt-3">
+                      {segments.map((s) => (
+                        <div key={s.label} className="flex items-center gap-2">
+                          <div className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
+                          <span className="text-[11px] text-muted-foreground">{s.label}</span>
+                          <span className={`text-[11px] font-semibold ${s.textColor} ml-auto tabular-nums`}>{s.value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+          )}
+
+          {/* Pending approvals */}
+          {pendingFiles.length > 0 && (
             <div className="bg-amber-500/[0.04] border border-amber-500/15 rounded-xl p-5">
               <div className="flex items-center gap-2 mb-3">
                 <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center">
@@ -516,7 +435,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                 <h3 className="text-sm font-semibold text-foreground">Aguardando Aprovação</h3>
               </div>
               <div className="space-y-2.5">
-                {(pendingFiles || []).map((f: any) => (
+                {pendingFiles.map((f: any) => (
                   <div key={f.id} className="flex items-start gap-2.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
                     <div className="min-w-0">
@@ -531,7 +450,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </div>
           )}
 
-          {/* ── Activity feed ── */}
+          {/* Activity feed */}
           <div>
             <div className="flex items-center gap-2 mb-4">
               <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
@@ -539,14 +458,14 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
               </div>
               <h3 className="text-sm font-semibold text-foreground">Atividade Recente</h3>
             </div>
-            {!(recentUpdates || []).length ? (
+            {recentUpdates.length === 0 ? (
               <div className="py-6 text-center">
                 <MessageSquare className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
                 <p className="text-[12px] text-muted-foreground">Nenhuma atualização ainda.</p>
               </div>
             ) : (
               <div className="space-y-0">
-                {(recentUpdates || []).map((u: any) => {
+                {recentUpdates.map((u: any) => {
                   const Icon = updateIcons[u.update_type] || Zap;
                   return (
                     <div key={u.id} className="flex gap-3 py-2.5 border-b border-border/50 last:border-0">
