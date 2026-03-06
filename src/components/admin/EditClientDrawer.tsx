@@ -231,7 +231,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     const total = parseFloat(payTotal);
     const entryPct = parseFloat(payEntryPct);
     const count = parseInt(payInstCount);
-    if (!total || !entryPct || !count) return;
+    if (!total || isNaN(entryPct) || !count) return;
     setPaySubmitting(true);
     try {
       const entryAmount = (total * entryPct) / 100;

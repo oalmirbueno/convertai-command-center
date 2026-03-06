@@ -132,7 +132,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
-    if (!total || !entryPct || !count || !payment) return;
+    if (!total || isNaN(entryPct) || !count || !payment) return;
 
     setSubmitting(true);
     try {
@@ -387,7 +387,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={submitting || !total || !entryPct}>
+            <Button onClick={handleCreate} disabled={submitting || !total}>
               {submitting ? "Criando..." : "Criar Plano"}
             </Button>
           </DialogFooter>
