@@ -335,26 +335,38 @@ export default function AdminFinanceiro() {
       </div>
 
       {/* Stats - only admin sees revenue/pending/overdue */}
-      {isAdmin && (
+      {isAdmin && (() => {
+        const showMonthly = brandFilter === "all" || brandFilter === "aceleriq";
+        const showIndiv = brandFilter === "all" || brandFilter === "sitebolt";
+        const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
+        const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
+        const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
+        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}` : undefined;
+        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}` : undefined;
+        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}` : undefined;
+
+        const cards = [
+          ...(showMonthly ? [{ label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" }] : []),
+          { label: "A Receber", value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
+          ...(brandFilter === "all" ? [{ label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" }] : []),
+          { label: "Total Recebido", value: fmt(receivedVal), sub: recSub, icon: CheckCircle2, color: "text-info" },
+          { label: "Atrasado", value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+        ];
+        return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {[
-           { label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" },
-            { label: "A Receber (Total)", value: fmt(pendingTotal + indivPending), sub: `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}`, icon: CreditCard, color: "text-warning" },
-            { label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" },
-            { label: "Total Recebido", value: fmt(receivedTotal + indivPaid), sub: `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}`, icon: CheckCircle2, color: "text-info" },
-            { label: "Atrasado", value: fmt(overdueTotal + indivOverdue), sub: `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}`, icon: CreditCard, color: "text-destructive" },
-          ].map((s, i) => (
+          {cards.map((s: any, i: number) => (
             <div key={i} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <s.icon className={`w-4 h-4 ${s.color}`} />
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
               </div>
               <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
-              {(s as any).sub && <p className="text-[11px] text-muted-foreground mt-0.5">{(s as any).sub}</p>}
+              {s.sub && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {!isAdmin && (
         <div className="grid grid-cols-1 gap-3">
