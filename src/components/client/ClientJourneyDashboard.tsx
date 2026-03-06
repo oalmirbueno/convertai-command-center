@@ -181,6 +181,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
       <FadeUp><AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} /></FadeUp>
 
       {/* ══════════ MAIN GRID ══════════ */}
+      <FadeUp>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* LEFT COLUMN */}
