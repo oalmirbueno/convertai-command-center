@@ -181,6 +181,8 @@ export default function AdminFinanceiro() {
     sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now && (periodFilter === "all" || isThisMonth(i.due_date)))
       .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
+  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
+
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
