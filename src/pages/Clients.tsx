@@ -62,6 +62,11 @@ export default function Clients() {
         <p className="heading-page">Clientes</p>
         {isAdmin && (
           <div className="flex gap-2 flex-wrap">
+            <button onClick={() => navigate("/ver-como-cliente")}
+              className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
+              <Eye className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Ver como</span> Cliente
+            </button>
             <button onClick={() => setBriefingOpen(true)}
               data-tour="clients-briefing-btn"
               className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
