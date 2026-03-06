@@ -487,7 +487,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
                       })}
                   </div>
                 )}
-              </div>
+              </motion.div>
             </motion.div>
           );
         })}
