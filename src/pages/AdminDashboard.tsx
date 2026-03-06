@@ -1,7 +1,7 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
-import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase } from "lucide-react";
+import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import MeetingNotesModal from "@/components/admin/MeetingNotesModal";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
