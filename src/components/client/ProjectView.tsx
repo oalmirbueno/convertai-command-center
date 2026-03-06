@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ArrowLeft, Activity, CheckCircle2, Zap, Timer, Target,
   Users, Calendar, Sparkles, TrendingUp, Eye, Clock,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import CircularProgress from "./CircularProgress";
 import TabOverview from "./tabs/TabOverview";
 import TabKanban from "./tabs/TabKanban";
