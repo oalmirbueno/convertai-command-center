@@ -132,8 +132,9 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
   }, [doneTasks, totalTasks, project.progress, project.start_date]);
 
   return (
-    <div className="animate-fade-in space-y-6">
+    <StaggerContainer className="space-y-6">
       {/* Back button */}
+      <FadeUp>
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -141,8 +142,10 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
         <ArrowLeft className="w-3.5 h-3.5" />
         Voltar aos projetos
       </button>
+      </FadeUp>
 
       {/* ══════════ IMMERSIVE HERO ══════════ */}
+      <FadeUp>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
         {/* Background effects */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
