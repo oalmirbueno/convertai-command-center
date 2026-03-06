@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { StaggerContainer, FadeUp, FadeScale } from "./motion";
 import {
   ArrowLeft, Activity, CheckCircle2, Zap, Timer, Target,
   Users, Calendar, Sparkles, TrendingUp, Eye, Clock,
@@ -131,8 +132,9 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
   }, [doneTasks, totalTasks, project.progress, project.start_date]);
 
   return (
-    <div className="animate-fade-in space-y-6">
+    <StaggerContainer className="space-y-6">
       {/* Back button */}
+      <FadeUp>
       <button
         onClick={onBack}
         className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
@@ -140,8 +142,10 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
         <ArrowLeft className="w-3.5 h-3.5" />
         Voltar aos projetos
       </button>
+      </FadeUp>
 
       {/* ══════════ IMMERSIVE HERO ══════════ */}
+      <FadeUp>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
         {/* Background effects */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
@@ -335,9 +339,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
           )}
         </div>
       </div>
+      </FadeUp>
 
       {/* ══════════ TASK PROGRESS BAR ══════════ */}
       {totalTasks > 0 && (
+        <FadeUp>
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[12px] font-semibold text-foreground">Distribuição das Tarefas</span>
@@ -370,9 +376,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             ))}
           </div>
         </div>
+        </FadeUp>
       )}
 
       {/* ══════════ TABS ══════════ */}
+      <FadeUp>
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-transparent h-auto p-0 gap-8 border-b border-border rounded-none w-full justify-start overflow-x-auto">
           {[
@@ -414,10 +422,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
           <TabUpdates projectId={project.id} />
         </TabsContent>
       </Tabs>
+      </FadeUp>
 
       {/* Floating request button */}
       <RequestButton projectId={project.id} projectName={project.name} />
-    </div>
+    </StaggerContainer>
   );
 }
 

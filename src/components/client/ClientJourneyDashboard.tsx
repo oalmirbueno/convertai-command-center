@@ -2,6 +2,7 @@ import CircularProgress from "./CircularProgress";
 import { Skeleton } from "@/components/ui/skeleton";
 import AutoSummaryCard from "./AutoSummaryCard";
 import AdsEducationCard from "./AdsEducationCard";
+import { StaggerContainer, FadeUp, FadeScale } from "./motion";
 import {
   CheckCircle2, Clock, AlertCircle, FileCheck, TrendingUp,
   Zap, Target, CalendarDays, MessageSquare,
@@ -77,9 +78,10 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
   }
 
   return (
-    <div className="animate-fade-in space-y-8">
+    <StaggerContainer className="space-y-8">
 
       {/* ══════════ HERO ══════════ */}
+      <FadeUp>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/[0.04] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
@@ -147,8 +149,10 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           )}
         </div>
       </div>
+      </FadeUp>
 
       {/* ══════════ METRICS ══════════ */}
+      <FadeUp>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: "Projetos Ativos", value: activeProjects.length, sub: doneProjects.length > 0 ? `+${doneProjects.length} concluídos` : "", icon: Briefcase, color: "text-primary", bg: "bg-primary/10" },
@@ -168,14 +172,16 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           </div>
         ))}
       </div>
+      </FadeUp>
 
       {/* ══════════ AUTO SUMMARY ══════════ */}
-      <AutoSummaryCard data={data} firstName={firstName} />
+      <FadeUp><AutoSummaryCard data={data} firstName={firstName} /></FadeUp>
 
       {/* ══════════ ADS EDUCATION ══════════ */}
-      <AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} />
+      <FadeUp><AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} /></FadeUp>
 
       {/* ══════════ MAIN GRID ══════════ */}
+      <FadeUp>
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
         {/* LEFT COLUMN */}
@@ -722,7 +728,8 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           </div>
         </div>
       </div>
-    </div>
+      </FadeUp>
+    </StaggerContainer>
   );
 }
 
