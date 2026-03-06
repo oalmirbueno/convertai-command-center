@@ -8,6 +8,7 @@ import {
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useMemo } from "react";
+import { motion } from "framer-motion";
 
 const PAGE_SIZE = 4;
 
@@ -100,10 +101,18 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
   const progressPct = stats.total > 0 ? Math.round((stats.completed / stats.total) * 100) : 0;
 
   return (
-    <div className="space-y-6">
+    <motion.div
+      className="space-y-6"
+      initial="hidden"
+      animate="show"
+      variants={{ hidden: {}, show: { transition: { staggerChildren: 0.1, delayChildren: 0.05 } } }}
+    >
 
       {/* ═══════ HERO HEADER ═══════ */}
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card">
+      <motion.div
+        variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+        className="relative overflow-hidden rounded-2xl border border-border bg-card"
+      >
         {/* Background decorative gradient */}
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.03] via-transparent to-emerald-500/[0.02] pointer-events-none" />
 
@@ -167,15 +176,18 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
             </div>
           </div>
         </div>
-      </div>
+      </motion.div>
 
       {/* ═══════ FLOW DIRECTION INDICATOR ═══════ */}
-      <div className="flex items-center gap-2 px-2">
+      <motion.div
+        variants={{ hidden: { opacity: 0, x: -12 }, show: { opacity: 1, x: 0, transition: { duration: 0.35 } } }}
+        className="flex items-center gap-2 px-2"
+      >
         <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground/60">
           <ArrowRight className="w-3 h-3" />
           <span>O projeto avança por cada etapa, da esquerda para a direita</span>
         </div>
-      </div>
+      </motion.div>
 
       {/* ═══════ MILESTONE CARDS ═══════ */}
       <div className="space-y-3">
@@ -199,7 +211,11 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
           const team = Array.from(teamMap.values());
 
           return (
-            <div key={m.id} className="relative">
+            <motion.div
+              key={m.id}
+              className="relative"
+              variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+            >
               {/* Connecting line */}
               {i < visibleMilestones.length - 1 && (
                 <div
@@ -388,7 +404,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -430,7 +446,10 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
       )}
 
       {/* ═══════ VALUE FOOTER ═══════ */}
-      <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+      <motion.div
+        variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+        className="bg-card border border-border rounded-xl p-4 sm:p-5"
+      >
         <div className="flex items-start gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -447,7 +466,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
