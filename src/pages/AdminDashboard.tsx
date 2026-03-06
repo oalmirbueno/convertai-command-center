@@ -301,9 +301,25 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Projects */}
       <div>
-        <p className="label-sm mb-4">Projetos Ativos</p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="label-sm">Projetos Ativos</p>
+          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            {BRAND_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setBrandFilter(f.value)}
+                className={`text-[11px] px-3 py-1 rounded-md transition-colors cursor-pointer border-none ${
+                  brandFilter === f.value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground bg-transparent"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
         {loadingProjects ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
         ) : activeProjects.length === 0 ? (
