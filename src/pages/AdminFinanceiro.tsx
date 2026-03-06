@@ -60,6 +60,7 @@ export default function AdminFinanceiro() {
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
+  const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
@@ -116,6 +117,11 @@ export default function AdminFinanceiro() {
   }, [clients, billing, isAdmin]);
 
   // Computed totals — combine billing + client plan data for accurate stats
+  const isThisMonth = (d: string) => {
+    const date = new Date(d);
+    return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+  };
+
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
   const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
@@ -123,24 +129,29 @@ export default function AdminFinanceiro() {
   // "A Receber" — from billing pending + active clients with plan_value not yet in billing
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
-    !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
+    !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
+    // Exclude clients already paid this month (no double counting)
+    !(billing || []).some((b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "paid" && isThisMonth(b.paid_date || b.due_date))
   );
   const extraPending = clientsWithPlanNotInBilling.reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
-  const monthlyRevenue = paidBills
-    .filter((b: any) => b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  // Period-aware filtering
+  const monthPendingBills = pendingBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.due_date));
+  const monthPaidBills = paidBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.paid_date || b.due_date));
 
-  const pendingTotal = pendingBills
-    .filter((b: any) => b.type !== "ads_recharge")
-    .reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
+  const monthlyRevenue = monthPaidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
 
-  const overdueTotal = overdueBills
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const pendingTotal = periodFilter === "month"
+    ? monthPendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0)
+    : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
 
-  const receivedTotal = paidBills
-    .filter((b: any) => b.type !== "ads_recharge")
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const overdueTotal = periodFilter === "month"
+    ? monthPendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0)
+    : overdueBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+
+  const receivedTotal = periodFilter === "month"
+    ? monthlyRevenue
+    : paidBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   // Receita Mensal Esperada = soma dos plan_value de clientes ativos
   const expectedMonthlyRevenue = (clients || [])
@@ -149,14 +160,28 @@ export default function AdminFinanceiro() {
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
-  // Individual project payments totals
+  // Individual project payments totals (period-aware)
   const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
+
   const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
-  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
-  const indivPending = indivTotal - indivPaid;
+    sum + (pp.installments || []).filter((i: any) => i.status === "paid" && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPendingAll = filteredPayments.reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending")
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPendingMonth = filteredPayments.reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && isThisMonth(i.due_date))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPending = periodFilter === "month" ? indivPendingMonth : indivPendingAll;
+
   const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now).reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now && (periodFilter === "all" || isThisMonth(i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
 
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
@@ -316,20 +341,37 @@ export default function AdminFinanceiro() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
         {isAdmin && (
-          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-            {BRAND_FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setBrandFilter(f.value)}
-                className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                  brandFilter === f.value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground bg-transparent"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setPeriodFilter(f.value)}
+                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                    periodFilter === f.value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              {BRAND_FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setBrandFilter(f.value)}
+                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                    brandFilter === f.value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
@@ -341,16 +383,19 @@ export default function AdminFinanceiro() {
         const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
         const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
         const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
-        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}` : undefined;
-        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}` : undefined;
-        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}` : undefined;
+        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
+        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
+        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
+        const periodLabel = periodFilter === "month" ? "no Mês" : "Geral";
 
         const cards = [
-          ...(showMonthly ? [{ label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" }] : []),
-          { label: "A Receber", value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
-          ...(brandFilter === "all" ? [{ label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" }] : []),
-          { label: "Total Recebido", value: fmt(receivedVal), sub: recSub, icon: CheckCircle2, color: "text-info" },
-          { label: "Atrasado", value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+          ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: periodFilter === "month" ? `de ${fmt(expectedMonthlyRevenue)} esperado` : recSub, icon: TrendingUp, color: "text-success" }] : [
+            { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: recSub, icon: TrendingUp, color: "text-success" },
+          ]),
+          ...(!showMonthly ? [] : []),
+          { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
+          { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+          ...(periodFilter === "month" && showMonthly ? [{ label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), sub: "Planos ativos AcelerIQ", icon: CheckCircle2, color: "text-info" }] : []),
         ];
         return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
