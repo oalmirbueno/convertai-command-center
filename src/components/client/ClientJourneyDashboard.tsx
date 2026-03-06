@@ -2,6 +2,7 @@ import CircularProgress from "./CircularProgress";
 import { Skeleton } from "@/components/ui/skeleton";
 import AutoSummaryCard from "./AutoSummaryCard";
 import AdsEducationCard from "./AdsEducationCard";
+import { StaggerContainer, FadeUp, FadeScale } from "./motion";
 import {
   CheckCircle2, Clock, AlertCircle, FileCheck, TrendingUp,
   Zap, Target, CalendarDays, MessageSquare,

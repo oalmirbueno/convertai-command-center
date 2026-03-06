@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { StaggerContainer, FadeUp, FadeScale } from "./motion";
 import {
   ArrowLeft, Activity, CheckCircle2, Zap, Timer, Target,
   Users, Calendar, Sparkles, TrendingUp, Eye, Clock,
