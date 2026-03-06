@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon } from "lucide-react";
+import { getProjectBrand } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -537,7 +538,10 @@ export default function AdminFinanceiro() {
                   <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
-                      <p className="text-xs text-muted-foreground">{pp.client?.company_name || pp.client?.full_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {pp.client?.company_name || pp.client?.full_name}
+                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
+                      </p>
                     </div>
                     <div className="w-20 hidden sm:block">
                       <Progress value={pct} className="h-1.5" />

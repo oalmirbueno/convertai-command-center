@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
+import { getProjectBrand } from "@/lib/brandHelpers";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
@@ -430,7 +431,10 @@ export default function ClientFinanceiro() {
                 <div key={pp.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
                   <div className="flex items-start justify-between flex-wrap gap-2">
                     <div>
-                      <p className="text-sm font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold text-foreground">{pp.project?.name || "Projeto"}</p>
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
+                      </div>
                       <p className="text-xl font-mono font-light text-foreground mt-1">{formatCurrency(Number(pp.total_value))}</p>
                     </div>
                     <div className="text-right">
