@@ -3,12 +3,13 @@ import {
   Check, ChevronDown, ChevronLeft, ChevronRight,
   Target, Sparkles, Clock, CalendarCheck, Zap,
   TrendingUp, Users, CheckCircle2, CircleDot, Circle,
-  ArrowRight, Star,
+  ArrowRight, Star, Activity,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 const PAGE_SIZE = 4;
 
