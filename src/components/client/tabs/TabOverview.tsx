@@ -54,20 +54,32 @@ export default function TabOverview({ project }: { project: any }) {
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  // Team members
-  const teamMembers = allTasks.length > 0
-    ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
-    : [];
-
-  // Tasks per team member with full breakdown
-  const memberTaskCounts = teamMembers.map((m: any) => {
-    const memberTasks = allTasks.filter((t: any) => t.assigned_to === m.id);
-    const memberDone = memberTasks.filter((t: any) => t.status === "done").length;
-    const memberDoing = memberTasks.filter((t: any) => t.status === "doing").length;
-    const memberReview = memberTasks.filter((t: any) => t.status === "review").length;
-    const memberBacklog = memberTasks.filter((t: any) => t.status === "backlog" || t.status === "todo").length;
-    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing, review: memberReview, backlog: memberBacklog };
-  });
+  // Team members — build from assigned_to UUID as key, assignee object as value
+  const memberTaskCounts = (() => {
+    const memberMap = new Map<string, { id: string; full_name: string; total: number; done: number; doing: number; review: number; backlog: number }>();
+    
+    allTasks.forEach((t: any) => {
+      if (!t.assigned_to) return;
+      const assigneeName = t.assignee?.full_name || "Sem nome";
+      
+      if (!memberMap.has(t.assigned_to)) {
+        memberMap.set(t.assigned_to, {
+          id: t.assigned_to,
+          full_name: assigneeName,
+          total: 0, done: 0, doing: 0, review: 0, backlog: 0,
+        });
+      }
+      
+      const member = memberMap.get(t.assigned_to)!;
+      member.total++;
+      if (t.status === "done") member.done++;
+      else if (t.status === "doing") member.doing++;
+      else if (t.status === "review") member.review++;
+      else member.backlog++;
+    });
+    
+    return Array.from(memberMap.values());
+  })();
 
   const objectives = project.objectives
     ? project.objectives.split("\n").filter((o: string) => o.trim())
