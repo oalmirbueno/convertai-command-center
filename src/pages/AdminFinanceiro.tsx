@@ -438,7 +438,7 @@ export default function AdminFinanceiro() {
           ))}
           {/* Projeção card — clickable */}
           <div
-            onClick={() => setProjectionOpen(!projectionOpen)}
+            onClick={() => navigate("/financeiro/projecao")}
             className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-info/40 transition-colors group relative"
           >
             <div className="flex items-center gap-2 mb-2">
@@ -448,7 +448,7 @@ export default function AdminFinanceiro() {
             <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
             <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
-              {projectionOpen ? "Fechar ▲" : "Ver detalhes ▼"}
+              Ver projeção →
             </span>
           </div>
         </div>
