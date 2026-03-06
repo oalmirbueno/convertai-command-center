@@ -3,12 +3,13 @@ import {
   Check, ChevronDown, ChevronLeft, ChevronRight,
   Target, Sparkles, Clock, CalendarCheck, Zap,
   TrendingUp, Users, CheckCircle2, CircleDot, Circle,
-  ArrowRight, Star,
+  ArrowRight, Star, Activity,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useState, useMemo } from "react";
 import { motion } from "framer-motion";
+import { BarChart, Bar, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 
 const PAGE_SIZE = 4;
 
@@ -75,6 +76,30 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
     const totalTasks = allTasks.length;
     return { total: all.length, completed, allTasks: totalTasks, doneTasks };
   }, [milestones, tasks]);
+
+  // Weekly delivery velocity (last 8 weeks)
+  const weeklyVelocity = useMemo(() => {
+    const doneTasks = (tasks || []).filter((t: any) => t.status === "done" && t.updated_at);
+    const now = new Date();
+    const weeks: { label: string; count: number }[] = [];
+
+    for (let w = 7; w >= 0; w--) {
+      const weekStart = new Date(now);
+      weekStart.setDate(weekStart.getDate() - w * 7);
+      weekStart.setHours(0, 0, 0, 0);
+      const weekEnd = new Date(weekStart);
+      weekEnd.setDate(weekEnd.getDate() + 7);
+
+      const count = doneTasks.filter((t: any) => {
+        const d = new Date(t.updated_at);
+        return d >= weekStart && d < weekEnd;
+      }).length;
+
+      const label = weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+      weeks.push({ label, count });
+    }
+    return weeks;
+  }, [tasks]);
 
   if (loadingMilestones || loadingTasks) {
     return (
@@ -177,6 +202,60 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
           </div>
         </div>
       </motion.div>
+
+      {/* ═══════ DELIVERY VELOCITY CHART ═══════ */}
+      {weeklyVelocity.some(w => w.count > 0) && (
+        <motion.div
+          variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+          className="bg-card border border-border rounded-xl p-5"
+        >
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-8 h-8 rounded-lg bg-sky-400/10 flex items-center justify-center shrink-0">
+              <Activity className="w-4 h-4 text-sky-400" />
+            </div>
+            <div>
+              <p className="text-[13px] font-semibold text-foreground">Ritmo de Entregas</p>
+              <p className="text-[10px] text-muted-foreground">Tarefas concluídas por semana nas últimas 8 semanas</p>
+            </div>
+            <div className="ml-auto text-right">
+              <p className="text-[16px] font-bold text-foreground tabular-nums">
+                {Math.round(weeklyVelocity.reduce((s, w) => s + w.count, 0) / Math.max(weeklyVelocity.filter(w => w.count > 0).length, 1))}
+              </p>
+              <p className="text-[9px] text-muted-foreground">média/semana</p>
+            </div>
+          </div>
+          <div className="h-[100px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyVelocity} barCategoryGap="20%">
+                <XAxis
+                  dataKey="label"
+                  tick={{ fontSize: 9, fill: "hsl(var(--muted-foreground))" }}
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip
+                  cursor={{ fill: "hsl(var(--secondary))" }}
+                  contentStyle={{
+                    background: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: 8,
+                    fontSize: 11,
+                    padding: "6px 10px",
+                  }}
+                  formatter={(value: number) => [`${value} tarefa${value !== 1 ? "s" : ""}`, "Concluídas"]}
+                  labelFormatter={(label) => `Semana de ${label}`}
+                />
+                <Bar
+                  dataKey="count"
+                  fill="hsl(var(--primary))"
+                  radius={[4, 4, 0, 0]}
+                  maxBarSize={28}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </motion.div>
+      )}
 
       {/* ═══════ FLOW DIRECTION INDICATOR ═══════ */}
       <motion.div
