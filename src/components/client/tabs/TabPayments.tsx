@@ -59,7 +59,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
-    if (!total || !entryPct || !count) return;
+    if (!total || isNaN(entryPct) || !count) return;
 
     setSubmitting(true);
     try {
@@ -132,7 +132,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
-    if (!total || !entryPct || !count || !payment) return;
+    if (!total || isNaN(entryPct) || !count || !payment) return;
 
     setSubmitting(true);
     try {
@@ -358,7 +358,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
     return (
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Criar Plano de Pagamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
@@ -387,7 +387,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCreateOpen(false)}>Cancelar</Button>
-            <Button onClick={handleCreate} disabled={submitting || !total || !entryPct}>
+            <Button onClick={handleCreate} disabled={submitting || !total}>
               {submitting ? "Criando..." : "Criar Plano"}
             </Button>
           </DialogFooter>
@@ -406,7 +406,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
     return (
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Editar Plano de Pagamento</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>
           <div className="space-y-4">
