@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
@@ -32,62 +33,63 @@ function formatDate(d: string) {
 }
 
 export default function ClientFinanceiro() {
-  const { user, profile } = useAuth();
+  const { user, profile: authProfile } = useAuth();
+  const { clientId, profile } = useClientIdentity();
   const queryClient = useQueryClient();
 
   // ===== QUERIES =====
   const { data: billing, isLoading: loadingBilling } = useQuery({
-    queryKey: ["billing-client", user?.id],
+    queryKey: ["billing-client", clientId],
     queryFn: async () => {
       const { data } = await supabase
         .from("billing")
         .select("*")
-        .eq("client_id", user!.id)
+        .eq("client_id", clientId!)
         .order("due_date", { ascending: false });
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
   const { data: wallets } = useQuery({
-    queryKey: ["ads-wallet-client", user?.id],
+    queryKey: ["ads-wallet-client", clientId],
     queryFn: async () => {
       const { data } = await supabase
         .from("ads_wallet")
         .select("*")
-        .eq("client_id", user!.id);
+        .eq("client_id", clientId!);
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
   const { data: rechargeRequests } = useQuery({
-    queryKey: ["recharge-requests-client", user?.id],
+    queryKey: ["recharge-requests-client", clientId],
     queryFn: async () => {
       const { data } = await supabase
         .from("recharge_requests")
         .select("*")
-        .eq("client_id", user!.id)
+        .eq("client_id", clientId!)
         .order("created_at", { ascending: false });
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
   const { data: myProjectPayments } = useQuery({
-    queryKey: ["client-project-payments", user?.id],
+    queryKey: ["client-project-payments", clientId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_payments")
         .select("*, project:projects!project_payments_project_id_fkey(name, project_type), installments:payment_installments(*)")
-        .eq("client_id", user!.id);
+        .eq("client_id", clientId!);
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!clientId,
     refetchInterval: 15000,
   });
 
