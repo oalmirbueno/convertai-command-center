@@ -1,5 +1,11 @@
-import { useTasks } from "@/hooks/useSupabaseData";
+import { useTasks, useMilestones, useProjectUpdates } from "@/hooks/useSupabaseData";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import {
+  CheckCircle2, Sparkles, Target, Users, Clock,
+  Activity, Zap, FileImage, AlertCircle, TrendingUp,
+  Eye, Hourglass, CircleCheck, CircleDot, Circle,
+} from "lucide-react";
+import { relativeTime, formatDate, formatDateShort, daysUntil } from "../dashboardHelpers";
 
 const statusBadge: Record<string, string> = {
   active: "bg-success/10 text-success",
@@ -19,24 +25,47 @@ const typeLabels: Record<string, string> = {
   other: "Outro",
 };
 
+const updateIcons: Record<string, typeof Activity> = {
+  creative: FileImage, task: CheckCircle2, alert: AlertCircle,
+  milestone: Target, system: Zap, report: TrendingUp,
+};
+
 export default function TabOverview({ project }: { project: any }) {
   const { data: tasks } = useTasks(project.id);
+  const { data: milestones } = useMilestones(project.id);
+  const { data: updates } = useProjectUpdates(project.id);
 
-  const formatDate = (d: string) => {
-    if (!d) return "—";
+  const allTasks = tasks || [];
+  const doingTasks = allTasks.filter((t: any) => t.status === "doing");
+  const reviewTasks = allTasks.filter((t: any) => t.status === "review");
+  const doneTasks = allTasks.filter((t: any) => t.status === "done");
+  const backlogTasks = allTasks.filter((t: any) => t.status === "backlog" || t.status === "todo");
+  const totalTasks = allTasks.length;
+
+  const allMilestones = milestones || [];
+  const completedMilestones = allMilestones.filter((m: any) => m.status === "completed");
+  const activeMilestone = allMilestones.find((m: any) => m.status === "in_progress" || m.status === "pending");
+
+  const recentDone = doneTasks.slice(0, 6);
+  const recentUpdates = (updates || []).slice(0, 6);
+
+  const formatDateFull = (d: string) => {
+    if (!d) return "";
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
 
-  // Get unique team members from tasks
-  const teamMembers = tasks
-    ? Array.from(
-        new Map(
-          tasks
-            .filter((t: any) => t.assigned_to && t.assignee)
-            .map((t: any) => [t.assigned_to, t.assignee])
-        ).values()
-      )
+  // Team members
+  const teamMembers = allTasks.length > 0
+    ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
     : [];
+
+  // Tasks per team member
+  const memberTaskCounts = teamMembers.map((m: any) => {
+    const memberTasks = allTasks.filter((t: any) => t.assigned_to === m.id);
+    const memberDone = memberTasks.filter((t: any) => t.status === "done").length;
+    const memberDoing = memberTasks.filter((t: any) => t.status === "doing" || t.status === "review").length;
+    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing };
+  });
 
   const objectives = project.objectives
     ? project.objectives.split("\n").filter((o: string) => o.trim())
@@ -74,6 +103,81 @@ export default function TabOverview({ project }: { project: any }) {
             </ul>
           </div>
         )}
+
+        {/* Current milestone */}
+        {activeMilestone && (
+          <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <Target className="w-4 h-4 text-primary" />
+              <span className="text-[12px] font-semibold text-foreground">Etapa Atual</span>
+            </div>
+            <p className="text-sm font-medium text-foreground">{activeMilestone.title}</p>
+            {activeMilestone.description && (
+              <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">{activeMilestone.description}</p>
+            )}
+            <p className="text-[11px] text-muted-foreground mt-2">
+              Prazo: {formatDateFull(activeMilestone.target_date)}
+              {` · ${completedMilestones.length}/${allMilestones.length} etapas concluídas`}
+            </p>
+          </div>
+        )}
+
+        {/* Milestones mini timeline */}
+        {allMilestones.length > 0 && (
+          <div>
+            <p className="label-sm mb-3">Progresso das Etapas</p>
+            <div className="space-y-2">
+              {allMilestones.slice(0, 6).map((m: any, i: number) => {
+                const isDone = m.status === "completed";
+                const isActive = m.status === "in_progress";
+                return (
+                  <div key={m.id} className="flex items-center gap-3">
+                    <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+                      isDone ? "bg-emerald-500/15 border border-emerald-500/40"
+                        : isActive ? "bg-primary/15 border border-primary/40"
+                        : "bg-secondary border border-border"
+                    }`}>
+                      {isDone ? <CircleCheck className="w-3 h-3 text-emerald-400" />
+                        : isActive ? <CircleDot className="w-3 h-3 text-primary" />
+                        : <Circle className="w-3 h-3 text-muted-foreground/40" />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-[12px] ${isDone ? "text-emerald-400 line-through decoration-emerald-500/30" : isActive ? "text-foreground font-medium" : "text-muted-foreground"}`}>
+                        {m.title}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{formatDateShort(m.target_date)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Recently completed tasks */}
+        {recentDone.length > 0 && (
+          <div>
+            <p className="label-sm mb-3">Tarefas Concluídas Recentemente</p>
+            <div className="bg-card border border-border rounded-xl divide-y divide-border">
+              {recentDone.map((t: any) => (
+                <div key={t.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[12px] text-foreground truncate">{t.title}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {t.assignee?.full_name && `${t.assignee.full_name} · `}{relativeTime(t.updated_at)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+              {doneTasks.length > 6 && (
+                <div className="px-4 py-2 text-center">
+                  <span className="text-[10px] text-muted-foreground">e mais {doneTasks.length - 6} concluídas</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Right col 40% */}
@@ -84,11 +188,11 @@ export default function TabOverview({ project }: { project: any }) {
           <div className="space-y-2.5 text-[13px]">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Início</span>
-              <span className="text-foreground">{formatDate(project.start_date)}</span>
+              <span className="text-foreground">{formatDateFull(project.start_date)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Prazo</span>
-              <span className="text-foreground">{formatDate(project.deadline)}</span>
+              <span className="text-foreground">{formatDateFull(project.deadline)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Progresso</span>
@@ -104,29 +208,104 @@ export default function TabOverview({ project }: { project: any }) {
               <span className="text-muted-foreground">Tipo</span>
               <span className="text-xs text-foreground">{typeLabels[project.project_type] || project.project_type}</span>
             </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Total de tarefas</span>
+              <span className="text-xs text-foreground font-mono">{totalTasks}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Tarefas concluídas</span>
+              <span className="text-xs text-emerald-400 font-mono">{doneTasks.length}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-muted-foreground">Em execução</span>
+              <span className="text-xs text-sky-400 font-mono">{doingTasks.length}</span>
+            </div>
+            {reviewTasks.length > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="text-muted-foreground">Em revisão</span>
+                <span className="text-xs text-amber-400 font-mono">{reviewTasks.length}</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Team card */}
         <div className="bg-card border border-border rounded-xl p-5">
-          <p className="label-sm mb-3">Equipe</p>
-          {teamMembers.length === 0 ? (
+          <p className="label-sm mb-3">Equipe do Projeto</p>
+          {memberTaskCounts.length === 0 ? (
             <p className="text-xs text-muted-foreground">Equipe não atribuída</p>
           ) : (
-            <div className="space-y-2.5">
-              {(teamMembers as any[]).map((member: any, i: number) => (
-                <div key={i} className="flex items-center gap-2.5">
-                  <Avatar className="w-7 h-7">
-                    <AvatarFallback className="text-[10px] bg-secondary text-muted-foreground">
+            <div className="space-y-3">
+              {memberTaskCounts.map((member: any, i: number) => (
+                <div key={i} className="flex items-center gap-3">
+                  <Avatar className="w-8 h-8">
+                    <AvatarFallback className="text-[10px] bg-secondary text-muted-foreground font-medium">
                       {member.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
                     </AvatarFallback>
                   </Avatar>
-                  <span className="text-[13px] text-foreground">{member.full_name}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-foreground">{member.full_name}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {member.doing > 0 && `${member.doing} em execução · `}
+                      {member.done}/{member.total} concluídas
+                    </p>
+                  </div>
+                  {member.doing > 0 && (
+                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                  )}
                 </div>
               ))}
             </div>
           )}
         </div>
+
+        {/* Recent updates */}
+        {recentUpdates.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <p className="label-sm mb-3">Últimas Atualizações</p>
+            <div className="space-y-0">
+              {recentUpdates.map((u: any) => {
+                const Icon = updateIcons[u.update_type] || Zap;
+                return (
+                  <div key={u.id} className="flex gap-2.5 py-2 border-b border-border/50 last:border-0">
+                    <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+                      <Icon className="w-3 h-3 text-muted-foreground" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[11px] text-foreground/85 line-clamp-2">{u.message}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        {u.author?.full_name && `${u.author.full_name} · `}{relativeTime(u.created_at)}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Backlog preview */}
+        {backlogTasks.length > 0 && (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <div className="flex items-center gap-2 mb-3">
+              <Hourglass className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="label-sm">Próximas Tarefas</p>
+              <span className="ml-auto text-[10px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full tabular-nums">{backlogTasks.length}</span>
+            </div>
+            <div className="space-y-2">
+              {backlogTasks.slice(0, 4).map((t: any) => (
+                <div key={t.id} className="flex items-center gap-2">
+                  <Circle className="w-3 h-3 text-muted-foreground/30 shrink-0" />
+                  <p className="text-[11px] text-foreground/60 truncate flex-1">{t.title}</p>
+                  {t.due_date && <span className="text-[9px] text-muted-foreground shrink-0">{formatDateShort(t.due_date)}</span>}
+                </div>
+              ))}
+              {backlogTasks.length > 4 && (
+                <p className="text-[10px] text-muted-foreground text-center">e mais {backlogTasks.length - 4}</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
