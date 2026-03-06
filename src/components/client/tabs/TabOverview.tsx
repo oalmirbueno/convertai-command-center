@@ -120,32 +120,76 @@ export default function TabOverview({ project }: { project: any }) {
 
         {/* Current milestone */}
         {activeMilestone && (
-          <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-5">
-            {/* Header */}
-            <div className="flex items-center gap-2.5 mb-4">
-              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
-                <Target className="w-4 h-4 text-primary" />
+          <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-5 space-y-4">
+            {/* Header row */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                  <Target className="w-4 h-4 text-primary" />
+                </div>
+                <p className="text-[13px] font-semibold text-foreground">Etapa Atual</p>
               </div>
-              <div>
-                <span className="text-[12px] font-semibold text-foreground block">Etapa Atual</span>
-                <span className="text-[10px] text-muted-foreground">
-                  {completedMilestones.length} de {allMilestones.length} etapas concluídas
-                </span>
-              </div>
+              <span className="text-[10px] text-muted-foreground bg-primary/10 px-2.5 py-1 rounded-full">
+                {completedMilestones.length} de {allMilestones.length} concluídas
+              </span>
             </div>
 
             {/* Milestone title */}
-            <p className="text-[14px] font-semibold text-foreground">{activeMilestone.title}</p>
+            <p className="text-[15px] font-semibold text-foreground leading-snug">{activeMilestone.title}</p>
 
-            {/* Description */}
-            {activeMilestone.description && (
-              <p className="text-[12px] text-muted-foreground mt-2 leading-relaxed">
-                {activeMilestone.description}
-              </p>
-            )}
+            {/* Formatted description */}
+            {activeMilestone.description && (() => {
+              const lines = activeMilestone.description.split("\n").filter((l: string) => l.trim());
+              const sections: { heading: string; items: string[] }[] = [];
+              let currentSection: { heading: string; items: string[] } | null = null;
+
+              lines.forEach((line: string) => {
+                const trimmed = line.trim();
+                // Detect section headings (lines ending with ":" or starting with keywords)
+                if (trimmed.endsWith(":") || /^(objetivo|foco|entregáveis|critério|meta)/i.test(trimmed)) {
+                  currentSection = { heading: trimmed.replace(/:$/, ""), items: [] };
+                  sections.push(currentSection);
+                } else if (currentSection) {
+                  currentSection.items.push(trimmed);
+                } else {
+                  // Standalone line before any heading
+                  sections.push({ heading: "", items: [trimmed] });
+                }
+              });
+
+              return (
+                <div className="space-y-3 text-[12px] leading-relaxed">
+                  {sections.map((sec, i) => (
+                    <div key={i}>
+                      {sec.heading && (
+                        <p className="text-[11px] font-semibold text-foreground/70 uppercase tracking-wide mb-1.5">
+                          {sec.heading}
+                        </p>
+                      )}
+                      <ul className="space-y-1">
+                        {sec.items.map((item, j) => {
+                          const cleaned = item.replace(/^[✔✓•\-–—]\s*/, "").trim();
+                          const isCheck = /^[✔✓]/.test(item.trim());
+                          return (
+                            <li key={j} className="flex items-start gap-2 text-muted-foreground">
+                              {isCheck ? (
+                                <CheckCircle2 className="w-3 h-3 text-emerald-400 mt-0.5 shrink-0" />
+                              ) : (
+                                <div className="w-1 h-1 rounded-full bg-primary/40 mt-1.5 shrink-0" />
+                              )}
+                              <span>{cleaned}</span>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
 
             {/* Meta info */}
-            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-primary/10">
+            <div className="flex items-center gap-4 pt-3 border-t border-primary/10">
               <div className="flex items-center gap-1.5">
                 <Clock className="w-3 h-3 text-muted-foreground" />
                 <span className="text-[11px] text-muted-foreground">
@@ -171,13 +215,11 @@ export default function TabOverview({ project }: { project: any }) {
 
             {/* Progress mini bar */}
             {allMilestones.length > 1 && (
-              <div className="mt-3">
-                <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
-                  <div
-                    className="h-full rounded-full bg-primary transition-all duration-500"
-                    style={{ width: `${(completedMilestones.length / allMilestones.length) * 100}%` }}
-                  />
-                </div>
+              <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-primary transition-all duration-500"
+                  style={{ width: `${(completedMilestones.length / allMilestones.length) * 100}%` }}
+                />
               </div>
             )}
           </div>
