@@ -9,7 +9,7 @@ import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon } from "lucide-react";
-import { getProjectBrand } from "@/lib/brandHelpers";
+import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -59,6 +59,7 @@ export default function AdminFinanceiro() {
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
+  const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
@@ -149,11 +150,12 @@ export default function AdminFinanceiro() {
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   // Individual project payments totals
-  const indivPaid = (projectPayments || []).reduce((sum: number, pp: any) =>
+  const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
+  const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
-  const indivTotal = (projectPayments || []).reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
+  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
   const indivPending = indivTotal - indivPaid;
-  const indivOverdue = (projectPayments || []).reduce((sum: number, pp: any) =>
+  const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now).reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const handleMarkPaid = async (id: string) => {
@@ -311,29 +313,60 @@ export default function AdminFinanceiro() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <p className="heading-page">Financeiro</p>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="heading-page">Financeiro</p>
+        {isAdmin && (
+          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            {BRAND_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setBrandFilter(f.value)}
+                className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                  brandFilter === f.value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground bg-transparent"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* Stats - only admin sees revenue/pending/overdue */}
-      {isAdmin && (
+      {isAdmin && (() => {
+        const showMonthly = brandFilter === "all" || brandFilter === "aceleriq";
+        const showIndiv = brandFilter === "all" || brandFilter === "sitebolt";
+        const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
+        const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
+        const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
+        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}` : undefined;
+        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}` : undefined;
+        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}` : undefined;
+
+        const cards = [
+          ...(showMonthly ? [{ label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" }] : []),
+          { label: "A Receber", value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
+          ...(brandFilter === "all" ? [{ label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" }] : []),
+          { label: "Total Recebido", value: fmt(receivedVal), sub: recSub, icon: CheckCircle2, color: "text-info" },
+          { label: "Atrasado", value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+        ];
+        return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
-          {[
-           { label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" },
-            { label: "A Receber (Total)", value: fmt(pendingTotal + indivPending), sub: `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}`, icon: CreditCard, color: "text-warning" },
-            { label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" },
-            { label: "Total Recebido", value: fmt(receivedTotal + indivPaid), sub: `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}`, icon: CheckCircle2, color: "text-info" },
-            { label: "Atrasado", value: fmt(overdueTotal + indivOverdue), sub: `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}`, icon: CreditCard, color: "text-destructive" },
-          ].map((s, i) => (
+          {cards.map((s: any, i: number) => (
             <div key={i} className="bg-card border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 mb-2">
                 <s.icon className={`w-4 h-4 ${s.color}`} />
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
               </div>
               <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
-              {(s as any).sub && <p className="text-[11px] text-muted-foreground mt-0.5">{(s as any).sub}</p>}
+              {s.sub && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
             </div>
           ))}
         </div>
-      )}
+        );
+      })()}
 
       {!isAdmin && (
         <div className="grid grid-cols-1 gap-3">
@@ -508,7 +541,7 @@ export default function AdminFinanceiro() {
           </div>
 
           {/* Projetos Individuais */}
-          {(projectPayments || []).length > 0 && (
+          {filteredPayments.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Briefcase className="w-3.5 h-3.5 text-primary" />
@@ -529,7 +562,7 @@ export default function AdminFinanceiro() {
                   </div>
                 ))}
               </div>
-              {(projectPayments || []).map((pp: any) => {
+              {filteredPayments.map((pp: any) => {
                 const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
                 const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
                 const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);

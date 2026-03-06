@@ -1,7 +1,7 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
-import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase } from "lucide-react";
+import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase, Users } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
 import { useState } from "react";
@@ -16,6 +16,7 @@ import MeetingNotesModal from "@/components/admin/MeetingNotesModal";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -71,6 +72,7 @@ export default function AdminDashboard() {
   const [meetingNotesOpen, setMeetingNotesOpen] = useState(false);
   const [briefingLinkOpen, setBriefingLinkOpen] = useState(false);
   const [drawerProject, setDrawerProject] = useState<any>(null);
+  const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -80,6 +82,18 @@ export default function AdminDashboard() {
   const thisYear = now.getFullYear();
 
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
+  const filteredProjects = activeProjects.filter((p: any) => matchesBrandFilter(p.project_type, brandFilter));
+
+  // Build team members map per project from tasks
+  const teamByProject: Record<string, { name: string; id: string }[]> = {};
+  (allTasks || []).forEach((t: any) => {
+    if (t.assigned_to && t.assignee?.full_name && t.project_id) {
+      if (!teamByProject[t.project_id]) teamByProject[t.project_id] = [];
+      if (!teamByProject[t.project_id].some((m: any) => m.id === t.assigned_to)) {
+        teamByProject[t.project_id].push({ name: t.assignee.full_name, id: t.assigned_to });
+      }
+    }
+  });
   const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
@@ -287,18 +301,35 @@ export default function AdminDashboard() {
         ))}
       </div>
 
-      {/* Projects */}
       <div>
-        <p className="label-sm mb-4">Projetos Ativos</p>
+        <div className="flex items-center justify-between mb-4">
+          <p className="label-sm">Projetos Ativos</p>
+          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            {BRAND_FILTERS.map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setBrandFilter(f.value)}
+                className={`text-[11px] px-3 py-1 rounded-md transition-colors cursor-pointer border-none ${
+                  brandFilter === f.value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground bg-transparent"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
         {loadingProjects ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-        ) : activeProjects.length === 0 ? (
+        ) : filteredProjects.length === 0 ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
         ) : (
           <div className="space-y-0.5 stagger-children">
-            {activeProjects.map((p: any) => {
+            {filteredProjects.map((p: any) => {
               const isHovered = hoveredProject === p.id;
               const showMenu = menuProject === p.id;
+              const projectTeam = teamByProject[p.id] || [];
               return (
                 <div
                   key={p.id}
@@ -310,11 +341,20 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-4">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{p.name}</span>
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{p.project_type?.replace("_", " ")}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{getProjectBrand(p.project_type)}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{p.client?.company_name || p.client?.full_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground">{p.client?.company_name || p.client?.full_name}</p>
+                        {projectTeam.length > 0 && (
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <Users className="w-3 h-3" />
+                            {projectTeam.map(m => m.name.split(" ")[0]).join(", ")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="w-32 hidden md:block">
                       <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
