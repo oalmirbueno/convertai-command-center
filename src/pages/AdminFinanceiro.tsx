@@ -410,8 +410,8 @@ export default function AdminFinanceiro() {
         const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
         const periodLabel = periodFilter === "month" ? "no Mês" : "Geral";
 
-        const MONTHS_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
-        const nextMonthName = MONTHS_NAMES[nextMonth];
+        const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+        const nextMonthFull = MONTHS_FULL[nextMonth];
         const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
 
         const cards = [
@@ -422,7 +422,6 @@ export default function AdminFinanceiro() {
           { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
           { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
           ...(periodFilter === "month" && showMonthly ? [{ label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), sub: "Planos ativos AcelerIQ", icon: CheckCircle2, color: "text-info" }] : []),
-          { label: `Projeção ${nextMonthName}`, value: fmt(nextMonthTotal), sub: nextMonthSub, icon: Briefcase, color: "text-info" },
         ];
         return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
@@ -436,6 +435,21 @@ export default function AdminFinanceiro() {
               {s.sub && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
             </div>
           ))}
+          {/* Projeção card — clickable */}
+          <div
+            onClick={() => setProjectionOpen(!projectionOpen)}
+            className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-info/40 transition-colors group relative"
+          >
+            <div className="flex items-center gap-2 mb-2">
+              <Briefcase className="w-4 h-4 text-info" />
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção — Próximo Mês</span>
+            </div>
+            <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
+            <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
+              {projectionOpen ? "Fechar ▲" : "Ver detalhes ▼"}
+            </span>
+          </div>
         </div>
         );
       })()}
