@@ -550,7 +550,7 @@ export default function AdminFinanceiro() {
                   </div>
                 ))}
               </div>
-              {(projectPayments || []).map((pp: any) => {
+              {filteredPayments.map((pp: any) => {
                 const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
                 const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
                 const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
