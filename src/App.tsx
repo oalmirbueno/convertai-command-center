@@ -20,6 +20,7 @@ import BriefingPublic from "@/pages/BriefingPublic";
 import AdminBriefings from "@/pages/AdminBriefings";
 import Projects from "@/pages/Projects";
 import AdminFinanceiro from "@/pages/AdminFinanceiro";
+import AdminProjection from "@/pages/AdminProjection";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import AdminReports from "@/pages/AdminReports";
 import ClientReports from "@/pages/ClientReports";
