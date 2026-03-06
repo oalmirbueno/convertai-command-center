@@ -149,8 +149,10 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           )}
         </div>
       </div>
+      </FadeUp>
 
       {/* ══════════ METRICS ══════════ */}
+      <FadeUp>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: "Projetos Ativos", value: activeProjects.length, sub: doneProjects.length > 0 ? `+${doneProjects.length} concluídos` : "", icon: Briefcase, color: "text-primary", bg: "bg-primary/10" },
@@ -170,12 +172,13 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
           </div>
         ))}
       </div>
+      </FadeUp>
 
       {/* ══════════ AUTO SUMMARY ══════════ */}
-      <AutoSummaryCard data={data} firstName={firstName} />
+      <FadeUp><AutoSummaryCard data={data} firstName={firstName} /></FadeUp>
 
       {/* ══════════ ADS EDUCATION ══════════ */}
-      <AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} />
+      <FadeUp><AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} /></FadeUp>
 
       {/* ══════════ MAIN GRID ══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
