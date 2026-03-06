@@ -322,13 +322,14 @@ export default function AdminDashboard() {
         </div>
         {loadingProjects ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
-        ) : activeProjects.length === 0 ? (
+        ) : filteredProjects.length === 0 ? (
           <div className="text-sm text-muted-foreground py-8 text-center">Nenhum projeto encontrado.</div>
         ) : (
           <div className="space-y-0.5 stagger-children">
-            {activeProjects.map((p: any) => {
+            {filteredProjects.map((p: any) => {
               const isHovered = hoveredProject === p.id;
               const showMenu = menuProject === p.id;
+              const projectTeam = teamByProject[p.id] || [];
               return (
                 <div
                   key={p.id}
