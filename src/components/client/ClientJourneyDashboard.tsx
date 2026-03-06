@@ -1,6 +1,7 @@
 import CircularProgress from "./CircularProgress";
 import { Skeleton } from "@/components/ui/skeleton";
 import AutoSummaryCard from "./AutoSummaryCard";
+import AdsEducationCard from "./AdsEducationCard";
 import {
   CheckCircle2, Clock, AlertCircle, FileCheck, TrendingUp,
   Zap, Target, CalendarDays, MessageSquare,
@@ -56,6 +57,12 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
   const overdueTasks = tasks
     .filter((t: any) => t.due_date && t.status !== "done" && daysUntil(t.due_date) < 0)
     .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+  // Detect traffic projects with active tasks (doing/review)
+  const trafficProjects = allProjects.filter((p: any) => p.project_type === "traffic" && p.status !== "done");
+  const activeTrafficProjectNames = trafficProjects
+    .filter((p: any) => tasks.some((t: any) => t.project_id === p.id && (t.status === "doing" || t.status === "review")))
+    .map((p: any) => p.name);
 
   if (loadingProjects) {
     return (
@@ -164,6 +171,9 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
 
       {/* ══════════ AUTO SUMMARY ══════════ */}
       <AutoSummaryCard data={data} firstName={firstName} />
+
+      {/* ══════════ ADS EDUCATION ══════════ */}
+      <AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} />
 
       {/* ══════════ MAIN GRID ══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
