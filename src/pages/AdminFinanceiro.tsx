@@ -37,6 +37,7 @@ const typeIcon = (type: string) => {
 };
 
 export default function AdminFinanceiro() {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const queryClient = useQueryClient();
