@@ -43,6 +43,7 @@ const statusLabel: Record<string, string> = {
 
 export default function Clients() {
   const { profile } = useAuth();
+  const navigate = useNavigate();
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading } = useClients();
   const [createOpen, setCreateOpen] = useState(false);
