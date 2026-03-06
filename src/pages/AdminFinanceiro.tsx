@@ -60,6 +60,7 @@ export default function AdminFinanceiro() {
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
+  const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
