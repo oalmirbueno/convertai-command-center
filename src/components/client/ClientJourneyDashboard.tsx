@@ -7,13 +7,21 @@ import {
   ArrowUpRight, Layers, Activity, Award, BarChart3,
   PackageCheck, ListChecks, Sparkles, Timer, Briefcase,
   CircleCheck, CircleDot, Circle, FileImage, BookOpen,
-  ClipboardList, Eye, FolderOpen,
+  ClipboardList, Eye, FolderOpen, User, Calendar,
+  Hourglass, Play, RotateCcw, ShieldCheck,
 } from "lucide-react";
 import { useClientDashboardData, typeLabels, relativeTime, daysUntil, formatDate, formatDateShort, type DashboardData } from "./dashboardHelpers";
 
 const updateIcons: Record<string, typeof Activity> = {
   creative: FileImage, task: CheckCircle2, alert: AlertCircle,
   milestone: Target, system: Zap, report: TrendingUp,
+};
+
+const priorityLabels: Record<string, { label: string; color: string }> = {
+  urgent: { label: "Urgente", color: "text-destructive" },
+  high: { label: "Alta", color: "text-amber-400" },
+  medium: { label: "Média", color: "text-muted-foreground" },
+  low: { label: "Baixa", color: "text-muted-foreground/60" },
 };
 
 interface Props {
@@ -34,8 +42,20 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
     recentUpdates,
   } = data;
 
-  const recentlyDoneTasks = doneTasks.slice(0, 5);
+  const backlogTasks = tasks.filter((t: any) => t.status === "backlog" || t.status === "todo");
+  const approvedTasks = tasks.filter((t: any) => t.status === "approved");
+  const recentlyDoneTasks = doneTasks.slice(0, 10);
   const firstName = clientName.split(" ")[0];
+
+  // Tasks with upcoming deadlines (next 7 days)
+  const upcomingDeadlineTasks = tasks
+    .filter((t: any) => t.due_date && t.status !== "done" && daysUntil(t.due_date) >= 0 && daysUntil(t.due_date) <= 7)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
+
+  // Overdue tasks
+  const overdueTasks = tasks
+    .filter((t: any) => t.due_date && t.status !== "done" && daysUntil(t.due_date) < 0)
+    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
 
   if (loadingProjects) {
     return (
@@ -76,6 +96,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                       <>{activeProjects.length === 1 ? "1 projeto ativo" : `${activeProjects.length} projetos ativos`} com {avgProgress}% de progresso. </>
                     )}
                     {doingTasks.length > 0 && <>{doingTasks.length} {doingTasks.length === 1 ? "tarefa sendo executada" : "tarefas sendo executadas"} agora. </>}
+                    {reviewTasks.length > 0 && <>{reviewTasks.length} em revisão. </>}
                     {pendingFiles.length > 0 && <>{pendingFiles.length} {pendingFiles.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua aprovação.</>}
                   </>
               }
@@ -101,6 +122,12 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                     {completedMilestonesCount}/{totalMilestones} etapas concluídas
                   </span>
                 )}
+                {overdueTasks.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-destructive/10 text-destructive px-2.5 py-1 rounded-full">
+                    <AlertCircle className="w-3 h-3" />
+                    {overdueTasks.length} {overdueTasks.length === 1 ? "tarefa atrasada" : "tarefas atrasadas"}
+                  </span>
+                )}
               </div>
             )}
           </div>
@@ -118,7 +145,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {[
           { label: "Projetos Ativos", value: activeProjects.length, sub: doneProjects.length > 0 ? `+${doneProjects.length} concluídos` : "", icon: Briefcase, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Tarefas em Execução", value: doingTasks.length + reviewTasks.length, sub: `de ${totalTasks} no total`, icon: ListChecks, color: "text-sky-400", bg: "bg-sky-500/10" },
+          { label: "Tarefas em Execução", value: doingTasks.length + reviewTasks.length, sub: `${doneTasks.length} concluídas de ${totalTasks}`, icon: ListChecks, color: "text-sky-400", bg: "bg-sky-500/10" },
           { label: "Entregas Realizadas", value: totalFiles, sub: approvedFiles > 0 ? `${approvedFiles} aprovadas` : "", icon: PackageCheck, color: "text-emerald-400", bg: "bg-emerald-500/10" },
           { label: "Aprovações Pendentes", value: pendingFiles.length, sub: pendingFiles.length > 0 ? "Ação necessária" : "Nenhuma pendência", icon: FileCheck, color: "text-amber-400", bg: "bg-amber-500/10" },
         ].map((stat) => (
@@ -153,8 +180,11 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                   const projectTasks = tasks.filter((t: any) => t.project_id === p.id);
                   const projectDoing = projectTasks.filter((t: any) => t.status === "doing" || t.status === "review");
                   const projectDone = projectTasks.filter((t: any) => t.status === "done");
+                  const projectBacklog = projectTasks.filter((t: any) => t.status === "backlog" || t.status === "todo");
                   const projectTotal = projectTasks.length;
                   const dl = daysUntil(p.deadline);
+                  const projectMilestones = milestones.filter((m: any) => m.project_id === p.id);
+                  const projectMilestonesDone = projectMilestones.filter((m: any) => m.status === "completed").length;
                   return (
                     <div
                       key={p.id}
@@ -174,7 +204,6 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                           </div>
                           <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
 
-                          {/* Description */}
                           {p.description && (
                             <p className="text-[11px] text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">{p.description}</p>
                           )}
@@ -189,11 +218,23 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                               <CheckCircle2 className="w-3 h-3 text-emerald-400" />
                               {projectDone.length}/{projectTotal} concluídas
                             </span>
+                            <span className="flex items-center gap-1">
+                              <Hourglass className="w-3 h-3 text-muted-foreground/50" />
+                              {projectBacklog.length} planejadas
+                            </span>
                             <span className={`flex items-center gap-1 ${dl <= 7 && dl >= 0 ? "text-amber-400" : dl < 0 ? "text-destructive" : ""}`}>
                               <Timer className="w-3 h-3" />
                               {dl < 0 ? `${Math.abs(dl)}d atrasado` : dl === 0 ? "Prazo hoje" : `${dl}d restantes`}
                             </span>
                           </div>
+
+                          {/* Milestones mini */}
+                          {projectMilestones.length > 0 && (
+                            <div className="flex items-center gap-2 mt-2 text-[11px] text-muted-foreground">
+                              <Target className="w-3 h-3 text-primary/60" />
+                              {projectMilestonesDone}/{projectMilestones.length} etapas concluídas
+                            </div>
+                          )}
 
                           {/* Progress bar */}
                           <div className="h-1.5 w-full rounded-full bg-secondary mt-3 overflow-hidden">
@@ -206,7 +247,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                           {/* Currently doing */}
                           {projectDoing.length > 0 && (
                             <div className="mt-2.5 flex flex-col gap-1">
-                              {projectDoing.slice(0, 2).map((t: any) => (
+                              {projectDoing.slice(0, 3).map((t: any) => (
                                 <span key={t.id} className="text-[11px] text-primary/80 flex items-center gap-1.5 truncate">
                                   <Sparkles className="w-3 h-3 shrink-0" />
                                   {t.title}
@@ -216,10 +257,21 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                             </div>
                           )}
 
-                          {/* Objectives if available */}
+                          {/* Dates */}
+                          <div className="mt-3 pt-2.5 border-t border-border/50 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground/60">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              Início: {formatDate(p.start_date)}
+                            </span>
+                            <span className="flex items-center gap-1">
+                              <Calendar className="w-3 h-3" />
+                              Prazo: {formatDate(p.deadline)}
+                            </span>
+                          </div>
+
                           {p.objectives && (
-                            <div className="mt-3 pt-2.5 border-t border-border/50">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-1">Objetivo</p>
+                            <div className="mt-2">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Objetivo</p>
                               <p className="text-[11px] text-foreground/60 line-clamp-2 leading-relaxed">{p.objectives}</p>
                             </div>
                           )}
@@ -289,10 +341,84 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             </section>
           )}
 
-          {/* Recently completed tasks */}
+          {/* Overdue Tasks */}
+          {overdueTasks.length > 0 && (
+            <section>
+              <SectionHeader icon={AlertCircle} color="text-destructive" title="Tarefas Atrasadas" count={overdueTasks.length} />
+              <div className="bg-destructive/[0.04] border border-destructive/15 rounded-xl divide-y divide-destructive/10">
+                {overdueTasks.map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t.project?.name}
+                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
+                        {t.due_date && ` · Prazo era ${formatDate(t.due_date)}`}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-medium text-destructive shrink-0">
+                      {Math.abs(daysUntil(t.due_date))}d atraso
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Tasks in Review */}
+          {reviewTasks.length > 0 && (
+            <section>
+              <SectionHeader icon={Eye} color="text-amber-400" title="Tarefas em Revisão" count={reviewTasks.length} />
+              <div className="bg-card border border-border rounded-xl divide-y divide-border">
+                {reviewTasks.map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <Eye className="w-4 h-4 text-amber-400 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t.project?.name}
+                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
+                        {t.due_date && ` · Prazo: ${formatDate(t.due_date)}`}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded shrink-0">
+                      Em revisão
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Approved tasks */}
+          {approvedTasks.length > 0 && (
+            <section>
+              <SectionHeader icon={ShieldCheck} color="text-primary" title="Tarefas Aprovadas" count={approvedTasks.length} />
+              <div className="bg-card border border-border rounded-xl divide-y divide-border">
+                {approvedTasks.map((t: any) => (
+                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
+                    <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t.project?.name}
+                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
+                      </p>
+                    </div>
+                    <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded shrink-0">
+                      Aprovada
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Completed tasks */}
           {recentlyDoneTasks.length > 0 && (
             <section>
-              <SectionHeader icon={CheckCircle2} color="text-emerald-400" title="Concluídos Recentemente" />
+              <SectionHeader icon={CheckCircle2} color="text-emerald-400" title="Tarefas Concluídas" count={doneTasks.length} />
               <div className="bg-card border border-border rounded-xl divide-y divide-border">
                 {recentlyDoneTasks.map((t: any) => (
                   <div key={t.id} className="flex items-center gap-3 px-4 py-3">
@@ -300,11 +426,25 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                     <div className="flex-1 min-w-0">
                       <p className="text-[13px] text-foreground truncate">{t.title}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name} · {relativeTime(t.updated_at)}
+                        {t.project?.name}
+                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
+                        {` · Concluída ${relativeTime(t.updated_at)}`}
                       </p>
                     </div>
+                    {t.priority && priorityLabels[t.priority] && t.priority !== "medium" && (
+                      <span className={`text-[10px] ${priorityLabels[t.priority].color} shrink-0`}>
+                        {priorityLabels[t.priority].label}
+                      </span>
+                    )}
                   </div>
                 ))}
+                {doneTasks.length > 10 && (
+                  <div className="px-4 py-2.5 text-center">
+                    <span className="text-[11px] text-muted-foreground">
+                      e mais {doneTasks.length - 10} tarefas concluídas
+                    </span>
+                  </div>
+                )}
               </div>
             </section>
           )}
@@ -314,28 +454,33 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
             <section>
               <SectionHeader icon={Award} color="text-emerald-400" title="Projetos Concluídos" count={doneProjects.length} />
               <div className="space-y-2">
-                {doneProjects.map((p: any) => (
-                  <div
-                    key={p.id}
-                    onClick={() => onSelectProject(p)}
-                    className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-emerald-500/20 hover:shadow-md transition-all duration-200"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                        <Award className="w-5 h-5 text-emerald-400" />
+                {doneProjects.map((p: any) => {
+                  const projectTasks = tasks.filter((t: any) => t.project_id === p.id);
+                  const projectDone = projectTasks.filter((t: any) => t.status === "done").length;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => onSelectProject(p)}
+                      className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-emerald-500/20 hover:shadow-md transition-all duration-200"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
+                          <Award className="w-5 h-5 text-emerald-400" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {typeLabels[p.project_type] || p.project_type} · Finalizado em {formatDate(p.deadline)}
+                            {projectDone > 0 && ` · ${projectDone} tarefas realizadas`}
+                          </p>
+                        </div>
+                        <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-md shrink-0">
+                          Entregue
+                        </span>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {typeLabels[p.project_type] || p.project_type} · Finalizado em {formatDate(p.deadline)}
-                        </p>
-                      </div>
-                      <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-md shrink-0">
-                        Entregue
-                      </span>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
@@ -359,20 +504,57 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                   <Sparkles className="w-3.5 h-3.5 text-primary" />
                 </div>
                 <h3 className="text-sm font-semibold text-foreground">Trabalhando Agora</h3>
+                <span className="ml-auto text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full tabular-nums">{doingTasks.length}</span>
               </div>
               <div className="space-y-2.5">
-                {doingTasks.slice(0, 5).map((t: any) => (
+                {doingTasks.slice(0, 6).map((t: any) => (
                   <div key={t.id} className="flex items-start gap-2.5">
                     <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0 animate-pulse" />
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <p className="text-[12px] text-foreground truncate">{t.title}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {t.project?.name}
                         {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
                       </p>
                     </div>
+                    {t.due_date && (
+                      <span className={`text-[9px] shrink-0 tabular-nums ${daysUntil(t.due_date) <= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
+                        {daysUntil(t.due_date)}d
+                      </span>
+                    )}
                   </div>
                 ))}
+              </div>
+            </div>
+          )}
+
+          {/* Upcoming deadlines */}
+          {upcomingDeadlineTasks.length > 0 && (
+            <div className="bg-amber-500/[0.04] border border-amber-500/15 rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center">
+                  <Clock className="w-3.5 h-3.5 text-amber-400" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Prazos Próximos</h3>
+              </div>
+              <div className="space-y-2.5">
+                {upcomingDeadlineTasks.slice(0, 5).map((t: any) => {
+                  const dl = daysUntil(t.due_date);
+                  return (
+                    <div key={t.id} className="flex items-start gap-2.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[12px] text-foreground truncate">{t.title}</p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {t.project?.name} · {formatDate(t.due_date)}
+                        </p>
+                      </div>
+                      <span className={`text-[10px] font-medium shrink-0 ${dl <= 2 ? "text-destructive" : "text-amber-400"}`}>
+                        {dl === 0 ? "Hoje" : dl === 1 ? "Amanhã" : `${dl}d`}
+                      </span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -387,12 +569,14 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                 <h3 className="text-sm font-semibold text-foreground">Visão Geral das Tarefas</h3>
               </div>
               {(() => {
-                const backlog = tasks.filter((t: any) => t.status === "backlog" || t.status === "todo").length;
+                const backlog = backlogTasks.length;
                 const doing = doingTasks.length;
                 const review = reviewTasks.length;
+                const approved = approvedTasks.length;
                 const done = doneTasks.length;
                 const segments = [
                   { label: "Concluídas", value: done, color: "bg-emerald-500", textColor: "text-emerald-400" },
+                  { label: "Aprovadas", value: approved, color: "bg-primary", textColor: "text-primary" },
                   { label: "Em revisão", value: review, color: "bg-amber-400", textColor: "text-amber-400" },
                   { label: "Em execução", value: doing, color: "bg-sky-400", textColor: "text-sky-400" },
                   { label: "Planejadas", value: backlog, color: "bg-muted-foreground/30", textColor: "text-muted-foreground" },
@@ -419,9 +603,50 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                         </div>
                       ))}
                     </div>
+                    {/* Completion percentage */}
+                    <div className="mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-muted-foreground">Taxa de conclusão</span>
+                        <span className="text-[13px] font-bold text-emerald-400 tabular-nums">
+                          {totalTasks > 0 ? Math.round((done / totalTasks) * 100) : 0}%
+                        </span>
+                      </div>
+                    </div>
                   </>
                 );
               })()}
+            </div>
+          )}
+
+          {/* Backlog */}
+          {backlogTasks.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center">
+                  <Hourglass className="w-3.5 h-3.5 text-muted-foreground" />
+                </div>
+                <h3 className="text-sm font-semibold text-foreground">Tarefas Planejadas</h3>
+                <span className="ml-auto text-[10px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full tabular-nums">{backlogTasks.length}</span>
+              </div>
+              <div className="space-y-2">
+                {backlogTasks.slice(0, 6).map((t: any) => (
+                  <div key={t.id} className="flex items-start gap-2.5">
+                    <Circle className="w-3.5 h-3.5 text-muted-foreground/30 mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="text-[12px] text-foreground/70 truncate">{t.title}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {t.project?.name}
+                        {t.due_date && ` · ${formatDateShort(t.due_date)}`}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                {backlogTasks.length > 6 && (
+                  <p className="text-[10px] text-muted-foreground text-center pt-1">
+                    e mais {backlogTasks.length - 6} tarefas planejadas
+                  </p>
+                )}
+              </div>
             </div>
           )}
 
@@ -475,6 +700,7 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
                       <div className="min-w-0 flex-1">
                         <p className="text-[12px] text-foreground/90 line-clamp-2">{u.message}</p>
                         <p className="text-[10px] text-muted-foreground mt-0.5">
+                          {u.author?.full_name && `${u.author.full_name} · `}
                           {u.project?.name} · {relativeTime(u.created_at)}
                         </p>
                       </div>
