@@ -150,11 +150,12 @@ export default function AdminFinanceiro() {
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   // Individual project payments totals
-  const indivPaid = (projectPayments || []).reduce((sum: number, pp: any) =>
+  const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
+  const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
-  const indivTotal = (projectPayments || []).reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
+  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
   const indivPending = indivTotal - indivPaid;
-  const indivOverdue = (projectPayments || []).reduce((sum: number, pp: any) =>
+  const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now).reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const handleMarkPaid = async (id: string) => {
