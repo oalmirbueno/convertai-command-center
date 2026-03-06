@@ -368,6 +368,63 @@ export default function AdminFinanceiro() {
         );
       })()}
 
+      {/* Detalhamento A Receber */}
+      {isAdmin && (() => {
+        const showMonthly2 = brandFilter === "all" || brandFilter === "aceleriq";
+        const showIndiv2 = brandFilter === "all" || brandFilter === "sitebolt";
+
+        const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
+          const client = (clients || []).find((c: any) => c.id === b.client_id);
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now };
+        }) : [];
+
+        const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
+          (pp.installments || []).filter((i: any) => i.status === "pending").map((i: any) => ({
+            id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
+            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount), due: i.due_date,
+            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now,
+          }))
+        ) : [];
+
+        const extraItems = showMonthly2 ? (clients || []).filter((c: any) =>
+          c.plan_value && c.plan_status === "active" &&
+          !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
+        ).map((c: any) => ({
+          id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
+          client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
+          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false,
+        })) : [];
+
+        const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
+          .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime());
+
+        if (allPending.length === 0) return null;
+        return (
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <CreditCard className="w-3.5 h-3.5 text-warning" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento — A Receber ({allPending.length})</span>
+            </div>
+            <div className="divide-y divide-border max-h-[320px] overflow-y-auto">
+              {allPending.map((item) => (
+                <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+                  <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] text-foreground truncate">{item.label}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.client}</p>
+                  </div>
+                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
+                  <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
+                  <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
+                    {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+
       {!isAdmin && (
         <div className="grid grid-cols-1 gap-3">
           <div className="bg-card border border-border rounded-xl p-4">
