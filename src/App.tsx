@@ -20,6 +20,7 @@ import BriefingPublic from "@/pages/BriefingPublic";
 import AdminBriefings from "@/pages/AdminBriefings";
 import Projects from "@/pages/Projects";
 import AdminFinanceiro from "@/pages/AdminFinanceiro";
+import AdminProjection from "@/pages/AdminProjection";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import AdminReports from "@/pages/AdminReports";
 import ClientReports from "@/pages/ClientReports";
@@ -77,6 +78,7 @@ function AppRoutes() {
       <Route path="/timeline" element={<ProtectedRoute><AppLayout><TimelinePage /></AppLayout></ProtectedRoute>} />
       <Route path="/ver-como-cliente" element={<ProtectedRoute><AppLayout><AdminViewAsClient /></AppLayout></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro/projecao" element={<ProtectedRoute><AppLayout><AdminProjection /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />

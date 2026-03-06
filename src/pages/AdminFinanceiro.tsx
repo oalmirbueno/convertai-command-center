@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -36,6 +37,7 @@ const typeIcon = (type: string) => {
 };
 
 export default function AdminFinanceiro() {
+  const navigate = useNavigate();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const queryClient = useQueryClient();
@@ -61,7 +63,6 @@ export default function AdminFinanceiro() {
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
-  const [projectionOpen, setProjectionOpen] = useState(false);
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
@@ -437,7 +438,7 @@ export default function AdminFinanceiro() {
           ))}
           {/* Projeção card — clickable */}
           <div
-            onClick={() => setProjectionOpen(!projectionOpen)}
+            onClick={() => navigate("/financeiro/projecao")}
             className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-info/40 transition-colors group relative"
           >
             <div className="flex items-center gap-2 mb-2">
@@ -447,7 +448,7 @@ export default function AdminFinanceiro() {
             <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
             <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
-              {projectionOpen ? "Fechar ▲" : "Ver detalhes ▼"}
+              Ver projeção →
             </span>
           </div>
         </div>
@@ -511,90 +512,7 @@ export default function AdminFinanceiro() {
         );
       })()}
 
-      {/* Projeção Detalhada */}
-      {isAdmin && projectionOpen && (() => {
-        const showMonthlyP = brandFilter === "all" || brandFilter === "aceleriq";
-        const showIndivP = brandFilter === "all" || brandFilter === "sitebolt";
-        const MONTHS_FULL_P = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
-        // Recurring items: each active client with plan
-        const recurringItems = showMonthlyP ? (clients || [])
-          .filter((c: any) => c.plan_value && c.plan_status === "active")
-          .map((c: any) => ({
-            id: `rec-${c.id}`,
-            label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
-            client: c.company_name || c.full_name || "—",
-            amount: Number(c.plan_value),
-            due: c.plan_renewal_date || "",
-            brand: "AcelerIQ" as const,
-            type: "recurring" as const,
-          })) : [];
-
-        // Individual items: pending installments due next month
-        const indivItems = showIndivP ? (projectPayments || [])
-          .filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter))
-          .flatMap((pp: any) =>
-            (pp.installments || [])
-              .filter((i: any) => i.status === "pending" && isNextMonth(i.due_date))
-              .map((i: any) => ({
-                id: `inst-${i.id}`,
-                label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-                client: pp.client?.company_name || pp.client?.full_name || "—",
-                amount: Number(i.amount),
-                due: i.due_date,
-                brand: getProjectBrand(pp.project?.project_type),
-                type: "installment" as const,
-              }))
-          ) : [];
-
-        const allItems = [...recurringItems, ...indivItems].sort((a, b) => a.client.localeCompare(b.client));
-        const recurringTotal = recurringItems.reduce((s, i) => s + i.amount, 0);
-        const indivItemsTotal = indivItems.reduce((s, i) => s + i.amount, 0);
-
-        return (
-          <div className="bg-card border border-info/20 rounded-xl overflow-hidden animate-fade-in">
-            <div className="px-5 py-3 border-b border-border flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Briefcase className="w-3.5 h-3.5 text-info" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Projeção Detalhada — {MONTHS_FULL_P[nextMonth]} {nextYear}
-                </span>
-              </div>
-              <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-                {showMonthlyP && <span>🔄 Recorrente: <strong className="text-foreground">{fmt(recurringTotal)}</strong></span>}
-                {showIndivP && <span>📦 Parcelas: <strong className="text-foreground">{fmt(indivItemsTotal)}</strong></span>}
-              </div>
-            </div>
-            {allItems.length === 0 ? (
-              <div className="px-5 py-6 text-center text-[13px] text-muted-foreground">
-                Nenhum item projetado para o próximo mês
-              </div>
-            ) : (
-              <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
-                {allItems.map((item) => (
-                  <div key={item.id} className="flex items-center gap-3 px-5 py-3">
-                    <div className={`w-2 h-2 rounded-full shrink-0 ${item.type === "recurring" ? "bg-success" : "bg-info"}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground truncate">{item.label}</p>
-                      <p className="text-[11px] text-muted-foreground">{item.client}</p>
-                    </div>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
-                    <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info whitespace-nowrap">
-                      {item.type === "recurring" ? "🔄 Recorrente" : "📦 Parcela"}
-                    </span>
-                    <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
-                    {item.due && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground whitespace-nowrap">
-                        {new Date(item.due + "T00:00:00").toLocaleDateString("pt-BR")}
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        );
-      })()}
 
       {!isAdmin && (
         <div className="grid grid-cols-1 gap-3">
