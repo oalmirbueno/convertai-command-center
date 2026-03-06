@@ -113,9 +113,9 @@ export default function AdminDashboard() {
 
   const financeStats = [
     { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
-    { label: "A Receber", value: fmt(pendingTotal + individualPending), color: "bg-warning" },
-    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info" },
-    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive" },
+    { label: "A Receber (Total)", value: fmt(pendingTotal + individualPending), color: "bg-warning", sub: `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(individualPending)}` },
+    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info", sub: `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(individualPaid)}` },
+    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(individualOverdue)}` },
   ];
 
   const formatDate = (d: string) => {
