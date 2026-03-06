@@ -339,9 +339,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
           )}
         </div>
       </div>
+      </FadeUp>
 
       {/* ══════════ TASK PROGRESS BAR ══════════ */}
       {totalTasks > 0 && (
+        <FadeUp>
         <div className="bg-card border border-border rounded-xl p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-[12px] font-semibold text-foreground">Distribuição das Tarefas</span>
@@ -374,9 +376,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             ))}
           </div>
         </div>
+        </FadeUp>
       )}
 
       {/* ══════════ TABS ══════════ */}
+      <FadeUp>
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="bg-transparent h-auto p-0 gap-8 border-b border-border rounded-none w-full justify-start overflow-x-auto">
           {[
@@ -418,10 +422,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
           <TabUpdates projectId={project.id} />
         </TabsContent>
       </Tabs>
+      </FadeUp>
 
       {/* Floating request button */}
       <RequestButton projectId={project.id} projectName={project.name} />
-    </div>
+    </StaggerContainer>
   );
 }
 
