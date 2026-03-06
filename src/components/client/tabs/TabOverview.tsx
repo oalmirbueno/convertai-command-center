@@ -59,12 +59,14 @@ export default function TabOverview({ project }: { project: any }) {
     ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
     : [];
 
-  // Tasks per team member
+  // Tasks per team member with full breakdown
   const memberTaskCounts = teamMembers.map((m: any) => {
     const memberTasks = allTasks.filter((t: any) => t.assigned_to === m.id);
     const memberDone = memberTasks.filter((t: any) => t.status === "done").length;
-    const memberDoing = memberTasks.filter((t: any) => t.status === "doing" || t.status === "review").length;
-    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing };
+    const memberDoing = memberTasks.filter((t: any) => t.status === "doing").length;
+    const memberReview = memberTasks.filter((t: any) => t.status === "review").length;
+    const memberBacklog = memberTasks.filter((t: any) => t.status === "backlog" || t.status === "todo").length;
+    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing, review: memberReview, backlog: memberBacklog };
   });
 
   const objectives = project.objectives
