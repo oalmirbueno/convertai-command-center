@@ -358,7 +358,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
     return (
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Criar Plano de Pagamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <div>
@@ -406,7 +406,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
     return (
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Editar Plano de Pagamento</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>
           <div className="space-y-4">
