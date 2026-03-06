@@ -106,19 +106,66 @@ export default function TabOverview({ project }: { project: any }) {
 
         {/* Current milestone */}
         {activeMilestone && (
-          <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-4">
-            <div className="flex items-center gap-2 mb-2">
-              <Target className="w-4 h-4 text-primary" />
-              <span className="text-[12px] font-semibold text-foreground">Etapa Atual</span>
+          <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-5">
+            {/* Header */}
+            <div className="flex items-center gap-2.5 mb-4">
+              <div className="w-8 h-8 rounded-lg bg-primary/15 flex items-center justify-center">
+                <Target className="w-4 h-4 text-primary" />
+              </div>
+              <div>
+                <span className="text-[12px] font-semibold text-foreground block">Etapa Atual</span>
+                <span className="text-[10px] text-muted-foreground">
+                  {completedMilestones.length} de {allMilestones.length} etapas concluídas
+                </span>
+              </div>
             </div>
-            <p className="text-sm font-medium text-foreground">{activeMilestone.title}</p>
+
+            {/* Milestone title */}
+            <p className="text-[14px] font-semibold text-foreground">{activeMilestone.title}</p>
+
+            {/* Description */}
             {activeMilestone.description && (
-              <p className="text-[12px] text-muted-foreground mt-1 leading-relaxed">{activeMilestone.description}</p>
+              <p className="text-[12px] text-muted-foreground mt-2 leading-relaxed">
+                {activeMilestone.description}
+              </p>
             )}
-            <p className="text-[11px] text-muted-foreground mt-2">
-              Prazo: {formatDateFull(activeMilestone.target_date)}
-              {` · ${completedMilestones.length}/${allMilestones.length} etapas concluídas`}
-            </p>
+
+            {/* Meta info */}
+            <div className="flex items-center gap-4 mt-4 pt-3 border-t border-primary/10">
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-3 h-3 text-muted-foreground" />
+                <span className="text-[11px] text-muted-foreground">
+                  Prazo: <span className="text-foreground font-medium">{formatDateFull(activeMilestone.target_date)}</span>
+                </span>
+              </div>
+              {activeMilestone.target_date && (
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
+                  daysUntil(activeMilestone.target_date) < 0
+                    ? "bg-destructive/10 text-destructive"
+                    : daysUntil(activeMilestone.target_date) <= 7
+                    ? "bg-amber-500/10 text-amber-400"
+                    : "bg-emerald-500/10 text-emerald-400"
+                }`}>
+                  {daysUntil(activeMilestone.target_date) < 0
+                    ? `${Math.abs(daysUntil(activeMilestone.target_date))}d em atraso`
+                    : daysUntil(activeMilestone.target_date) === 0
+                    ? "Prazo hoje"
+                    : `${daysUntil(activeMilestone.target_date)}d restantes`}
+                </span>
+              )}
+            </div>
+
+            {/* Progress mini bar */}
+            {allMilestones.length > 1 && (
+              <div className="mt-3">
+                <div className="h-1.5 w-full rounded-full bg-primary/10 overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary transition-all duration-500"
+                    style={{ width: `${(completedMilestones.length / allMilestones.length) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
