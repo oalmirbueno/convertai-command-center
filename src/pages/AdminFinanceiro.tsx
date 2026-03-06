@@ -529,7 +529,7 @@ export default function AdminFinanceiro() {
           </div>
 
           {/* Projetos Individuais */}
-          {(projectPayments || []).length > 0 && (
+          {filteredPayments.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <Briefcase className="w-3.5 h-3.5 text-primary" />
