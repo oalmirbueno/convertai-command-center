@@ -172,6 +172,9 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
       {/* ══════════ AUTO SUMMARY ══════════ */}
       <AutoSummaryCard data={data} firstName={firstName} />
 
+      {/* ══════════ ADS EDUCATION ══════════ */}
+      <AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} />
+
       {/* ══════════ MAIN GRID ══════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
