@@ -72,6 +72,7 @@ export default function AdminDashboard() {
   const [meetingNotesOpen, setMeetingNotesOpen] = useState(false);
   const [briefingLinkOpen, setBriefingLinkOpen] = useState(false);
   const [drawerProject, setDrawerProject] = useState<any>(null);
+  const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -81,6 +82,18 @@ export default function AdminDashboard() {
   const thisYear = now.getFullYear();
 
   const activeProjects = projects?.filter((p: any) => p.status !== "done") || [];
+  const filteredProjects = activeProjects.filter((p: any) => matchesBrandFilter(p.project_type, brandFilter));
+
+  // Build team members map per project from tasks
+  const teamByProject: Record<string, { name: string; id: string }[]> = {};
+  (allTasks || []).forEach((t: any) => {
+    if (t.assigned_to && t.assignee?.full_name && t.project_id) {
+      if (!teamByProject[t.project_id]) teamByProject[t.project_id] = [];
+      if (!teamByProject[t.project_id].some((m: any) => m.id === t.assigned_to)) {
+        teamByProject[t.project_id].push({ name: t.assignee.full_name, id: t.assigned_to });
+      }
+    }
+  });
   const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
