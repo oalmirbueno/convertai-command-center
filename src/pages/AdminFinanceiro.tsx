@@ -158,6 +158,27 @@ export default function AdminFinanceiro() {
     .filter((c: any) => c.plan_value && c.plan_status === "active")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
+  // Projeção próximo mês
+  const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
+  const nextYear = thisMonth === 11 ? thisYear + 1 : thisYear;
+  const isNextMonth = (d: string) => {
+    const date = new Date(d);
+    return date.getMonth() === nextMonth && date.getFullYear() === nextYear;
+  };
+
+  // Recurring: plan_value de clientes ativos (mesma receita esperada)
+  const nextMonthRecurring = expectedMonthlyRevenue;
+
+  // Individual: parcelas pendentes com vencimento no próximo mês
+  const nextMonthIndiv = (projectPayments || [])
+    .filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter))
+    .reduce((sum: number, pp: any) =>
+      sum + (pp.installments || []).filter((i: any) => i.status === "pending" && isNextMonth(i.due_date))
+        .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const nextMonthTotal = (brandFilter === "all" || brandFilter === "aceleriq" ? nextMonthRecurring : 0)
+    + (brandFilter === "all" || brandFilter === "sitebolt" ? nextMonthIndiv : 0);
+
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   // Individual project payments totals (period-aware)
