@@ -319,7 +319,7 @@ export default function TabOverview({ project }: { project: any }) {
                     </div>
 
                     {/* Progress bar */}
-                    <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden flex ml-11">
+                    <div className="h-1.5 rounded-full bg-secondary overflow-hidden flex ml-11 mr-0" style={{ width: "calc(100% - 2.75rem)" }}>
                       {member.done > 0 && (
                         <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(member.done / member.total) * 100}%` }} />
                       )}
@@ -332,7 +332,7 @@ export default function TabOverview({ project }: { project: any }) {
                     </div>
 
                     {/* Task breakdown */}
-                    <div className="flex flex-wrap gap-x-3 gap-y-1 ml-11">
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 pl-11">
                       {member.done > 0 && (
                         <span className="flex items-center gap-1 text-[10px] text-emerald-400">
                           <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
