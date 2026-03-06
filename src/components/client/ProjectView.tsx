@@ -79,6 +79,57 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
     ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
     : [];
 
+  // Build sparkline data from task completions over time
+  const sparklineData = useMemo(() => {
+    if (totalTasks === 0) return [];
+
+    // Collect completion dates from done tasks
+    const completionDates = doneTasks
+      .filter((t: any) => t.updated_at)
+      .map((t: any) => new Date(t.updated_at))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (completionDates.length === 0) {
+      // Return a flat line at current progress
+      return [
+        { date: formatDateShort(project.start_date), progress: 0 },
+        { date: "Hoje", progress: project.progress },
+      ];
+    }
+
+    // Build cumulative progress points
+    const points: { date: string; progress: number }[] = [];
+    
+    // Start point
+    points.push({
+      date: new Date(project.start_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+      progress: 0,
+    });
+
+    // Group completions by day and accumulate
+    const dayMap = new Map<string, number>();
+    completionDates.forEach((d, i) => {
+      const key = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+      dayMap.set(key, i + 1);
+    });
+
+    dayMap.forEach((count, dateLabel) => {
+      const pct = Math.round((count / totalTasks) * 100);
+      points.push({ date: dateLabel, progress: Math.min(pct, project.progress) });
+    });
+
+    // Current point
+    const lastDate = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    const lastPoint = points[points.length - 1];
+    if (lastPoint.date !== lastDate) {
+      points.push({ date: lastDate, progress: project.progress });
+    } else {
+      lastPoint.progress = project.progress;
+    }
+
+    return points;
+  }, [doneTasks, totalTasks, project.progress, project.start_date]);
+
   return (
     <div className="animate-fade-in space-y-6">
       {/* Back button */}
