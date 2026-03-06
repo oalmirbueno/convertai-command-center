@@ -548,7 +548,87 @@ export default function AdminFinanceiro() {
         ) : null;
       })()}
 
-      <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
+      {/* Pie Chart: AcelerIQ vs SiteBolt */}
+      {isAdmin && (() => {
+        const allPayments = projectPayments || [];
+        // AcelerIQ received = billing paid (non-ads)
+        const aceleriqReceived = paidBills
+          .filter((b: any) => b.type !== "ads_recharge")
+          .reduce((s: number, b: any) => s + Number(b.amount), 0);
+        // SiteBolt received = individual project installments paid
+        const siteboltReceived = allPayments
+          .filter((pp: any) => ["site", "landing_page", "event", "other"].includes(pp.project?.project_type))
+          .reduce((sum: number, pp: any) =>
+            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+        // Joint (automation) received
+        const jointReceived = allPayments
+          .filter((pp: any) => pp.project?.project_type === "automation")
+          .reduce((sum: number, pp: any) =>
+            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+        const pieData = [
+          { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
+          { name: "SiteBolt", value: siteboltReceived, color: "hsl(var(--primary))" },
+          ...(jointReceived > 0 ? [{ name: "AcelerIQ + SiteBolt", value: jointReceived, color: "hsl(var(--info))" }] : []),
+        ].filter(d => d.value > 0);
+
+        const total = pieData.reduce((s, d) => s + d.value, 0);
+        if (total === 0) return null;
+
+        return (
+          <div className="bg-card border border-border rounded-xl p-5">
+            <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2 mb-4">
+              <TrendingUp className="w-3.5 h-3.5 text-primary" />
+              Proporção da Receita — AcelerIQ vs SiteBolt
+            </p>
+            <div className="flex flex-col sm:flex-row items-center gap-6">
+              <div className="h-[200px] w-[200px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={55}
+                      outerRadius={85}
+                      paddingAngle={3}
+                      dataKey="value"
+                      strokeWidth={0}
+                    >
+                      {pieData.map((entry, index) => (
+                        <Cell key={index} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                      formatter={(value: number) => [fmt(value), ""]}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex-1 space-y-3">
+                {pieData.map((d) => (
+                  <div key={d.name} className="flex items-center gap-3">
+                    <div className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: d.color }} />
+                    <div className="flex-1">
+                      <p className="text-[13px] text-foreground font-medium">{d.name}</p>
+                      <p className="text-[11px] text-muted-foreground">{Math.round((d.value / total) * 100)}% da receita</p>
+                    </div>
+                    <p className="text-sm font-mono text-foreground">{fmt(d.value)}</p>
+                  </div>
+                ))}
+                <div className="pt-2 border-t border-border">
+                  <div className="flex items-center justify-between">
+                    <p className="text-[11px] text-muted-foreground">Total</p>
+                    <p className="text-sm font-mono font-semibold text-foreground">{fmt(total)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
