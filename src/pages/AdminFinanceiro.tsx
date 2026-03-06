@@ -480,7 +480,7 @@ export default function AdminFinanceiro() {
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-success" />
-                Receita {currentYear} — Mês a Mês
+                Receita {currentYear} {brandFilter !== "all" ? `— ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""} — Mês a Mês
               </p>
             </div>
             <div className="h-[220px]">
