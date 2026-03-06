@@ -78,9 +78,10 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
   }
 
   return (
-    <div className="animate-fade-in space-y-8">
+    <StaggerContainer className="space-y-8">
 
       {/* ══════════ HERO ══════════ */}
+      <FadeUp>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
         <div className="absolute top-0 right-0 w-96 h-96 bg-primary/[0.04] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
