@@ -341,11 +341,20 @@ export default function AdminDashboard() {
                   <div className="flex items-center gap-4">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />
                     <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium text-foreground">{p.name}</span>
                         <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{p.project_type?.replace("_", " ")}</span>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary font-medium">{getProjectBrand(p.project_type)}</span>
                       </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">{p.client?.company_name || p.client?.full_name}</p>
+                      <div className="flex items-center gap-2 mt-0.5">
+                        <p className="text-xs text-muted-foreground">{p.client?.company_name || p.client?.full_name}</p>
+                        {projectTeam.length > 0 && (
+                          <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                            <Users className="w-3 h-3" />
+                            {projectTeam.map(m => m.name.split(" ")[0]).join(", ")}
+                          </span>
+                        )}
+                      </div>
                     </div>
                     <div className="w-32 hidden md:block">
                       <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
