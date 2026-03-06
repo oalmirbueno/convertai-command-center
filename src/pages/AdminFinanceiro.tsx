@@ -341,20 +341,37 @@ export default function AdminFinanceiro() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
         {isAdmin && (
-          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
-            {BRAND_FILTERS.map((f) => (
-              <button
-                key={f.value}
-                onClick={() => setBrandFilter(f.value)}
-                className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
-                  brandFilter === f.value
-                    ? "bg-card text-foreground shadow-sm"
-                    : "text-muted-foreground hover:text-foreground bg-transparent"
-                }`}
-              >
-                {f.label}
-              </button>
-            ))}
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setPeriodFilter(f.value)}
+                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                    periodFilter === f.value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
+            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              {BRAND_FILTERS.map((f) => (
+                <button
+                  key={f.value}
+                  onClick={() => setBrandFilter(f.value)}
+                  className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                    brandFilter === f.value
+                      ? "bg-card text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground bg-transparent"
+                  }`}
+                >
+                  {f.label}
+                </button>
+              ))}
+            </div>
           </div>
         )}
       </div>
