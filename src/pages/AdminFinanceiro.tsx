@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -61,7 +62,6 @@ export default function AdminFinanceiro() {
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
-  const [projectionOpen, setProjectionOpen] = useState(false);
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
