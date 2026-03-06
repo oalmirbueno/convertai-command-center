@@ -117,6 +117,11 @@ export default function AdminFinanceiro() {
   }, [clients, billing, isAdmin]);
 
   // Computed totals — combine billing + client plan data for accurate stats
+  const isThisMonth = (d: string) => {
+    const date = new Date(d);
+    return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+  };
+
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
   const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
@@ -124,24 +129,29 @@ export default function AdminFinanceiro() {
   // "A Receber" — from billing pending + active clients with plan_value not yet in billing
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
-    !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
+    !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
+    // Exclude clients already paid this month (no double counting)
+    !(billing || []).some((b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "paid" && isThisMonth(b.paid_date || b.due_date))
   );
   const extraPending = clientsWithPlanNotInBilling.reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
-  const monthlyRevenue = paidBills
-    .filter((b: any) => b.type !== "ads_recharge" && new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  // Period-aware filtering
+  const monthPendingBills = pendingBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.due_date));
+  const monthPaidBills = paidBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.paid_date || b.due_date));
 
-  const pendingTotal = pendingBills
-    .filter((b: any) => b.type !== "ads_recharge")
-    .reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
+  const monthlyRevenue = monthPaidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
 
-  const overdueTotal = overdueBills
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const pendingTotal = periodFilter === "month"
+    ? monthPendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0)
+    : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
 
-  const receivedTotal = paidBills
-    .filter((b: any) => b.type !== "ads_recharge")
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const overdueTotal = periodFilter === "month"
+    ? monthPendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0)
+    : overdueBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+
+  const receivedTotal = periodFilter === "month"
+    ? monthlyRevenue
+    : paidBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   // Receita Mensal Esperada = soma dos plan_value de clientes ativos
   const expectedMonthlyRevenue = (clients || [])
@@ -150,14 +160,26 @@ export default function AdminFinanceiro() {
 
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
-  // Individual project payments totals
+  // Individual project payments totals (period-aware)
   const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
+
   const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
-  const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
-  const indivPending = indivTotal - indivPaid;
+    sum + (pp.installments || []).filter((i: any) => i.status === "paid" && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPendingAll = filteredPayments.reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending")
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPendingMonth = filteredPayments.reduce((sum: number, pp: any) =>
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && isThisMonth(i.due_date))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const indivPending = periodFilter === "month" ? indivPendingMonth : indivPendingAll;
+
   const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now).reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now && (periodFilter === "all" || isThisMonth(i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
