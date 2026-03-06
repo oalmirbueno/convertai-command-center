@@ -158,6 +158,27 @@ export default function AdminFinanceiro() {
     .filter((c: any) => c.plan_value && c.plan_status === "active")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
+  // Projeção próximo mês
+  const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
+  const nextYear = thisMonth === 11 ? thisYear + 1 : thisYear;
+  const isNextMonth = (d: string) => {
+    const date = new Date(d);
+    return date.getMonth() === nextMonth && date.getFullYear() === nextYear;
+  };
+
+  // Recurring: plan_value de clientes ativos (mesma receita esperada)
+  const nextMonthRecurring = expectedMonthlyRevenue;
+
+  // Individual: parcelas pendentes com vencimento no próximo mês
+  const nextMonthIndiv = (projectPayments || [])
+    .filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter))
+    .reduce((sum: number, pp: any) =>
+      sum + (pp.installments || []).filter((i: any) => i.status === "pending" && isNextMonth(i.due_date))
+        .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+
+  const nextMonthTotal = (brandFilter === "all" || brandFilter === "aceleriq" ? nextMonthRecurring : 0)
+    + (brandFilter === "all" || brandFilter === "sitebolt" ? nextMonthIndiv : 0);
+
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   // Individual project payments totals (period-aware)
@@ -388,6 +409,10 @@ export default function AdminFinanceiro() {
         const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
         const periodLabel = periodFilter === "month" ? "no Mês" : "Geral";
 
+        const MONTHS_NAMES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+        const nextMonthName = MONTHS_NAMES[nextMonth];
+        const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
+
         const cards = [
           ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: periodFilter === "month" ? `de ${fmt(expectedMonthlyRevenue)} esperado` : recSub, icon: TrendingUp, color: "text-success" }] : [
             { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: recSub, icon: TrendingUp, color: "text-success" },
@@ -396,6 +421,7 @@ export default function AdminFinanceiro() {
           { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
           { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
           ...(periodFilter === "month" && showMonthly ? [{ label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), sub: "Planos ativos AcelerIQ", icon: CheckCircle2, color: "text-info" }] : []),
+          { label: `Projeção ${nextMonthName}`, value: fmt(nextMonthTotal), sub: nextMonthSub, icon: Briefcase, color: "text-info" },
         ];
         return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
