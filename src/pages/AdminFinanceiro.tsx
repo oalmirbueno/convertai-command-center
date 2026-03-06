@@ -439,18 +439,38 @@ export default function AdminFinanceiro() {
 
       {/* Revenue Chart - monthly comparison */}
       {isAdmin && (() => {
+        const showMonthlyChart = brandFilter === "all" || brandFilter === "aceleriq";
+        const showIndivChart = brandFilter === "all" || brandFilter === "sitebolt";
         const MONTHS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
         const chartData: { name: string; recebido: number; pendente: number }[] = [];
         const currentYear = now.getFullYear();
         for (let m = 0; m < 12; m++) {
-          const received = (billing || [])
-            .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
-            .filter((b: any) => { const d = new Date(b.paid_date || b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
-            .reduce((s: number, b: any) => s + Number(b.amount), 0);
-          const pending = (billing || [])
-            .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
-            .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
-            .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          let received = 0;
+          let pending = 0;
+
+          if (showMonthlyChart) {
+            received += (billing || [])
+              .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
+              .filter((b: any) => { const d = new Date(b.paid_date || b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .reduce((s: number, b: any) => s + Number(b.amount), 0);
+            pending += (billing || [])
+              .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
+              .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          }
+
+          if (showIndivChart) {
+            filteredPayments.forEach((pp: any) => {
+              (pp.installments || []).forEach((inst: any) => {
+                const d = new Date(inst.paid_date || inst.due_date);
+                if (d.getMonth() === m && d.getFullYear() === currentYear) {
+                  if (inst.status === "paid") received += Number(inst.amount);
+                  else if (inst.status === "pending") pending += Number(inst.amount);
+                }
+              });
+            });
+          }
+
           if (received > 0 || pending > 0 || m <= now.getMonth()) {
             chartData.push({ name: MONTHS[m], recebido: received, pendente: pending });
           }
