@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import {
   ArrowLeft, Activity, CheckCircle2, Zap, Timer, Target,
   Users, Calendar, Sparkles, TrendingUp, Eye, Clock,
@@ -6,6 +6,7 @@ import {
 } from "lucide-react";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { AreaChart, Area, ResponsiveContainer, Tooltip, XAxis } from "recharts";
 import CircularProgress from "./CircularProgress";
 import TabOverview from "./tabs/TabOverview";
 import TabKanban from "./tabs/TabKanban";
@@ -78,6 +79,57 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
     ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
     : [];
 
+  // Build sparkline data from task completions over time
+  const sparklineData = useMemo(() => {
+    if (totalTasks === 0) return [];
+
+    // Collect completion dates from done tasks
+    const completionDates = doneTasks
+      .filter((t: any) => t.updated_at)
+      .map((t: any) => new Date(t.updated_at))
+      .sort((a, b) => a.getTime() - b.getTime());
+
+    if (completionDates.length === 0) {
+      // Return a flat line at current progress
+      return [
+        { date: formatDateShort(project.start_date), progress: 0 },
+        { date: "Hoje", progress: project.progress },
+      ];
+    }
+
+    // Build cumulative progress points
+    const points: { date: string; progress: number }[] = [];
+    
+    // Start point
+    points.push({
+      date: new Date(project.start_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" }),
+      progress: 0,
+    });
+
+    // Group completions by day and accumulate
+    const dayMap = new Map<string, number>();
+    completionDates.forEach((d, i) => {
+      const key = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+      dayMap.set(key, i + 1);
+    });
+
+    dayMap.forEach((count, dateLabel) => {
+      const pct = Math.round((count / totalTasks) * 100);
+      points.push({ date: dateLabel, progress: Math.min(pct, project.progress) });
+    });
+
+    // Current point
+    const lastDate = new Date().toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    const lastPoint = points[points.length - 1];
+    if (lastPoint.date !== lastDate) {
+      points.push({ date: lastDate, progress: project.progress });
+    } else {
+      lastPoint.progress = project.progress;
+    }
+
+    return points;
+  }, [doneTasks, totalTasks, project.progress, project.start_date]);
+
   return (
     <div className="animate-fade-in space-y-6">
       {/* Back button */}
@@ -108,7 +160,7 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             </span>
           </div>
 
-          {/* Title + progress */}
+          {/* Title + progress + sparkline */}
           <div className="flex items-start justify-between gap-6">
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">{project.name}</h1>
@@ -116,9 +168,51 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
                 <p className="text-sm text-muted-foreground/80 leading-relaxed max-w-2xl line-clamp-2">{project.description}</p>
               )}
             </div>
-            <div className="hidden sm:flex flex-col items-center gap-1 shrink-0">
-              <CircularProgress progress={project.progress} size={76} strokeWidth={5} />
-              <span className="text-[10px] text-muted-foreground mt-0.5">Progresso</span>
+            <div className="hidden sm:flex items-end gap-4 shrink-0">
+              {/* Sparkline */}
+              {sparklineData.length >= 2 && (
+                <div className="flex flex-col items-center gap-1">
+                  <div className="w-[120px] h-[52px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={sparklineData} margin={{ top: 2, right: 2, bottom: 0, left: 2 }}>
+                        <defs>
+                          <linearGradient id="sparkGradient" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="hsl(var(--primary))" stopOpacity={0.3} />
+                            <stop offset="100%" stopColor="hsl(var(--primary))" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <Tooltip
+                          contentStyle={{
+                            background: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                            fontSize: "11px",
+                            padding: "6px 10px",
+                          }}
+                          labelStyle={{ color: "hsl(var(--muted-foreground))", fontSize: "10px" }}
+                          formatter={(value: number) => [`${value}%`, "Progresso"]}
+                        />
+                        <XAxis dataKey="date" hide />
+                        <Area
+                          type="monotone"
+                          dataKey="progress"
+                          stroke="hsl(var(--primary))"
+                          strokeWidth={2}
+                          fill="url(#sparkGradient)"
+                          dot={false}
+                          activeDot={{ r: 3, fill: "hsl(var(--primary))", strokeWidth: 0 }}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <span className="text-[9px] text-muted-foreground">Evolução</span>
+                </div>
+              )}
+              {/* Circular progress */}
+              <div className="flex flex-col items-center gap-1">
+                <CircularProgress progress={project.progress} size={76} strokeWidth={5} />
+                <span className="text-[10px] text-muted-foreground mt-0.5">Progresso</span>
+              </div>
             </div>
           </div>
 
