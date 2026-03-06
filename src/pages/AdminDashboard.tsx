@@ -184,6 +184,7 @@ export default function AdminDashboard() {
             <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer" onClick={() => navigate("/financeiro")}>
               <p className="label-sm">{s.label}</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{s.value}</p>
+              {(s as any).sub && <p className="text-[10px] text-muted-foreground mt-1.5">{(s as any).sub}</p>}
               <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
             </div>
           ))}
