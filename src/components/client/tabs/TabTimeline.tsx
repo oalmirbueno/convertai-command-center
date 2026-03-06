@@ -404,7 +404,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
                   </div>
                 )}
               </div>
-            </div>
+            </motion.div>
           );
         })}
       </div>
@@ -446,7 +446,10 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
       )}
 
       {/* ═══════ VALUE FOOTER ═══════ */}
-      <div className="bg-card border border-border rounded-xl p-4 sm:p-5">
+      <motion.div
+        variants={{ hidden: { opacity: 0, y: 16 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+        className="bg-card border border-border rounded-xl p-4 sm:p-5"
+      >
         <div className="flex items-start gap-3">
           <div className="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
             <TrendingUp className="w-4 h-4 text-emerald-400" />
@@ -463,7 +466,7 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
             </p>
           </div>
         </div>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 }
