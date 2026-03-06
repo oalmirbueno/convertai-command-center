@@ -629,6 +629,7 @@ export default function AdminFinanceiro() {
         );
       })()}
 
+      <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
