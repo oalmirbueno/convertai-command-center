@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { FileText } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
@@ -23,15 +24,16 @@ function formatDateShort(d: string) {
 
 export default function ClientReports() {
   const { user } = useAuth();
+  const { clientId } = useClientIdentity();
   const navigate = useNavigate();
 
   const { data: reports, isLoading } = useQuery({
-    queryKey: ["reports-client", user?.id],
+    queryKey: ["reports-client", clientId],
     queryFn: async () => {
       const { data } = await supabase
         .from("reports")
         .select("*, project:projects(name)")
-        .eq("client_id", user!.id)
+        .eq("client_id", clientId!)
         .eq("status", "published")
         .order("created_at", { ascending: false });
       return data || [];

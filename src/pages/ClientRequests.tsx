@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2 } from "lucide-react";
@@ -23,6 +24,7 @@ const priorityBadge: Record<string, { cls: string; label: string }> = {
 
 export default function ClientRequests() {
   const { user, profile } = useAuth();
+  const { clientId } = useClientIdentity();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -31,16 +33,16 @@ export default function ClientRequests() {
   const [priority, setPriority] = useState("normal");
 
   const { data: requests, isLoading } = useQuery({
-    queryKey: ["client-requests", user?.id],
+    queryKey: ["client-requests", clientId],
     queryFn: async () => {
       const { data } = await supabase
         .from("client_requests")
         .select("*")
-        .eq("client_id", user!.id)
+        .eq("client_id", clientId!)
         .order("created_at", { ascending: false });
       return data || [];
     },
-    enabled: !!user,
+    enabled: !!user && !!clientId,
   });
 
   const handleCreate = async () => {

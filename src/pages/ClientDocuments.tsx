@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFiles, useProjects } from "@/hooks/useSupabaseData";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -46,7 +47,8 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
 
 export default function ClientDocuments() {
   const { user } = useAuth();
-  const { data: files, isLoading } = useFiles(undefined, user?.id);
+  const { clientId } = useClientIdentity();
+  const { data: files, isLoading } = useFiles(undefined, clientId || undefined);
   const { data: projects } = useProjects();
   const queryClient = useQueryClient();
   const { toast } = useToast();
