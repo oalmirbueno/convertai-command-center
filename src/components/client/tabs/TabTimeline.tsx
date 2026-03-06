@@ -211,7 +211,11 @@ export default function TabTimeline({ projectId }: { projectId: string }) {
           const team = Array.from(teamMap.values());
 
           return (
-            <div key={m.id} className="relative">
+            <motion.div
+              key={m.id}
+              className="relative"
+              variants={{ hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] } } }}
+            >
               {/* Connecting line */}
               {i < visibleMilestones.length - 1 && (
                 <div
