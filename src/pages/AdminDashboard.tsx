@@ -113,9 +113,9 @@ export default function AdminDashboard() {
 
   const financeStats = [
     { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
-    { label: "A Receber", value: fmt(pendingTotal + individualPending), color: "bg-warning" },
-    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info" },
-    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive" },
+    { label: "A Receber (Total)", value: fmt(pendingTotal + individualPending), color: "bg-warning", sub: `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(individualPending)}` },
+    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info", sub: `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(individualPaid)}` },
+    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(individualOverdue)}` },
   ];
 
   const formatDate = (d: string) => {
@@ -184,6 +184,7 @@ export default function AdminDashboard() {
             <div key={s.label} className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer" onClick={() => navigate("/financeiro")}>
               <p className="label-sm">{s.label}</p>
               <p className="font-mono font-light text-[22px] leading-none text-foreground mt-2">{s.value}</p>
+              {(s as any).sub && <p className="text-[10px] text-muted-foreground mt-1.5">{(s as any).sub}</p>}
               <div className={`h-0.5 w-8 ${s.color} rounded-full mt-3 opacity-60`} />
             </div>
           ))}
