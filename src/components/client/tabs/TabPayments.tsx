@@ -59,7 +59,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
-    if (!total || !entryPct || !count) return;
+    if (!total || isNaN(entryPct) || !count) return;
 
     setSubmitting(true);
     try {

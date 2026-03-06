@@ -301,7 +301,7 @@ export default function AdminDashboard() {
               return (
                 <div
                   key={p.id}
-                  className="bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative"
+                  className={`bg-card border border-border rounded-xl px-5 py-4 cursor-pointer hover:border-muted-foreground/30 transition-colors relative ${showMenu ? "z-50" : ""}`}
                   onClick={() => setDrawerProject(p)}
                   onMouseEnter={() => setHoveredProject(p.id)}
                   onMouseLeave={() => { setHoveredProject(null); setMenuProject(null); }}
