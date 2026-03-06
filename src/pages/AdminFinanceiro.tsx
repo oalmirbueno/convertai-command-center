@@ -383,16 +383,19 @@ export default function AdminFinanceiro() {
         const pendingVal = (showMonthly ? pendingTotal : 0) + (showIndiv ? indivPending : 0);
         const receivedVal = (showMonthly ? receivedTotal : 0) + (showIndiv ? indivPaid : 0);
         const overdueVal = (showMonthly ? overdueTotal : 0) + (showIndiv ? indivOverdue : 0);
-        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(indivPending)}` : undefined;
-        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(indivPaid)}` : undefined;
-        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(indivOverdue)}` : undefined;
+        const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
+        const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
+        const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
+        const periodLabel = periodFilter === "month" ? "no Mês" : "Geral";
 
         const cards = [
-          ...(showMonthly ? [{ label: "Recebido no Mês", value: fmt(monthlyRevenue), sub: `de ${fmt(expectedMonthlyRevenue)} esperado`, icon: TrendingUp, color: "text-success" }] : []),
-          { label: "A Receber", value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
-          ...(brandFilter === "all" ? [{ label: "A Receber (Mensal)", value: fmt(pendingTotal), sub: "Apenas planos AcelerIQ", icon: CreditCard, color: "text-warning" }] : []),
-          { label: "Total Recebido", value: fmt(receivedVal), sub: recSub, icon: CheckCircle2, color: "text-info" },
-          { label: "Atrasado", value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+          ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: periodFilter === "month" ? `de ${fmt(expectedMonthlyRevenue)} esperado` : recSub, icon: TrendingUp, color: "text-success" }] : [
+            { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: recSub, icon: TrendingUp, color: "text-success" },
+          ]),
+          ...(!showMonthly ? [] : []),
+          { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
+          { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
+          ...(periodFilter === "month" && showMonthly ? [{ label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), sub: "Planos ativos AcelerIQ", icon: CheckCircle2, color: "text-info" }] : []),
         ];
         return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
