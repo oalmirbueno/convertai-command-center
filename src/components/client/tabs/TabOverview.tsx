@@ -59,12 +59,14 @@ export default function TabOverview({ project }: { project: any }) {
     ? Array.from(new Map(allTasks.filter((t: any) => t.assigned_to && t.assignee).map((t: any) => [t.assigned_to, t.assignee])).values()) as any[]
     : [];
 
-  // Tasks per team member
+  // Tasks per team member with full breakdown
   const memberTaskCounts = teamMembers.map((m: any) => {
     const memberTasks = allTasks.filter((t: any) => t.assigned_to === m.id);
     const memberDone = memberTasks.filter((t: any) => t.status === "done").length;
-    const memberDoing = memberTasks.filter((t: any) => t.status === "doing" || t.status === "review").length;
-    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing };
+    const memberDoing = memberTasks.filter((t: any) => t.status === "doing").length;
+    const memberReview = memberTasks.filter((t: any) => t.status === "review").length;
+    const memberBacklog = memberTasks.filter((t: any) => t.status === "backlog" || t.status === "todo").length;
+    return { ...m, total: memberTasks.length, done: memberDone, doing: memberDoing, review: memberReview, backlog: memberBacklog };
   });
 
   const objectives = project.objectives
@@ -278,30 +280,75 @@ export default function TabOverview({ project }: { project: any }) {
 
         {/* Team card */}
         <div className="bg-card border border-border rounded-xl p-5">
-          <p className="label-sm mb-3">Equipe do Projeto</p>
+          <p className="label-sm mb-4">Equipe do Projeto</p>
           {memberTaskCounts.length === 0 ? (
             <p className="text-xs text-muted-foreground">Equipe não atribuída</p>
           ) : (
-            <div className="space-y-3">
-              {memberTaskCounts.map((member: any, i: number) => (
-                <div key={i} className="flex items-center gap-3">
-                  <Avatar className="w-8 h-8">
-                    <AvatarFallback className="text-[10px] bg-secondary text-muted-foreground font-medium">
-                      {member.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] text-foreground">{member.full_name}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {member.doing > 0 && `${member.doing} em execução · `}
-                      {member.done}/{member.total} concluídas
-                    </p>
+            <div className="space-y-4">
+              {memberTaskCounts.map((member: any, i: number) => {
+                const progressPct = member.total > 0 ? Math.round((member.done / member.total) * 100) : 0;
+                return (
+                  <div key={i} className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <Avatar className="w-8 h-8">
+                        <AvatarFallback className="text-[10px] bg-secondary text-muted-foreground font-medium">
+                          {member.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2)}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] text-foreground font-medium">{member.full_name}</p>
+                          {member.doing > 0 && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
+                          )}
+                        </div>
+                      </div>
+                      <span className="text-[11px] text-muted-foreground font-mono">{progressPct}%</span>
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-1.5 w-full rounded-full bg-secondary overflow-hidden flex ml-11">
+                      {member.done > 0 && (
+                        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${(member.done / member.total) * 100}%` }} />
+                      )}
+                      {member.doing > 0 && (
+                        <div className="h-full bg-sky-400 transition-all" style={{ width: `${(member.doing / member.total) * 100}%` }} />
+                      )}
+                      {member.review > 0 && (
+                        <div className="h-full bg-amber-400 transition-all" style={{ width: `${(member.review / member.total) * 100}%` }} />
+                      )}
+                    </div>
+
+                    {/* Task breakdown */}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1 ml-11">
+                      {member.done > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] text-emerald-400">
+                          <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                          {member.done} concluída{member.done > 1 ? "s" : ""}
+                        </span>
+                      )}
+                      {member.doing > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] text-sky-400">
+                          <div className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                          {member.doing} em execução
+                        </span>
+                      )}
+                      {member.review > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] text-amber-400">
+                          <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                          {member.review} em revisão
+                        </span>
+                      )}
+                      {member.backlog > 0 && (
+                        <span className="flex items-center gap-1 text-[10px] text-muted-foreground">
+                          <div className="w-1.5 h-1.5 rounded-full bg-muted-foreground/30" />
+                          {member.backlog} planejada{member.backlog > 1 ? "s" : ""}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  {member.doing > 0 && (
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse shrink-0" />
-                  )}
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
