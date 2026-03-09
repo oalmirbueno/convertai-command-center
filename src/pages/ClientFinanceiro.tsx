@@ -1,12 +1,14 @@
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
+import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase, Zap, Info, ArrowRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
