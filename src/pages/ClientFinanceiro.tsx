@@ -537,6 +537,115 @@ export default function ClientFinanceiro() {
           )}
         </div>
       </section>
+      {/* ========== POPUP: DETALHES DA RECARGA ========== */}
+      <Dialog open={!!rechargePopup} onOpenChange={(open) => { if (!open) setRechargePopup(null); }}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          {rechargePopup && (() => {
+            const r = rechargePopup;
+            const platform = platformLabels[r.platform] || r.platform;
+            // Extract period from reason
+            const isPeriodic = r.reason?.includes("semanal") || r.reason?.includes("mensal");
+            const period = r.reason?.includes("mensal") ? "mensal" : "semanal";
+
+            return (
+              <>
+                {/* Header visual */}
+                <div className="bg-gradient-to-br from-warning/20 to-warning/5 px-6 pt-8 pb-6 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-warning/20 flex items-center justify-center mx-auto mb-4">
+                    <Zap className="w-8 h-8 text-warning" />
+                  </div>
+                  <DialogTitle className="text-lg font-semibold text-foreground">
+                    Solicitação de Recarga
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{platform}</p>
+                </div>
+
+                {/* Content */}
+                <div className="px-6 py-5 space-y-5">
+                  {/* Amount */}
+                  <div className="text-center">
+                    <p className="text-3xl font-mono font-bold text-foreground">
+                      {formatCurrency(Number(r.amount))}
+                    </p>
+                    {isPeriodic && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Investimento {period} em anúncios
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Explanation */}
+                  <div className="bg-secondary/50 border border-border rounded-xl p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-4 h-4 text-info shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-foreground">Como funciona?</p>
+                        <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                          <li>Sua equipe identificou a necessidade de investimento em <span className="text-foreground font-medium">{platform}</span></li>
+                          <li>Após sua confirmação, realizamos a recarga na plataforma de anúncios</li>
+                          <li>O saldo será atualizado automaticamente no seu painel</li>
+                          <li>Você acompanha os resultados nos relatórios periódicos</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  {r.reason && (
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Observação da equipe</p>
+                      <p className="text-sm text-foreground italic">"{r.reason}"</p>
+                    </div>
+                  )}
+
+                  {/* Date */}
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Solicitado em {formatDate(r.created_at)}
+                  </p>
+
+                  {/* Actions */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        handleConfirmRecharge(r.id, Number(r.amount), r.platform);
+                        setRechargePopup(null);
+                      }}
+                      className="w-full py-3 rounded-xl text-[14px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none flex items-center justify-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      Confirmar Pagamento
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          openWhatsApp(
+                            `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platform}, gostaria de conversar antes de confirmar.`
+                          );
+                        }}
+                        className="py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        Discutir
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleRejectRecharge(r.id);
+                          setRechargePopup(null);
+                        }}
+                        className="py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30 flex items-center justify-center gap-2"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Recusar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
