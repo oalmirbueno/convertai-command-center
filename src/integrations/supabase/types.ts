@@ -56,6 +56,7 @@ export type Database = {
           error_message: string | null
           id: string
           ip_address: string | null
+          key_name: string | null
           params: Json | null
           status_code: number | null
         }
@@ -65,6 +66,7 @@ export type Database = {
           error_message?: string | null
           id?: string
           ip_address?: string | null
+          key_name?: string | null
           params?: Json | null
           status_code?: number | null
         }
@@ -74,8 +76,42 @@ export type Database = {
           error_message?: string | null
           id?: string
           ip_address?: string | null
+          key_name?: string | null
           params?: Json | null
           status_code?: number | null
+        }
+        Relationships: []
+      }
+      api_keys: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          key_hash: string
+          key_preview: string
+          last_used_at: string | null
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash: string
+          key_preview: string
+          last_used_at?: string | null
+          name: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          key_hash?: string
+          key_preview?: string
+          last_used_at?: string | null
+          name?: string
         }
         Relationships: []
       }
@@ -1062,6 +1098,13 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      validate_api_key: {
+        Args: { _key_hash: string }
+        Returns: {
+          id: string
+          name: string
+        }[]
       }
     }
     Enums: {
