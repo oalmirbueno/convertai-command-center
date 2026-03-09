@@ -1,12 +1,14 @@
+import { useState, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { toast } from "sonner";
 import { notifyAdmin } from "@/lib/notifyHelpers";
-import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase } from "lucide-react";
+import { MessageCircle, Check, X, AlertTriangle, Wallet, CreditCard, Clock, Loader2, Briefcase, Zap, Info, ArrowRight } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { getProjectBrand } from "@/lib/brandHelpers";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 const platformLabels: Record<string, string> = {
   meta: "Meta Ads",
@@ -96,6 +98,16 @@ export default function ClientFinanceiro() {
   // ===== COMPUTED =====
   const showTraffic = (profile as any)?.services_config?.traffic !== false;
   const pendingRecharges = (rechargeRequests || []).filter((r: any) => r.status === "pending");
+  const [rechargePopup, setRechargePopup] = useState<any>(null);
+  const [popupShown, setPopupShown] = useState(false);
+
+  // Auto-open popup when there are pending recharges
+  useEffect(() => {
+    if (pendingRecharges.length > 0 && !popupShown) {
+      setRechargePopup(pendingRecharges[0]);
+      setPopupShown(true);
+    }
+  }, [pendingRecharges.length, popupShown]);
   const planBillings = (billing || []).filter(
     (b: any) => b.type === "plan_renewal" || b.type === "renewal"
   );
@@ -343,7 +355,7 @@ export default function ClientFinanceiro() {
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 text-warning" />
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Recargas Pendentes
+              Recargas Pendentes ({pendingRecharges.length})
             </span>
           </div>
 
@@ -351,54 +363,31 @@ export default function ClientFinanceiro() {
             {pendingRecharges.map((r: any) => (
               <div
                 key={r.id}
-                className="bg-card border border-warning/30 rounded-2xl p-5"
+                onClick={() => setRechargePopup(r)}
+                className="bg-card border border-warning/30 rounded-2xl p-5 cursor-pointer hover:border-warning/60 transition-colors"
               >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    ⚡ Recarga {platformLabels[r.platform] || r.platform}
-                  </p>
-                  <p className="text-xl font-mono font-light text-foreground mt-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                    <Zap className="w-5 h-5 text-warning" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">
+                      Recarga {platformLabels[r.platform] || r.platform}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Solicitado em {formatDate(r.created_at)}
+                    </p>
+                  </div>
+                  <p className="text-lg font-mono font-semibold text-foreground">
                     {formatCurrency(Number(r.amount))}
                   </p>
-                  {r.reason && (
-                    <p className="text-xs text-muted-foreground mt-2 italic">
-                      "{r.reason}"
-                    </p>
-                  )}
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Solicitado em {formatDate(r.created_at)}
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </div>
+                {r.reason && (
+                  <p className="text-xs text-muted-foreground mt-2 ml-[52px] italic">
+                    "{r.reason}"
                   </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <button
-                    onClick={() =>
-                      handleConfirmRecharge(r.id, Number(r.amount), r.platform)
-                    }
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Confirmar Recarga
-                  </button>
-                  <button
-                    onClick={() =>
-                      openWhatsApp(
-                        `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platformLabels[r.platform] || r.platform}...`
-                      )
-                    }
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    Discutir
-                  </button>
-                  <button
-                    onClick={() => handleRejectRecharge(r.id)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    Recusar
-                  </button>
-                </div>
+                )}
               </div>
             ))}
           </div>
@@ -548,6 +537,115 @@ export default function ClientFinanceiro() {
           )}
         </div>
       </section>
+      {/* ========== POPUP: DETALHES DA RECARGA ========== */}
+      <Dialog open={!!rechargePopup} onOpenChange={(open) => { if (!open) setRechargePopup(null); }}>
+        <DialogContent className="max-w-md p-0 gap-0 overflow-hidden">
+          {rechargePopup && (() => {
+            const r = rechargePopup;
+            const platform = platformLabels[r.platform] || r.platform;
+            // Extract period from reason
+            const isPeriodic = r.reason?.includes("semanal") || r.reason?.includes("mensal");
+            const period = r.reason?.includes("mensal") ? "mensal" : "semanal";
+
+            return (
+              <>
+                {/* Header visual */}
+                <div className="bg-gradient-to-br from-warning/20 to-warning/5 px-6 pt-8 pb-6 text-center">
+                  <div className="w-16 h-16 rounded-2xl bg-warning/20 flex items-center justify-center mx-auto mb-4">
+                    <Zap className="w-8 h-8 text-warning" />
+                  </div>
+                  <DialogTitle className="text-lg font-semibold text-foreground">
+                    Solicitação de Recarga
+                  </DialogTitle>
+                  <p className="text-sm text-muted-foreground mt-1">{platform}</p>
+                </div>
+
+                {/* Content */}
+                <div className="px-6 py-5 space-y-5">
+                  {/* Amount */}
+                  <div className="text-center">
+                    <p className="text-3xl font-mono font-bold text-foreground">
+                      {formatCurrency(Number(r.amount))}
+                    </p>
+                    {isPeriodic && (
+                      <p className="text-sm text-muted-foreground mt-1">
+                        Investimento {period} em anúncios
+                      </p>
+                    )}
+                  </div>
+
+                  {/* Explanation */}
+                  <div className="bg-secondary/50 border border-border rounded-xl p-4 space-y-3">
+                    <div className="flex items-start gap-3">
+                      <Info className="w-4 h-4 text-info shrink-0 mt-0.5" />
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-foreground">Como funciona?</p>
+                        <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal list-inside">
+                          <li>Sua equipe identificou a necessidade de investimento em <span className="text-foreground font-medium">{platform}</span></li>
+                          <li>Após sua confirmação, realizamos a recarga na plataforma de anúncios</li>
+                          <li>O saldo será atualizado automaticamente no seu painel</li>
+                          <li>Você acompanha os resultados nos relatórios periódicos</li>
+                        </ol>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Reason */}
+                  {r.reason && (
+                    <div className="bg-card border border-border rounded-xl p-3">
+                      <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Observação da equipe</p>
+                      <p className="text-sm text-foreground italic">"{r.reason}"</p>
+                    </div>
+                  )}
+
+                  {/* Date */}
+                  <p className="text-[11px] text-muted-foreground text-center">
+                    Solicitado em {formatDate(r.created_at)}
+                  </p>
+
+                  {/* Actions */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => {
+                        handleConfirmRecharge(r.id, Number(r.amount), r.platform);
+                        setRechargePopup(null);
+                      }}
+                      className="w-full py-3 rounded-xl text-[14px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none flex items-center justify-center gap-2"
+                    >
+                      <Check className="w-4 h-4" />
+                      Confirmar Pagamento
+                    </button>
+
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          openWhatsApp(
+                            `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platform}, gostaria de conversar antes de confirmar.`
+                          );
+                        }}
+                        className="py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border flex items-center justify-center gap-2"
+                      >
+                        <MessageCircle className="w-3.5 h-3.5" />
+                        Discutir
+                      </button>
+                      <button
+                        onClick={() => {
+                          handleRejectRecharge(r.id);
+                          setRechargePopup(null);
+                        }}
+                        className="py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30 flex items-center justify-center gap-2"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        Recusar
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
