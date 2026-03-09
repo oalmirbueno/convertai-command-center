@@ -41,6 +41,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
   { title: "Config", url: "/config", icon: Settings },
+  { title: "API", url: "/api-docs", icon: Zap },
 ];
 
 const clientMainNav: NavItem[] = [
