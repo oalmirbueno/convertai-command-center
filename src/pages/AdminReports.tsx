@@ -9,7 +9,7 @@ import { useNavigate } from "react-router-dom";
 
 const metricLabels: Record<string, string> = {
   reach: "Alcance", impressions: "Impressões", engagement: "Engaj. %",
-  clicks: "Cliques", ctr: "CTR %", conversions: "Conversões",
+  clicks: "Cliques", ctr: "CTR %", conversions: "Mensagens",
   followers_gained: "Seguidores", ad_spend: "Investido", cpa: "CPA",
 };
 

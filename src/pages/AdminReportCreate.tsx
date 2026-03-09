@@ -18,7 +18,7 @@ const defaultMetrics = [
   { key: "engagement", label: "Engajamento", suffix: "%" },
   { key: "clicks", label: "Cliques", suffix: "" },
   { key: "ctr", label: "CTR", suffix: "%" },
-  { key: "conversions", label: "Conversões", suffix: "" },
+  { key: "conversions", label: "Mensagens", suffix: "" },
   { key: "followers_gained", label: "Novos Seguidores", suffix: "" },
   { key: "ad_spend", label: "Investimento", suffix: "R$" },
   { key: "cpa", label: "CPA", suffix: "R$" },

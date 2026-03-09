@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import {
   FileText, BarChart3, TrendingUp, Calendar, ArrowRight,
-  Eye, MousePointerClick, Users, Zap, DollarSign, Target,
+  Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";

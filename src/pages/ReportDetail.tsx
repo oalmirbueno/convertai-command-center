@@ -21,7 +21,7 @@ const metricConfig: Record<string, { label: string; format: (v: number) => strin
   engagement:       { label: "Engajamento",      format: v => v.toFixed(1) + "%",                                  icon: Zap,               color: "hsl(145, 100%, 50%)" },
   clicks:           { label: "Cliques",          format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v), icon: MousePointerClick, color: "hsl(38, 92%, 50%)" },
   ctr:              { label: "CTR",              format: v => v.toFixed(2) + "%",                                  icon: Target,            color: "hsl(346, 87%, 60%)" },
-  conversions:      { label: "Conversões",       format: v => String(v),                                           icon: Target,            color: "hsl(142, 71%, 45%)" },
+  conversions:      { label: "Mensagens",        format: v => String(v),                                           icon: MessageCircle,     color: "hsl(142, 71%, 45%)" },
   followers_gained: { label: "Novos Seguidores", format: v => "+" + v.toLocaleString("pt-BR"),                     icon: Users,             color: "hsl(188, 94%, 43%)" },
   ad_spend:         { label: "Investimento",     format: v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 }), icon: DollarSign, color: "hsl(221, 83%, 53%)" },
   cpa:              { label: "CPA",              format: v => "R$ " + v.toFixed(2),                                icon: DollarSign,        color: "hsl(280, 70%, 60%)" },
