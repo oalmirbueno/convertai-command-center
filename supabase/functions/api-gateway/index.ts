@@ -508,9 +508,17 @@ const handlers: Record<string, Handler> = {
     if (error) throw error
     return ok(data)
   },
+  // ── Audit Log ──
+  list_audit_log: async (db, p) => {
+    let q = db.from('api_audit_log').select('*')
+    if (p.action) q = q.eq('action', p.action)
+    if (p.ip_address) q = q.eq('ip_address', p.ip_address)
+    if (p.limit) q = q.limit(p.limit)
+    const { data, error } = await q.order('created_at', { ascending: false })
+    if (error) throw error
+    return ok(data)
+  },
 }
-
-// ─── Main ──────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
