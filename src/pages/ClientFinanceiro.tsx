@@ -355,7 +355,7 @@ export default function ClientFinanceiro() {
           <div className="flex items-center gap-2 mb-3">
             <AlertTriangle className="w-4 h-4 text-warning" />
             <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Recargas Pendentes
+              Recargas Pendentes ({pendingRecharges.length})
             </span>
           </div>
 
@@ -363,54 +363,31 @@ export default function ClientFinanceiro() {
             {pendingRecharges.map((r: any) => (
               <div
                 key={r.id}
-                className="bg-card border border-warning/30 rounded-2xl p-5"
+                onClick={() => setRechargePopup(r)}
+                className="bg-card border border-warning/30 rounded-2xl p-5 cursor-pointer hover:border-warning/60 transition-colors"
               >
-                <div>
-                  <p className="text-sm font-medium text-foreground">
-                    ⚡ Recarga {platformLabels[r.platform] || r.platform}
-                  </p>
-                  <p className="text-xl font-mono font-light text-foreground mt-1">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                    <Zap className="w-5 h-5 text-warning" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-foreground">
+                      Recarga {platformLabels[r.platform] || r.platform}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Solicitado em {formatDate(r.created_at)}
+                    </p>
+                  </div>
+                  <p className="text-lg font-mono font-semibold text-foreground">
                     {formatCurrency(Number(r.amount))}
                   </p>
-                  {r.reason && (
-                    <p className="text-xs text-muted-foreground mt-2 italic">
-                      "{r.reason}"
-                    </p>
-                  )}
-                  <p className="text-[11px] text-muted-foreground mt-1">
-                    Solicitado em {formatDate(r.created_at)}
+                  <ArrowRight className="w-4 h-4 text-muted-foreground shrink-0" />
+                </div>
+                {r.reason && (
+                  <p className="text-xs text-muted-foreground mt-2 ml-[52px] italic">
+                    "{r.reason}"
                   </p>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-4">
-                  <button
-                    onClick={() =>
-                      handleConfirmRecharge(r.id, Number(r.amount), r.platform)
-                    }
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none"
-                  >
-                    <Check className="w-3.5 h-3.5" />
-                    Confirmar Recarga
-                  </button>
-                  <button
-                    onClick={() =>
-                      openWhatsApp(
-                        `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platformLabels[r.platform] || r.platform}...`
-                      )
-                    }
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border"
-                  >
-                    <MessageCircle className="w-3.5 h-3.5" />
-                    Discutir
-                  </button>
-                  <button
-                    onClick={() => handleRejectRecharge(r.id)}
-                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                    Recusar
-                  </button>
-                </div>
+                )}
               </div>
             ))}
           </div>
