@@ -865,10 +865,17 @@ export default function AdminFinanceiro() {
             </div>
           )}
 
-          {Object.entries(walletsByClient).length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Nenhum wallet de anúncios cadastrado.</p>}
+          {/* Add wallet button */}
+          <div className="flex justify-end">
+            <button onClick={() => setAddWalletModal(true)}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer border-none">
+              <Plus className="w-4 h-4" /> Adicionar Wallet
+            </button>
+          </div>
+
+          {Object.entries(walletsByClient).length === 0 && <p className="text-sm text-muted-foreground text-center py-6">Nenhum wallet de anúncios cadastrado. Clique em "Adicionar Wallet" para começar.</p>}
           {Object.entries(walletsByClient).map(([clientId, clientWallets]) => {
             const clientTotal = clientWallets.reduce((s: number, w: any) => s + Number(w.balance), 0);
-            // Calculate total invested from completed recharges for this client
             const clientRecharges = (recharges || []).filter((r: any) => r.client_id === clientId && r.status === "completed");
             const totalInvested = clientRecharges.reduce((s: number, r: any) => s + Number(r.amount), 0);
             return (
@@ -879,9 +886,9 @@ export default function AdminFinanceiro() {
               </div>
               <div className="space-y-2">
                 {clientWallets.map((w: any) => (
-                  <div key={w.id} className="flex items-center gap-3">
+                  <div key={w.id} className="flex items-center gap-3 flex-wrap">
                     <span className="text-xs text-muted-foreground w-24 capitalize">{w.platform} Ads</span>
-                    <p className="text-sm font-mono font-medium text-foreground flex-1">{fmt(Number(w.balance))}</p>
+                    <p className={`text-sm font-mono font-medium flex-1 ${Number(w.balance) < 100 ? "text-warning" : "text-foreground"}`}>{fmt(Number(w.balance))}</p>
                     <button onClick={() => setRechargeModal({ clientId, platform: w.platform })}
                       className="text-[11px] px-3 py-1 rounded-full bg-info/10 text-info hover:bg-info/20 transition-colors cursor-pointer border-none flex items-center gap-1">
                       <RefreshCw className="w-3 h-3" /> Solicitar Recarga
