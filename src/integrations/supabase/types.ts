@@ -49,6 +49,36 @@ export type Database = {
           },
         ]
       }
+      api_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          error_message: string | null
+          id: string
+          ip_address: string | null
+          params: Json | null
+          status_code: number | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          params?: Json | null
+          status_code?: number | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          error_message?: string | null
+          id?: string
+          ip_address?: string | null
+          params?: Json | null
+          status_code?: number | null
+        }
+        Relationships: []
+      }
       billing: {
         Row: {
           amount: number
