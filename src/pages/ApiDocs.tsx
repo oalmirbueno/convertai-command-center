@@ -1,11 +1,18 @@
-import { useState } from "react";
-import { Copy, Check, ExternalLink, Shield, Zap, Code2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Copy, Check, ExternalLink, Shield, Zap, Code2, Key, Plus, Trash2, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const GATEWAY_URL = `https://${import.meta.env.VITE_SUPABASE_PROJECT_ID}.supabase.co/functions/v1/api-gateway`;
 
+// --- Action docs (unchanged) ---
 const actionDocs: {
   category: string;
   actions: { name: string; desc: string; required?: string[]; optional?: string[]; example: Record<string, any> }[];
@@ -15,6 +22,7 @@ const actionDocs: {
     actions: [
       { name: "health", desc: "Verifica se o gateway está online", example: { action: "health" } },
       { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" } },
+      { name: "list_audit_log", desc: "Lista logs de auditoria", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 } },
     ],
   },
   {
@@ -114,6 +122,186 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
+// --- SHA-256 hash (browser) ---
+async function sha256(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+function generateKey(): string {
+  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  let result = "acq_";
+  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
+  return result;
+}
+
+// --- API Keys Management Section ---
+function ApiKeysSection() {
+  const [keys, setKeys] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [showCreate, setShowCreate] = useState(false);
+  const [newKeyName, setNewKeyName] = useState("");
+  const [createdKey, setCreatedKey] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+
+  const fetchKeys = async () => {
+    const { data } = await supabase.from("api_keys" as any).select("*").order("created_at", { ascending: false });
+    setKeys((data as any[]) || []);
+    setLoading(false);
+  };
+
+  useEffect(() => { fetchKeys(); }, []);
+
+  const handleCreate = async () => {
+    if (!newKeyName.trim()) return;
+    setCreating(true);
+    const rawKey = generateKey();
+    const keyHash = await sha256(rawKey);
+    const keyPreview = rawKey.slice(0, 8) + "..." + rawKey.slice(-4);
+
+    const { data: userData } = await supabase.auth.getUser();
+
+    const { error } = await supabase.from("api_keys" as any).insert({
+      name: newKeyName.trim(),
+      key_hash: keyHash,
+      key_preview: keyPreview,
+      created_by: userData.user?.id,
+    } as any);
+
+    if (error) {
+      toast.error("Erro ao criar chave: " + error.message);
+    } else {
+      setCreatedKey(rawKey);
+      fetchKeys();
+    }
+    setCreating(false);
+  };
+
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    await supabase.from("api_keys" as any).delete().eq("id", deleteId);
+    setDeleteId(null);
+    fetchKeys();
+    toast.success("Chave revogada com sucesso");
+  };
+
+  const handleToggle = async (id: string, currentActive: boolean) => {
+    await supabase.from("api_keys" as any).update({ is_active: !currentActive } as any).eq("id", id);
+    fetchKeys();
+    toast.success(currentActive ? "Chave desativada" : "Chave ativada");
+  };
+
+  return (
+    <Card className="bg-card border-border">
+      <CardHeader className="pb-3">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2"><Key className="w-4 h-4 text-primary" /> API Keys</CardTitle>
+          <Button size="sm" variant="outline" onClick={() => { setShowCreate(true); setNewKeyName(""); setCreatedKey(null); }}>
+            <Plus className="w-3.5 h-3.5 mr-1" /> Nova Chave
+          </Button>
+        </div>
+      </CardHeader>
+      <CardContent>
+        {loading ? (
+          <p className="text-xs text-muted-foreground">Carregando...</p>
+        ) : keys.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Nenhuma chave criada. Clique em "Nova Chave" para começar.</p>
+        ) : (
+          <div className="space-y-2">
+            {keys.map((k: any) => (
+              <div key={k.id} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50 border border-border">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium truncate">{k.name}</span>
+                    <Badge variant={k.is_active ? "default" : "secondary"} className="text-[10px]">
+                      {k.is_active ? "Ativa" : "Inativa"}
+                    </Badge>
+                  </div>
+                  <div className="flex items-center gap-3 mt-1">
+                    <code className="text-[11px] text-muted-foreground">{k.key_preview}</code>
+                    {k.last_used_at && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Último uso: {new Date(k.last_used_at).toLocaleDateString("pt-BR")}
+                      </span>
+                    )}
+                    <span className="text-[10px] text-muted-foreground">
+                      Criada: {new Date(k.created_at).toLocaleDateString("pt-BR")}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1 ml-2">
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggle(k.id, k.is_active)} title={k.is_active ? "Desativar" : "Ativar"}>
+                    {k.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </Button>
+                  <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(k.id)} title="Revogar">
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+
+      {/* Create Key Dialog */}
+      <Dialog open={showCreate} onOpenChange={setShowCreate}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{createdKey ? "Chave Criada!" : "Nova API Key"}</DialogTitle>
+          </DialogHeader>
+          {createdKey ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted-foreground">
+                Copie esta chave agora. <span className="text-destructive font-medium">Ela não será exibida novamente.</span>
+              </p>
+              <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
+                <code className="text-xs flex-1 break-all select-all">{createdKey}</code>
+                <CopyButton text={createdKey} />
+              </div>
+              <DialogFooter>
+                <Button onClick={() => { setShowCreate(false); setCreatedKey(null); }}>Entendi, copiei!</Button>
+              </DialogFooter>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div>
+                <Label htmlFor="key-name">Nome da chave</Label>
+                <Input
+                  id="key-name"
+                  placeholder="Ex: n8n Produção, OpenClaw, Zapier..."
+                  value={newKeyName}
+                  onChange={(e) => setNewKeyName(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreate()}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">Use um nome que identifique onde a chave será usada.</p>
+              </div>
+              <DialogFooter>
+                <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
+                <Button onClick={handleCreate} disabled={!newKeyName.trim() || creating}>
+                  {creating ? "Criando..." : "Gerar Chave"}
+                </Button>
+              </DialogFooter>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirm */}
+      <ConfirmModal
+        open={!!deleteId}
+        title="Revogar API Key"
+        description="Essa ação é irreversível. Qualquer integração usando esta chave perderá acesso imediatamente."
+        confirmLabel="Revogar"
+        onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
+      />
+    </Card>
+  );
+}
+
+// --- Main Page ---
 export default function ApiDocs() {
   const [expandedCat, setExpandedCat] = useState<string | null>(null);
   const curlExample = `curl -X POST "${GATEWAY_URL}" \\
@@ -140,6 +328,9 @@ export default function ApiDocs() {
         <h1 className="text-2xl font-bold">API Gateway</h1>
         <p className="text-sm text-muted-foreground mt-1">Conecte qualquer ferramenta externa (n8n, OpenClaw, Make, Zapier) ao sistema completo.</p>
       </div>
+
+      {/* API Keys Management */}
+      <ApiKeysSection />
 
       {/* Quick Start */}
       <div className="grid md:grid-cols-3 gap-4">
@@ -202,7 +393,7 @@ export default function ApiDocs() {
 
       {/* Actions Reference */}
       <div>
-        <h2 className="text-lg font-semibold mb-3">Ações Disponíveis ({Object.keys(actionDocs.flatMap(c => c.actions)).length})</h2>
+        <h2 className="text-lg font-semibold mb-3">Ações Disponíveis</h2>
         <div className="space-y-3">
           {actionDocs.map((cat) => (
             <Card key={cat.category} className="bg-card border-border overflow-hidden">
