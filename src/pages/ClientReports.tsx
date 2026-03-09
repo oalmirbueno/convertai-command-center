@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import {
   FileText, BarChart3, TrendingUp, Calendar, ArrowRight,
-  Eye, MousePointerClick, Users, Zap, DollarSign, Target,
+  Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +18,7 @@ const metricConfig: Record<string, { label: string; format: (v: number) => strin
   engagement:       { label: "Engaj.",       format: v => v.toFixed(1) + "%",                                  icon: Zap,               color: "hsl(145, 100%, 50%)" },
   clicks:           { label: "Cliques",      format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(v), icon: MousePointerClick, color: "hsl(38, 92%, 50%)" },
   ctr:              { label: "CTR",          format: v => v.toFixed(2) + "%",                                  icon: Target,            color: "hsl(346, 87%, 60%)" },
-  conversions:      { label: "Conversões",   format: v => String(v),                                           icon: Target,            color: "hsl(142, 71%, 45%)" },
+  conversions:      { label: "Mensagens",    format: v => String(v),                                           icon: MessageCircle,     color: "hsl(142, 71%, 45%)" },
   followers_gained: { label: "Seguidores",   format: v => "+" + v,                                             icon: Users,             color: "hsl(188, 94%, 43%)" },
   ad_spend:         { label: "Investido",    format: v => "R$" + v.toLocaleString("pt-BR"),                    icon: DollarSign,        color: "hsl(221, 83%, 53%)" },
 };
