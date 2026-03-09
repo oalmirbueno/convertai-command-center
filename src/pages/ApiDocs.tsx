@@ -291,12 +291,11 @@ function ApiKeysSection() {
       {/* Delete Confirm */}
       <ConfirmModal
         open={!!deleteId}
-        onOpenChange={(open) => !open && setDeleteId(null)}
         title="Revogar API Key"
         description="Essa ação é irreversível. Qualquer integração usando esta chave perderá acesso imediatamente."
         confirmLabel="Revogar"
-        variant="destructive"
         onConfirm={handleDelete}
+        onCancel={() => setDeleteId(null)}
       />
     </Card>
   );
