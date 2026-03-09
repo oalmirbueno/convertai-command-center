@@ -1,93 +1,85 @@
 
 
-## Plan: Universal API/Webhook Gateway for External Integrations
+# Login Page - Layout Reorganization
 
-### Problem
-The current webhook system is limited -- hardcoded endpoints, fire-and-forget only (no inbound), no authentication for external callers, and no way for tools like n8n or OpenClaw to **manage** the system (create clients, tasks, projects, update statuses, etc.).
+## Current Issues
+- Logo is small and tucked in the top-left corner -- user wants it big and centered/prominent
+- The consultant image is barely visible due to aggressive masking -- needs to be more present but pushed to the edge
+- Text content floats in the middle and overlaps with the faded image zone
+- The woman in the image should be looking forward (facing camera)
 
-### Solution
-Create a single, powerful **Edge Function** (`api-gateway`) that acts as a universal REST API, authenticated via a shared API key (secret). External tools send requests to this gateway specifying an `action` and `payload`, and the gateway executes it using the service role client -- giving full CRUD access to the entire system.
+## Changes
 
-### Architecture
+### 1. Generate new consultant image
+- Generate a new hero image of a professional woman looking directly at the camera (forward-facing), arms crossed, confident pose
+- Save as `src/assets/consultant-hero-flipped.jpg` (replacing current)
+
+### 2. Restructure the left panel layout into clear zones
+
+The left panel will be reorganized into a **two-column internal layout** that prevents any overlap:
 
 ```text
-n8n / OpenClaw / Zapier / Make / etc.
-            │
-            ▼  POST with X-API-Key header
-┌──────────────────────────────┐
-│   Edge Function: api-gateway │
-│   - Validates API key        │
-│   - Routes by "action"       │
-│   - Full CRUD on all tables  │
-│   - Returns structured JSON  │
-└──────────────────────────────┘
-            │
-            ▼
-      Supabase DB (service role)
++-----------------------------------------------+
+|                                                |
+|   [WOMAN IMAGE]        [CONTENT AREA]          |
+|   Positioned at        Centered vertically:    |
+|   far-left edge,                               |
+|   bottom-aligned,       - Big Logo (48px icon)  |
+|   ~45% of panel         - "Aceleriq" (24px)    |
+|   width, masked          - "Performance OS"    |
+|   on right edge                                |
+|                         - Welcome heading      |
+|                         - Description text     |
+|                                                |
+|                         - 3 value props        |
+|                           with Lucide icons    |
+|                                                |
+|                         - Metrics footer       |
+|                         - Copyright            |
++-----------------------------------------------+
 ```
 
-### Supported Actions (comprehensive list)
+### 3. Specific layout changes in `src/pages/Login.tsx`
 
-**Clients**: `list_clients`, `get_client`, `create_client`, `update_client`
-**Projects**: `list_projects`, `get_project`, `create_project`, `update_project`
-**Tasks**: `list_tasks`, `get_task`, `create_task`, `update_task`, `delete_task`
-**Milestones**: `list_milestones`, `create_milestone`, `update_milestone`
-**Files**: `list_files`, `update_file` (approval status, feedback)
-**Reports**: `list_reports`, `create_report`, `update_report`
-**Billing**: `list_billing`, `create_billing`, `update_billing`
-**Notifications**: `send_notification`
-**Client Requests**: `list_requests`, `update_request`
-**Briefings**: `list_briefings`, `get_briefing`
-**Updates Feed**: `create_update`
-**Ads Wallet**: `get_wallet`, `update_wallet`
-**System**: `health`, `get_schema` (returns available actions + their params)
+**Image positioning:**
+- Keep `absolute left-0 bottom-0` but with `h-[85%]` so she's prominent
+- Keep the right-fade mask but less aggressive: fade starts at 60% instead of 50%
+- This keeps the woman visible but cleanly fading before the text zone
 
-### Implementation Steps
+**Content area (right side of left panel):**
+- All content (logo, text, value props, metrics) lives in a single column on the right side of the left panel
+- Uses `ml-auto` with fixed `max-width: 320px` and `pr-12 pl-6`
+- This ensures zero overlap with the image
 
-1. **Create `EXTERNAL_API_KEY` secret** -- a shared key that external tools use to authenticate. Requested via `add_secret` tool.
+**Logo/Branding -- big and prominent:**
+- Move the logo from top-left into the content column, at the top of the vertically-centered block
+- Icon: 48px square with green gradient
+- Text: "Aceleriq" at ~22px bold, "Performance OS" subtitle
+- This makes the branding the first thing you see in the content area
 
-2. **Create Edge Function `supabase/functions/api-gateway/index.ts`**:
-   - Validates `X-API-Key` header against the stored secret
-   - Parses `{ action, ...params }` from request body
-   - Routes to handler functions for each action
-   - Uses service role client for full DB access
-   - Returns consistent `{ success, data, error }` responses
-   - Comprehensive error handling with descriptive messages
+**Welcome text:**
+- "Bom te ver por aqui!" heading
+- Short description paragraph
+- Positioned below logo with proper spacing
 
-3. **Update `supabase/config.toml`** to add:
-   ```toml
-   [functions.api-gateway]
-   verify_jwt = false
-   ```
+**Value props:**
+- 3 items with Lucide icons (BarChart3, Zap, Target) -- no emojis
+- Compact spacing below the welcome text
 
-4. **Update `src/lib/webhooks.ts`** to also export the gateway URL for reference, and add any new outbound webhook events.
+**Footer metrics + copyright:**
+- Pinned to the bottom of the content column
+- Animated counter numbers
 
-5. **Create documentation page `src/pages/ApiDocs.tsx`** (admin-only) showing:
-   - Gateway URL
-   - All available actions with example payloads
-   - Authentication instructions
-   - Copy-paste examples for n8n HTTP nodes
+### 4. No changes to the right panel (form side)
+The login/signup form stays exactly as-is.
 
-6. **Add route** in `App.tsx` for `/api-docs` (admin only).
+## Technical Details
 
-### Security
-- Authentication via `X-API-Key` header checked against a stored secret
-- Service role used only inside the edge function (never exposed)
-- Rate limiting awareness via descriptive error responses
-- Input validation on all actions (required fields checked)
+### Files Modified
+- `src/pages/Login.tsx` -- restructure left panel layout only
+- `src/assets/consultant-hero-flipped.jpg` -- new forward-facing image
 
-### Technical Details
-
-The edge function will be ~400-500 lines, organized as a router pattern:
-
-```typescript
-const handlers: Record<string, (client, params) => Promise<Response>> = {
-  health: async () => json({ status: "ok", version: "1.0" }),
-  list_clients: async (db) => { ... },
-  create_task: async (db, { project_id, title, ... }) => { ... },
-  // ... all actions
-};
-```
-
-Each handler validates required params, executes the query, and returns structured responses. The documentation page will be a clean reference for integration setup.
-
+### Key CSS/Layout Approach
+- The image and content never overlap because the content column uses `ml-auto` with a fixed max-width, occupying only the right ~40% of the left panel
+- The image occupies the left portion with a gradient mask that fades before reaching the content zone
+- The logo moves from a separate top-left position into the main content flow for better visual hierarchy

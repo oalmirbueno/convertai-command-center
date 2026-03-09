@@ -9,7 +9,7 @@ import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap } from "lucide-react";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
@@ -41,6 +41,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
   { title: "Config", url: "/config", icon: Settings },
+  { title: "API", url: "/api-docs", icon: Zap },
 ];
 
 const clientMainNav: NavItem[] = [
