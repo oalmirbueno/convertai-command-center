@@ -59,13 +59,15 @@ export default function AdminFinanceiro() {
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
+  const [addWalletModal, setAddWalletModal] = useState(false);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
-  const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "" });
+  const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
+  const [addWalletForm, setAddWalletForm] = useState({ client_id: "", platform: "meta", balance: "0" });
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
   const [syncing, setSyncing] = useState(false);
   const autoSyncDone = useRef(false);
