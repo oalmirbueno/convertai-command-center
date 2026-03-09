@@ -1020,23 +1020,145 @@ export default function AdminFinanceiro() {
         </DialogContent>
       </Dialog>
 
-      {/* Recharge Modal */}
+      {/* Recharge Modal — Preset Values */}
       <Dialog open={!!rechargeModal} onOpenChange={() => setRechargeModal(null)}>
-        <DialogContent className="bg-card border-border">
+        <DialogContent className="bg-card border-border max-w-md">
           <DialogHeader><DialogTitle className="text-foreground">Solicitar Recarga — {rechargeModal?.platform}</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground">Escolha o valor semanal de investimento para o cliente:</p>
+            
+            {/* Preset amount buttons */}
+            <div className="grid grid-cols-3 gap-2">
+              {[250, 500, 1000].map((val) => (
+                <button
+                  key={val}
+                  onClick={() => setRechargeForm(f => ({ ...f, amount: String(val) }))}
+                  className={`flex flex-col items-center gap-1 py-4 px-3 rounded-xl border-2 transition-all cursor-pointer ${
+                    rechargeForm.amount === String(val)
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-secondary/30 text-foreground hover:border-muted-foreground"
+                  }`}
+                >
+                  <span className="text-lg font-mono font-semibold">{fmt(val)}</span>
+                  <span className="text-[10px] text-muted-foreground uppercase tracking-wider">/semana</span>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom amount option */}
+            <div className="relative">
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Ou valor personalizado</label>
+              <Input
+                type="number"
+                value={![250, 500, 1000].includes(Number(rechargeForm.amount)) ? rechargeForm.amount : ""}
+                onChange={e => setRechargeForm(f => ({ ...f, amount: e.target.value }))}
+                placeholder="Outro valor..."
+                className="mt-1"
+                onFocus={() => {
+                  if ([250, 500, 1000].includes(Number(rechargeForm.amount))) {
+                    setRechargeForm(f => ({ ...f, amount: "" }));
+                  }
+                }}
+              />
+            </div>
+
+            {/* Period selector */}
+            <div>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Período</label>
+              <div className="flex gap-2 mt-1">
+                {["semanal", "mensal"].map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setRechargeForm(f => ({ ...f, period: p }))}
+                    className={`flex-1 py-2 px-3 rounded-lg text-xs font-medium transition-colors cursor-pointer border ${
+                      rechargeForm.period === p
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-transparent border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {p === "semanal" ? "📅 Semanal" : "📆 Mensal"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Observação (opcional)</label>
+              <textarea value={rechargeForm.reason} onChange={e => setRechargeForm(f => ({ ...f, reason: e.target.value }))}
+                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={2} placeholder="Ex: Manter campanha X ativa..." />
+            </div>
+
+            {/* Summary */}
+            {rechargeForm.amount && (
+              <div className="bg-secondary/50 border border-border rounded-xl p-3">
+                <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">Resumo da solicitação</p>
+                <p className="text-sm text-foreground">
+                  <span className="font-mono font-semibold text-primary">{fmt(Number(rechargeForm.amount))}</span>
+                  <span className="text-muted-foreground"> / {rechargeForm.period}</span>
+                  <span className="text-muted-foreground"> — {rechargeModal?.platform} Ads</span>
+                </p>
+                {rechargeForm.period === "mensal" && (
+                  <p className="text-[11px] text-muted-foreground mt-1">≈ {fmt(Number(rechargeForm.amount) / 4)}/semana</p>
+                )}
+              </div>
+            )}
+
+            <button
+              onClick={handleRequestRecharge}
+              disabled={!rechargeForm.amount || Number(rechargeForm.amount) <= 0}
+              className="w-full py-3 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            >
+              <Bell className="w-4 h-4" /> Enviar Solicitação ao Cliente
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Wallet Modal */}
+      <Dialog open={addWalletModal} onOpenChange={setAddWalletModal}>
+        <DialogContent className="bg-card border-border max-w-sm">
+          <DialogHeader><DialogTitle className="text-foreground">Adicionar Wallet de Anúncios</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="text-xs text-muted-foreground">Valor (R$)</label>
-              <Input type="number" value={rechargeForm.amount} onChange={e => setRechargeForm(f => ({ ...f, amount: e.target.value }))} placeholder="0.00" className="mt-1" />
+              <label className="text-xs text-muted-foreground">Cliente</label>
+              <select value={addWalletForm.client_id} onChange={e => setAddWalletForm(f => ({ ...f, client_id: e.target.value }))}
+                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+                <option value="">Selecionar...</option>
+                {(clients || []).map((c: any) => <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>)}
+              </select>
             </div>
             <div>
-              <label className="text-xs text-muted-foreground">Motivo *</label>
-              <textarea value={rechargeForm.reason} onChange={e => setRechargeForm(f => ({ ...f, reason: e.target.value }))}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground resize-none" rows={3} placeholder="Campanha X precisa de mais budget..." />
+              <label className="text-xs text-muted-foreground">Plataforma</label>
+              <select value={addWalletForm.platform} onChange={e => setAddWalletForm(f => ({ ...f, platform: e.target.value }))}
+                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
+                <option value="meta">Meta Ads</option>
+                <option value="google">Google Ads</option>
+                <option value="tiktok">TikTok Ads</option>
+                <option value="linkedin">LinkedIn Ads</option>
+              </select>
             </div>
-            <button onClick={handleRequestRecharge}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none">
-              Enviar Solicitação
+            <div>
+              <label className="text-xs text-muted-foreground">Saldo Inicial (R$)</label>
+              <Input type="number" value={addWalletForm.balance} onChange={e => setAddWalletForm(f => ({ ...f, balance: e.target.value }))} className="mt-1" placeholder="0" />
+            </div>
+            <button
+              onClick={async () => {
+                if (!addWalletForm.client_id) { toast.error("Selecione um cliente"); return; }
+                const existing = (wallets || []).find((w: any) => w.client_id === addWalletForm.client_id && w.platform === addWalletForm.platform);
+                if (existing) { toast.error("Este cliente já possui wallet para esta plataforma"); return; }
+                await supabase.from("ads_wallet").insert({
+                  client_id: addWalletForm.client_id,
+                  platform: addWalletForm.platform,
+                  balance: Number(addWalletForm.balance) || 0,
+                });
+                queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
+                toast.success("Wallet criado com sucesso!");
+                setAddWalletModal(false);
+                setAddWalletForm({ client_id: "", platform: "meta", balance: "0" });
+              }}
+              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+            >
+              Criar Wallet
             </button>
           </div>
         </DialogContent>
