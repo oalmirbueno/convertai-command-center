@@ -43,7 +43,12 @@ const handlers: Record<string, Handler> = {
 
   // ── Clients (profiles with role=client) ──
   list_clients: async (db, p) => {
-    let q = db.from('profiles').select('*, user_roles!inner(role)').eq('user_roles.role', 'client')
+    // Get client user_ids first
+    const { data: roles, error: rolesErr } = await db.from('user_roles').select('user_id').eq('role', 'client')
+    if (rolesErr) throw rolesErr
+    const clientIds = (roles || []).map((r: any) => r.user_id)
+    if (clientIds.length === 0) return ok([])
+    let q = db.from('profiles').select('*').in('id', clientIds)
     if (p.plan_status) q = q.eq('plan_status', p.plan_status)
     if (p.limit) q = q.limit(p.limit)
     const { data, error } = await q.order('created_at', { ascending: false })
