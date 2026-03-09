@@ -520,28 +520,59 @@ const handlers: Record<string, Handler> = {
   },
 }
 
+// SHA-256 hash helper
+async function sha256(input: string): Promise<string> {
+  const data = new TextEncoder().encode(input)
+  const hash = await crypto.subtle.digest('SHA-256', data)
+  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, '0')).join('')
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
+  // Create service-role client early (needed for key validation)
+  const db = createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    { auth: { persistSession: false, autoRefreshToken: false } }
+  )
+
+  let body: Record<string, any> | undefined
+
   try {
-    // Auth check
+    // Auth check — validate against DB keys
     const apiKey = req.headers.get('x-api-key')
-    const expectedKey = Deno.env.get('EXTERNAL_API_KEY')
-    if (!apiKey || apiKey !== expectedKey) {
-      return err('Invalid or missing API key. Send X-API-Key header.', 401)
+    if (!apiKey) {
+      return err('Missing API key. Send X-API-Key header.', 401)
+    }
+
+    const keyHash = await sha256(apiKey)
+
+    // Also accept the legacy env var key
+    const legacyKey = Deno.env.get('EXTERNAL_API_KEY')
+    let keyName = 'legacy'
+
+    if (apiKey !== legacyKey) {
+      // Check against DB
+      const { data: keyRow, error: keyErr } = await db.rpc('validate_api_key', { _key_hash: keyHash })
+      if (keyErr || !keyRow || keyRow.length === 0) {
+        return err('Invalid API key.', 401)
+      }
+      keyName = keyRow[0].name
+      // Update last_used_at
+      db.from('api_keys').update({ last_used_at: new Date().toISOString() }).eq('id', keyRow[0].id).then(() => {})
     }
 
     // Parse body
-    let body: Record<string, any>
     try {
       body = await req.json()
     } catch {
       return err('Invalid JSON body. Send { "action": "...", ...params }')
     }
 
-    const { action, ...params } = body
+    const { action, ...params } = body!
     if (!action || typeof action !== 'string') {
       return err('Missing "action" field. Use get_schema to list available actions.')
     }
@@ -551,13 +582,6 @@ Deno.serve(async (req) => {
       return err(`Unknown action "${action}". Use get_schema to list available actions.`, 404)
     }
 
-    // Create service-role client for full access
-    const db = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-      { auth: { persistSession: false, autoRefreshToken: false } }
-    )
-
     // Get client IP
     const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim()
       || req.headers.get('cf-connecting-ip')
@@ -566,25 +590,20 @@ Deno.serve(async (req) => {
 
     const response = await handler(db, params)
 
-    // Log audit (fire-and-forget, don't block response)
+    // Log audit (fire-and-forget)
     db.from('api_audit_log').insert({
       action,
       ip_address: ip,
       status_code: response.status,
       params: Object.keys(params).length > 0 ? params : null,
+      key_name: keyName,
     }).then(() => {})
 
     return response
   } catch (e: any) {
     console.error('API Gateway error:', e)
 
-    // Try to log error too
     try {
-      const db = createClient(
-        Deno.env.get('SUPABASE_URL')!,
-        Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
-        { auth: { persistSession: false, autoRefreshToken: false } }
-      )
       const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown'
       db.from('api_audit_log').insert({
         action: body?.action || 'unknown',
