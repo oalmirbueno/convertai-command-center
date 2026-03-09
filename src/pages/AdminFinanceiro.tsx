@@ -287,7 +287,7 @@ export default function AdminFinanceiro() {
     });
 
     setRechargeModal(null);
-    setRechargeForm({ amount: "", reason: "" });
+    setRechargeForm({ amount: "", reason: "", period: "semanal" });
   };
 
   const handleCompleteRecharge = async (r: any) => {
