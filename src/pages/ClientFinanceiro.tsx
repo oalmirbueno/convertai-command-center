@@ -98,6 +98,16 @@ export default function ClientFinanceiro() {
   // ===== COMPUTED =====
   const showTraffic = (profile as any)?.services_config?.traffic !== false;
   const pendingRecharges = (rechargeRequests || []).filter((r: any) => r.status === "pending");
+  const [rechargePopup, setRechargePopup] = useState<any>(null);
+  const [popupShown, setPopupShown] = useState(false);
+
+  // Auto-open popup when there are pending recharges
+  useEffect(() => {
+    if (pendingRecharges.length > 0 && !popupShown) {
+      setRechargePopup(pendingRecharges[0]);
+      setPopupShown(true);
+    }
+  }, [pendingRecharges.length, popupShown]);
   const planBillings = (billing || []).filter(
     (b: any) => b.type === "plan_renewal" || b.type === "renewal"
   );
