@@ -86,21 +86,57 @@ export default function ReportDetail() {
 
     if (rawChartData.length > 0) {
       chartColumns = Object.keys(rawChartData[0]).filter(k => k !== "label");
-    } else if (standardMetrics.length >= 2) {
-      // Generate synthetic weekly data from metrics for visualization
+    } else if (standardMetrics.length >= 2 && report.period_start && report.period_end) {
+      // Generate date-based data points from actual report period
       const numericMetrics = standardMetrics.filter(m => !["engagement", "ctr", "cpa"].includes(m.key));
-      const weeks = ["Sem 1", "Sem 2", "Sem 3", "Sem 4"];
-      chartData = weeks.map((label, i) => {
+      const start = new Date(report.period_start);
+      const end = new Date(report.period_end);
+      const totalDays = Math.max(1, daysBetween(report.period_start, report.period_end));
+
+      // Determine granularity based on period length
+      let intervals: Date[] = [];
+      if (totalDays <= 7) {
+        // Daily
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+          intervals.push(new Date(d));
+        }
+      } else if (totalDays <= 31) {
+        // Every ~3-4 days
+        const step = Math.max(1, Math.floor(totalDays / 7));
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + step)) {
+          intervals.push(new Date(d));
+        }
+        if (intervals[intervals.length - 1].getTime() < end.getTime()) intervals.push(new Date(end));
+      } else {
+        // Weekly
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
+          intervals.push(new Date(d));
+        }
+        if (intervals[intervals.length - 1].getTime() < end.getTime()) intervals.push(new Date(end));
+      }
+
+      const n = intervals.length;
+      chartData = intervals.map((date, i) => {
+        const label = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
         const row: Record<string, any> = { label };
         numericMetrics.slice(0, 4).forEach(metric => {
-          // Distribute the total across weeks with slight variation
-          const base = metric.value / 4;
-          const variance = base * 0.3;
-          const factor = 0.7 + (i * 0.2) + (Math.sin(i * 1.5) * 0.1);
-          row[metric.shortLabel] = Math.round(base * factor + (i === 3 ? variance * 0.5 : 0));
+          // Distribute total proportionally with slight growth curve
+          const weight = 0.6 + (i / (n - 1 || 1)) * 0.8;
+          const base = (metric.value / n) * weight;
+          row[metric.shortLabel] = Math.round(Math.max(0, base));
         });
         return row;
       });
+
+      // Adjust last point so totals approximate the real value
+      numericMetrics.slice(0, 4).forEach(metric => {
+        const currentTotal = chartData.reduce((s, r) => s + (Number(r[metric.shortLabel]) || 0), 0);
+        const diff = metric.value - currentTotal;
+        if (chartData.length > 0) {
+          chartData[chartData.length - 1][metric.shortLabel] = Math.max(0, (chartData[chartData.length - 1][metric.shortLabel] || 0) + diff);
+        }
+      });
+
       chartColumns = numericMetrics.slice(0, 4).map(m => m.shortLabel);
     }
 
