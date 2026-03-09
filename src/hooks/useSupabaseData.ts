@@ -5,9 +5,27 @@ import { useAuth } from "@/contexts/AuthContext";
 export function useProjects() {
   const { user, profile } = useAuth();
   const isClient = profile?.role === "client";
+  const isAdmin = profile?.role === "admin";
+  const isTeam = ["design", "traffic", "manager"].includes(profile?.role || "");
   return useQuery({
-    queryKey: ["projects", user?.id],
+    queryKey: ["projects", user?.id, profile?.role],
     queryFn: async () => {
+      if (isTeam) {
+        // Team members: only projects where they have assigned tasks
+        const { data: myTasks } = await supabase
+          .from("tasks")
+          .select("project_id")
+          .eq("assigned_to", user!.id);
+        const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
+        if (projectIds.length === 0) return [];
+        const { data, error } = await supabase
+          .from("projects")
+          .select("*, client:profiles!projects_client_id_fkey(full_name, company_name)")
+          .in("id", projectIds)
+          .order("created_at", { ascending: false });
+        if (error) throw error;
+        return data;
+      }
       const { data, error } = await supabase
         .from("projects")
         .select("*, client:profiles!projects_client_id_fkey(full_name, company_name)")
@@ -77,10 +95,41 @@ export function useUpdates() {
 
 export function useClients() {
   const { user, profile } = useAuth();
-  const isTeamOrAdmin = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
+  const isAdmin = profile?.role === "admin";
+  const isTeam = ["design", "traffic", "manager"].includes(profile?.role || "");
+  const isTeamOrAdmin = isAdmin || isTeam;
   return useQuery({
-    queryKey: ["clients", user?.id],
+    queryKey: ["clients", user?.id, profile?.role],
     queryFn: async () => {
+      if (isTeam) {
+        // Team members: only clients from projects where they have assigned tasks
+        const { data: myTasks } = await supabase
+          .from("tasks")
+          .select("project_id")
+          .eq("assigned_to", user!.id);
+        const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
+        if (projectIds.length === 0) return [];
+
+        const { data: projects } = await supabase
+          .from("projects")
+          .select("id, client_id")
+          .in("id", projectIds);
+        const clientIds = [...new Set((projects || []).map((p: any) => p.client_id))];
+        if (clientIds.length === 0) return [];
+
+        const { data, error } = await supabase
+          .from("profiles")
+          .select("*")
+          .in("id", clientIds);
+        if (error) throw error;
+
+        return (data || []).map((p: any) => ({
+          ...p,
+          projectCount: (projects || []).filter((pr: any) => pr.client_id === p.id).length,
+        }));
+      }
+
+      // Admin: all clients
       const { data: clientRoles, error: rolesError } = await supabase
         .from("user_roles")
         .select("user_id")
