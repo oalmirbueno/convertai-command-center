@@ -266,12 +266,13 @@ export default function AdminFinanceiro() {
   const handleRequestRecharge = async () => {
     if (!rechargeModal || !rechargeForm.amount) { toast.error("Informe o valor"); return; }
     const amount = parseFloat(rechargeForm.amount);
+    const periodLabel = rechargeForm.period === "mensal" ? "mensal" : "semanal";
     await supabase.from("recharge_requests").insert({
       client_id: rechargeModal.clientId, platform: rechargeModal.platform,
-      amount, reason: rechargeForm.reason || null, requested_by: user?.id,
+      amount, reason: rechargeForm.reason ? `${rechargeForm.reason} (${periodLabel})` : `Investimento ${periodLabel}`, requested_by: user?.id,
     });
     // Notify the CLIENT
-    await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(amount)} solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
+    await notifyUser(rechargeModal.clientId, `Recarga de ${fmt(amount)} (${periodLabel}) solicitada para ${rechargeModal.platform}. Por favor, confirme.`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
     toast.success("Solicitação de recarga enviada! Cliente será notificado.");
 
