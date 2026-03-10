@@ -756,6 +756,7 @@ Body (JSON):
           <TabsTrigger value="tester" className="text-xs gap-1.5"><Play className="w-3.5 h-3.5" /> Testar API</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Audit Log</TabsTrigger>
           <TabsTrigger value="security" className="text-xs gap-1.5"><Lock className="w-3.5 h-3.5" /> Segurança</TabsTrigger>
+          <TabsTrigger value="integrations" className="text-xs gap-1.5"><Settings2 className="w-3.5 h-3.5" /> Integrações</TabsTrigger>
         </TabsList>
 
         {/* ── TAB: Visão Geral ─────────────────────────────── */}
