@@ -508,6 +508,39 @@ const handlers: Record<string, Handler> = {
     if (error) throw error
     return ok(data)
   },
+  // ── Notifications ──
+  list_notifications: async (db, p) => {
+    let q = db.from('notifications').select('*')
+    if (p.user_id) q = q.eq('user_id', p.user_id)
+    if (p.read !== undefined) q = q.eq('read', p.read)
+    if (p.notification_type) q = q.eq('notification_type', p.notification_type)
+    q = q.order('created_at', { ascending: false })
+    if (p.limit) q = q.limit(p.limit)
+    else q = q.limit(50)
+    const { data, error } = await q
+    if (error) throw error
+    return ok(data)
+  },
+
+  send_notification: async (db, p) => {
+    requireFields(p, ['user_id', 'message', 'notification_type'])
+    const { data, error } = await db.from('notifications').insert({
+      user_id: p.user_id,
+      message: p.message,
+      notification_type: p.notification_type,
+      link: p.link || null,
+    }).select().single()
+    if (error) throw error
+    return ok(data)
+  },
+
+  mark_notification_read: async (db, p) => {
+    requireFields(p, ['notification_id'])
+    const { data, error } = await db.from('notifications').update({ read: true }).eq('id', p.notification_id).select().single()
+    if (error) throw error
+    return ok(data)
+  },
+
   // ── Audit Log ──
   list_audit_log: async (db, p) => {
     let q = db.from('api_audit_log').select('*')
