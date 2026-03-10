@@ -100,9 +100,9 @@ const actionDocs: {
     category: "Milestones",
     icon: "🏁",
     actions: [
-      { name: "list_milestones", desc: "Lista milestones de um projeto", optional: ["project_id"], example: { action: "list_milestones", project_id: "uuid" } },
-      { name: "create_milestone", desc: "Cria milestone", required: ["project_id", "title", "target_date"], optional: ["description", "milestone_order", "status"], example: { action: "create_milestone", project_id: "uuid", title: "Entrega v1", target_date: "2026-04-01" } },
-      { name: "update_milestone", desc: "Atualiza milestone", required: ["milestone_id"], example: { action: "update_milestone", milestone_id: "uuid", status: "completed" } },
+      { name: "list_milestones", desc: "Lista milestones de um projeto", optional: ["project_id"], example: { action: "list_milestones", project_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", title: "Entrega v1", status: "pending", target_date: "2026-04-01" }] } },
+      { name: "create_milestone", desc: "Cria milestone", required: ["project_id", "title", "target_date"], optional: ["description", "milestone_order", "status"], example: { action: "create_milestone", project_id: "uuid", title: "Entrega v1", target_date: "2026-04-01" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Entrega v1", status: "pending" } } },
+      { name: "update_milestone", desc: "Atualiza milestone", required: ["milestone_id"], example: { action: "update_milestone", milestone_id: "uuid", status: "completed" }, responseExample: { success: true, data: { id: "uuid", status: "completed" } } },
     ],
   },
   {
