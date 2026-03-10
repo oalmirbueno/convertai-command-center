@@ -331,17 +331,93 @@ function ApiKeysSection() {
             <DialogTitle>{createdKey ? "🔑 Chave Criada!" : "Nova API Key"}</DialogTitle>
           </DialogHeader>
           {createdKey ? (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <p className="text-sm text-muted-foreground">
-                Copie esta chave agora. <span className="text-destructive font-medium">Ela não será exibida novamente.</span>
+                Copie estas informações agora. <span className="text-destructive font-medium">A chave não será exibida novamente.</span>
               </p>
-              <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
-                <code className="text-xs flex-1 break-all select-all font-mono">{createdKey}</code>
-                <CopyButton text={createdKey} />
+
+              {/* API Key */}
+              <div>
+                <Label className="text-xs font-semibold">🔑 API Key</Label>
+                <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg mt-1">
+                  <code className="text-xs flex-1 break-all select-all font-mono">{createdKey}</code>
+                  <CopyButton text={createdKey} />
+                </div>
               </div>
-              <DialogFooter>
-                <Button onClick={() => { setShowCreate(false); setCreatedKey(null); }}>Entendi, copiei!</Button>
-              </DialogFooter>
+
+              {/* Base URL */}
+              <div>
+                <Label className="text-xs font-semibold">🌐 Base URL</Label>
+                <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg mt-1">
+                  <code className="text-[11px] flex-1 break-all select-all font-mono">{GATEWAY_URL}</code>
+                  <CopyButton text={GATEWAY_URL} />
+                </div>
+              </div>
+
+              {/* Headers */}
+              <div>
+                <Label className="text-xs font-semibold">📋 Headers obrigatórios</Label>
+                <div className="mt-1 p-2 bg-secondary rounded-lg space-y-1 text-[11px] font-mono">
+                  <div className="flex items-center justify-between">
+                    <span><span className="text-primary">Content-Type:</span> application/json</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span><span className="text-primary">X-API-Key:</span> {createdKey.slice(0, 12)}...</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Quick example */}
+              <div>
+                <Label className="text-xs font-semibold">⚡ Exemplo rápido (cURL)</Label>
+                <div className="relative group mt-1">
+                  <pre className="text-[10px] bg-secondary p-2 rounded-lg overflow-x-auto whitespace-pre-wrap font-mono leading-relaxed">{`curl -X POST "${GATEWAY_URL}" \\
+  -H "Content-Type: application/json" \\
+  -H "X-API-Key: ${createdKey}" \\
+  -d '{"action": "health"}'`}</pre>
+                  <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <CopyButton text={`curl -X POST "${GATEWAY_URL}" \\\n  -H "Content-Type: application/json" \\\n  -H "X-API-Key: ${createdKey}" \\\n  -d '{"action": "health"}'`} />
+                  </div>
+                </div>
+              </div>
+
+              {/* Copy all button */}
+              <div className="flex items-center gap-2 pt-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-xs flex-1"
+                  onClick={() => {
+                    const allInfo = `=== Aceleriq API - Dados de Integração ===
+
+Base URL: ${GATEWAY_URL}
+Método: POST (todas as ações)
+
+Headers:
+  Content-Type: application/json
+  X-API-Key: ${createdKey}
+
+Formato do Body:
+  { "action": "nome_da_acao", ...parametros }
+
+Exemplo cURL:
+  curl -X POST "${GATEWAY_URL}" \\
+    -H "Content-Type: application/json" \\
+    -H "X-API-Key: ${createdKey}" \\
+    -d '{"action": "health"}'
+
+Ações disponíveis: health, get_schema, list_clients, create_client, list_projects, create_project, list_tasks, create_task, etc.
+Use "get_schema" para listar todas as ${totalActions} ações.`;
+                    navigator.clipboard.writeText(allInfo);
+                    toast.success("Todas as informações copiadas!");
+                  }}
+                >
+                  <Copy className="w-3.5 h-3.5 mr-1" /> Copiar tudo
+                </Button>
+                <Button size="sm" className="flex-1" onClick={() => { setShowCreate(false); setCreatedKey(null); }}>
+                  Entendi, copiei!
+                </Button>
+              </div>
             </div>
           ) : (
             <div className="space-y-4">
