@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Copy, Check, ExternalLink, Shield, Zap, Code2, Key, Plus, Trash2,
   Eye, EyeOff, BookOpen, Terminal, AlertTriangle, Server, Clock, Hash,
-  Globe, Lock, FileJson, ChevronDown, ChevronRight, Info, CheckCircle2
+  Globe, Lock, FileJson, ChevronDown, ChevronRight, Info, CheckCircle2,
+  Play, Loader2, Webhook, Database, Activity, RefreshCw, Search
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,12 +13,33 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Separator } from "@/components/ui/separator";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const GATEWAY_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/api-gateway`;
+const WEBHOOK_BASE = import.meta.env.VITE_WEBHOOK_URL || "https://n8n.srv1353465.hstgr.cloud/webhook";
+
+/* ─── Webhook Routes (real, from src/lib/webhooks.ts) ──── */
+const webhookRoutes = [
+  { name: "onboard-client", desc: "Dispara onboarding de novo cliente", trigger: "Criação de cliente via admin", payload: '{ client_id, full_name, email, company_name, plan_name }' },
+  { name: "process-diagnostic", desc: "Processa diagnóstico/briefing respondido", trigger: "Submissão de briefing público", payload: '{ briefing_id, client_id, responses }' },
+  { name: "meeting-to-plan", desc: "Converte anotações de reunião em plano de projeto", trigger: "Admin processa notas de reunião", payload: '{ meeting_notes, client_id, project_name }' },
+  { name: "creative-approval", desc: "Notifica sobre aprovação/rejeição de criativo", trigger: "Cliente aprova ou rejeita arquivo", payload: '{ file_id, client_id, status, feedback }' },
+  { name: "client-request-v2", desc: "Processa nova solicitação do cliente", trigger: "Cliente envia pedido via portal", payload: '{ request_id, client_id, title, description, priority }' },
+  { name: "ads-recharge", desc: "Processa solicitação de recarga de ads", trigger: "Cliente solicita recarga de wallet", payload: '{ recharge_id, client_id, amount, platform }' },
+];
+
+/* ─── Edge Functions (real, from supabase/functions/) ──── */
+const edgeFunctions = [
+  { name: "api-gateway", desc: "Gateway unificado da API — 44 ações CRUD", auth: "X-API-Key (SHA-256)", method: "POST", public: true },
+  { name: "check-renewals", desc: "Verifica renovações de planos e marca inadimplentes", auth: "Sem JWT (cron)", method: "POST", public: true },
+  { name: "check-task-reminders", desc: "Envia lembretes de tarefas próximas do vencimento", auth: "Sem JWT (cron)", method: "POST", public: true },
+  { name: "manage-team", desc: "Gerencia membros da equipe (criar, atualizar roles)", auth: "Sem JWT (service role)", method: "POST", public: true },
+  { name: "process-meeting-notes", desc: "Processa notas de reunião com IA para gerar projeto", auth: "Sem JWT (service role)", method: "POST", public: true },
+];
 
 /* ─── Action Docs ───────────────────────────────────────── */
 const actionDocs: {
@@ -36,24 +58,9 @@ const actionDocs: {
     category: "Sistema",
     icon: "🔧",
     actions: [
-      {
-        name: "health",
-        desc: "Verifica se o gateway está online",
-        example: { action: "health" },
-        responseExample: { success: true, data: { status: "ok", version: "1.0", timestamp: "2026-03-10T12:00:00.000Z" } },
-      },
-      {
-        name: "get_schema",
-        desc: "Lista todas as ações disponíveis",
-        example: { action: "get_schema" },
-        responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "..."], docs: "POST with { action, ...params }" } },
-      },
-      {
-        name: "list_audit_log",
-        desc: "Lista logs de auditoria do gateway",
-        optional: ["action", "ip_address", "limit"],
-        example: { action: "list_audit_log", limit: 50 },
-      },
+      { name: "health", desc: "Verifica se o gateway está online", example: { action: "health" }, responseExample: { success: true, data: { status: "ok", version: "1.0", timestamp: "2026-03-10T12:00:00.000Z" } } },
+      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "..."], docs: "POST with { action, ...params }" } } },
+      { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 } },
     ],
   },
   {
@@ -317,7 +324,6 @@ function ApiKeysSection() {
         </div>
       )}
 
-      {/* Create Key Dialog */}
       <Dialog open={showCreate} onOpenChange={setShowCreate}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -369,6 +375,209 @@ function ApiKeysSection() {
         onCancel={() => setDeleteId(null)}
       />
     </>
+  );
+}
+
+/* ─── Live API Tester ───────────────────────────────────── */
+function ApiTester() {
+  const [apiKey, setApiKey] = useState("");
+  const [actionName, setActionName] = useState("health");
+  const [paramsText, setParamsText] = useState("{}");
+  const [response, setResponse] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [statusCode, setStatusCode] = useState<number | null>(null);
+  const [elapsed, setElapsed] = useState<number | null>(null);
+
+  const allActions = actionDocs.flatMap(c => c.actions.map(a => a.name)).sort();
+
+  const handleTest = async () => {
+    if (!apiKey.trim()) { toast.error("Insira sua API Key"); return; }
+    setLoading(true);
+    setResponse(null);
+    setStatusCode(null);
+    const start = performance.now();
+
+    try {
+      let extraParams = {};
+      try { extraParams = JSON.parse(paramsText); } catch { toast.error("JSON de parâmetros inválido"); setLoading(false); return; }
+
+      const res = await fetch(GATEWAY_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-API-Key": apiKey },
+        body: JSON.stringify({ action: actionName, ...extraParams }),
+      });
+
+      setStatusCode(res.status);
+      setElapsed(Math.round(performance.now() - start));
+      const json = await res.json();
+      setResponse(JSON.stringify(json, null, 2));
+    } catch (err: any) {
+      setResponse(JSON.stringify({ error: err.message }, null, 2));
+      setElapsed(Math.round(performance.now() - start));
+    }
+    setLoading(false);
+  };
+
+  // When action changes, prefill params
+  const handleActionChange = (action: string) => {
+    setActionName(action);
+    const found = actionDocs.flatMap(c => c.actions).find(a => a.name === action);
+    if (found) {
+      const { action: _, ...rest } = found.example;
+      setParamsText(Object.keys(rest).length > 0 ? JSON.stringify(rest, null, 2) : "{}");
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <Card className="bg-card border-border">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm flex items-center gap-2"><Play className="w-4 h-4 text-primary" /> Testar API ao Vivo</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div>
+            <Label className="text-xs">API Key</Label>
+            <Input type="password" placeholder="acq_SuaChaveAqui..." value={apiKey} onChange={e => setApiKey(e.target.value)} className="font-mono text-xs" />
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Ação</Label>
+              <Select value={actionName} onValueChange={handleActionChange}>
+                <SelectTrigger className="text-xs font-mono"><SelectValue /></SelectTrigger>
+                <SelectContent className="max-h-60">
+                  {allActions.map(a => <SelectItem key={a} value={a} className="text-xs font-mono">{a}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label className="text-xs">Parâmetros (JSON)</Label>
+              <textarea
+                className="w-full text-xs font-mono bg-secondary border border-border rounded-md p-2 min-h-[60px] resize-y"
+                value={paramsText}
+                onChange={e => setParamsText(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button onClick={handleTest} disabled={loading} size="sm">
+              {loading ? <Loader2 className="w-3.5 h-3.5 animate-spin mr-1" /> : <Play className="w-3.5 h-3.5 mr-1" />}
+              Executar
+            </Button>
+            <code className="text-[10px] text-muted-foreground">POST {GATEWAY_URL}</code>
+          </div>
+        </CardContent>
+      </Card>
+
+      {response && (
+        <Card className="bg-card border-border">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm flex items-center gap-2">
+              Resposta
+              {statusCode && (
+                <Badge variant={statusCode === 200 ? "default" : "destructive"} className="text-[10px]">
+                  {statusCode}
+                </Badge>
+              )}
+              {elapsed !== null && <span className="text-[10px] text-muted-foreground font-normal">{elapsed}ms</span>}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <CodeBlock code={response} />
+          </CardContent>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+/* ─── Audit Log Viewer ──────────────────────────────────── */
+function AuditLogViewer() {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [filterAction, setFilterAction] = useState("");
+  const [limit, setLimit] = useState(50);
+
+  const fetchLogs = useCallback(async () => {
+    setLoading(true);
+    let q = supabase.from("api_audit_log" as any).select("*").order("created_at", { ascending: false }).limit(limit);
+    if (filterAction) q = q.eq("action", filterAction);
+    const { data } = await q;
+    setLogs((data as any[]) || []);
+    setLoading(false);
+  }, [filterAction, limit]);
+
+  useEffect(() => { fetchLogs(); }, [fetchLogs]);
+
+  const statusColor = (code: number | null) => {
+    if (!code) return "text-muted-foreground";
+    if (code >= 200 && code < 300) return "text-green-500";
+    if (code >= 400 && code < 500) return "text-yellow-500";
+    return "text-destructive";
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-2 flex-wrap">
+        <Input
+          placeholder="Filtrar por ação..."
+          value={filterAction}
+          onChange={e => setFilterAction(e.target.value)}
+          className="max-w-[200px] text-xs"
+        />
+        <Select value={String(limit)} onValueChange={v => setLimit(Number(v))}>
+          <SelectTrigger className="w-[100px] text-xs"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="25">25 logs</SelectItem>
+            <SelectItem value="50">50 logs</SelectItem>
+            <SelectItem value="100">100 logs</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button size="sm" variant="outline" onClick={fetchLogs} className="text-xs">
+          <RefreshCw className="w-3.5 h-3.5 mr-1" /> Atualizar
+        </Button>
+        <span className="text-[10px] text-muted-foreground ml-auto">{logs.length} registros</span>
+      </div>
+
+      {loading ? (
+        <p className="text-xs text-muted-foreground">Carregando...</p>
+      ) : logs.length === 0 ? (
+        <Card className="bg-secondary/30 border-dashed border-border">
+          <CardContent className="py-8 text-center">
+            <Activity className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
+            <p className="text-sm text-muted-foreground">Nenhum log encontrado.</p>
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="border-b border-border">
+                <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Data</th>
+                <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Ação</th>
+                <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Status</th>
+                <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Chave</th>
+                <th className="text-left py-2 pr-3 font-medium text-muted-foreground">IP</th>
+                <th className="text-left py-2 font-medium text-muted-foreground">Erro</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map((log: any) => (
+                <tr key={log.id} className="border-b border-border/30 hover:bg-secondary/30">
+                  <td className="py-1.5 pr-3 text-muted-foreground whitespace-nowrap">
+                    {new Date(log.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
+                  </td>
+                  <td className="py-1.5 pr-3"><code className="text-primary font-mono">{log.action}</code></td>
+                  <td className={`py-1.5 pr-3 font-bold ${statusColor(log.status_code)}`}>{log.status_code || "—"}</td>
+                  <td className="py-1.5 pr-3 text-muted-foreground">{log.key_name || "—"}</td>
+                  <td className="py-1.5 pr-3 text-muted-foreground font-mono">{log.ip_address || "—"}</td>
+                  <td className="py-1.5 text-destructive truncate max-w-[200px]">{log.error_message || ""}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -532,24 +741,21 @@ Body (JSON):
           <Server className="w-6 h-6 text-primary" /> API & Integrações
         </h1>
         <p className="text-sm text-muted-foreground mt-1">
-          Documentação completa da API Aceleriq — conecte n8n, Make, Zapier ou qualquer sistema externo.
+          Documentação completa da infraestrutura real da Aceleriq — rotas, autenticação, webhooks e testes ao vivo.
         </p>
       </div>
 
-      <Tabs defaultValue="keys" className="w-full">
+      <Tabs defaultValue="overview" className="w-full">
         <TabsList className="w-full justify-start bg-secondary/50 flex-wrap h-auto gap-1 p-1">
-          <TabsTrigger value="keys" className="text-xs gap-1.5"><Key className="w-3.5 h-3.5" /> API Keys</TabsTrigger>
           <TabsTrigger value="overview" className="text-xs gap-1.5"><BookOpen className="w-3.5 h-3.5" /> Visão Geral</TabsTrigger>
-          <TabsTrigger value="auth" className="text-xs gap-1.5"><Shield className="w-3.5 h-3.5" /> Autenticação</TabsTrigger>
-          <TabsTrigger value="examples" className="text-xs gap-1.5"><Terminal className="w-3.5 h-3.5" /> Exemplos</TabsTrigger>
+          <TabsTrigger value="keys" className="text-xs gap-1.5"><Key className="w-3.5 h-3.5" /> API Keys</TabsTrigger>
           <TabsTrigger value="endpoints" className="text-xs gap-1.5"><Code2 className="w-3.5 h-3.5" /> Endpoints ({totalActions})</TabsTrigger>
+          <TabsTrigger value="webhooks" className="text-xs gap-1.5"><Webhook className="w-3.5 h-3.5" /> Webhooks & Funções</TabsTrigger>
+          <TabsTrigger value="examples" className="text-xs gap-1.5"><Terminal className="w-3.5 h-3.5" /> Exemplos</TabsTrigger>
+          <TabsTrigger value="tester" className="text-xs gap-1.5"><Play className="w-3.5 h-3.5" /> Testar API</TabsTrigger>
+          <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Audit Log</TabsTrigger>
           <TabsTrigger value="security" className="text-xs gap-1.5"><Lock className="w-3.5 h-3.5" /> Segurança</TabsTrigger>
         </TabsList>
-
-        {/* ── TAB: API Keys ────────────────────────────────── */}
-        <TabsContent value="keys" className="mt-4 space-y-4">
-          <ApiKeysSection />
-        </TabsContent>
 
         {/* ── TAB: Visão Geral ─────────────────────────────── */}
         <TabsContent value="overview" className="mt-4 space-y-4">
@@ -575,14 +781,14 @@ Body (JSON):
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2"><Shield className="w-4 h-4 text-primary" /><span className="text-xs font-semibold">Autenticação</span></div>
                 <code className="text-[10px] bg-secondary px-2 py-1 rounded">X-API-Key</code>
-                <p className="text-[10px] text-muted-foreground mt-1">Header obrigatório em todas as chamadas</p>
+                <p className="text-[10px] text-muted-foreground mt-1">SHA-256 validado contra o banco</p>
               </CardContent>
             </Card>
             <Card className="bg-card border-border">
               <CardContent className="p-4">
                 <div className="flex items-center gap-2 mb-2"><Hash className="w-4 h-4 text-primary" /><span className="text-xs font-semibold">Ações</span></div>
                 <p className="text-2xl font-bold text-primary">{totalActions}</p>
-                <p className="text-[10px] text-muted-foreground">endpoints disponíveis em {actionDocs.length} categorias</p>
+                <p className="text-[10px] text-muted-foreground">{actionDocs.length} categorias + {webhookRoutes.length} webhooks</p>
               </CardContent>
             </Card>
           </div>
@@ -590,24 +796,24 @@ Body (JSON):
           {/* Architecture */}
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Arquitetura da API</CardTitle>
+              <CardTitle className="text-sm">Arquitetura Real da Plataforma</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="text-xs text-muted-foreground space-y-2">
-                <p>A API da Aceleriq utiliza um <strong>gateway unificado</strong> — um único endpoint que recebe todas as requisições via <code className="bg-secondary px-1 rounded">POST</code>. A ação desejada é definida no body JSON através do campo <code className="bg-secondary px-1 rounded">"action"</code>.</p>
+                <p>A Aceleriq opera com <strong>3 camadas de integração</strong> reais em produção:</p>
 
                 <div className="grid sm:grid-cols-3 gap-3 mt-3">
                   <div className="p-3 bg-secondary/50 rounded-lg">
-                    <p className="font-medium text-foreground mb-1">🌐 Edge Function</p>
-                    <p>Backend serverless hospedado em cloud. Sem servidor próprio para gerenciar.</p>
+                    <p className="font-medium text-foreground mb-1">🌐 API Gateway</p>
+                    <p>Edge Function unificada (<code className="bg-secondary px-1 rounded">api-gateway</code>) — 44 ações CRUD via POST único com autenticação X-API-Key.</p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
-                    <p className="font-medium text-foreground mb-1">🔐 Service Role</p>
-                    <p>O gateway usa privilégios elevados (service role) para operar em todas as tabelas.</p>
+                    <p className="font-medium text-foreground mb-1">🔗 Webhooks n8n</p>
+                    <p>{webhookRoutes.length} rotas de webhook para automação de fluxos. Base: <code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE}</code></p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
-                    <p className="font-medium text-foreground mb-1">📝 Audit Log</p>
-                    <p>Toda chamada é registrada com IP, ação, status e nome da chave utilizada.</p>
+                    <p className="font-medium text-foreground mb-1">⚡ Edge Functions</p>
+                    <p>{edgeFunctions.length} funções serverless para lógica de backend (cron, IA, gestão de equipe).</p>
                   </div>
                 </div>
               </div>
@@ -615,7 +821,7 @@ Body (JSON):
               <Separator />
 
               <div>
-                <p className="text-xs font-medium mb-2">Formato das Respostas</p>
+                <p className="text-xs font-medium mb-2">Formato das Respostas (API Gateway)</p>
                 <div className="grid md:grid-cols-2 gap-3">
                   <div>
                     <p className="text-[10px] text-green-500 font-medium mb-1 flex items-center gap-1"><CheckCircle2 className="w-3 h-3" /> Sucesso (200)</p>
@@ -627,138 +833,112 @@ Body (JSON):
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
 
-          {/* Headers Table */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm">Headers Obrigatórios</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Header</th>
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Valor</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Descrição</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-muted-foreground">
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded text-foreground">Content-Type</code></td>
-                      <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded">application/json</code></td>
-                      <td className="py-2">Obrigatório. Todas as requisições são JSON.</td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded text-foreground">X-API-Key</code></td>
-                      <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded">acq_xxx...</code></td>
-                      <td className="py-2">Obrigatório. Chave gerada na aba "API Keys".</td>
-                    </tr>
-                  </tbody>
-                </table>
+              <Separator />
+
+              {/* Headers Table */}
+              <div>
+                <p className="text-xs font-medium mb-2">Headers Obrigatórios</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b border-border">
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Header</th>
+                        <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Valor</th>
+                        <th className="text-left py-2 font-medium text-muted-foreground">Descrição</th>
+                      </tr>
+                    </thead>
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded text-foreground">Content-Type</code></td>
+                        <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded">application/json</code></td>
+                        <td className="py-2">Obrigatório para todas as requisições.</td>
+                      </tr>
+                      <tr>
+                        <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded text-foreground">X-API-Key</code></td>
+                        <td className="py-2 pr-4"><code className="bg-secondary px-1 rounded">acq_xxx...</code></td>
+                        <td className="py-2">Chave gerada na aba "API Keys". Hash SHA-256 validado no banco.</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Database tables used */}
+              <div>
+                <p className="text-xs font-medium mb-2">Tabelas do Banco de Dados Acessíveis via API</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {["profiles", "projects", "tasks", "milestones", "files", "reports", "billing", "notifications",
+                    "client_requests", "briefings", "updates", "ads_wallet", "recharge_requests", "project_payments",
+                    "payment_installments", "task_comments", "task_checklist_items", "task_attachments", "user_roles",
+                    "api_keys", "api_audit_log"].map(t => (
+                    <Badge key={t} variant="secondary" className="text-[10px] font-mono">{t}</Badge>
+                  ))}
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Config reference */}
+              <div>
+                <p className="text-xs font-medium mb-2">Referência Rápida de Configuração</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <tbody className="text-muted-foreground">
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground w-48">Base URL (API Gateway)</td>
+                        <td className="py-1.5"><div className="flex items-center gap-1"><code className="bg-secondary px-1 rounded text-[10px] break-all">{GATEWAY_URL}</code><CopyButton text={GATEWAY_URL} /></div></td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Base URL (Webhooks)</td>
+                        <td className="py-1.5"><div className="flex items-center gap-1"><code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE}</code><CopyButton text={WEBHOOK_BASE} /></div></td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Método HTTP</td>
+                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">POST</code> (todas as rotas)</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Header de Auth</td>
+                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">X-API-Key</code></td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Formato do Body</td>
+                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">{`{ "action": "...", ...params }`}</code></td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Prefixo das Chaves</td>
+                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">acq_</code> (36 caracteres)</td>
+                      </tr>
+                      <tr className="border-b border-border/50">
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Validação</td>
+                        <td className="py-1.5">SHA-256 → tabela <code className="bg-secondary px-1 rounded">api_keys</code> → RPC <code className="bg-secondary px-1 rounded">validate_api_key</code></td>
+                      </tr>
+                      <tr>
+                        <td className="py-1.5 pr-4 font-medium text-foreground">Infraestrutura</td>
+                        <td className="py-1.5">{totalActions} ações API + {webhookRoutes.length} webhooks + {edgeFunctions.length} edge functions</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
               </div>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* ── TAB: Autenticação ────────────────────────────── */}
-        <TabsContent value="auth" className="mt-4 space-y-4">
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Shield className="w-4 h-4 text-primary" /> Sistema de Autenticação</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 text-xs text-muted-foreground">
-              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
-                <p className="font-medium text-foreground mb-1">Como funciona</p>
-                <ol className="list-decimal list-inside space-y-1">
-                  <li>Você gera uma API Key na aba <strong>"API Keys"</strong> (prefixo <code className="bg-secondary px-1 rounded">acq_</code>)</li>
-                  <li>A chave é hasheada com <strong>SHA-256</strong> e armazenada no banco de dados</li>
-                  <li>A cada requisição, o gateway hasheia a chave recebida e valida contra o banco</li>
-                  <li>Se válida e ativa, a requisição é processada e auditada</li>
-                </ol>
-              </div>
-
-              <div>
-                <p className="font-medium text-foreground mb-2">Envio da Chave</p>
-                <CodeBlock code={`// A chave deve ser enviada no header "X-API-Key"
-// NÃO envie no body, query string ou outros headers
-
-Headers:
-  X-API-Key: acq_AbCdEfGhIjKlMnOpQrStUvWxYz1234`} language="text" />
-              </div>
-
-              <div>
-                <p className="font-medium text-foreground mb-2">Respostas de Erro de Autenticação</p>
-                <CodeBlock code={responseAuth} />
-              </div>
-
-              <div className="p-3 bg-destructive/10 rounded-lg border border-destructive/20">
-                <p className="font-medium text-destructive flex items-center gap-1 mb-1"><AlertTriangle className="w-3.5 h-3.5" /> Importante</p>
-                <ul className="list-disc list-inside space-y-1">
-                  <li>A chave completa é exibida <strong>apenas uma vez</strong> no momento da criação</li>
-                  <li>Chaves desativadas retornam erro 401 imediatamente</li>
-                  <li>Cada chave possui um nome identificador para rastreabilidade no audit log</li>
-                  <li>Revogar uma chave é <strong>irreversível</strong></li>
-                </ul>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        {/* ── TAB: Exemplos ────────────────────────────────── */}
-        <TabsContent value="examples" className="mt-4 space-y-4">
-          <div className="grid gap-4">
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Health Check</CardTitle>
-              </CardHeader>
-              <CardContent><CodeBlock code={curlExample} language="bash" /></CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Criar Cliente</CardTitle>
-              </CardHeader>
-              <CardContent><CodeBlock code={curlCreateClient} language="bash" /></CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><Code2 className="w-4 h-4" /> JavaScript / TypeScript</CardTitle>
-              </CardHeader>
-              <CardContent><CodeBlock code={jsExample} language="js" /></CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><Code2 className="w-4 h-4" /> Python</CardTitle>
-              </CardHeader>
-              <CardContent><CodeBlock code={pythonExample} language="python" /></CardContent>
-            </Card>
-
-            <Card className="bg-card border-border">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm flex items-center gap-2"><Zap className="w-4 h-4" /> n8n — HTTP Request Node</CardTitle>
-              </CardHeader>
-              <CardContent><CodeBlock code={n8nExample} language="text" /></CardContent>
-            </Card>
-          </div>
+        {/* ── TAB: API Keys ────────────────────────────────── */}
+        <TabsContent value="keys" className="mt-4 space-y-4">
+          <ApiKeysSection />
         </TabsContent>
 
         {/* ── TAB: Endpoints ───────────────────────────────── */}
         <TabsContent value="endpoints" className="mt-4 space-y-3">
           <div className="flex items-center justify-between mb-2">
             <p className="text-xs text-muted-foreground">
-              {totalActions} ações disponíveis em {actionDocs.length} categorias. Todas via <code className="bg-secondary px-1 rounded">POST</code> no endpoint único.
+              {totalActions} ações via <code className="bg-secondary px-1 rounded">POST {GATEWAY_URL}</code>
             </p>
-            <Button
-              size="sm"
-              variant="outline"
-              className="text-xs"
-              onClick={() => setExpandedCat(expandedCat ? null : "__all__")}
-            >
+            <Button size="sm" variant="outline" className="text-xs" onClick={() => setExpandedCat(expandedCat ? null : "__all__")}>
               {expandedCat === "__all__" ? "Fechar Todos" : "Expandir Todos"}
             </Button>
           </div>
@@ -772,29 +952,215 @@ Headers:
           ))}
         </TabsContent>
 
+        {/* ── TAB: Webhooks & Edge Functions ────────────────── */}
+        <TabsContent value="webhooks" className="mt-4 space-y-4">
+          {/* Webhooks n8n */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Webhook className="w-4 h-4 text-primary" /> Webhooks n8n (Rotas Reais)</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="text-xs text-muted-foreground mb-2">
+                <p>Webhooks configurados em <code className="bg-secondary px-1 rounded">src/lib/webhooks.ts</code>. Disparados automaticamente pelo frontend via <code className="bg-secondary px-1 rounded">fireWebhook()</code>.</p>
+                <div className="flex items-center gap-1 mt-2">
+                  <span className="font-medium text-foreground">Base URL:</span>
+                  <code className="bg-secondary px-2 py-0.5 rounded text-[10px] break-all">{WEBHOOK_BASE}</code>
+                  <CopyButton text={WEBHOOK_BASE} />
+                </div>
+              </div>
+              <div className="divide-y divide-border">
+                {webhookRoutes.map(w => (
+                  <div key={w.name} className="py-3 space-y-1.5">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-[10px] font-mono">POST</Badge>
+                      <code className="text-xs font-bold text-primary">/{w.name}</code>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{w.desc}</p>
+                    <p className="text-[10px] text-muted-foreground"><span className="font-medium text-foreground">Trigger:</span> {w.trigger}</p>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground font-medium mb-1">URL Completa</p>
+                      <div className="flex items-center gap-1">
+                        <code className="text-[10px] bg-secondary px-2 py-0.5 rounded break-all">{WEBHOOK_BASE}/{w.name}</code>
+                        <CopyButton text={`${WEBHOOK_BASE}/${w.name}`} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-muted-foreground font-medium mb-1">Payload Esperado</p>
+                      <CodeBlock code={w.payload} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Edge Functions */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Database className="w-4 h-4 text-primary" /> Edge Functions (Backend Serverless)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-xs text-muted-foreground mb-3">
+                Funções backend em <code className="bg-secondary px-1 rounded">supabase/functions/</code>. Deploy automático.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Função</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Descrição</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Auth</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">URL</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-muted-foreground">
+                    {edgeFunctions.map(ef => (
+                      <tr key={ef.name} className="border-b border-border/30">
+                        <td className="py-2 pr-3"><code className="text-primary font-mono font-bold">{ef.name}</code></td>
+                        <td className="py-2 pr-3">{ef.desc}</td>
+                        <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">{ef.auth}</Badge></td>
+                        <td className="py-2">
+                          <div className="flex items-center gap-1">
+                            <code className="text-[9px] bg-secondary px-1 rounded break-all">
+                              {`https://${PROJECT_ID}.supabase.co/functions/v1/${ef.name}`}
+                            </code>
+                            <CopyButton text={`https://${PROJECT_ID}.supabase.co/functions/v1/${ef.name}`} />
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Env vars */}
+          <Card className="bg-card border-border">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Variáveis de Ambiente Relacionadas</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Variável</th>
+                      <th className="text-left py-2 pr-3 font-medium text-muted-foreground">Tipo</th>
+                      <th className="text-left py-2 font-medium text-muted-foreground">Uso</th>
+                    </tr>
+                  </thead>
+                  <tbody className="text-muted-foreground">
+                    <tr className="border-b border-border/30">
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">VITE_SUPABASE_PROJECT_ID</code></td>
+                      <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Frontend</Badge></td>
+                      <td className="py-2">Compõe a Base URL do gateway</td>
+                    </tr>
+                    <tr className="border-b border-border/30">
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">VITE_WEBHOOK_URL</code></td>
+                      <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Frontend + Secret</Badge></td>
+                      <td className="py-2">Base URL dos webhooks n8n</td>
+                    </tr>
+                    <tr className="border-b border-border/30">
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">EXTERNAL_API_KEY</code></td>
+                      <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Secret</Badge></td>
+                      <td className="py-2">Chave legada (fallback) do gateway</td>
+                    </tr>
+                    <tr className="border-b border-border/30">
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">SUPABASE_SERVICE_ROLE_KEY</code></td>
+                      <td className="py-2 pr-3"><Badge variant="destructive" className="text-[9px]">Secret</Badge></td>
+                      <td className="py-2">Usada pelo gateway para acesso elevado ao banco</td>
+                    </tr>
+                    <tr>
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">LOVABLE_API_KEY</code></td>
+                      <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Secret</Badge></td>
+                      <td className="py-2">Chave para Lovable AI (edge functions)</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ── TAB: Exemplos ────────────────────────────────── */}
+        <TabsContent value="examples" className="mt-4 space-y-4">
+          <div className="grid gap-4">
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Health Check</CardTitle></CardHeader>
+              <CardContent><CodeBlock code={curlExample} language="bash" /></CardContent>
+            </Card>
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Criar Cliente</CardTitle></CardHeader>
+              <CardContent><CodeBlock code={curlCreateClient} language="bash" /></CardContent>
+            </Card>
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Code2 className="w-4 h-4" /> JavaScript / TypeScript</CardTitle></CardHeader>
+              <CardContent><CodeBlock code={jsExample} language="js" /></CardContent>
+            </Card>
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Code2 className="w-4 h-4" /> Python</CardTitle></CardHeader>
+              <CardContent><CodeBlock code={pythonExample} language="python" /></CardContent>
+            </Card>
+            <Card className="bg-card border-border">
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Zap className="w-4 h-4" /> n8n — HTTP Request Node</CardTitle></CardHeader>
+              <CardContent><CodeBlock code={n8nExample} language="text" /></CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        {/* ── TAB: Testar API ──────────────────────────────── */}
+        <TabsContent value="tester" className="mt-4">
+          <ApiTester />
+        </TabsContent>
+
+        {/* ── TAB: Audit Log ───────────────────────────────── */}
+        <TabsContent value="audit" className="mt-4">
+          <AuditLogViewer />
+        </TabsContent>
+
         {/* ── TAB: Segurança ───────────────────────────────── */}
         <TabsContent value="security" className="mt-4 space-y-4">
           <Card className="bg-card border-border">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Lock className="w-4 h-4 text-primary" /> Práticas de Segurança</CardTitle>
+              <CardTitle className="text-sm flex items-center gap-2"><Lock className="w-4 h-4 text-primary" /> Autenticação & Segurança</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4 text-xs text-muted-foreground">
+              <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
+                <p className="font-medium text-foreground mb-1">Fluxo de Autenticação (real)</p>
+                <ol className="list-decimal list-inside space-y-1">
+                  <li>Admin gera API Key na aba "API Keys" (prefixo <code className="bg-secondary px-1 rounded">acq_</code>)</li>
+                  <li>A chave é hasheada com SHA-256 e salva na tabela <code className="bg-secondary px-1 rounded">api_keys</code></li>
+                  <li>A cada request, o gateway hasheia a chave recebida via <code className="bg-secondary px-1 rounded">X-API-Key</code></li>
+                  <li>Executa RPC <code className="bg-secondary px-1 rounded">validate_api_key(_key_hash)</code> para validar</li>
+                  <li>Se válida e ativa → processa. Se não → 401</li>
+                  <li>Atualiza <code className="bg-secondary px-1 rounded">last_used_at</code> e registra no <code className="bg-secondary px-1 rounded">api_audit_log</code></li>
+                </ol>
+              </div>
+
+              <div>
+                <p className="font-medium text-foreground mb-2">Respostas de Erro de Autenticação</p>
+                <CodeBlock code={responseAuth} />
+              </div>
+
+              <Separator />
+
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
                   <p className="font-medium text-foreground flex items-center gap-1"><Shield className="w-3.5 h-3.5 text-primary" /> Chaves Hasheadas</p>
-                  <p>As API Keys são armazenadas como hash SHA-256. A chave original nunca é salva no banco.</p>
+                  <p>API Keys armazenadas como hash SHA-256. A chave original nunca é salva.</p>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
-                  <p className="font-medium text-foreground flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-primary" /> Audit Log</p>
-                  <p>Toda chamada registra: ação, IP do requisitante, status HTTP e nome da chave.</p>
+                  <p className="font-medium text-foreground flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-primary" /> Audit Log Completo</p>
+                  <p>Cada chamada registra: ação, IP, status HTTP, nome da chave e erro (se houver).</p>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
-                  <p className="font-medium text-foreground flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-primary" /> RLS Protegido</p>
-                  <p>As tabelas de chaves e logs são protegidas por Row Level Security — apenas admins têm acesso.</p>
+                  <p className="font-medium text-foreground flex items-center gap-1"><Lock className="w-3.5 h-3.5 text-primary" /> RLS em Todas as Tabelas</p>
+                  <p>Row Level Security ativo. api_keys e api_audit_log acessíveis apenas por admins.</p>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
-                  <p className="font-medium text-foreground flex items-center gap-1"><Key className="w-3.5 h-3.5 text-primary" /> Chaves Revogáveis</p>
-                  <p>Chaves podem ser desativadas ou revogadas a qualquer momento sem afetar outras integrações.</p>
+                  <p className="font-medium text-foreground flex items-center gap-1"><Key className="w-3.5 h-3.5 text-primary" /> Service Role Isolado</p>
+                  <p>O gateway usa service_role_key — nunca exposta ao frontend.</p>
                 </div>
               </div>
 
@@ -805,75 +1171,30 @@ Headers:
                 <ul className="space-y-2">
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Use uma chave diferente para cada integração (n8n, OpenClaw, etc.)</li>
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Nunca compartilhe a API Key em repositórios públicos ou chats</li>
-                  <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Monitore o "Último uso" de cada chave regularmente</li>
+                  <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Monitore o "Último uso" e o Audit Log regularmente</li>
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Revogue chaves que não são mais utilizadas</li>
-                  <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Use o audit log para investigar acessos suspeitos</li>
+                  <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Chaves desativadas retornam 401 imediatamente sem processar</li>
                 </ul>
               </div>
 
               <Separator />
 
               <div>
-                <p className="font-medium text-foreground mb-2">Estrutura do Banco de Dados</p>
+                <p className="font-medium text-foreground mb-2">Estrutura do Banco (Infra API)</p>
                 <div className="space-y-2">
                   <div className="p-2 bg-secondary/50 rounded">
                     <code className="text-[10px] text-primary font-bold">api_keys</code>
-                    <p className="text-[10px] mt-0.5">Armazena nome, hash da chave, preview, status ativo, último uso e quem criou.</p>
+                    <p className="text-[10px] mt-0.5">Colunas: id, name, key_hash, key_preview, is_active, last_used_at, created_by, created_at</p>
                   </div>
                   <div className="p-2 bg-secondary/50 rounded">
                     <code className="text-[10px] text-primary font-bold">api_audit_log</code>
-                    <p className="text-[10px] mt-0.5">Registra ação, IP, status code, parâmetros, nome da chave e mensagens de erro.</p>
+                    <p className="text-[10px] mt-0.5">Colunas: id, action, ip_address, status_code, params, key_name, error_message, created_at</p>
+                  </div>
+                  <div className="p-2 bg-secondary/50 rounded">
+                    <code className="text-[10px] text-primary font-bold">validate_api_key()</code>
+                    <p className="text-[10px] mt-0.5">RPC SECURITY DEFINER que valida hash contra api_keys onde is_active = true</p>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Quick Config Reference */}
-          <Card className="bg-card border-border">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm flex items-center gap-2"><Info className="w-4 h-4 text-primary" /> Referência Rápida de Configuração</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="overflow-x-auto">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="border-b border-border">
-                      <th className="text-left py-2 pr-4 font-medium text-muted-foreground">Configuração</th>
-                      <th className="text-left py-2 font-medium text-muted-foreground">Valor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="text-muted-foreground">
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Base URL</td>
-                      <td className="py-2"><div className="flex items-center gap-1"><code className="bg-secondary px-1 rounded text-[10px] break-all">{GATEWAY_URL}</code><CopyButton text={GATEWAY_URL} /></div></td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Método HTTP</td>
-                      <td className="py-2"><code className="bg-secondary px-1 rounded">POST</code></td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Header de Autenticação</td>
-                      <td className="py-2"><code className="bg-secondary px-1 rounded">X-API-Key</code></td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Formato do Body</td>
-                      <td className="py-2"><code className="bg-secondary px-1 rounded">JSON</code> — <code className="bg-secondary px-1 rounded">{`{ "action": "...", ...params }`}</code></td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Prefixo das Chaves</td>
-                      <td className="py-2"><code className="bg-secondary px-1 rounded">acq_</code></td>
-                    </tr>
-                    <tr className="border-b border-border/50">
-                      <td className="py-2 pr-4 font-medium text-foreground">Validação</td>
-                      <td className="py-2">SHA-256 hash contra tabela <code className="bg-secondary px-1 rounded">api_keys</code></td>
-                    </tr>
-                    <tr>
-                      <td className="py-2 pr-4 font-medium text-foreground">Total de Ações</td>
-                      <td className="py-2"><Badge>{totalActions} endpoints</Badge></td>
-                    </tr>
-                  </tbody>
-                </table>
               </div>
             </CardContent>
           </Card>
