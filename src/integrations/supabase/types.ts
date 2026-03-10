@@ -353,6 +353,51 @@ export type Database = {
           },
         ]
       }
+      integration_configs: {
+        Row: {
+          auth_header: string
+          auth_type: string
+          auth_value_preview: string
+          base_url: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          notes: string | null
+          updated_at: string
+        }
+        Insert: {
+          auth_header?: string
+          auth_type?: string
+          auth_value_preview?: string
+          base_url?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Update: {
+          auth_header?: string
+          auth_type?: string
+          auth_value_preview?: string
+          base_url?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          notes?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       milestones: {
         Row: {
           created_at: string

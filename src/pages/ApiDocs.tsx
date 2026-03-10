@@ -3,8 +3,9 @@ import {
   Copy, Check, ExternalLink, Shield, Zap, Code2, Key, Plus, Trash2,
   Eye, EyeOff, BookOpen, Terminal, AlertTriangle, Server, Clock, Hash,
   Globe, Lock, FileJson, ChevronDown, ChevronRight, Info, CheckCircle2,
-  Play, Loader2, Webhook, Database, Activity, RefreshCw, Search
+  Play, Loader2, Webhook, Database, Activity, RefreshCw, Search, Settings2
 } from "lucide-react";
+import IntegrationsManager from "@/components/admin/IntegrationsManager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -59,116 +60,116 @@ const actionDocs: {
     icon: "🔧",
     actions: [
       { name: "health", desc: "Verifica se o gateway está online", example: { action: "health" }, responseExample: { success: true, data: { status: "ok", version: "1.0", timestamp: "2026-03-10T12:00:00.000Z" } } },
-      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "..."], docs: "POST with { action, ...params }" } } },
-      { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 } },
+      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "...44 total"], docs: "POST with { action, ...params }" } } },
+      { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 }, responseExample: { success: true, data: [{ id: "uuid", action: "list_clients", status_code: 200, key_name: "n8n-prod", ip_address: "187.x.x.x", created_at: "2026-03-10T12:00:00Z" }] } },
     ],
   },
   {
     category: "Clientes",
     icon: "👥",
     actions: [
-      { name: "list_clients", desc: "Lista todos os clientes", optional: ["plan_status", "limit"], example: { action: "list_clients", limit: 10 }, responseExample: { success: true, data: [{ id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", plan_name: "Pro" }] } },
-      { name: "get_client", desc: "Busca um cliente por ID", required: ["client_id"], example: { action: "get_client", client_id: "uuid-aqui" } },
+      { name: "list_clients", desc: "Lista todos os clientes", optional: ["plan_status", "limit"], example: { action: "list_clients", limit: 10 }, responseExample: { success: true, data: [{ id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", plan_name: "Pro", plan_value: 2500 }] } },
+      { name: "get_client", desc: "Busca um cliente por ID", required: ["client_id"], example: { action: "get_client", client_id: "uuid-aqui" }, responseExample: { success: true, data: { id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", phone: "11999999999" } } },
       { name: "create_client", desc: "Cria um novo cliente (cria conta + perfil)", required: ["email", "full_name"], optional: ["password", "company_name", "phone", "plan_name", "plan_value", "plan_renewal_date"], example: { action: "create_client", email: "novo@empresa.com", full_name: "João Silva", company_name: "Empresa X", plan_name: "Pro", plan_value: 2500 }, responseExample: { success: true, data: { id: "novo-uuid", email: "novo@empresa.com" } } },
-      { name: "update_client", desc: "Atualiza dados de um cliente", required: ["client_id"], optional: ["full_name", "company_name", "phone", "plan_name", "plan_value", "plan_status", "plan_renewal_date"], example: { action: "update_client", client_id: "uuid", plan_status: "overdue" } },
+      { name: "update_client", desc: "Atualiza dados de um cliente", required: ["client_id"], optional: ["full_name", "company_name", "phone", "plan_name", "plan_value", "plan_status", "plan_renewal_date"], example: { action: "update_client", client_id: "uuid", plan_status: "overdue" }, responseExample: { success: true, data: { id: "uuid", full_name: "João Silva", plan_status: "overdue" } } },
     ],
   },
   {
     category: "Projetos",
     icon: "📁",
     actions: [
-      { name: "list_projects", desc: "Lista projetos", optional: ["client_id", "status", "limit"], example: { action: "list_projects", client_id: "uuid" } },
-      { name: "get_project", desc: "Busca projeto com milestones e tasks", required: ["project_id"], example: { action: "get_project", project_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", name: "Site Novo", status: "active", progress: 45, milestones: [], tasks: [] } } },
-      { name: "create_project", desc: "Cria um projeto", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status", "created_by"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" } },
-      { name: "update_project", desc: "Atualiza um projeto", required: ["project_id"], example: { action: "update_project", project_id: "uuid", status: "active", progress: 50 } },
-      { name: "delete_project", desc: "Exclui um projeto", required: ["project_id"], example: { action: "delete_project", project_id: "uuid" } },
+      { name: "list_projects", desc: "Lista projetos", optional: ["client_id", "status", "limit"], example: { action: "list_projects", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", name: "Site Novo", status: "active", progress: 45, project_type: "website", deadline: "2026-04-10" }] } },
+      { name: "get_project", desc: "Busca projeto com milestones e tasks", required: ["project_id"], example: { action: "get_project", project_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", name: "Site Novo", status: "active", progress: 45, milestones: [{ id: "uuid", title: "Entrega v1" }], tasks: [{ id: "uuid", title: "Landing page", status: "doing" }] } } },
+      { name: "create_project", desc: "Cria um projeto", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status", "created_by"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" }, responseExample: { success: true, data: { id: "novo-uuid", name: "Site Novo", status: "planning", progress: 0 } } },
+      { name: "update_project", desc: "Atualiza um projeto", required: ["project_id"], example: { action: "update_project", project_id: "uuid", status: "active", progress: 50 }, responseExample: { success: true, data: { id: "uuid", status: "active", progress: 50 } } },
+      { name: "delete_project", desc: "Exclui um projeto", required: ["project_id"], example: { action: "delete_project", project_id: "uuid" }, responseExample: { success: true, data: { deleted: "uuid" } } },
     ],
   },
   {
     category: "Tarefas",
     icon: "✅",
     actions: [
-      { name: "list_tasks", desc: "Lista tarefas", optional: ["project_id", "status", "assigned_to", "milestone_id", "limit"], example: { action: "list_tasks", project_id: "uuid", status: "doing" } },
-      { name: "get_task", desc: "Busca tarefa com comentários, checklist e anexos", required: ["task_id"], example: { action: "get_task", task_id: "uuid" } },
-      { name: "create_task", desc: "Cria uma tarefa", required: ["project_id", "title"], optional: ["description", "status", "priority", "assigned_to", "due_date", "milestone_id", "task_order"], example: { action: "create_task", project_id: "uuid", title: "Criar landing page", priority: "high" } },
-      { name: "update_task", desc: "Atualiza uma tarefa", required: ["task_id"], example: { action: "update_task", task_id: "uuid", status: "done" } },
-      { name: "delete_task", desc: "Exclui uma tarefa", required: ["task_id"], example: { action: "delete_task", task_id: "uuid" } },
+      { name: "list_tasks", desc: "Lista tarefas", optional: ["project_id", "status", "assigned_to", "milestone_id", "limit"], example: { action: "list_tasks", project_id: "uuid", status: "doing" }, responseExample: { success: true, data: [{ id: "uuid", title: "Criar landing page", status: "doing", priority: "high", assigned_to: "uuid" }] } },
+      { name: "get_task", desc: "Busca tarefa com comentários, checklist e anexos", required: ["task_id"], example: { action: "get_task", task_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", title: "Landing page", status: "doing", task_comments: [], task_checklist_items: [], task_attachments: [] } } },
+      { name: "create_task", desc: "Cria uma tarefa", required: ["project_id", "title"], optional: ["description", "status", "priority", "assigned_to", "due_date", "milestone_id", "task_order"], example: { action: "create_task", project_id: "uuid", title: "Criar landing page", priority: "high" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Criar landing page", status: "backlog", priority: "high" } } },
+      { name: "update_task", desc: "Atualiza uma tarefa", required: ["task_id"], example: { action: "update_task", task_id: "uuid", status: "done" }, responseExample: { success: true, data: { id: "uuid", status: "done" } } },
+      { name: "delete_task", desc: "Exclui uma tarefa", required: ["task_id"], example: { action: "delete_task", task_id: "uuid" }, responseExample: { success: true, data: { deleted: "uuid" } } },
     ],
   },
   {
     category: "Milestones",
     icon: "🏁",
     actions: [
-      { name: "list_milestones", desc: "Lista milestones de um projeto", optional: ["project_id"], example: { action: "list_milestones", project_id: "uuid" } },
-      { name: "create_milestone", desc: "Cria milestone", required: ["project_id", "title", "target_date"], optional: ["description", "milestone_order", "status"], example: { action: "create_milestone", project_id: "uuid", title: "Entrega v1", target_date: "2026-04-01" } },
-      { name: "update_milestone", desc: "Atualiza milestone", required: ["milestone_id"], example: { action: "update_milestone", milestone_id: "uuid", status: "completed" } },
+      { name: "list_milestones", desc: "Lista milestones de um projeto", optional: ["project_id"], example: { action: "list_milestones", project_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", title: "Entrega v1", status: "pending", target_date: "2026-04-01" }] } },
+      { name: "create_milestone", desc: "Cria milestone", required: ["project_id", "title", "target_date"], optional: ["description", "milestone_order", "status"], example: { action: "create_milestone", project_id: "uuid", title: "Entrega v1", target_date: "2026-04-01" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Entrega v1", status: "pending" } } },
+      { name: "update_milestone", desc: "Atualiza milestone", required: ["milestone_id"], example: { action: "update_milestone", milestone_id: "uuid", status: "completed" }, responseExample: { success: true, data: { id: "uuid", status: "completed" } } },
     ],
   },
   {
     category: "Relatórios",
     icon: "📊",
     actions: [
-      { name: "list_reports", desc: "Lista relatórios", optional: ["client_id", "project_id", "status", "limit"], example: { action: "list_reports" } },
-      { name: "create_report", desc: "Cria relatório", required: ["client_id", "project_id", "title"], optional: ["summary", "highlights", "next_steps", "metrics", "chart_data", "chart_type", "period_start", "period_end", "status", "created_by", "internal_notes"], example: { action: "create_report", client_id: "uuid", project_id: "uuid", title: "Relatório Março" } },
-      { name: "update_report", desc: "Atualiza relatório", required: ["report_id"], example: { action: "update_report", report_id: "uuid", status: "published" } },
+      { name: "list_reports", desc: "Lista relatórios", optional: ["client_id", "project_id", "status", "limit"], example: { action: "list_reports" }, responseExample: { success: true, data: [{ id: "uuid", title: "Relatório Março", status: "published", client_id: "uuid" }] } },
+      { name: "create_report", desc: "Cria relatório", required: ["client_id", "project_id", "title"], optional: ["summary", "highlights", "next_steps", "metrics", "chart_data", "chart_type", "period_start", "period_end", "status", "created_by", "internal_notes"], example: { action: "create_report", client_id: "uuid", project_id: "uuid", title: "Relatório Março" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Relatório Março", status: "draft" } } },
+      { name: "update_report", desc: "Atualiza relatório", required: ["report_id"], example: { action: "update_report", report_id: "uuid", status: "published" }, responseExample: { success: true, data: { id: "uuid", status: "published" } } },
     ],
   },
   {
     category: "Financeiro",
     icon: "💰",
     actions: [
-      { name: "list_billing", desc: "Lista cobranças", optional: ["client_id", "status", "limit"], example: { action: "list_billing", status: "pending" } },
-      { name: "create_billing", desc: "Cria cobrança", required: ["client_id", "amount", "due_date", "type"], optional: ["description", "status", "platform"], example: { action: "create_billing", client_id: "uuid", amount: 2500, due_date: "2026-04-01", type: "mensalidade" } },
-      { name: "update_billing", desc: "Atualiza cobrança", required: ["billing_id"], example: { action: "update_billing", billing_id: "uuid", status: "paid", paid_date: "2026-03-09" } },
-      { name: "list_payments", desc: "Lista pagamentos de projetos com parcelas", optional: ["client_id", "project_id", "limit"], example: { action: "list_payments", client_id: "uuid" } },
+      { name: "list_billing", desc: "Lista cobranças", optional: ["client_id", "status", "limit"], example: { action: "list_billing", status: "pending" }, responseExample: { success: true, data: [{ id: "uuid", amount: 2500, status: "pending", due_date: "2026-04-01", type: "mensalidade" }] } },
+      { name: "create_billing", desc: "Cria cobrança", required: ["client_id", "amount", "due_date", "type"], optional: ["description", "status", "platform"], example: { action: "create_billing", client_id: "uuid", amount: 2500, due_date: "2026-04-01", type: "mensalidade" }, responseExample: { success: true, data: { id: "novo-uuid", amount: 2500, status: "pending" } } },
+      { name: "update_billing", desc: "Atualiza cobrança", required: ["billing_id"], example: { action: "update_billing", billing_id: "uuid", status: "paid", paid_date: "2026-03-09" }, responseExample: { success: true, data: { id: "uuid", status: "paid", paid_date: "2026-03-09" } } },
+      { name: "list_payments", desc: "Lista pagamentos de projetos com parcelas", optional: ["client_id", "project_id", "limit"], example: { action: "list_payments", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", total_value: 5000, entry_amount: 2500, installments_count: 3, payment_installments: [] }] } },
     ],
   },
   {
     category: "Notificações",
     icon: "🔔",
     actions: [
-      { name: "send_notification", desc: "Envia notificação para um usuário", required: ["user_id", "message", "notification_type"], optional: ["link"], example: { action: "send_notification", user_id: "uuid", message: "Novo arquivo disponível!", notification_type: "update", link: "/aprovacoes" } },
-      { name: "list_notifications", desc: "Lista notificações de um usuário", required: ["user_id"], optional: ["read", "limit"], example: { action: "list_notifications", user_id: "uuid", read: false } },
+      { name: "send_notification", desc: "Envia notificação para um usuário", required: ["user_id", "message", "notification_type"], optional: ["link"], example: { action: "send_notification", user_id: "uuid", message: "Novo arquivo disponível!", notification_type: "update", link: "/aprovacoes" }, responseExample: { success: true, data: { id: "novo-uuid", message: "Novo arquivo disponível!", read: false } } },
+      { name: "list_notifications", desc: "Lista notificações de um usuário", required: ["user_id"], optional: ["read", "limit"], example: { action: "list_notifications", user_id: "uuid", read: false }, responseExample: { success: true, data: [{ id: "uuid", message: "Arquivo aprovado", notification_type: "approval", read: false, created_at: "2026-03-10T12:00:00Z" }] } },
     ],
   },
   {
     category: "Pedidos & Briefings",
     icon: "📋",
     actions: [
-      { name: "list_requests", desc: "Lista pedidos de clientes", optional: ["client_id", "status", "limit"], example: { action: "list_requests", status: "new" } },
-      { name: "create_request", desc: "Cria pedido", required: ["client_id", "title", "description"], optional: ["priority", "project_id"], example: { action: "create_request", client_id: "uuid", title: "Novo post", description: "Preciso de um post para Instagram" } },
-      { name: "update_request", desc: "Atualiza pedido", required: ["request_id"], example: { action: "update_request", request_id: "uuid", status: "done" } },
-      { name: "list_briefings", desc: "Lista briefings", optional: ["client_id", "submitted", "limit"], example: { action: "list_briefings" } },
-      { name: "get_briefing", desc: "Busca briefing por ID", required: ["briefing_id"], example: { action: "get_briefing", briefing_id: "uuid" } },
+      { name: "list_requests", desc: "Lista pedidos de clientes", optional: ["client_id", "status", "limit"], example: { action: "list_requests", status: "new" }, responseExample: { success: true, data: [{ id: "uuid", title: "Novo post", status: "new", priority: "normal", client_id: "uuid" }] } },
+      { name: "create_request", desc: "Cria pedido", required: ["client_id", "title", "description"], optional: ["priority", "project_id"], example: { action: "create_request", client_id: "uuid", title: "Novo post", description: "Preciso de um post para Instagram" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Novo post", status: "new" } } },
+      { name: "update_request", desc: "Atualiza pedido", required: ["request_id"], example: { action: "update_request", request_id: "uuid", status: "done" }, responseExample: { success: true, data: { id: "uuid", status: "done" } } },
+      { name: "list_briefings", desc: "Lista briefings", optional: ["client_id", "submitted", "limit"], example: { action: "list_briefings" }, responseExample: { success: true, data: [{ id: "uuid", client_id: "uuid", submitted: true, token: "abc123" }] } },
+      { name: "get_briefing", desc: "Busca briefing por ID", required: ["briefing_id"], example: { action: "get_briefing", briefing_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", responses: {}, submitted: true, client_id: "uuid" } } },
     ],
   },
   {
     category: "Feeds & Arquivos",
     icon: "📂",
     actions: [
-      { name: "create_update", desc: "Cria update no feed de um projeto", required: ["project_id", "author_id", "message", "update_type"], example: { action: "create_update", project_id: "uuid", author_id: "uuid", message: "Deploy realizado!", update_type: "milestone" } },
-      { name: "list_files", desc: "Lista arquivos", optional: ["client_id", "project_id", "approval_status", "limit"], example: { action: "list_files", project_id: "uuid" } },
-      { name: "update_file", desc: "Atualiza arquivo (aprovação, feedback)", required: ["file_id"], example: { action: "update_file", file_id: "uuid", approval_status: "approved" } },
+      { name: "create_update", desc: "Cria update no feed de um projeto", required: ["project_id", "author_id", "message", "update_type"], example: { action: "create_update", project_id: "uuid", author_id: "uuid", message: "Deploy realizado!", update_type: "milestone" }, responseExample: { success: true, data: { id: "novo-uuid", message: "Deploy realizado!", update_type: "milestone" } } },
+      { name: "list_files", desc: "Lista arquivos", optional: ["client_id", "project_id", "approval_status", "limit"], example: { action: "list_files", project_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", file_name: "banner.png", approval_status: "pending", file_url: "https://..." }] } },
+      { name: "update_file", desc: "Atualiza arquivo (aprovação, feedback)", required: ["file_id"], example: { action: "update_file", file_id: "uuid", approval_status: "approved" }, responseExample: { success: true, data: { id: "uuid", approval_status: "approved" } } },
     ],
   },
   {
     category: "Ads & Wallet",
     icon: "📢",
     actions: [
-      { name: "get_wallet", desc: "Busca carteira de ads do cliente", required: ["client_id"], example: { action: "get_wallet", client_id: "uuid" } },
-      { name: "update_wallet", desc: "Atualiza saldo da carteira", required: ["wallet_id"], example: { action: "update_wallet", wallet_id: "uuid", balance: 1500 } },
-      { name: "list_recharges", desc: "Lista solicitações de recarga", optional: ["client_id", "status"], example: { action: "list_recharges", status: "pending" } },
-      { name: "update_recharge", desc: "Atualiza status de recarga", required: ["recharge_id"], example: { action: "update_recharge", recharge_id: "uuid", status: "approved" } },
+      { name: "get_wallet", desc: "Busca carteira de ads do cliente", required: ["client_id"], example: { action: "get_wallet", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", platform: "meta", balance: 1500, last_recharge_date: "2026-03-01" }] } },
+      { name: "update_wallet", desc: "Atualiza saldo da carteira", required: ["wallet_id"], example: { action: "update_wallet", wallet_id: "uuid", balance: 1500 }, responseExample: { success: true, data: { id: "uuid", balance: 1500 } } },
+      { name: "list_recharges", desc: "Lista solicitações de recarga", optional: ["client_id", "status"], example: { action: "list_recharges", status: "pending" }, responseExample: { success: true, data: [{ id: "uuid", amount: 500, platform: "meta", status: "pending" }] } },
+      { name: "update_recharge", desc: "Atualiza status de recarga", required: ["recharge_id"], example: { action: "update_recharge", recharge_id: "uuid", status: "approved" }, responseExample: { success: true, data: { id: "uuid", status: "approved" } } },
     ],
   },
   {
     category: "Equipe & Checklist",
     icon: "👨‍💻",
     actions: [
-      { name: "list_team", desc: "Lista membros da equipe (exceto clientes)", example: { action: "list_team" } },
-      { name: "create_comment", desc: "Adiciona comentário a uma tarefa", required: ["task_id", "author_id", "content"], example: { action: "create_comment", task_id: "uuid", author_id: "uuid", content: "Ficou ótimo!" } },
-      { name: "create_checklist_item", desc: "Adiciona item de checklist", required: ["task_id", "created_by", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", created_by: "uuid", title: "Revisar cores" } },
-      { name: "update_checklist_item", desc: "Atualiza item de checklist", required: ["item_id"], example: { action: "update_checklist_item", item_id: "uuid", checked: true } },
+      { name: "list_team", desc: "Lista membros da equipe (exceto clientes)", example: { action: "list_team" }, responseExample: { success: true, data: [{ user_id: "uuid", role: "design", profiles: { full_name: "Ana Designer", email: "ana@equipe.com" } }] } },
+      { name: "create_comment", desc: "Adiciona comentário a uma tarefa", required: ["task_id", "author_id", "content"], example: { action: "create_comment", task_id: "uuid", author_id: "uuid", content: "Ficou ótimo!" }, responseExample: { success: true, data: { id: "novo-uuid", content: "Ficou ótimo!", created_at: "2026-03-10T12:00:00Z" } } },
+      { name: "create_checklist_item", desc: "Adiciona item de checklist", required: ["task_id", "created_by", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", created_by: "uuid", title: "Revisar cores" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Revisar cores", checked: false } } },
+      { name: "update_checklist_item", desc: "Atualiza item de checklist", required: ["item_id"], example: { action: "update_checklist_item", item_id: "uuid", checked: true }, responseExample: { success: true, data: { id: "uuid", checked: true } } },
     ],
   },
 ];
@@ -755,6 +756,7 @@ Body (JSON):
           <TabsTrigger value="tester" className="text-xs gap-1.5"><Play className="w-3.5 h-3.5" /> Testar API</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Audit Log</TabsTrigger>
           <TabsTrigger value="security" className="text-xs gap-1.5"><Lock className="w-3.5 h-3.5" /> Segurança</TabsTrigger>
+          <TabsTrigger value="integrations" className="text-xs gap-1.5"><Settings2 className="w-3.5 h-3.5" /> Integrações</TabsTrigger>
         </TabsList>
 
         {/* ── TAB: Visão Geral ─────────────────────────────── */}
@@ -1198,6 +1200,11 @@ Body (JSON):
               </div>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        {/* ── TAB: Integrações Salvas ──────────────────────── */}
+        <TabsContent value="integrations" className="mt-4">
+          <IntegrationsManager />
         </TabsContent>
       </Tabs>
     </div>
