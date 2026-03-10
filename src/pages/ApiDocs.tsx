@@ -156,10 +156,10 @@ const actionDocs: {
     category: "Ads & Wallet",
     icon: "📢",
     actions: [
-      { name: "get_wallet", desc: "Busca carteira de ads do cliente", required: ["client_id"], example: { action: "get_wallet", client_id: "uuid" } },
-      { name: "update_wallet", desc: "Atualiza saldo da carteira", required: ["wallet_id"], example: { action: "update_wallet", wallet_id: "uuid", balance: 1500 } },
-      { name: "list_recharges", desc: "Lista solicitações de recarga", optional: ["client_id", "status"], example: { action: "list_recharges", status: "pending" } },
-      { name: "update_recharge", desc: "Atualiza status de recarga", required: ["recharge_id"], example: { action: "update_recharge", recharge_id: "uuid", status: "approved" } },
+      { name: "get_wallet", desc: "Busca carteira de ads do cliente", required: ["client_id"], example: { action: "get_wallet", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", platform: "meta", balance: 1500, last_recharge_date: "2026-03-01" }] } },
+      { name: "update_wallet", desc: "Atualiza saldo da carteira", required: ["wallet_id"], example: { action: "update_wallet", wallet_id: "uuid", balance: 1500 }, responseExample: { success: true, data: { id: "uuid", balance: 1500 } } },
+      { name: "list_recharges", desc: "Lista solicitações de recarga", optional: ["client_id", "status"], example: { action: "list_recharges", status: "pending" }, responseExample: { success: true, data: [{ id: "uuid", amount: 500, platform: "meta", status: "pending" }] } },
+      { name: "update_recharge", desc: "Atualiza status de recarga", required: ["recharge_id"], example: { action: "update_recharge", recharge_id: "uuid", status: "approved" }, responseExample: { success: true, data: { id: "uuid", status: "approved" } } },
     ],
   },
   {
