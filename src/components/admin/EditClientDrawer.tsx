@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -104,6 +104,70 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     },
     enabled: !!client?.id,
   });
+
+  // Executive summary queries
+  const { data: clientProjects } = useQuery({
+    queryKey: ["client-exec-projects", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("projects").select("id, name, status, progress, project_type, deadline")
+        .eq("client_id", client.id).order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  const clientProjectIds = (clientProjects || []).map((p: any) => p.id);
+
+  const { data: clientTasks } = useQuery({
+    queryKey: ["client-exec-tasks", client?.id, clientProjectIds.join(",")],
+    queryFn: async () => {
+      if (!clientProjectIds.length) return [];
+      const { data } = await supabase.from("tasks").select("id, status, priority")
+        .in("project_id", clientProjectIds);
+      return data || [];
+    },
+    enabled: !!client?.id && clientProjectIds.length > 0,
+  });
+
+  const { data: clientFiles } = useQuery({
+    queryKey: ["client-exec-files", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("files").select("id, approval_status, created_at")
+        .eq("client_id", client.id).order("created_at", { ascending: false }).limit(20);
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  const { data: clientReports } = useQuery({
+    queryKey: ["client-exec-reports", client?.id],
+    queryFn: async () => {
+      if (!clientProjectIds.length) return [];
+      const { data } = await supabase.from("reports").select("id, status")
+        .in("project_id", clientProjectIds);
+      return data || [];
+    },
+    enabled: !!client?.id && clientProjectIds.length > 0,
+  });
+
+  const { data: clientBilling } = useQuery({
+    queryKey: ["client-exec-billing", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("billing").select("id, status, amount, due_date")
+        .eq("client_id", client.id);
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  // Compute executive metrics
+  const execActiveProjects = (clientProjects || []).filter((p: any) => p.status !== "done").length;
+  const execOpenTasks = (clientTasks || []).filter((t: any) => t.status !== "done").length;
+  const execUrgentTasks = (clientTasks || []).filter((t: any) => (t.priority === "urgent" || t.priority === "high") && t.status !== "done").length;
+  const execPendingFiles = (clientFiles || []).filter((f: any) => f.approval_status === "pending").length;
+  const execPublishedReports = (clientReports || []).filter((r: any) => r.status === "published").length;
+  const execPendingBills = (clientBilling || []).filter((b: any) => b.status === "pending").length;
+  const execOverdueBills = (clientBilling || []).filter((b: any) => b.status === "pending" && new Date(b.due_date) < new Date()).length;
   useEffect(() => {
     if (client) {
       setFullName(client.full_name || "");
@@ -306,6 +370,32 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 <p className="text-[11px] text-muted-foreground">Clique na foto para alterar a logo</p>
               </div>
             </div>
+            {/* Executive Summary */}
+            {isAdmin && (
+              <div className="bg-secondary/50 border border-border rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+                  <Activity className="w-3 h-3" /> Resumo Executivo
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Projetos", value: execActiveProjects, icon: Briefcase, color: "text-primary" },
+                    { label: "Tarefas", value: execOpenTasks, icon: ListChecks, color: "text-sky-400", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
+                    { label: "Aprovações", value: execPendingFiles, icon: PackageCheck, color: execPendingFiles > 0 ? "text-amber-400" : "text-muted-foreground" },
+                    { label: "Relatórios", value: execPublishedReports, icon: BarChart3, color: "text-primary" },
+                    { label: "Pendências", value: execPendingBills, icon: DollarSign, color: execPendingBills > 0 ? "text-warning" : "text-muted-foreground" },
+                    { label: "Atrasados", value: execOverdueBills, icon: AlertCircle, color: execOverdueBills > 0 ? "text-destructive" : "text-muted-foreground" },
+                  ].map((m) => (
+                    <div key={m.label} className="text-center py-1.5">
+                      <m.icon className={`w-3.5 h-3.5 mx-auto mb-0.5 ${m.color}`} />
+                      <p className="text-sm font-mono font-medium text-foreground">{m.value}</p>
+                      <p className="text-[9px] text-muted-foreground">{m.label}</p>
+                      {"alert" in m && m.alert && <p className="text-[8px] text-destructive">{m.alert}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Status do Cliente */}
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status do Cliente</label>

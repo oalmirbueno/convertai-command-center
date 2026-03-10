@@ -94,7 +94,22 @@ export default function AdminDashboard() {
       }
     }
   });
-  const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
+  const urgentTasks = (allTasks || []).filter((t: any) => (t.priority === "urgent" || t.priority === "high") && t.status !== "done").slice(0, 5);
+
+  // Clients with upcoming renewal (next 7 days) or expired
+  const clientsRenewalAlert = (clients || []).filter((c: any) => {
+    if (!c.plan_renewal_date) return false;
+    const renewal = new Date(c.plan_renewal_date + "T00:00:00");
+    const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
+    return diffDays <= 7;
+  }).sort((a: any, b: any) => new Date(a.plan_renewal_date).getTime() - new Date(b.plan_renewal_date).getTime());
+
+  // Projects with no progress update in last 14 days
+  const stalledProjects = activeProjects.filter((p: any) => {
+    const lastUpdate = new Date(p.updated_at || p.created_at);
+    const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / 86400000);
+    return daysSince >= 14 && p.progress < 100;
+  });
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid" && b.type !== "ads_recharge");
@@ -453,6 +468,75 @@ export default function AdminDashboard() {
           </div>
         )}
       </div>
+
+      {/* Alerts Row: Clients renewal + Stalled Projects */}
+      {isAdmin && (clientsRenewalAlert.length > 0 || stalledProjects.length > 0) && (
+        <div className="grid lg:grid-cols-2 gap-6">
+          {clientsRenewalAlert.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm mb-4 flex items-center gap-2">
+                <Clock className="w-3.5 h-3.5 text-warning" />
+                Clientes com Vencimento Próximo
+              </p>
+              <div className="space-y-0">
+                {clientsRenewalAlert.map((c: any, i: number) => {
+                  const renewal = new Date(c.plan_renewal_date + "T00:00:00");
+                  const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
+                  const isExpired = diffDays < 0;
+                  return (
+                    <div key={c.id}>
+                      {i > 0 && <div className="border-t border-border" />}
+                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg px-1"
+                        onClick={() => navigate("/clientes")}>
+                        <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isExpired ? "bg-destructive" : "bg-warning"}`} />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] text-foreground">{c.company_name || c.full_name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {c.plan_name && `${c.plan_name} · `}
+                            {c.plan_value && `${fmt(Number(c.plan_value))} · `}
+                            <span className={isExpired ? "text-destructive font-medium" : "text-warning"}>
+                              {isExpired ? `Vencido há ${Math.abs(diffDays)}d` : diffDays === 0 ? "Vence hoje" : `Vence em ${diffDays}d`}
+                            </span>
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {stalledProjects.length > 0 && (
+            <div className="bg-card border border-border rounded-xl p-5">
+              <p className="label-sm mb-4 flex items-center gap-2">
+                <AlertTriangle className="w-3.5 h-3.5 text-muted-foreground" />
+                Projetos sem Progresso Recente
+              </p>
+              <div className="space-y-0">
+                {stalledProjects.map((p: any, i: number) => {
+                  const daysSince = Math.floor((now.getTime() - new Date(p.updated_at || p.created_at).getTime()) / 86400000);
+                  return (
+                    <div key={p.id}>
+                      {i > 0 && <div className="border-t border-border" />}
+                      <div className="flex items-center gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg px-1"
+                        onClick={() => setDrawerProject(p)}>
+                        <div className="w-1.5 h-1.5 rounded-full shrink-0 bg-muted-foreground" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] text-foreground">{p.name}</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            {p.client?.company_name || p.client?.full_name} · {p.progress}% · Parado há {daysSince}d
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Updates + Urgent Tasks */}
       <div className="grid lg:grid-cols-2 gap-6">
