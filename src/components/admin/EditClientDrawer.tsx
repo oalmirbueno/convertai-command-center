@@ -370,6 +370,32 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 <p className="text-[11px] text-muted-foreground">Clique na foto para alterar a logo</p>
               </div>
             </div>
+            {/* Executive Summary */}
+            {isAdmin && (
+              <div className="bg-secondary/50 border border-border rounded-xl p-3.5 space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-1.5">
+                  <Activity className="w-3 h-3" /> Resumo Executivo
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { label: "Projetos", value: execActiveProjects, icon: Briefcase, color: "text-primary" },
+                    { label: "Tarefas", value: execOpenTasks, icon: ListChecks, color: "text-sky-400", alert: execUrgentTasks > 0 ? `${execUrgentTasks} urgentes` : "" },
+                    { label: "Aprovações", value: execPendingFiles, icon: PackageCheck, color: execPendingFiles > 0 ? "text-amber-400" : "text-muted-foreground" },
+                    { label: "Relatórios", value: execPublishedReports, icon: BarChart3, color: "text-primary" },
+                    { label: "Pendências", value: execPendingBills, icon: DollarSign, color: execPendingBills > 0 ? "text-warning" : "text-muted-foreground" },
+                    { label: "Atrasados", value: execOverdueBills, icon: AlertCircle, color: execOverdueBills > 0 ? "text-destructive" : "text-muted-foreground" },
+                  ].map((m) => (
+                    <div key={m.label} className="text-center py-1.5">
+                      <m.icon className={`w-3.5 h-3.5 mx-auto mb-0.5 ${m.color}`} />
+                      <p className="text-sm font-mono font-medium text-foreground">{m.value}</p>
+                      <p className="text-[9px] text-muted-foreground">{m.label}</p>
+                      {"alert" in m && m.alert && <p className="text-[8px] text-destructive">{m.alert}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Status do Cliente */}
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status do Cliente</label>
