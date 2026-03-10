@@ -89,11 +89,11 @@ const actionDocs: {
     category: "Tarefas",
     icon: "✅",
     actions: [
-      { name: "list_tasks", desc: "Lista tarefas", optional: ["project_id", "status", "assigned_to", "milestone_id", "limit"], example: { action: "list_tasks", project_id: "uuid", status: "doing" } },
-      { name: "get_task", desc: "Busca tarefa com comentários, checklist e anexos", required: ["task_id"], example: { action: "get_task", task_id: "uuid" } },
-      { name: "create_task", desc: "Cria uma tarefa", required: ["project_id", "title"], optional: ["description", "status", "priority", "assigned_to", "due_date", "milestone_id", "task_order"], example: { action: "create_task", project_id: "uuid", title: "Criar landing page", priority: "high" } },
-      { name: "update_task", desc: "Atualiza uma tarefa", required: ["task_id"], example: { action: "update_task", task_id: "uuid", status: "done" } },
-      { name: "delete_task", desc: "Exclui uma tarefa", required: ["task_id"], example: { action: "delete_task", task_id: "uuid" } },
+      { name: "list_tasks", desc: "Lista tarefas", optional: ["project_id", "status", "assigned_to", "milestone_id", "limit"], example: { action: "list_tasks", project_id: "uuid", status: "doing" }, responseExample: { success: true, data: [{ id: "uuid", title: "Criar landing page", status: "doing", priority: "high", assigned_to: "uuid" }] } },
+      { name: "get_task", desc: "Busca tarefa com comentários, checklist e anexos", required: ["task_id"], example: { action: "get_task", task_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", title: "Landing page", status: "doing", task_comments: [], task_checklist_items: [], task_attachments: [] } } },
+      { name: "create_task", desc: "Cria uma tarefa", required: ["project_id", "title"], optional: ["description", "status", "priority", "assigned_to", "due_date", "milestone_id", "task_order"], example: { action: "create_task", project_id: "uuid", title: "Criar landing page", priority: "high" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Criar landing page", status: "backlog", priority: "high" } } },
+      { name: "update_task", desc: "Atualiza uma tarefa", required: ["task_id"], example: { action: "update_task", task_id: "uuid", status: "done" }, responseExample: { success: true, data: { id: "uuid", status: "done" } } },
+      { name: "delete_task", desc: "Exclui uma tarefa", required: ["task_id"], example: { action: "delete_task", task_id: "uuid" }, responseExample: { success: true, data: { deleted: "uuid" } } },
     ],
   },
   {
