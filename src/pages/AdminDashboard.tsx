@@ -94,7 +94,22 @@ export default function AdminDashboard() {
       }
     }
   });
-  const urgentTasks = (allTasks || []).filter((t: any) => t.priority === "urgent" || t.priority === "high").slice(0, 5);
+  const urgentTasks = (allTasks || []).filter((t: any) => (t.priority === "urgent" || t.priority === "high") && t.status !== "done").slice(0, 5);
+
+  // Clients with upcoming renewal (next 7 days) or expired
+  const clientsRenewalAlert = (clients || []).filter((c: any) => {
+    if (!c.plan_renewal_date) return false;
+    const renewal = new Date(c.plan_renewal_date + "T00:00:00");
+    const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
+    return diffDays <= 7;
+  }).sort((a: any, b: any) => new Date(a.plan_renewal_date).getTime() - new Date(b.plan_renewal_date).getTime());
+
+  // Projects with no progress update in last 14 days
+  const stalledProjects = activeProjects.filter((p: any) => {
+    const lastUpdate = new Date(p.updated_at || p.created_at);
+    const daysSince = Math.floor((now.getTime() - lastUpdate.getTime()) / 86400000);
+    return daysSince >= 14 && p.progress < 100;
+  });
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid" && b.type !== "ads_recharge");
