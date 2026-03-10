@@ -33,12 +33,23 @@ type Handler = (db: DB, params: Record<string, any>) => Promise<Response>
 const handlers: Record<string, Handler> = {
 
   // ── System ──
-  health: async () => ok({ status: 'ok', version: '1.0', timestamp: new Date().toISOString() }),
+  health: async () => ok({ status: 'ok', version: '1.1', timestamp: new Date().toISOString() }),
 
   get_schema: async () => ok({
-    version: '1.0',
+    version: '1.1',
     actions: Object.keys(handlers).sort(),
     docs: 'POST with { "action": "<name>", ...params }. Auth via X-API-Key header.',
+    context_params: {
+      get_wallet: 'Requires client_id — returns all wallets for a specific client',
+      list_notifications: 'Requires user_id — returns notifications for a specific user',
+      list_billing: 'Optional client_id — filters billing by client. Without it returns all.',
+      list_tasks: 'Optional project_id, status, assigned_to, milestone_id to filter',
+      list_files: 'Optional client_id, project_id, approval_status to filter',
+      list_reports: 'Optional client_id, project_id, status to filter',
+      list_payments: 'Optional client_id, project_id to filter',
+      list_recharges: 'Optional client_id, status to filter',
+      list_requests: 'Optional client_id, status to filter',
+    },
   }),
 
   // ── Clients (profiles with role=client) ──
