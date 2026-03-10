@@ -1201,6 +1201,11 @@ Body (JSON):
             </CardContent>
           </Card>
         </TabsContent>
+
+        {/* ── TAB: Integrações Salvas ──────────────────────── */}
+        <TabsContent value="integrations" className="mt-4">
+          <IntegrationsManager />
+        </TabsContent>
       </Tabs>
     </div>
   );
