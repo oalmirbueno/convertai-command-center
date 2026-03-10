@@ -1,6 +1,12 @@
 project_id = "gicbrgagstyvbaaumprj"
 
+[functions.api-gateway]
+verify_jwt = false
+
 [functions.check-renewals]
+verify_jwt = false
+
+[functions.check-task-reminders]
 verify_jwt = false
 
 [functions.manage-team]
