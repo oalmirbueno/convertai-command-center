@@ -68,10 +68,10 @@ const actionDocs: {
     category: "Clientes",
     icon: "👥",
     actions: [
-      { name: "list_clients", desc: "Lista todos os clientes", optional: ["plan_status", "limit"], example: { action: "list_clients", limit: 10 }, responseExample: { success: true, data: [{ id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", plan_name: "Pro" }] } },
-      { name: "get_client", desc: "Busca um cliente por ID", required: ["client_id"], example: { action: "get_client", client_id: "uuid-aqui" } },
+      { name: "list_clients", desc: "Lista todos os clientes", optional: ["plan_status", "limit"], example: { action: "list_clients", limit: 10 }, responseExample: { success: true, data: [{ id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", plan_name: "Pro", plan_value: 2500 }] } },
+      { name: "get_client", desc: "Busca um cliente por ID", required: ["client_id"], example: { action: "get_client", client_id: "uuid-aqui" }, responseExample: { success: true, data: { id: "uuid", full_name: "João Silva", email: "joao@empresa.com", company_name: "Empresa X", plan_status: "active", phone: "11999999999" } } },
       { name: "create_client", desc: "Cria um novo cliente (cria conta + perfil)", required: ["email", "full_name"], optional: ["password", "company_name", "phone", "plan_name", "plan_value", "plan_renewal_date"], example: { action: "create_client", email: "novo@empresa.com", full_name: "João Silva", company_name: "Empresa X", plan_name: "Pro", plan_value: 2500 }, responseExample: { success: true, data: { id: "novo-uuid", email: "novo@empresa.com" } } },
-      { name: "update_client", desc: "Atualiza dados de um cliente", required: ["client_id"], optional: ["full_name", "company_name", "phone", "plan_name", "plan_value", "plan_status", "plan_renewal_date"], example: { action: "update_client", client_id: "uuid", plan_status: "overdue" } },
+      { name: "update_client", desc: "Atualiza dados de um cliente", required: ["client_id"], optional: ["full_name", "company_name", "phone", "plan_name", "plan_value", "plan_status", "plan_renewal_date"], example: { action: "update_client", client_id: "uuid", plan_status: "overdue" }, responseExample: { success: true, data: { id: "uuid", full_name: "João Silva", plan_status: "overdue" } } },
     ],
   },
   {
