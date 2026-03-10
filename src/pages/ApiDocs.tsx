@@ -166,10 +166,10 @@ const actionDocs: {
     category: "Equipe & Checklist",
     icon: "👨‍💻",
     actions: [
-      { name: "list_team", desc: "Lista membros da equipe (exceto clientes)", example: { action: "list_team" } },
-      { name: "create_comment", desc: "Adiciona comentário a uma tarefa", required: ["task_id", "author_id", "content"], example: { action: "create_comment", task_id: "uuid", author_id: "uuid", content: "Ficou ótimo!" } },
-      { name: "create_checklist_item", desc: "Adiciona item de checklist", required: ["task_id", "created_by", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", created_by: "uuid", title: "Revisar cores" } },
-      { name: "update_checklist_item", desc: "Atualiza item de checklist", required: ["item_id"], example: { action: "update_checklist_item", item_id: "uuid", checked: true } },
+      { name: "list_team", desc: "Lista membros da equipe (exceto clientes)", example: { action: "list_team" }, responseExample: { success: true, data: [{ user_id: "uuid", role: "design", profiles: { full_name: "Ana Designer", email: "ana@equipe.com" } }] } },
+      { name: "create_comment", desc: "Adiciona comentário a uma tarefa", required: ["task_id", "author_id", "content"], example: { action: "create_comment", task_id: "uuid", author_id: "uuid", content: "Ficou ótimo!" }, responseExample: { success: true, data: { id: "novo-uuid", content: "Ficou ótimo!", created_at: "2026-03-10T12:00:00Z" } } },
+      { name: "create_checklist_item", desc: "Adiciona item de checklist", required: ["task_id", "created_by", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", created_by: "uuid", title: "Revisar cores" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Revisar cores", checked: false } } },
+      { name: "update_checklist_item", desc: "Atualiza item de checklist", required: ["item_id"], example: { action: "update_checklist_item", item_id: "uuid", checked: true }, responseExample: { success: true, data: { id: "uuid", checked: true } } },
     ],
   },
 ];
