@@ -136,11 +136,11 @@ const actionDocs: {
     category: "Pedidos & Briefings",
     icon: "📋",
     actions: [
-      { name: "list_requests", desc: "Lista pedidos de clientes", optional: ["client_id", "status", "limit"], example: { action: "list_requests", status: "new" } },
-      { name: "create_request", desc: "Cria pedido", required: ["client_id", "title", "description"], optional: ["priority", "project_id"], example: { action: "create_request", client_id: "uuid", title: "Novo post", description: "Preciso de um post para Instagram" } },
-      { name: "update_request", desc: "Atualiza pedido", required: ["request_id"], example: { action: "update_request", request_id: "uuid", status: "done" } },
-      { name: "list_briefings", desc: "Lista briefings", optional: ["client_id", "submitted", "limit"], example: { action: "list_briefings" } },
-      { name: "get_briefing", desc: "Busca briefing por ID", required: ["briefing_id"], example: { action: "get_briefing", briefing_id: "uuid" } },
+      { name: "list_requests", desc: "Lista pedidos de clientes", optional: ["client_id", "status", "limit"], example: { action: "list_requests", status: "new" }, responseExample: { success: true, data: [{ id: "uuid", title: "Novo post", status: "new", priority: "normal", client_id: "uuid" }] } },
+      { name: "create_request", desc: "Cria pedido", required: ["client_id", "title", "description"], optional: ["priority", "project_id"], example: { action: "create_request", client_id: "uuid", title: "Novo post", description: "Preciso de um post para Instagram" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Novo post", status: "new" } } },
+      { name: "update_request", desc: "Atualiza pedido", required: ["request_id"], example: { action: "update_request", request_id: "uuid", status: "done" }, responseExample: { success: true, data: { id: "uuid", status: "done" } } },
+      { name: "list_briefings", desc: "Lista briefings", optional: ["client_id", "submitted", "limit"], example: { action: "list_briefings" }, responseExample: { success: true, data: [{ id: "uuid", client_id: "uuid", submitted: true, token: "abc123" }] } },
+      { name: "get_briefing", desc: "Busca briefing por ID", required: ["briefing_id"], example: { action: "get_briefing", briefing_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", responses: {}, submitted: true, client_id: "uuid" } } },
     ],
   },
   {
