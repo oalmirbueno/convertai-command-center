@@ -147,9 +147,9 @@ const actionDocs: {
     category: "Feeds & Arquivos",
     icon: "📂",
     actions: [
-      { name: "create_update", desc: "Cria update no feed de um projeto", required: ["project_id", "author_id", "message", "update_type"], example: { action: "create_update", project_id: "uuid", author_id: "uuid", message: "Deploy realizado!", update_type: "milestone" } },
-      { name: "list_files", desc: "Lista arquivos", optional: ["client_id", "project_id", "approval_status", "limit"], example: { action: "list_files", project_id: "uuid" } },
-      { name: "update_file", desc: "Atualiza arquivo (aprovação, feedback)", required: ["file_id"], example: { action: "update_file", file_id: "uuid", approval_status: "approved" } },
+      { name: "create_update", desc: "Cria update no feed de um projeto", required: ["project_id", "author_id", "message", "update_type"], example: { action: "create_update", project_id: "uuid", author_id: "uuid", message: "Deploy realizado!", update_type: "milestone" }, responseExample: { success: true, data: { id: "novo-uuid", message: "Deploy realizado!", update_type: "milestone" } } },
+      { name: "list_files", desc: "Lista arquivos", optional: ["client_id", "project_id", "approval_status", "limit"], example: { action: "list_files", project_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", file_name: "banner.png", approval_status: "pending", file_url: "https://..." }] } },
+      { name: "update_file", desc: "Atualiza arquivo (aprovação, feedback)", required: ["file_id"], example: { action: "update_file", file_id: "uuid", approval_status: "approved" }, responseExample: { success: true, data: { id: "uuid", approval_status: "approved" } } },
     ],
   },
   {
