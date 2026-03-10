@@ -106,14 +106,42 @@ export default function AdminDashboard() {
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
-  const stats = [
-    { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
-    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
-    { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
-    { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
-  ];
+  // Individual project payments
+  const individualPaidThisMonth = (projectPayments || []).reduce((sum: number, pp: any) => {
+    const paidThisMonth = (pp.installments || []).filter((i: any) => {
+      if (i.status !== "paid" || !i.paid_date) return false;
+      const d = new Date(i.paid_date);
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    });
+    return sum + paidThisMonth.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  }, 0);
 
-  // Individual project payments summary
+  const pendingBillsThisMonth = pendingBills
+    .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
+    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const individualPendingThisMonth = (projectPayments || []).reduce((sum: number, pp: any) => {
+    const pending = (pp.installments || []).filter((i: any) => {
+      if (i.status !== "pending") return false;
+      const d = new Date(i.due_date);
+      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+    });
+    return sum + pending.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  }, 0);
+
+  const in7days = new Date(now);
+  in7days.setDate(in7days.getDate() + 7);
+  const dueSoon7Billing = pendingBills
+    .filter((b: any) => { const d = new Date(b.due_date); return d >= now && d <= in7days; })
+    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const dueSoon7Individual = (projectPayments || []).reduce((sum: number, pp: any) => {
+    const soon = (pp.installments || []).filter((i: any) => {
+      if (i.status !== "pending") return false;
+      const d = new Date(i.due_date);
+      return d >= now && d <= in7days;
+    });
+    return sum + soon.reduce((s: number, i: any) => s + Number(i.amount), 0);
+  }, 0);
+
   const individualPaid = (projectPayments || []).reduce((sum: number, pp: any) => {
     const paidInstallments = (pp.installments || []).filter((i: any) => i.status === "paid");
     return sum + paidInstallments.reduce((s: number, i: any) => s + Number(i.amount), 0);
@@ -125,11 +153,22 @@ export default function AdminDashboard() {
     return sum + overdue.reduce((s: number, i: any) => s + Number(i.amount), 0);
   }, 0);
 
+  const totalReceivedThisMonth = monthlyRevenue + individualPaidThisMonth;
+  const totalPendingThisMonth = pendingBillsThisMonth + individualPendingThisMonth;
+  const totalDueSoon7 = dueSoon7Billing + dueSoon7Individual;
+
+  const stats = [
+    { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
+    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
+    { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
+    { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
+  ];
+
   const financeStats = [
-    { label: "Receita Mensal", value: fmt(monthlyRevenue), color: "bg-success" },
-    { label: "A Receber (Total)", value: fmt(pendingTotal + individualPending), color: "bg-warning", sub: `AcelerIQ ${fmt(pendingTotal)} · SiteBolt ${fmt(individualPending)}` },
-    { label: "Total Recebido", value: fmt(receivedTotal + individualPaid), color: "bg-info", sub: `AcelerIQ ${fmt(receivedTotal)} · SiteBolt ${fmt(individualPaid)}` },
-    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: `AcelerIQ ${fmt(overdueTotal)} · SiteBolt ${fmt(individualOverdue)}` },
+    { label: "Recebido no Mês", value: fmt(totalReceivedThisMonth), color: "bg-success", sub: `Recorrente ${fmt(monthlyRevenue)} · Projetos ${fmt(individualPaidThisMonth)}` },
+    { label: "Pendente do Mês", value: fmt(totalPendingThisMonth), color: "bg-warning", sub: `Recorrente ${fmt(pendingBillsThisMonth)} · Projetos ${fmt(individualPendingThisMonth)}` },
+    { label: "Vence em 7 dias", value: fmt(totalDueSoon7), color: totalDueSoon7 > 0 ? "bg-warning" : "bg-muted-foreground", sub: `Recorrente ${fmt(dueSoon7Billing)} · Projetos ${fmt(dueSoon7Individual)}` },
+    { label: "Atrasado", value: fmt(overdueTotal + individualOverdue), color: "bg-destructive", sub: `Recorrente ${fmt(overdueTotal)} · Projetos ${fmt(individualOverdue)}` },
   ];
 
   const formatDate = (d: string) => {
