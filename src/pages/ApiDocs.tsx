@@ -118,10 +118,10 @@ const actionDocs: {
     category: "Financeiro",
     icon: "💰",
     actions: [
-      { name: "list_billing", desc: "Lista cobranças", optional: ["client_id", "status", "limit"], example: { action: "list_billing", status: "pending" } },
-      { name: "create_billing", desc: "Cria cobrança", required: ["client_id", "amount", "due_date", "type"], optional: ["description", "status", "platform"], example: { action: "create_billing", client_id: "uuid", amount: 2500, due_date: "2026-04-01", type: "mensalidade" } },
-      { name: "update_billing", desc: "Atualiza cobrança", required: ["billing_id"], example: { action: "update_billing", billing_id: "uuid", status: "paid", paid_date: "2026-03-09" } },
-      { name: "list_payments", desc: "Lista pagamentos de projetos com parcelas", optional: ["client_id", "project_id", "limit"], example: { action: "list_payments", client_id: "uuid" } },
+      { name: "list_billing", desc: "Lista cobranças", optional: ["client_id", "status", "limit"], example: { action: "list_billing", status: "pending" }, responseExample: { success: true, data: [{ id: "uuid", amount: 2500, status: "pending", due_date: "2026-04-01", type: "mensalidade" }] } },
+      { name: "create_billing", desc: "Cria cobrança", required: ["client_id", "amount", "due_date", "type"], optional: ["description", "status", "platform"], example: { action: "create_billing", client_id: "uuid", amount: 2500, due_date: "2026-04-01", type: "mensalidade" }, responseExample: { success: true, data: { id: "novo-uuid", amount: 2500, status: "pending" } } },
+      { name: "update_billing", desc: "Atualiza cobrança", required: ["billing_id"], example: { action: "update_billing", billing_id: "uuid", status: "paid", paid_date: "2026-03-09" }, responseExample: { success: true, data: { id: "uuid", status: "paid", paid_date: "2026-03-09" } } },
+      { name: "list_payments", desc: "Lista pagamentos de projetos com parcelas", optional: ["client_id", "project_id", "limit"], example: { action: "list_payments", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", total_value: 5000, entry_amount: 2500, installments_count: 3, payment_installments: [] }] } },
     ],
   },
   {
