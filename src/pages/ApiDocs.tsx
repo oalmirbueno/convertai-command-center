@@ -128,8 +128,8 @@ const actionDocs: {
     category: "Notificações",
     icon: "🔔",
     actions: [
-      { name: "send_notification", desc: "Envia notificação para um usuário", required: ["user_id", "message", "notification_type"], optional: ["link"], example: { action: "send_notification", user_id: "uuid", message: "Novo arquivo disponível!", notification_type: "update", link: "/aprovacoes" } },
-      { name: "list_notifications", desc: "Lista notificações de um usuário", required: ["user_id"], optional: ["read", "limit"], example: { action: "list_notifications", user_id: "uuid", read: false } },
+      { name: "send_notification", desc: "Envia notificação para um usuário", required: ["user_id", "message", "notification_type"], optional: ["link"], example: { action: "send_notification", user_id: "uuid", message: "Novo arquivo disponível!", notification_type: "update", link: "/aprovacoes" }, responseExample: { success: true, data: { id: "novo-uuid", message: "Novo arquivo disponível!", read: false } } },
+      { name: "list_notifications", desc: "Lista notificações de um usuário", required: ["user_id"], optional: ["read", "limit"], example: { action: "list_notifications", user_id: "uuid", read: false }, responseExample: { success: true, data: [{ id: "uuid", message: "Arquivo aprovado", notification_type: "approval", read: false, created_at: "2026-03-10T12:00:00Z" }] } },
     ],
   },
   {
