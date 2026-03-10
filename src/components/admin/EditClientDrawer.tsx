@@ -104,6 +104,70 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     },
     enabled: !!client?.id,
   });
+
+  // Executive summary queries
+  const { data: clientProjects } = useQuery({
+    queryKey: ["client-exec-projects", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("projects").select("id, name, status, progress, project_type, deadline")
+        .eq("client_id", client.id).order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  const clientProjectIds = (clientProjects || []).map((p: any) => p.id);
+
+  const { data: clientTasks } = useQuery({
+    queryKey: ["client-exec-tasks", client?.id, clientProjectIds.join(",")],
+    queryFn: async () => {
+      if (!clientProjectIds.length) return [];
+      const { data } = await supabase.from("tasks").select("id, status, priority")
+        .in("project_id", clientProjectIds);
+      return data || [];
+    },
+    enabled: !!client?.id && clientProjectIds.length > 0,
+  });
+
+  const { data: clientFiles } = useQuery({
+    queryKey: ["client-exec-files", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("files").select("id, approval_status, created_at")
+        .eq("client_id", client.id).order("created_at", { ascending: false }).limit(20);
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  const { data: clientReports } = useQuery({
+    queryKey: ["client-exec-reports", client?.id],
+    queryFn: async () => {
+      if (!clientProjectIds.length) return [];
+      const { data } = await supabase.from("reports").select("id, status")
+        .in("project_id", clientProjectIds);
+      return data || [];
+    },
+    enabled: !!client?.id && clientProjectIds.length > 0,
+  });
+
+  const { data: clientBilling } = useQuery({
+    queryKey: ["client-exec-billing", client?.id],
+    queryFn: async () => {
+      const { data } = await supabase.from("billing").select("id, status, amount, due_date")
+        .eq("client_id", client.id);
+      return data || [];
+    },
+    enabled: !!client?.id,
+  });
+
+  // Compute executive metrics
+  const execActiveProjects = (clientProjects || []).filter((p: any) => p.status !== "done").length;
+  const execOpenTasks = (clientTasks || []).filter((t: any) => t.status !== "done").length;
+  const execUrgentTasks = (clientTasks || []).filter((t: any) => (t.priority === "urgent" || t.priority === "high") && t.status !== "done").length;
+  const execPendingFiles = (clientFiles || []).filter((f: any) => f.approval_status === "pending").length;
+  const execPublishedReports = (clientReports || []).filter((r: any) => r.status === "published").length;
+  const execPendingBills = (clientBilling || []).filter((b: any) => b.status === "pending").length;
+  const execOverdueBills = (clientBilling || []).filter((b: any) => b.status === "pending" && new Date(b.due_date) < new Date()).length;
   useEffect(() => {
     if (client) {
       setFullName(client.full_name || "");
