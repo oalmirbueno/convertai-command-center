@@ -157,6 +157,13 @@ export default function AdminDashboard() {
   const totalPendingThisMonth = pendingBillsThisMonth + individualPendingThisMonth;
   const totalDueSoon7 = dueSoon7Billing + dueSoon7Individual;
 
+  const stats = [
+    { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
+    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
+    { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
+    { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
+  ];
+
   const financeStats = [
     { label: "Recebido no Mês", value: fmt(totalReceivedThisMonth), color: "bg-success", sub: `Recorrente ${fmt(monthlyRevenue)} · Projetos ${fmt(individualPaidThisMonth)}` },
     { label: "Pendente do Mês", value: fmt(totalPendingThisMonth), color: "bg-warning", sub: `Recorrente ${fmt(pendingBillsThisMonth)} · Projetos ${fmt(individualPendingThisMonth)}` },
