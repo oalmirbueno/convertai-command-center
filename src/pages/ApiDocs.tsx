@@ -78,11 +78,11 @@ const actionDocs: {
     category: "Projetos",
     icon: "📁",
     actions: [
-      { name: "list_projects", desc: "Lista projetos", optional: ["client_id", "status", "limit"], example: { action: "list_projects", client_id: "uuid" } },
-      { name: "get_project", desc: "Busca projeto com milestones e tasks", required: ["project_id"], example: { action: "get_project", project_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", name: "Site Novo", status: "active", progress: 45, milestones: [], tasks: [] } } },
-      { name: "create_project", desc: "Cria um projeto", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status", "created_by"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" } },
-      { name: "update_project", desc: "Atualiza um projeto", required: ["project_id"], example: { action: "update_project", project_id: "uuid", status: "active", progress: 50 } },
-      { name: "delete_project", desc: "Exclui um projeto", required: ["project_id"], example: { action: "delete_project", project_id: "uuid" } },
+      { name: "list_projects", desc: "Lista projetos", optional: ["client_id", "status", "limit"], example: { action: "list_projects", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", name: "Site Novo", status: "active", progress: 45, project_type: "website", deadline: "2026-04-10" }] } },
+      { name: "get_project", desc: "Busca projeto com milestones e tasks", required: ["project_id"], example: { action: "get_project", project_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", name: "Site Novo", status: "active", progress: 45, milestones: [{ id: "uuid", title: "Entrega v1" }], tasks: [{ id: "uuid", title: "Landing page", status: "doing" }] } } },
+      { name: "create_project", desc: "Cria um projeto", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status", "created_by"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" }, responseExample: { success: true, data: { id: "novo-uuid", name: "Site Novo", status: "planning", progress: 0 } } },
+      { name: "update_project", desc: "Atualiza um projeto", required: ["project_id"], example: { action: "update_project", project_id: "uuid", status: "active", progress: 50 }, responseExample: { success: true, data: { id: "uuid", status: "active", progress: 50 } } },
+      { name: "delete_project", desc: "Exclui um projeto", required: ["project_id"], example: { action: "delete_project", project_id: "uuid" }, responseExample: { success: true, data: { deleted: "uuid" } } },
     ],
   },
   {
