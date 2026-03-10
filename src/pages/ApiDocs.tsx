@@ -60,8 +60,8 @@ const actionDocs: {
     icon: "🔧",
     actions: [
       { name: "health", desc: "Verifica se o gateway está online", example: { action: "health" }, responseExample: { success: true, data: { status: "ok", version: "1.0", timestamp: "2026-03-10T12:00:00.000Z" } } },
-      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "..."], docs: "POST with { action, ...params }" } } },
-      { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 } },
+      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "...44 total"], docs: "POST with { action, ...params }" } } },
+      { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 }, responseExample: { success: true, data: [{ id: "uuid", action: "list_clients", status_code: 200, key_name: "n8n-prod", ip_address: "187.x.x.x", created_at: "2026-03-10T12:00:00Z" }] } },
     ],
   },
   {
