@@ -3,8 +3,9 @@ import {
   Copy, Check, ExternalLink, Shield, Zap, Code2, Key, Plus, Trash2,
   Eye, EyeOff, BookOpen, Terminal, AlertTriangle, Server, Clock, Hash,
   Globe, Lock, FileJson, ChevronDown, ChevronRight, Info, CheckCircle2,
-  Play, Loader2, Webhook, Database, Activity, RefreshCw, Search
+  Play, Loader2, Webhook, Database, Activity, RefreshCw, Search, Settings2
 } from "lucide-react";
+import IntegrationsManager from "@/components/admin/IntegrationsManager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
