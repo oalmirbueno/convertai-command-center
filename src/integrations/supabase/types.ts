@@ -485,6 +485,7 @@ export type Database = {
           due_date: string
           id: string
           installment_number: number
+          paid_amount: number | null
           paid_date: string | null
           payment_id: string
           status: string
@@ -496,6 +497,7 @@ export type Database = {
           due_date: string
           id?: string
           installment_number: number
+          paid_amount?: number | null
           paid_date?: string | null
           payment_id: string
           status?: string
@@ -507,6 +509,7 @@ export type Database = {
           due_date?: string
           id?: string
           installment_number?: number
+          paid_amount?: number | null
           paid_date?: string | null
           payment_id?: string
           status?: string
