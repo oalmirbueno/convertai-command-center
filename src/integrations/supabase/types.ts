@@ -477,6 +477,48 @@ export type Database = {
           },
         ]
       }
+      payment_audit_log: {
+        Row: {
+          action: string
+          created_at: string
+          entity_id: string
+          entity_type: string
+          id: string
+          new_amount: number | null
+          new_status: string | null
+          notes: string | null
+          old_amount: number | null
+          old_status: string | null
+          performed_by: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          entity_id: string
+          entity_type: string
+          id?: string
+          new_amount?: number | null
+          new_status?: string | null
+          notes?: string | null
+          old_amount?: number | null
+          old_status?: string | null
+          performed_by?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          entity_id?: string
+          entity_type?: string
+          id?: string
+          new_amount?: number | null
+          new_status?: string | null
+          notes?: string | null
+          old_amount?: number | null
+          old_status?: string | null
+          performed_by?: string | null
+        }
+        Relationships: []
+      }
       payment_installments: {
         Row: {
           amount: number
