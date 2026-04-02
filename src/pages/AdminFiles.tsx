@@ -17,8 +17,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
 const FOLDERS = [
