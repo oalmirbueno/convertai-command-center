@@ -101,9 +101,14 @@ export default function AdminFiles() {
       valid.push(file);
     }
     if (valid.length === 0) return;
-    setUploadFiles(prev => [...prev, ...valid]);
-    if (uploadFiles.length === 0 && valid.length > 0) {
+    if (uploadMode === "single") {
+      setUploadFiles([valid[0]]);
       setUploadName(valid[0].name);
+    } else {
+      setUploadFiles(prev => [...prev, ...valid]);
+      if (uploadFiles.length === 0 && valid.length > 0) {
+        setUploadName(valid[0].name);
+      }
     }
     setUploadFolder(activeFolder);
   };
