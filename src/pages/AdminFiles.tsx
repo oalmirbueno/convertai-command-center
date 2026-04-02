@@ -48,7 +48,49 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
   none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
 
-export default function AdminFiles() {
+function CarouselSlider({ files }: { files: any[] }) {
+  const [idx, setIdx] = useState(0);
+  const isImg = (name: string) => {
+    const ext = name?.split(".").pop()?.toLowerCase() || "";
+    return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+  };
+  if (files.length === 1) {
+    return <FilePreviewContent fileName={files[0].file_name} fileUrl={files[0].file_url} />;
+  }
+  const current = files[idx];
+  return (
+    <div className="relative group">
+      <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[400px]">
+        {isImg(current.file_name) ? (
+          <img src={current.file_url} alt={current.file_name} className="max-w-full max-h-[400px] object-contain" />
+        ) : (
+          <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+        )}
+      </div>
+      <button
+        className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => setIdx((idx - 1 + files.length) % files.length)}
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <button
+        className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => setIdx((idx + 1) % files.length)}
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {files.map((_: any, i: number) => (
+          <button key={i} onClick={() => setIdx(i)} className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`} />
+        ))}
+      </div>
+      <span className="absolute top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+        🎠 {idx + 1}/{files.length}
+      </span>
+    </div>
+  );
+}
+
   const { user } = useAuth();
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
