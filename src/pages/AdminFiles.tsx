@@ -441,6 +441,20 @@ export default function AdminFiles() {
                     <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
+                        <FolderInput className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {FOLDERS.filter(fo => fo.id !== (f.folder || "estrategicos")).map(fo => (
+                        <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); handleMoveFolder(f.id, fo.id); }}>
+                          {fo.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                     onClick={(e) => e.stopPropagation()}>
