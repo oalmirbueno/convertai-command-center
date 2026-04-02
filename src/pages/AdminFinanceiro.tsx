@@ -787,6 +787,7 @@ export default function AdminFinanceiro() {
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
           {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md">📋 Histórico</TabsTrigger>}
         </TabsList>
 
         {/* Tab: Overview */}
