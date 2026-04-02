@@ -14,9 +14,39 @@ import {
 import { FileImage, FileText, File, ChevronLeft, ChevronRight, Images } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
+function useSwipe(onLeft: () => void, onRight: () => void, threshold = 50) {
+  const start = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = useCallback((e: React.TouchEvent) => {
+    start.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, []);
+  const onTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (!start.current) return;
+    const dx = e.changedTouches[0].clientX - start.current.x;
+    const dy = e.changedTouches[0].clientY - start.current.y;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
+      dx < 0 ? onLeft() : onRight();
+    }
+    start.current = null;
+  }, [onLeft, onRight, threshold]);
+  return { onTouchStart, onTouchEnd };
+}
+
+function SwipeableGallery({ previewIndex, setPreviewIndex, totalItems, children }: {
+  previewIndex: number; setPreviewIndex: React.Dispatch<React.SetStateAction<number>>; totalItems: number; children: React.ReactNode;
+}) {
+  const goNext = useCallback(() => setPreviewIndex(i => Math.min(totalItems - 1, i + 1)), [totalItems, setPreviewIndex]);
+  const goPrev = useCallback(() => setPreviewIndex(i => Math.max(0, i - 1)), [setPreviewIndex]);
+  const swipe = useSwipe(goNext, goPrev);
+  return (
+    <div className="relative touch-pan-y" onTouchStart={swipe.onTouchStart} onTouchEnd={swipe.onTouchEnd}>
+      {children}
+    </div>
+  );
+}
+
 const approvalBadge: Record<string, { className: string; label: string }> = {
-  pending: { className: "bg-warning/10 text-warning", label: "⏳ Aguardando Aprovação" },
-  approved: { className: "bg-success/10 text-success", label: "✓ Aprovado" },
+  pending: { className: "bg-warning/10 text-warning", label: "\u23F3 Aguardando Aprova\u00E7\u00E3o" },
+  approved: { className: "bg-success/10 text-success", label: "\u2713 Aprovado" },
   rejected: { className: "bg-destructive/10 text-destructive", label: "Ajuste Solicitado" },
   none: { className: "bg-muted text-muted-foreground", label: "Sem status" },
 };
