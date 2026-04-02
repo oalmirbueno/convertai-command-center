@@ -1273,6 +1273,67 @@ export default function AdminFinanceiro() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Pay Modal */}
+      <Dialog open={!!payModal} onOpenChange={() => setPayModal(null)}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader><DialogTitle className="text-foreground">Registrar Pagamento</DialogTitle></DialogHeader>
+          {payModal && (
+            <div className="space-y-4">
+              <div className="bg-secondary/50 rounded-lg p-3">
+                <p className="text-[13px] text-foreground font-medium">{payModal.label}</p>
+                <p className="text-sm font-mono text-foreground mt-1">Valor: {fmt(payModal.amount)}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPayType("full")}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
+                    payType === "full" ? "bg-success/15 border-success/30 text-success" : "bg-secondary border-border text-muted-foreground"
+                  }`}
+                >
+                  ✅ Pago Total
+                </button>
+                <button
+                  onClick={() => setPayType("partial")}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
+                    payType === "partial" ? "bg-warning/15 border-warning/30 text-warning" : "bg-secondary border-border text-muted-foreground"
+                  }`}
+                >
+                  💳 Pagou Parte
+                </button>
+              </div>
+
+              {payType === "partial" && (
+                <div>
+                  <label className="text-xs text-muted-foreground">Valor pago (R$)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={payPartialAmount}
+                    onChange={e => setPayPartialAmount(e.target.value)}
+                    className="mt-1"
+                    placeholder={`Máx: ${payModal.amount.toFixed(2)}`}
+                  />
+                  {payPartialAmount && parseFloat(payPartialAmount) > 0 && parseFloat(payPartialAmount) < payModal.amount && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Restante: {fmt(payModal.amount - parseFloat(payPartialAmount))}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handlePayFromPanel}
+                disabled={payType === "partial" && (!payPartialAmount || parseFloat(payPartialAmount) <= 0)}
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-success text-success-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {payType === "full" ? `Confirmar — ${fmt(payModal.amount)}` : `Confirmar — ${fmt(parseFloat(payPartialAmount) || 0)}`}
+              </button>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
