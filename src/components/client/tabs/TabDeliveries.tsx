@@ -228,8 +228,12 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
 
           {currentPreviewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {/* Gallery slider */}
-              <div className="relative">
+              {/* Gallery slider with swipe */}
+              <SwipeableGallery
+                previewIndex={previewIndex}
+                setPreviewIndex={setPreviewIndex}
+                totalItems={previewGroup?.children.length || 1}
+              >
                 <FilePreviewContent fileName={currentPreviewFile.file_name} fileUrl={currentPreviewFile.file_url} />
 
                 {previewGroup && previewGroup.children.length > 1 && (
