@@ -1,15 +1,24 @@
 import { ExternalLink, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const isImage = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
+const getFileExtension = (value?: string) => {
+  if (!value) return "";
+  const normalized = value.split("?")[0].split("#")[0];
+  return normalized.split(".").pop()?.toLowerCase() || "";
+};
+
+const resolveExtension = (fileName: string, fileUrl?: string) =>
+  getFileExtension(fileName) || getFileExtension(fileUrl);
+
+const isImage = (fileName: string, fileUrl?: string) => {
+  const ext = resolveExtension(fileName, fileUrl);
   return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
 };
 
-const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
+const isPdf = (fileName: string, fileUrl?: string) => resolveExtension(fileName, fileUrl) === "pdf";
 
-const isVideo = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
+const isVideo = (fileName: string, fileUrl?: string) => {
+  const ext = resolveExtension(fileName, fileUrl);
   return ["mp4", "webm", "mov"].includes(ext);
 };
 
