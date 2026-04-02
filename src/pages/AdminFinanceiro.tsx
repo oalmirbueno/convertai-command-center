@@ -64,6 +64,9 @@ export default function AdminFinanceiro() {
   const [receivedFilter, setReceivedFilter] = useState<string>("all");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
+  const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
+  const [payType, setPayType] = useState<"full" | "partial">("full");
+  const [payPartialAmount, setPayPartialAmount] = useState("");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
@@ -355,6 +358,65 @@ export default function AdminFinanceiro() {
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
+  const handlePayFromPanel = async () => {
+    if (!payModal) return;
+    const today = new Date().toISOString().split("T")[0];
+    const paidAmount = payType === "full" ? payModal.amount : (parseFloat(payPartialAmount) || 0);
+
+    if (payModal.type === "billing") {
+      if (payType === "full") {
+        await handleMarkPaid(payModal.id);
+      } else {
+        // Partial: update billing with partial info — mark as paid with partial amount note
+        const remaining = payModal.amount - paidAmount;
+        await supabase.from("billing").update({
+          status: "paid",
+          paid_date: today,
+          description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
+        }).eq("id", payModal.id);
+        // Create new billing for remaining
+        if (remaining > 0 && payModal.clientId) {
+          const original = (billing || []).find((b: any) => b.id === payModal.id);
+          await supabase.from("billing").insert({
+            client_id: payModal.clientId,
+            type: original?.type || "renewal",
+            amount: remaining,
+            due_date: original?.due_date || today,
+            description: `Saldo restante — ${fmt(remaining)}`,
+          });
+        }
+        if (payModal.clientId) {
+          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
+        }
+        queryClient.invalidateQueries({ queryKey: ["billing"] });
+        queryClient.invalidateQueries({ queryKey: ["clients"] });
+        toast.success("Pagamento parcial registrado!");
+      }
+    } else if (payModal.type === "installment") {
+      if (payType === "full") {
+        await supabase.from("payment_installments").update({
+          status: "paid",
+          paid_amount: payModal.amount,
+          paid_date: today,
+        }).eq("id", payModal.id);
+      } else {
+        const newStatus = paidAmount >= payModal.amount ? "paid" : "partial";
+        await supabase.from("payment_installments").update({
+          status: newStatus,
+          paid_amount: paidAmount,
+          paid_date: today,
+        }).eq("id", payModal.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
+      toast.success(payType === "full" ? "Parcela paga!" : "Pagamento parcial registrado!");
+    }
+
+    setPayModal(null);
+    setPayType("full");
+    setPayPartialAmount("");
+  };
+
   // Group wallets by client
   const walletsByClient: Record<string, any[]> = {};
   (wallets || []).forEach((w: any) => {
@@ -465,14 +527,14 @@ export default function AdminFinanceiro() {
 
         const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now };
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
         }) : [];
 
         const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
-          (pp.installments || []).filter((i: any) => i.status === "pending").map((i: any) => ({
+          (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
             id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount), due: i.due_date,
-            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now,
+            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
+            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now, itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
           }))
         ) : [];
 
@@ -482,7 +544,7 @@ export default function AdminFinanceiro() {
         ).map((c: any) => ({
           id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
-          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false,
+          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false, itemType: "extra" as const, clientId: c.id,
         })) : [];
 
         const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
@@ -495,19 +557,40 @@ export default function AdminFinanceiro() {
               <CreditCard className="w-3.5 h-3.5 text-warning" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento — A Receber ({allPending.length})</span>
             </div>
-            <div className="divide-y divide-border max-h-[320px] overflow-y-auto">
-              {allPending.map((item) => (
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
+              {allPending.map((item: any) => (
                 <div key={item.id} className="flex items-center gap-3 px-5 py-3">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] text-foreground truncate">{item.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{item.client}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.client}
+                      {item.paidSoFar > 0 && <span className="ml-1 text-success">(já pago: {fmt(item.paidSoFar)})</span>}
+                    </p>
                   </div>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
                   <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
                     {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
                   </span>
+                  {item.itemType !== "extra" && (
+                    <button
+                      onClick={() => {
+                        setPayModal({
+                          id: item.id,
+                          type: item.itemType,
+                          label: item.label,
+                          amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
+                          clientId: item.clientId,
+                          billingType: item.billingType,
+                        });
+                        setPayType("full");
+                        setPayPartialAmount("");
+                      }}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
+                    >
+                      💰 Pagar
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
@@ -1188,6 +1271,67 @@ export default function AdminFinanceiro() {
               Salvar
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Pay Modal */}
+      <Dialog open={!!payModal} onOpenChange={() => setPayModal(null)}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader><DialogTitle className="text-foreground">Registrar Pagamento</DialogTitle></DialogHeader>
+          {payModal && (
+            <div className="space-y-4">
+              <div className="bg-secondary/50 rounded-lg p-3">
+                <p className="text-[13px] text-foreground font-medium">{payModal.label}</p>
+                <p className="text-sm font-mono text-foreground mt-1">Valor: {fmt(payModal.amount)}</p>
+              </div>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setPayType("full")}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
+                    payType === "full" ? "bg-success/15 border-success/30 text-success" : "bg-secondary border-border text-muted-foreground"
+                  }`}
+                >
+                  ✅ Pago Total
+                </button>
+                <button
+                  onClick={() => setPayType("partial")}
+                  className={`flex-1 py-2 rounded-lg text-[12px] font-medium transition-colors cursor-pointer border ${
+                    payType === "partial" ? "bg-warning/15 border-warning/30 text-warning" : "bg-secondary border-border text-muted-foreground"
+                  }`}
+                >
+                  💳 Pagou Parte
+                </button>
+              </div>
+
+              {payType === "partial" && (
+                <div>
+                  <label className="text-xs text-muted-foreground">Valor pago (R$)</label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={payPartialAmount}
+                    onChange={e => setPayPartialAmount(e.target.value)}
+                    className="mt-1"
+                    placeholder={`Máx: ${payModal.amount.toFixed(2)}`}
+                  />
+                  {payPartialAmount && parseFloat(payPartialAmount) > 0 && parseFloat(payPartialAmount) < payModal.amount && (
+                    <p className="text-[11px] text-muted-foreground mt-1">
+                      Restante: {fmt(payModal.amount - parseFloat(payPartialAmount))}
+                    </p>
+                  )}
+                </div>
+              )}
+
+              <button
+                onClick={handlePayFromPanel}
+                disabled={payType === "partial" && (!payPartialAmount || parseFloat(payPartialAmount) <= 0)}
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-success text-success-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {payType === "full" ? `Confirmar — ${fmt(payModal.amount)}` : `Confirmar — ${fmt(parseFloat(payPartialAmount) || 0)}`}
+              </button>
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
