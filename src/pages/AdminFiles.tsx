@@ -76,6 +76,21 @@ export default function AdminFiles() {
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+
+  const handleRename = async () => {
+    if (!previewFile || !editNameValue.trim()) return;
+    try {
+      await supabase.from("files").update({ file_name: editNameValue.trim() }).eq("id", previewFile.id);
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      setPreviewFile({ ...previewFile, file_name: editNameValue.trim() });
+      setEditingName(false);
+      toast({ title: "Nome atualizado" });
+    } catch {
+      toast({ title: "Erro ao renomear", variant: "destructive" });
+    }
+  };
 
   const isImage = (name: string) => {
     const ext = name?.split(".").pop()?.toLowerCase() || "";
