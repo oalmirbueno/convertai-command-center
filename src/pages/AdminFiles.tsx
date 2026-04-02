@@ -522,8 +522,8 @@ export default function AdminFiles() {
           </div>
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
             <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
-            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Enviando..." : "Enviar"}
+            <Button onClick={handleUpload} disabled={uploadFiles.length === 0 || uploading}>
+              {uploading ? "Enviando..." : uploadFiles.length > 1 ? `Enviar ${uploadFiles.length} arquivos` : "Enviar"}
             </Button>
           </DialogFooter>
         </DialogContent>
