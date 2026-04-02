@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight,
 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
@@ -47,6 +47,49 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Rejeitado" },
   none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
+
+function CarouselSlider({ files }: { files: any[] }) {
+  const [idx, setIdx] = useState(0);
+  const isImg = (name: string) => {
+    const ext = name?.split(".").pop()?.toLowerCase() || "";
+    return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
+  };
+  if (files.length === 1) {
+    return <FilePreviewContent fileName={files[0].file_name} fileUrl={files[0].file_url} />;
+  }
+  const current = files[idx];
+  return (
+    <div className="relative group">
+      <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px] max-h-[400px]">
+        {isImg(current.file_name) ? (
+          <img src={current.file_url} alt={current.file_name} className="max-w-full max-h-[400px] object-contain" />
+        ) : (
+          <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+        )}
+      </div>
+      <button
+        className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => setIdx((idx - 1 + files.length) % files.length)}
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <button
+        className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1.5 opacity-0 group-hover:opacity-100 transition-opacity"
+        onClick={() => setIdx((idx + 1) % files.length)}
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+      <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {files.map((_: any, i: number) => (
+          <button key={i} onClick={() => setIdx(i)} className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`} />
+        ))}
+      </div>
+      <span className="absolute top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+        🎠 {idx + 1}/{files.length}
+      </span>
+    </div>
+  );
+}
 
 export default function AdminFiles() {
   const { user } = useAuth();
@@ -100,7 +143,18 @@ export default function AdminFiles() {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  // Build carousel children map
+  const childrenMap = new Map<string, any[]>();
+  (allFiles || []).forEach((f: any) => {
+    if (f.parent_file_id) {
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
+
   const filteredFiles = (allFiles || []).filter((f: any) => {
+    if (f.parent_file_id) return false; // hide carousel children
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     return true;
@@ -331,16 +385,25 @@ export default function AdminFiles() {
           {filteredFiles.map((f: any) => {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
+            const carouselChildren = childrenMap.get(f.id) || [];
+            const isCarousel = carouselChildren.length > 0;
             return (
               <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
                 <div className="flex items-center gap-3">
                   <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">
-                      {f.file_name}
-                      {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-medium text-foreground truncate">
+                        {f.file_name}
+                        {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
+                      </p>
+                      {isCarousel && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                          🎠 {carouselChildren.length + 1}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground">
                       {f.project?.name || "—"} • {formatDate(f.created_at)}
                     </p>
@@ -404,7 +467,7 @@ export default function AdminFiles() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
+              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
                   {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
