@@ -62,7 +62,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     );
   }
 
-  if (isVideo(fileName)) {
+  if (isVideo(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden p-2">
         <video
