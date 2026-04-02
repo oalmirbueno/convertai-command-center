@@ -13,8 +13,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+
+function CarouselSlider({ files }: { files: any[] }) {
+  const [idx, setIdx] = useState(0);
+  const current = files[idx];
+
+  if (!current) return null;
+  if (files.length === 1) {
+    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />;
+  }
+
+  return (
+    <div className="relative group">
+      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+      <button
+        type="button"
+        className="absolute z-10 left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + files.length) % files.length); }}
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        className="absolute z-10 right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % files.length); }}
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+      <div className="absolute z-10 bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {files.map((_: any, i: number) => (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+          />
+        ))}
+      </div>
+      <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+        🎠 {idx + 1}/{files.length}
+      </span>
+    </div>
+  );
+}
 
 const CLIENT_FOLDERS = [
   { id: "estrategicos", label: "📁 Estratégicos" },
