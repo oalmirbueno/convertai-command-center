@@ -418,27 +418,46 @@ export default function AdminFiles() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl h-40 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+              className={`border-2 border-dashed rounded-2xl min-h-[120px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
                 dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-              }`}
+              } ${uploadFiles.length > 0 ? "py-3" : "h-40"}`}
             >
               <Upload className="w-8 h-8 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
-                {uploadFile ? uploadFile.name : "Arraste ou clique para selecionar"}
+                {uploadFiles.length === 0
+                  ? "Arraste ou clique para selecionar (múltiplos para carrossel)"
+                  : `${uploadFiles.length} arquivo(s) selecionado(s)`}
               </p>
-              {uploadFile && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {(uploadFile.size / 1024 / 1024).toFixed(1)} MB
-                </p>
-              )}
+              <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione vários arquivos para enviar como carrossel</p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
               accept={ACCEPTED}
+              multiple
               className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length > 0) handleFilesSelect(files);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
             />
+
+            {uploadFiles.length > 0 && (
+              <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                {uploadFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg px-3 py-1.5">
+                    <FileImage className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                    <button onClick={(e) => { e.stopPropagation(); removeUploadFile(i); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-0.5">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-3">
               <div>
