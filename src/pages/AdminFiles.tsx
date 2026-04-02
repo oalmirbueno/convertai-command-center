@@ -65,7 +65,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
   const [uploadProject, setUploadProject] = useState("");
@@ -90,78 +90,107 @@ export default function AdminFiles() {
     return true;
   });
 
-  const handleFileSelect = (file: File) => {
-    if (file.size > MAX_SIZE) {
-      toast({ title: "Arquivo muito grande", description: "Máximo 50MB.", variant: "destructive" });
-      return;
+  const handleFilesSelect = (newFiles: File[]) => {
+    const valid: File[] = [];
+    for (const file of newFiles) {
+      if (file.size > MAX_SIZE) {
+        toast({ title: "Arquivo muito grande", description: `${file.name} excede 50MB.`, variant: "destructive" });
+        continue;
+      }
+      valid.push(file);
     }
-    setUploadFile(file);
-    setUploadName(file.name);
+    if (valid.length === 0) return;
+    setUploadFiles(prev => [...prev, ...valid]);
+    if (uploadFiles.length === 0 && valid.length > 0) {
+      setUploadName(valid[0].name);
+    }
     setUploadFolder(activeFolder);
+  };
+
+  const removeUploadFile = (index: number) => {
+    setUploadFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-  }, [activeFolder]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleFilesSelect(files);
+  }, [activeFolder, uploadFiles.length]);
 
   const handleUpload = async () => {
-    if (!uploadFile || !user || !selectedClient || selectedClient === "all") {
-      toast({ title: "Selecione um cliente", variant: "destructive" });
+    if (uploadFiles.length === 0 || !user || !selectedClient || selectedClient === "all") {
+      toast({ title: "Selecione um cliente e ao menos um arquivo", variant: "destructive" });
       return;
     }
     setUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
 
     try {
-      const ext = uploadFile.name.split(".").pop();
-      const path = `${selectedClient}/${Date.now()}.${ext}`;
-      setUploadProgress(30);
+      const totalFiles = uploadFiles.length;
+      const isCarousel = totalFiles > 1;
+      // For carousel: first file gets the main record, others are linked via parent_file_id
+      let parentFileId: string | null = null;
 
-      const { error: storageError } = await supabase.storage.from("files").upload(path, uploadFile);
-      if (storageError) throw storageError;
-      setUploadProgress(70);
+      for (let i = 0; i < totalFiles; i++) {
+        const file = uploadFiles[i];
+        const ext = file.name.split(".").pop();
+        const path = `${selectedClient}/${Date.now()}_${i}.${ext}`;
 
-      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+        const { error: storageError } = await supabase.storage.from("files").upload(path, file);
+        if (storageError) throw storageError;
 
-      await supabase.from("files").insert({
-        client_id: selectedClient,
-        file_name: uploadName || uploadFile.name,
-        file_url: urlData.publicUrl,
-        file_type: uploadType,
-        folder: uploadFolder,
-        uploaded_by: user.id,
-        project_id: uploadProject === "none" ? null : uploadProject || null,
-        approval_status: uploadApproval ? "pending" : "none",
-        caption: uploadCaption.trim() || null,
-        carousel_text: uploadCarousel.trim() || null,
-        description: uploadDescription.trim() || null,
-      });
-      setUploadProgress(90);
+        const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+
+        const fileName = i === 0
+          ? (uploadName || file.name)
+          : (isCarousel ? `${uploadName || uploadFiles[0].name} (${i + 1}/${totalFiles})` : file.name);
+
+        const { data: inserted } = await supabase.from("files").insert({
+          client_id: selectedClient,
+          file_name: fileName,
+          file_url: urlData.publicUrl,
+          file_type: isCarousel ? "creative" : uploadType,
+          folder: uploadFolder,
+          uploaded_by: user.id,
+          project_id: uploadProject === "none" ? null : uploadProject || null,
+          approval_status: uploadApproval ? "pending" : "none",
+          caption: i === 0 ? (uploadCaption.trim() || null) : null,
+          carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
+          description: i === 0 ? (uploadDescription.trim() || null) : null,
+          parent_file_id: parentFileId,
+        }).select("id").single();
+
+        if (i === 0 && inserted) {
+          parentFileId = inserted.id;
+        }
+
+        setUploadProgress(Math.round(((i + 1) / totalFiles) * 85) + 10);
+      }
 
       if (uploadApproval) {
+        const label = isCarousel ? `Carrossel para aprovação: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo para aprovação: ${uploadName}`;
         await supabase.from("notifications").insert({
           user_id: selectedClient,
-          message: `Novo arquivo para aprovação: ${uploadName}`,
+          message: label,
           notification_type: "approval",
           link: "/aprovacoes",
         });
       }
 
-      if (uploadProject) {
+      if (uploadProject && uploadProject !== "none") {
+        const label = isCarousel ? `Carrossel enviado: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo enviado: ${uploadName}`;
         await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
-          message: `Novo arquivo enviado: ${uploadName}`,
+          message: label,
           update_type: "creative",
         });
       }
 
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      toast({ title: "Arquivo enviado com sucesso" });
+      toast({ title: isCarousel ? `Carrossel enviado (${totalFiles} arquivos)` : "Arquivo enviado com sucesso" });
       setUploadOpen(false);
       resetUploadForm();
     } catch (err: any) {
@@ -171,7 +200,7 @@ export default function AdminFiles() {
   };
 
   const resetUploadForm = () => {
-    setUploadFile(null);
+    setUploadFiles([]);
     setUploadName("");
     setUploadProject("");
     setUploadType("documento");
@@ -389,27 +418,46 @@ export default function AdminFiles() {
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl h-40 flex flex-col items-center justify-center cursor-pointer transition-colors ${
+              className={`border-2 border-dashed rounded-2xl min-h-[120px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
                 dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-              }`}
+              } ${uploadFiles.length > 0 ? "py-3" : "h-40"}`}
             >
               <Upload className="w-8 h-8 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
-                {uploadFile ? uploadFile.name : "Arraste ou clique para selecionar"}
+                {uploadFiles.length === 0
+                  ? "Arraste ou clique para selecionar (múltiplos para carrossel)"
+                  : `${uploadFiles.length} arquivo(s) selecionado(s)`}
               </p>
-              {uploadFile && (
-                <p className="text-xs text-muted-foreground mt-1">
-                  {(uploadFile.size / 1024 / 1024).toFixed(1)} MB
-                </p>
-              )}
+              <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione vários arquivos para enviar como carrossel</p>
             </div>
             <input
               ref={fileInputRef}
               type="file"
               accept={ACCEPTED}
+              multiple
               className="hidden"
-              onChange={(e) => { if (e.target.files?.[0]) handleFileSelect(e.target.files[0]); }}
+              onChange={(e) => {
+                const files = Array.from(e.target.files || []);
+                if (files.length > 0) handleFilesSelect(files);
+                if (fileInputRef.current) fileInputRef.current.value = "";
+              }}
             />
+
+            {uploadFiles.length > 0 && (
+              <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
+                {uploadFiles.map((f, i) => (
+                  <div key={i} className="flex items-center gap-2 bg-secondary/50 border border-border rounded-lg px-3 py-1.5">
+                    <FileImage className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                    <span className="text-xs text-foreground truncate flex-1">{f.name}</span>
+                    <span className="text-[10px] text-muted-foreground shrink-0">{(f.size / 1024 / 1024).toFixed(1)}MB</span>
+                    <button onClick={(e) => { e.stopPropagation(); removeUploadFile(i); }}
+                      className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-0.5">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
 
             <div className="space-y-3">
               <div>
@@ -474,8 +522,8 @@ export default function AdminFiles() {
           </div>
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
             <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
-            <Button onClick={handleUpload} disabled={!uploadFile || uploading}>
-              {uploading ? "Enviando..." : "Enviar"}
+            <Button onClick={handleUpload} disabled={uploadFiles.length === 0 || uploading}>
+              {uploading ? "Enviando..." : uploadFiles.length > 1 ? `Enviar ${uploadFiles.length} arquivos` : "Enviar"}
             </Button>
           </DialogFooter>
         </DialogContent>
