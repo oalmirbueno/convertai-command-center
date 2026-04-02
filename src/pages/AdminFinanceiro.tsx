@@ -61,11 +61,18 @@ export default function AdminFinanceiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("payment_audit_log")
-        .select("*, performer:profiles!payment_audit_log_performed_by_fkey(full_name)")
+        .select("*")
         .order("created_at", { ascending: false })
         .limit(50);
       if (error) throw error;
-      return data || [];
+      // Fetch performer names
+      const performerIds = [...new Set((data || []).map((l: any) => l.performed_by).filter(Boolean))];
+      let performers: Record<string, string> = {};
+      if (performerIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", performerIds);
+        (profiles || []).forEach((p: any) => { performers[p.id] = p.full_name; });
+      }
+      return (data || []).map((l: any) => ({ ...l, performerName: performers[l.performed_by] || null }));
     },
     enabled: isAdmin,
   });
