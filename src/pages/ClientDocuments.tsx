@@ -288,7 +288,22 @@ export default function ClientDocuments() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
+              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewFile.file_url} download className="gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Baixar
+                  </a>
+                </Button>
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
               </p>
