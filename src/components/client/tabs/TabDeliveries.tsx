@@ -251,10 +251,10 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                       className="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 rounded-full bg-background/80 border border-border flex items-center justify-center hover:bg-background disabled:opacity-30 transition-all"
                     >
                       <ChevronRight className="w-4 h-4 text-foreground" />
-                    </button>
+                </button>
                   </>
                 )}
-              </div>
+              </SwipeableGallery>
 
               {/* Dot indicators */}
               {previewGroup && previewGroup.children.length > 1 && (
