@@ -100,7 +100,18 @@ export default function AdminFiles() {
   const formatDate = (d: string) =>
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
+  // Build carousel children map
+  const childrenMap = new Map<string, any[]>();
+  (allFiles || []).forEach((f: any) => {
+    if (f.parent_file_id) {
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
+
   const filteredFiles = (allFiles || []).filter((f: any) => {
+    if (f.parent_file_id) return false; // hide carousel children
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     return true;
