@@ -1,15 +1,24 @@
 import { ExternalLink, FileText, Download, Eye } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const isImage = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
+const getFileExtension = (value?: string) => {
+  if (!value) return "";
+  const normalized = value.split("?")[0].split("#")[0];
+  return normalized.split(".").pop()?.toLowerCase() || "";
+};
+
+const resolveExtension = (fileName: string, fileUrl?: string) =>
+  getFileExtension(fileName) || getFileExtension(fileUrl);
+
+const isImage = (fileName: string, fileUrl?: string) => {
+  const ext = resolveExtension(fileName, fileUrl);
   return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
 };
 
-const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
+const isPdf = (fileName: string, fileUrl?: string) => resolveExtension(fileName, fileUrl) === "pdf";
 
-const isVideo = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
+const isVideo = (fileName: string, fileUrl?: string) => {
+  const ext = resolveExtension(fileName, fileUrl);
   return ["mp4", "webm", "mov"].includes(ext);
 };
 
@@ -19,7 +28,7 @@ interface Props {
 }
 
 export default function FilePreviewContent({ fileName, fileUrl }: Props) {
-  if (isImage(fileName)) {
+  if (isImage(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center p-2">
         <img
@@ -32,7 +41,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     );
   }
 
-  if (isPdf(fileName)) {
+  if (isPdf(fileName, fileUrl)) {
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border">
         <iframe
@@ -53,7 +62,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     );
   }
 
-  if (isVideo(fileName)) {
+  if (isVideo(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden p-2">
         <video
