@@ -1146,8 +1146,8 @@ export default function AdminFinanceiro() {
                           <p className="text-[10px] text-muted-foreground/60">
                             {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
                           </p>
-                          {log.performer?.full_name && (
-                            <p className="text-[10px] text-primary mt-0.5">{log.performer.full_name}</p>
+                          {log.performerName && (
+                            <p className="text-[10px] text-primary mt-0.5">{log.performerName}</p>
                           )}
                         </div>
                       </div>
