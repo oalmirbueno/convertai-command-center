@@ -538,6 +538,18 @@ export default function AdminFiles() {
                   <p className="text-xs text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
+              {/* Move folder */}
+              <div className="flex items-center gap-2">
+                <FolderInput className="w-4 h-4 text-muted-foreground shrink-0" />
+                <Select value={previewFile.folder || "estrategicos"} onValueChange={(v) => handleMoveFolder(previewFile.id, v)}>
+                  <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
