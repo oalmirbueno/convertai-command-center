@@ -13,8 +13,51 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen } from "lucide-react";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+
+function CarouselSlider({ files }: { files: any[] }) {
+  const [idx, setIdx] = useState(0);
+  const current = files[idx];
+
+  if (!current) return null;
+  if (files.length === 1) {
+    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />;
+  }
+
+  return (
+    <div className="relative group">
+      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+      <button
+        type="button"
+        className="absolute z-10 left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + files.length) % files.length); }}
+      >
+        <ChevronLeft className="w-4 h-4" />
+      </button>
+      <button
+        type="button"
+        className="absolute z-10 right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % files.length); }}
+      >
+        <ChevronRight className="w-4 h-4" />
+      </button>
+      <div className="absolute z-10 bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
+        {files.map((_: any, i: number) => (
+          <button
+            key={i}
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
+          />
+        ))}
+      </div>
+      <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+        🎠 {idx + 1}/{files.length}
+      </span>
+    </div>
+  );
+}
 
 const CLIENT_FOLDERS = [
   { id: "estrategicos", label: "📁 Estratégicos" },
@@ -61,7 +104,20 @@ export default function ClientDocuments() {
   const [submitting, setSubmitting] = useState(false);
   const [previewFile, setPreviewFile] = useState<any>(null);
 
+  // Build children map for carousel grouping
+  const childrenMap = new Map<string, any[]>();
+  const childIds = new Set<string>();
+  (files || []).forEach((f: any) => {
+    if (f.parent_file_id) {
+      childIds.add(f.id);
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
+
   const filteredFiles = (files || []).filter((f: any) => {
+    if (childIds.has(f.id)) return false; // hide children
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     if (filterProject !== "all" && f.project_id !== filterProject) return false;
     return true;
@@ -232,7 +288,22 @@ export default function ClientDocuments() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
+              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
+              
+              {/* Action buttons */}
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                  </a>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <a href={previewFile.file_url} download className="gap-1.5">
+                    <Download className="w-3.5 h-3.5" /> Baixar
+                  </a>
+                </Button>
+              </div>
+
               <p className="text-xs text-muted-foreground">
                 Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
               </p>
