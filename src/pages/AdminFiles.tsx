@@ -65,6 +65,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
+  const [uploadMode, setUploadMode] = useState<"single" | "carousel">("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
@@ -100,9 +101,14 @@ export default function AdminFiles() {
       valid.push(file);
     }
     if (valid.length === 0) return;
-    setUploadFiles(prev => [...prev, ...valid]);
-    if (uploadFiles.length === 0 && valid.length > 0) {
+    if (uploadMode === "single") {
+      setUploadFiles([valid[0]]);
       setUploadName(valid[0].name);
+    } else {
+      setUploadFiles(prev => [...prev, ...valid]);
+      if (uploadFiles.length === 0 && valid.length > 0) {
+        setUploadName(valid[0].name);
+      }
     }
     setUploadFolder(activeFolder);
   };
@@ -128,7 +134,7 @@ export default function AdminFiles() {
 
     try {
       const totalFiles = uploadFiles.length;
-      const isCarousel = totalFiles > 1;
+      const isCarousel = uploadMode === "carousel" && totalFiles > 1;
       // For carousel: first file gets the main record, others are linked via parent_file_id
       let parentFileId: string | null = null;
 
@@ -200,6 +206,7 @@ export default function AdminFiles() {
   };
 
   const resetUploadForm = () => {
+    setUploadMode("single");
     setUploadFiles([]);
     setUploadName("");
     setUploadProject("");
@@ -412,29 +419,60 @@ export default function AdminFiles() {
             <DialogTitle>Upload de Arquivo</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 overflow-y-auto flex-1 px-6 py-4">
+            {/* Mode selector */}
+            <div>
+              <Label className="label-sm mb-1.5 block">Modo de envio</Label>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { setUploadMode("single"); setUploadFiles(prev => prev.slice(0, 1)); }}
+                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                    uploadMode === "single"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  📄 Arquivo único
+                </button>
+                <button
+                  onClick={() => setUploadMode("carousel")}
+                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                    uploadMode === "carousel"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  🎠 Carrossel
+                </button>
+              </div>
+            </div>
+
             {/* Drag & Drop zone */}
             <div
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={handleDrop}
               onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl min-h-[120px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
+              className={`border-2 border-dashed rounded-2xl min-h-[100px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
                 dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-              } ${uploadFiles.length > 0 ? "py-3" : "h-40"}`}
+              } ${uploadFiles.length > 0 ? "py-3" : "h-36"}`}
             >
-              <Upload className="w-8 h-8 text-muted-foreground mb-2" />
+              <Upload className="w-7 h-7 text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
                 {uploadFiles.length === 0
-                  ? "Arraste ou clique para selecionar (múltiplos para carrossel)"
+                  ? uploadMode === "carousel"
+                    ? "Arraste ou clique para selecionar múltiplas imagens"
+                    : "Arraste ou clique para selecionar"
                   : `${uploadFiles.length} arquivo(s) selecionado(s)`}
               </p>
-              <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione vários arquivos para enviar como carrossel</p>
+              {uploadMode === "carousel" && (
+                <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione várias imagens para montar o carrossel</p>
+              )}
             </div>
             <input
               ref={fileInputRef}
               type="file"
               accept={ACCEPTED}
-              multiple
+              multiple={uploadMode === "carousel"}
               className="hidden"
               onChange={(e) => {
                 const files = Array.from(e.target.files || []);
@@ -502,11 +540,13 @@ export default function AdminFiles() {
                 <textarea value={uploadCaption} onChange={(e) => setUploadCaption(e.target.value)} rows={2} placeholder="Legenda do post..."
                   className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
               </div>
-              <div>
-                <Label className="label-sm">Texto do Carrossel (opcional)</Label>
-                <textarea value={uploadCarousel} onChange={(e) => setUploadCarousel(e.target.value)} rows={2} placeholder="Texto para carrossel multi-slide..."
-                  className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
-              </div>
+              {uploadMode === "carousel" && (
+                <div>
+                  <Label className="label-sm">Texto do Carrossel (opcional)</Label>
+                  <textarea value={uploadCarousel} onChange={(e) => setUploadCarousel(e.target.value)} rows={2} placeholder="Texto para carrossel multi-slide..."
+                    className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+                </div>
+              )}
               <div>
                 <Label className="label-sm">Descrição interna (opcional)</Label>
                 <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Notas para o cliente..."
