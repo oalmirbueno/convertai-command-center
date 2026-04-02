@@ -17,7 +17,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X,
 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
@@ -76,6 +76,21 @@ export default function AdminFiles() {
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  const [editingName, setEditingName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState("");
+
+  const handleRename = async () => {
+    if (!previewFile || !editNameValue.trim()) return;
+    try {
+      await supabase.from("files").update({ file_name: editNameValue.trim() }).eq("id", previewFile.id);
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      setPreviewFile({ ...previewFile, file_name: editNameValue.trim() });
+      setEditingName(false);
+      toast({ title: "Nome atualizado" });
+    } catch {
+      toast({ title: "Erro ao renomear", variant: "destructive" });
+    }
+  };
 
   const isImage = (name: string) => {
     const ext = name?.split(".").pop()?.toLowerCase() || "";
@@ -346,10 +361,33 @@ export default function AdminFiles() {
       )}
 
       {/* Preview Modal */}
-      <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
+      <Dialog open={!!previewFile} onOpenChange={(o) => { if (!o) { setPreviewFile(null); setEditingName(false); } }}>
         <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
-            <DialogTitle className="truncate pr-6 text-base">{previewFile?.file_name}</DialogTitle>
+            {editingName ? (
+              <div className="flex items-center gap-2 pr-6">
+                <Input
+                  value={editNameValue}
+                  onChange={(e) => setEditNameValue(e.target.value)}
+                  className="h-8 text-sm bg-secondary border-border rounded-lg flex-1"
+                  autoFocus
+                  onKeyDown={(e) => { if (e.key === "Enter") handleRename(); if (e.key === "Escape") setEditingName(false); }}
+                />
+                <button onClick={handleRename} className="text-success hover:text-success/80 transition-colors"><Check className="w-4 h-4" /></button>
+                <button onClick={() => setEditingName(false)} className="text-muted-foreground hover:text-foreground transition-colors"><X className="w-4 h-4" /></button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 pr-6">
+                <DialogTitle className="truncate text-base">{previewFile?.file_name}</DialogTitle>
+                <button
+                  onClick={() => { setEditNameValue(previewFile?.file_name || ""); setEditingName(true); }}
+                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                  title="Renomear"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
