@@ -28,7 +28,7 @@ interface Props {
 }
 
 export default function FilePreviewContent({ fileName, fileUrl }: Props) {
-  if (isImage(fileName)) {
+  if (isImage(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center p-2">
         <img
