@@ -104,7 +104,20 @@ export default function ClientDocuments() {
   const [submitting, setSubmitting] = useState(false);
   const [previewFile, setPreviewFile] = useState<any>(null);
 
+  // Build children map for carousel grouping
+  const childrenMap = new Map<string, any[]>();
+  const childIds = new Set<string>();
+  (files || []).forEach((f: any) => {
+    if (f.parent_file_id) {
+      childIds.add(f.id);
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
+
   const filteredFiles = (files || []).filter((f: any) => {
+    if (childIds.has(f.id)) return false; // hide children
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     if (filterProject !== "all" && f.project_id !== filterProject) return false;
     return true;
