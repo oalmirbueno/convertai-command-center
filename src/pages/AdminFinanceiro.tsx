@@ -56,6 +56,19 @@ export default function AdminFinanceiro() {
     },
     enabled: isAdmin,
   });
+  const { data: auditLogs } = useQuery({
+    queryKey: ["payment-audit-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_audit_log")
+        .select("*, performer:profiles!payment_audit_log_performed_by_fkey(full_name)")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
 
   const [newBillingOpen, setNewBillingOpen] = useState(false);
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
