@@ -17,8 +17,9 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput,
 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 
 const FOLDERS = [
@@ -141,6 +142,20 @@ export default function AdminFiles() {
       toast({ title: "Nome atualizado" });
     } catch {
       toast({ title: "Erro ao renomear", variant: "destructive" });
+    }
+  };
+
+  const handleMoveFolder = async (fileId: string, newFolder: string) => {
+    try {
+      await supabase.from("files").update({ folder: newFolder }).eq("id", fileId);
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      if (previewFile?.id === fileId) {
+        setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);
+      }
+      const folderLabel = FOLDERS.find(f => f.id === newFolder)?.label || newFolder;
+      toast({ title: `Movido para ${folderLabel}` });
+    } catch {
+      toast({ title: "Erro ao mover arquivo", variant: "destructive" });
     }
   };
 
@@ -426,6 +441,20 @@ export default function AdminFiles() {
                     <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
+                        <FolderInput className="w-4 h-4" />
+                      </button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      {FOLDERS.filter(fo => fo.id !== (f.folder || "estrategicos")).map(fo => (
+                        <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); handleMoveFolder(f.id, fo.id); }}>
+                          {fo.label}
+                        </DropdownMenuItem>
+                      ))}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
                   <a href={f.file_url} target="_blank" rel="noopener noreferrer"
                     className="text-muted-foreground hover:text-foreground transition-colors"
                     onClick={(e) => e.stopPropagation()}>
@@ -509,6 +538,18 @@ export default function AdminFiles() {
                   <p className="text-xs text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
+              {/* Move folder */}
+              <div className="flex items-center gap-2">
+                <FolderInput className="w-4 h-4 text-muted-foreground shrink-0" />
+                <Select value={previewFile.folder || "estrategicos"} onValueChange={(v) => handleMoveFolder(previewFile.id, v)}>
+                  <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           )}
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
