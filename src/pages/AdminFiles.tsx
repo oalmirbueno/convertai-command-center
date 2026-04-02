@@ -206,6 +206,7 @@ export default function AdminFiles() {
   };
 
   const resetUploadForm = () => {
+    setUploadMode("single");
     setUploadFiles([]);
     setUploadName("");
     setUploadProject("");
