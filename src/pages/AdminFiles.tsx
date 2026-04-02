@@ -189,22 +189,35 @@ export default function AdminFiles() {
         setUploadProgress(Math.round(((i + 1) / totalFiles) * 85) + 10);
       }
 
-      if (uploadApproval) {
-        const label = isCarousel ? `Carrossel para aprovação: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo para aprovação: ${uploadName}`;
+      // Always notify client about new upload
+      const fileLabel = isCarousel ? `Carrossel enviado: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo enviado: ${uploadName}`;
+      const approvalLabel = isCarousel ? `Carrossel para aprovação: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo para aprovação: ${uploadName}`;
+
+      await supabase.from("notifications").insert({
+        user_id: selectedClient,
+        message: uploadApproval ? approvalLabel : fileLabel,
+        notification_type: uploadApproval ? "approval" : "delivery",
+        link: uploadApproval ? "/aprovacoes" : "/documentos",
+      });
+
+      // Notify admin (if uploader is not admin)
+      const { data: adminId } = await supabase.rpc("get_admin_user_id");
+      if (adminId && adminId !== user.id) {
+        const clientProfile = (clients || []).find((c: any) => c.id === selectedClient);
+        const clientName = clientProfile?.company_name || clientProfile?.full_name || "cliente";
         await supabase.from("notifications").insert({
-          user_id: selectedClient,
-          message: label,
-          notification_type: "approval",
-          link: "/aprovacoes",
+          user_id: adminId,
+          message: `${user.email} enviou ${isCarousel ? `carrossel (${totalFiles})` : "arquivo"}: ${uploadName} → ${clientName}`,
+          notification_type: "delivery",
+          link: "/arquivos",
         });
       }
 
       if (uploadProject && uploadProject !== "none") {
-        const label = isCarousel ? `Carrossel enviado: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo enviado: ${uploadName}`;
         await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
-          message: label,
+          message: fileLabel,
           update_type: "creative",
         });
       }
