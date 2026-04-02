@@ -527,14 +527,14 @@ export default function AdminFinanceiro() {
 
         const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now };
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
         }) : [];
 
         const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
-          (pp.installments || []).filter((i: any) => i.status === "pending").map((i: any) => ({
+          (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
             id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount), due: i.due_date,
-            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now,
+            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
+            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now, itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
           }))
         ) : [];
 
@@ -544,7 +544,7 @@ export default function AdminFinanceiro() {
         ).map((c: any) => ({
           id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
-          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false,
+          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false, itemType: "extra" as const, clientId: c.id,
         })) : [];
 
         const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
@@ -557,19 +557,40 @@ export default function AdminFinanceiro() {
               <CreditCard className="w-3.5 h-3.5 text-warning" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento — A Receber ({allPending.length})</span>
             </div>
-            <div className="divide-y divide-border max-h-[320px] overflow-y-auto">
-              {allPending.map((item) => (
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
+              {allPending.map((item: any) => (
                 <div key={item.id} className="flex items-center gap-3 px-5 py-3">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] text-foreground truncate">{item.label}</p>
-                    <p className="text-[11px] text-muted-foreground">{item.client}</p>
+                    <p className="text-[11px] text-muted-foreground">{item.client}
+                      {item.paidSoFar > 0 && <span className="ml-1 text-success">(já pago: {fmt(item.paidSoFar)})</span>}
+                    </p>
                   </div>
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
                   <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
                     {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
                   </span>
+                  {item.itemType !== "extra" && (
+                    <button
+                      onClick={() => {
+                        setPayModal({
+                          id: item.id,
+                          type: item.itemType,
+                          label: item.label,
+                          amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
+                          clientId: item.clientId,
+                          billingType: item.billingType,
+                        });
+                        setPayType("full");
+                        setPayPartialAmount("");
+                      }}
+                      className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
+                    >
+                      💰 Pagar
+                    </button>
+                  )}
                 </div>
               ))}
             </div>
