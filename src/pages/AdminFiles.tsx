@@ -422,16 +422,9 @@ export default function AdminFiles() {
               </div>
             )}
           </DialogHeader>
-          {previewFile && (() => {
-            const carouselImages = [previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
-            const isCarouselFile = carouselImages.length > 1;
-            return (
+          {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              {isCarouselFile ? (
-                <CarouselSlider files={carouselImages} />
-              ) : (
-                <FilePreviewContent fileName={previewFile.file_name} fileUrl={previewFile.file_url} />
-              )}
+              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
                   {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
