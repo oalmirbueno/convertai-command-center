@@ -342,16 +342,25 @@ export default function AdminFiles() {
           {filteredFiles.map((f: any) => {
             const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
+            const carouselChildren = childrenMap.get(f.id) || [];
+            const isCarousel = carouselChildren.length > 0;
             return (
               <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
                 <div className="flex items-center gap-3">
                   <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">
-                      {f.file_name}
-                      {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[13px] font-medium text-foreground truncate">
+                        {f.file_name}
+                        {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
+                      </p>
+                      {isCarousel && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                          🎠 {carouselChildren.length + 1}
+                        </span>
+                      )}
+                    </div>
                     <p className="text-[11px] text-muted-foreground">
                       {f.project?.name || "—"} • {formatDate(f.created_at)}
                     </p>
