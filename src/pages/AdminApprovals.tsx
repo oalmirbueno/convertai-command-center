@@ -53,13 +53,13 @@ function CarouselPreview({ images, small }: { images: { file_url: string; file_n
       {images.length > 1 && (
         <>
           <button
-            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-1.5 shadow-md opacity-80 hover:opacity-100 transition-all"
             onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
           <button
-            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-1.5 shadow-md opacity-80 hover:opacity-100 transition-all"
             onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
           >
             <ChevronRight className="w-4 h-4" />
