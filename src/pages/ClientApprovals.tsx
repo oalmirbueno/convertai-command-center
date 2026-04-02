@@ -13,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, ExternalLink } from "lucide-react";
+import { FileImage, FileText, Film, Archive, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
@@ -36,6 +36,51 @@ const isImage = (name: string) => {
 
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
+function CarouselPreview({ images, small }: { images: { file_url: string; file_name: string }[]; small?: boolean }) {
+  const [idx, setIdx] = useState(0);
+  if (images.length === 0) return null;
+  const current = images[idx];
+  const maxH = small ? "h-32" : "min-h-[200px] max-h-[400px]";
+
+  return (
+    <div className="relative group">
+      <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
+        {isImage(current.file_name) ? (
+          <img src={current.file_url} alt={current.file_name} className={small ? "w-full h-full object-cover" : "max-w-full max-h-[400px] object-contain"} />
+        ) : (
+          <FileText className="w-12 h-12 text-muted-foreground/30" />
+        )}
+      </div>
+      {images.length > 1 && (
+        <>
+          <button
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
+            {images.map((_, i) => (
+              <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            ))}
+          </div>
+        </>
+      )}
+      {images.length > 1 && (
+        <span className="absolute top-1 right-1 bg-background/80 text-[10px] px-1.5 py-0.5 rounded-md text-muted-foreground">
+          {idx + 1}/{images.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function ClientApprovals() {
   const { user, profile } = useAuth();
   const { clientId } = useClientIdentity();
@@ -49,7 +94,28 @@ export default function ClientApprovals() {
   const [submitting, setSubmitting] = useState(false);
   const [previewFile, setPreviewFile] = useState<any>(null);
 
-  const approvalFiles = (files || []).filter((f: any) => f.approval_status !== "none");
+  const allFilesList = files || [];
+
+  // Build carousel children map
+  const childrenMap = new Map<string, any[]>();
+  allFilesList.forEach((f: any) => {
+    if (f.parent_file_id) {
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
+
+  // Only parent/standalone files with approval status
+  const approvalFiles = allFilesList.filter((f: any) => f.approval_status !== "none" && !f.parent_file_id);
+
+  const getCarouselImages = (f: any) => {
+    const children = childrenMap.get(f.id) || [];
+    if (children.length > 0) {
+      return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
+    }
+    return [f];
+  };
 
   const handleApprove = async () => {
     if (!confirmApprove || !user) return;
@@ -69,7 +135,6 @@ export default function ClientApprovals() {
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Aprovado com sucesso!" });
 
-      // Fire webhook
       fireWebhook(webhooks.creativeApproval, {
         file_id: confirmApprove,
         file_name: file?.file_name || '',
@@ -93,9 +158,8 @@ export default function ClientApprovals() {
     try {
       await supabase.from("files").update({ approval_status: "rejected", feedback: feedbackText }).eq("id", feedbackFileId);
 
-      await notifyAdmin(`Cliente solicitou ajustes em: ${(files || []).find((f: any) => f.id === feedbackFileId)?.file_name}`, "approval", "/aprovacoes");
+      await notifyAdmin(`Cliente solicitou ajustes em: ${allFilesList.find((f: any) => f.id === feedbackFileId)?.file_name}`, "approval", "/aprovacoes");
 
-      // Fetch complete file data for task creation
       const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
 
       if (fileData?.project_id) {
@@ -104,7 +168,6 @@ export default function ClientApprovals() {
           message: `Cliente solicitou ajustes em: ${fileData.file_name}`, update_type: "alert",
         });
 
-        // Create task in kanban on rejection
         const { error: taskErr } = await supabase.from("tasks").insert({
           project_id: fileData.project_id,
           title: `Ajustar: ${fileData.file_name}`,
@@ -118,7 +181,6 @@ export default function ClientApprovals() {
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Feedback enviado" });
 
-      // Fire webhook
       fireWebhook(webhooks.creativeApproval, {
         file_id: feedbackFileId,
         file_name: fileData?.file_name || '',
@@ -153,20 +215,22 @@ export default function ClientApprovals() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
           {approvalFiles.map((f: any) => {
-            const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
+            const images = getCarouselImages(f);
+            const isCarousel = images.length > 1;
             return (
               <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
-                <div className="h-32 bg-secondary flex items-center justify-center">
-                  {isImage(f.file_name) ? (
-                    <img src={f.file_url} alt={f.file_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Icon className="w-12 h-12 text-muted-foreground/30" />
-                  )}
-                </div>
+                <CarouselPreview images={images} small />
                 <div className="p-4 space-y-2">
-                  <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
+                    {isCarousel && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap">
+                        Carrossel • {images.length}
+                      </span>
+                    )}
+                  </div>
                   <p className="text-[11px] text-muted-foreground">{f.project?.name || "—"} • {formatDate(f.created_at)}</p>
                   <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border ${badge.cls}`}>{badge.label}</span>
                   {f.approval_status === "rejected" && f.feedback && (
@@ -185,21 +249,20 @@ export default function ClientApprovals() {
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {previewFile?.file_name}
+              {previewFile && getCarouselImages(previewFile).length > 1 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                  Carrossel • {getCarouselImages(previewFile).length} imagens
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
           {previewFile && (
             <div className="space-y-4">
-              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
-                {isImage(previewFile.file_name) ? (
-                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
-                ) : isPdf(previewFile.file_name) ? (
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
-                    <ExternalLink className="w-4 h-4" /> Abrir PDF
-                  </a>
-                ) : (
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
-                    <ExternalLink className="w-4 h-4" /> Baixar arquivo
-                  </a>
-                )}
+              <div className="bg-secondary rounded-xl overflow-hidden">
+                <CarouselPreview images={getCarouselImages(previewFile)} />
               </div>
               <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}

@@ -7,7 +7,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, RefreshCw, Upload, ExternalLink, Zap } from "lucide-react";
+import { FileImage, FileText, Film, Archive, RefreshCw, ExternalLink, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
@@ -35,6 +35,51 @@ const isImage = (name: string) => {
   return ["jpg","jpeg","png","gif","webp"].includes(ext);
 };
 
+function CarouselPreview({ images, small }: { images: { file_url: string; file_name: string }[]; small?: boolean }) {
+  const [idx, setIdx] = useState(0);
+  if (images.length === 0) return null;
+  const current = images[idx];
+  const maxH = small ? "h-32" : "min-h-[200px] max-h-[400px]";
+
+  return (
+    <div className="relative group">
+      <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
+        {isImage(current.file_name) ? (
+          <img src={current.file_url} alt={current.file_name} className={small ? "w-full h-full object-cover" : "max-w-full max-h-[400px] object-contain"} />
+        ) : (
+          <FileText className="w-12 h-12 text-muted-foreground/30" />
+        )}
+      </div>
+      {images.length > 1 && (
+        <>
+          <button
+            className="absolute left-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + images.length) % images.length); }}
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <button
+            className="absolute right-1 top-1/2 -translate-y-1/2 bg-background/80 rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+            onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % images.length); }}
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
+          <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-1">
+            {images.map((_, i) => (
+              <span key={i} className={`w-1.5 h-1.5 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`} />
+            ))}
+          </div>
+        </>
+      )}
+      {images.length > 1 && (
+        <span className="absolute top-1 right-1 bg-background/80 text-[10px] px-1.5 py-0.5 rounded-md text-muted-foreground">
+          {idx + 1}/{images.length}
+        </span>
+      )}
+    </div>
+  );
+}
+
 export default function AdminApprovals() {
   const { user } = useAuth();
   const { data: allFiles, isLoading } = useAllFiles();
@@ -43,17 +88,34 @@ export default function AdminApprovals() {
   const [activeTab, setActiveTab] = useState("all");
   const [previewFile, setPreviewFile] = useState<any>(null);
 
-  // Only files with approval status != none
-  const approvalFiles = (allFiles || []).filter((f: any) => f.approval_status !== "none");
-  const filtered = activeTab === "all" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === activeTab);
+  // Build carousel children map
+  const allFilesList = allFiles || [];
+  const childrenMap = new Map<string, any[]>();
+  allFilesList.forEach((f: any) => {
+    if (f.parent_file_id) {
+      const arr = childrenMap.get(f.parent_file_id) || [];
+      arr.push(f);
+      childrenMap.set(f.parent_file_id, arr);
+    }
+  });
 
+  // Only parent/standalone files with approval status
+  const approvalFiles = allFilesList.filter((f: any) => f.approval_status !== "none" && !f.parent_file_id);
+  const filtered = activeTab === "all" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === activeTab);
   const pendingCount = approvalFiles.filter((f: any) => f.approval_status === "pending").length;
+
+  const getCarouselImages = (f: any) => {
+    const children = childrenMap.get(f.id) || [];
+    if (children.length > 0) {
+      return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
+    }
+    return [f];
+  };
 
   const handleResend = async (fileId: string) => {
     try {
       const file = approvalFiles.find((f: any) => f.id === fileId);
       await supabase.from("files").update({ approval_status: "pending", feedback: null }).eq("id", fileId);
-      // Create update
       if (file?.project_id) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
@@ -62,7 +124,6 @@ export default function AdminApprovals() {
             message: `Criativo reenviado para aprovação: ${file.file_name}`, update_type: "delivery",
           });
         }
-        // Notify client
         if (file.client_id) {
           await supabase.from("notifications").insert({
             user_id: file.client_id,
@@ -112,7 +173,6 @@ export default function AdminApprovals() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         {TABS.map((t) => (
           <button
@@ -129,7 +189,6 @@ export default function AdminApprovals() {
         ))}
       </div>
 
-      {/* Grid */}
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1,2,3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
@@ -139,22 +198,22 @@ export default function AdminApprovals() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start stagger-children">
           {filtered.map((f: any) => {
-            const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
+            const images = getCarouselImages(f);
+            const isCarousel = images.length > 1;
             return (
               <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors flex flex-col"
                 onClick={() => setPreviewFile(f)}>
-                {/* Preview */}
-                <div className="h-32 bg-secondary flex items-center justify-center shrink-0">
-                  {isImage(f.file_name) ? (
-                    <img src={f.file_url} alt={f.file_name} className="w-full h-full object-cover" />
-                  ) : (
-                    <Icon className="w-12 h-12 text-muted-foreground/30" />
-                  )}
-                </div>
-
+                <CarouselPreview images={images} small />
                 <div className="p-4 space-y-2 flex-1 flex flex-col">
-                  <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-foreground truncate">{f.file_name}</p>
+                    {isCarousel && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap">
+                        Carrossel • {images.length}
+                      </span>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
                     <span className="truncate max-w-[120px]">{f.project?.name || "—"}</span>
                     <span>•</span>
@@ -193,20 +252,24 @@ export default function AdminApprovals() {
           })}
         </div>
       )}
+
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader><DialogTitle>{previewFile?.file_name}</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {previewFile?.file_name}
+              {previewFile && getCarouselImages(previewFile).length > 1 && (
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                  Carrossel • {getCarouselImages(previewFile).length} imagens
+                </span>
+              )}
+            </DialogTitle>
+          </DialogHeader>
           {previewFile && (
             <div className="space-y-4">
-              <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center min-h-[200px]">
-                {isImage(previewFile.file_name) ? (
-                  <img src={previewFile.file_url} alt={previewFile.file_name} className="max-w-full max-h-[400px] object-contain" />
-                ) : (
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-primary hover:underline py-8">
-                    <ExternalLink className="w-4 h-4" /> {previewFile.file_name?.toLowerCase().endsWith(".pdf") ? "Abrir PDF" : "Baixar arquivo"}
-                  </a>
-                )}
+              <div className="bg-secondary rounded-xl overflow-hidden">
+                <CarouselPreview images={getCarouselImages(previewFile)} />
               </div>
               <p className="text-xs text-muted-foreground">
                 Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
