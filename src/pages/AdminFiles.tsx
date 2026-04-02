@@ -119,60 +119,78 @@ export default function AdminFiles() {
   }, [activeFolder, uploadFiles.length]);
 
   const handleUpload = async () => {
-    if (!uploadFile || !user || !selectedClient || selectedClient === "all") {
-      toast({ title: "Selecione um cliente", variant: "destructive" });
+    if (uploadFiles.length === 0 || !user || !selectedClient || selectedClient === "all") {
+      toast({ title: "Selecione um cliente e ao menos um arquivo", variant: "destructive" });
       return;
     }
     setUploading(true);
-    setUploadProgress(10);
+    setUploadProgress(5);
 
     try {
-      const ext = uploadFile.name.split(".").pop();
-      const path = `${selectedClient}/${Date.now()}.${ext}`;
-      setUploadProgress(30);
+      const totalFiles = uploadFiles.length;
+      const isCarousel = totalFiles > 1;
+      // For carousel: first file gets the main record, others are linked via parent_file_id
+      let parentFileId: string | null = null;
 
-      const { error: storageError } = await supabase.storage.from("files").upload(path, uploadFile);
-      if (storageError) throw storageError;
-      setUploadProgress(70);
+      for (let i = 0; i < totalFiles; i++) {
+        const file = uploadFiles[i];
+        const ext = file.name.split(".").pop();
+        const path = `${selectedClient}/${Date.now()}_${i}.${ext}`;
 
-      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+        const { error: storageError } = await supabase.storage.from("files").upload(path, file);
+        if (storageError) throw storageError;
 
-      await supabase.from("files").insert({
-        client_id: selectedClient,
-        file_name: uploadName || uploadFile.name,
-        file_url: urlData.publicUrl,
-        file_type: uploadType,
-        folder: uploadFolder,
-        uploaded_by: user.id,
-        project_id: uploadProject === "none" ? null : uploadProject || null,
-        approval_status: uploadApproval ? "pending" : "none",
-        caption: uploadCaption.trim() || null,
-        carousel_text: uploadCarousel.trim() || null,
-        description: uploadDescription.trim() || null,
-      });
-      setUploadProgress(90);
+        const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
+
+        const fileName = i === 0
+          ? (uploadName || file.name)
+          : (isCarousel ? `${uploadName || uploadFiles[0].name} (${i + 1}/${totalFiles})` : file.name);
+
+        const { data: inserted } = await supabase.from("files").insert({
+          client_id: selectedClient,
+          file_name: fileName,
+          file_url: urlData.publicUrl,
+          file_type: isCarousel ? "creative" : uploadType,
+          folder: uploadFolder,
+          uploaded_by: user.id,
+          project_id: uploadProject === "none" ? null : uploadProject || null,
+          approval_status: uploadApproval ? "pending" : "none",
+          caption: i === 0 ? (uploadCaption.trim() || null) : null,
+          carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
+          description: i === 0 ? (uploadDescription.trim() || null) : null,
+          parent_file_id: parentFileId,
+        }).select("id").single();
+
+        if (i === 0 && inserted) {
+          parentFileId = inserted.id;
+        }
+
+        setUploadProgress(Math.round(((i + 1) / totalFiles) * 85) + 10);
+      }
 
       if (uploadApproval) {
+        const label = isCarousel ? `Carrossel para aprovação: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo para aprovação: ${uploadName}`;
         await supabase.from("notifications").insert({
           user_id: selectedClient,
-          message: `Novo arquivo para aprovação: ${uploadName}`,
+          message: label,
           notification_type: "approval",
           link: "/aprovacoes",
         });
       }
 
-      if (uploadProject) {
+      if (uploadProject && uploadProject !== "none") {
+        const label = isCarousel ? `Carrossel enviado: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo enviado: ${uploadName}`;
         await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
-          message: `Novo arquivo enviado: ${uploadName}`,
+          message: label,
           update_type: "creative",
         });
       }
 
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      toast({ title: "Arquivo enviado com sucesso" });
+      toast({ title: isCarousel ? `Carrossel enviado (${totalFiles} arquivos)` : "Arquivo enviado com sucesso" });
       setUploadOpen(false);
       resetUploadForm();
     } catch (err: any) {
