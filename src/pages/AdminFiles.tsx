@@ -90,22 +90,33 @@ export default function AdminFiles() {
     return true;
   });
 
-  const handleFileSelect = (file: File) => {
-    if (file.size > MAX_SIZE) {
-      toast({ title: "Arquivo muito grande", description: "Máximo 50MB.", variant: "destructive" });
-      return;
+  const handleFilesSelect = (newFiles: File[]) => {
+    const valid: File[] = [];
+    for (const file of newFiles) {
+      if (file.size > MAX_SIZE) {
+        toast({ title: "Arquivo muito grande", description: `${file.name} excede 50MB.`, variant: "destructive" });
+        continue;
+      }
+      valid.push(file);
     }
-    setUploadFile(file);
-    setUploadName(file.name);
+    if (valid.length === 0) return;
+    setUploadFiles(prev => [...prev, ...valid]);
+    if (uploadFiles.length === 0 && valid.length > 0) {
+      setUploadName(valid[0].name);
+    }
     setUploadFolder(activeFolder);
+  };
+
+  const removeUploadFile = (index: number) => {
+    setUploadFiles(prev => prev.filter((_, i) => i !== index));
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files[0];
-    if (file) handleFileSelect(file);
-  }, [activeFolder]);
+    const files = Array.from(e.dataTransfer.files);
+    if (files.length > 0) handleFilesSelect(files);
+  }, [activeFolder, uploadFiles.length]);
 
   const handleUpload = async () => {
     if (!uploadFile || !user || !selectedClient || selectedClient === "all") {
