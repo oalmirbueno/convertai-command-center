@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -53,6 +53,26 @@ export default function AdminFinanceiro() {
         .select("*, project:projects!project_payments_project_id_fkey(name, project_type), client:profiles!project_payments_client_id_fkey(full_name, company_name), installments:payment_installments(*)");
       if (error) throw error;
       return data || [];
+    },
+    enabled: isAdmin,
+  });
+  const { data: auditLogs } = useQuery({
+    queryKey: ["payment-audit-log"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("payment_audit_log")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      // Fetch performer names
+      const performerIds = [...new Set((data || []).map((l: any) => l.performed_by).filter(Boolean))];
+      let performers: Record<string, string> = {};
+      if (performerIds.length > 0) {
+        const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", performerIds);
+        (profiles || []).forEach((p: any) => { performers[p.id] = p.full_name; });
+      }
+      return (data || []).map((l: any) => ({ ...l, performerName: performers[l.performed_by] || null }));
     },
     enabled: isAdmin,
   });
@@ -358,6 +378,14 @@ export default function AdminFinanceiro() {
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
+  const logAudit = async (entityType: string, entityId: string, action: string, oldStatus: string | null, newStatus: string, oldAmount: number | null, newAmount: number, notes?: string) => {
+    await supabase.from("payment_audit_log").insert({
+      entity_type: entityType, entity_id: entityId, action, old_status: oldStatus, new_status: newStatus,
+      old_amount: oldAmount, new_amount: newAmount, notes: notes || null, performed_by: user?.id || null,
+    } as any);
+    queryClient.invalidateQueries({ queryKey: ["payment-audit-log"] });
+  };
+
   const handlePayFromPanel = async () => {
     if (!payModal) return;
     const today = new Date().toISOString().split("T")[0];
@@ -365,16 +393,15 @@ export default function AdminFinanceiro() {
 
     if (payModal.type === "billing") {
       if (payType === "full") {
+        await logAudit("billing", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
         await handleMarkPaid(payModal.id);
       } else {
-        // Partial: update billing with partial info — mark as paid with partial amount note
         const remaining = payModal.amount - paidAmount;
         await supabase.from("billing").update({
           status: "paid",
           paid_date: today,
           description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
         }).eq("id", payModal.id);
-        // Create new billing for remaining
         if (remaining > 0 && payModal.clientId) {
           const original = (billing || []).find((b: any) => b.id === payModal.id);
           await supabase.from("billing").insert({
@@ -385,6 +412,7 @@ export default function AdminFinanceiro() {
             description: `Saldo restante — ${fmt(remaining)}`,
           });
         }
+        await logAudit("billing", payModal.id, "paid_partial", "pending", "paid", payModal.amount, paidAmount, `${payModal.label} — restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
           await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
         }
@@ -399,6 +427,7 @@ export default function AdminFinanceiro() {
           paid_amount: payModal.amount,
           paid_date: today,
         }).eq("id", payModal.id);
+        await logAudit("installment", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
       } else {
         const newStatus = paidAmount >= payModal.amount ? "paid" : "partial";
         await supabase.from("payment_installments").update({
@@ -406,6 +435,7 @@ export default function AdminFinanceiro() {
           paid_amount: paidAmount,
           paid_date: today,
         }).eq("id", payModal.id);
+        await logAudit("installment", payModal.id, "paid_partial", "pending", newStatus, payModal.amount, paidAmount, payModal.label);
       }
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
@@ -764,6 +794,7 @@ export default function AdminFinanceiro() {
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
           {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md">📋 Histórico</TabsTrigger>}
         </TabsList>
 
         {/* Tab: Overview */}
@@ -1059,6 +1090,74 @@ export default function AdminFinanceiro() {
             );
           })}
         </TabsContent>
+
+        {/* Audit Log Tab */}
+        {isAdmin && (
+          <TabsContent value="audit" className="space-y-4">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-info" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Histórico de Alterações — Últimos 50 registros</span>
+              </div>
+              {(auditLogs || []).length === 0 ? (
+                <div className="px-5 py-8 text-center text-muted-foreground text-sm">
+                  Nenhuma alteração registrada ainda.
+                </div>
+              ) : (
+                <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+                  {(auditLogs || []).map((log: any) => {
+                    const actionLabels: Record<string, { label: string; color: string }> = {
+                      paid_full: { label: "Pago Total", color: "text-success bg-success/10" },
+                      paid_partial: { label: "Pago Parcial", color: "text-warning bg-warning/10" },
+                      status_change: { label: "Status Alterado", color: "text-info bg-info/10" },
+                      amount_change: { label: "Valor Alterado", color: "text-primary bg-primary/10" },
+                    };
+                    const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-secondary" };
+                    const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
+
+                    return (
+                      <div key={log.id} className="flex items-center gap-3 px-5 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${actionInfo.color}`}>
+                              {actionInfo.label}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{typeLabel}</span>
+                          </div>
+                          {log.notes && <p className="text-[12px] text-foreground mt-1 truncate">{log.notes}</p>}
+                          <div className="flex items-center gap-3 mt-1">
+                            {log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {fmt(log.old_amount)} → {fmt(log.new_amount)}
+                              </span>
+                            )}
+                            {log.new_amount != null && log.old_amount === log.new_amount && (
+                              <span className="text-[11px] text-muted-foreground font-mono">{fmt(log.new_amount)}</span>
+                            )}
+                            {log.old_status && log.new_status && log.old_status !== log.new_status && (
+                              <span className="text-[11px] text-muted-foreground">{log.old_status} → {log.new_status}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[11px] text-muted-foreground">
+                            {new Date(log.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60">
+                            {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          {log.performerName && (
+                            <p className="text-[10px] text-primary mt-0.5">{log.performerName}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* New Billing Modal */}
