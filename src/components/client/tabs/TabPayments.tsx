@@ -12,10 +12,14 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 import { DollarSign, CheckCircle2, Clock, AlertCircle, Plus, Pencil } from "lucide-react";
 
 const statusConfig: Record<string, { icon: any; className: string; label: string }> = {
   paid: { icon: CheckCircle2, className: "text-success bg-success/10", label: "Pago" },
+  partial: { icon: Clock, className: "text-primary bg-primary/10", label: "Parcial" },
   pending: { icon: Clock, className: "text-warning bg-warning/10", label: "Pendente" },
   overdue: { icon: AlertCircle, className: "text-destructive bg-destructive/10", label: "Atrasado" },
 };
@@ -34,6 +38,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
+  // Plan create/edit state
   const [createOpen, setCreateOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [totalValue, setTotalValue] = useState("");
@@ -41,7 +46,13 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   const [installmentsCount, setInstallmentsCount] = useState("1");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [markPaidId, setMarkPaidId] = useState<string | null>(null);
+
+  // Installment edit state
+  const [editInstOpen, setEditInstOpen] = useState(false);
+  const [editingInst, setEditingInst] = useState<any>(null);
+  const [editInstStatus, setEditInstStatus] = useState("pending");
+  const [editInstPaidAmount, setEditInstPaidAmount] = useState("");
+  const [editInstPaidDate, setEditInstPaidDate] = useState("");
 
   const formatCurrency = (v: number) =>
     new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
@@ -51,6 +62,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
   const getInstallmentStatus = (inst: any) => {
     if (inst.status === "paid") return "paid";
+    if (inst.status === "partial") return "partial";
     if (inst.due_date && new Date(inst.due_date) < new Date()) return "overdue";
     return "pending";
   };
@@ -67,7 +79,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       const remaining = total - entryAmount;
       const perInstallment = count > 0 ? remaining / count : 0;
 
-      // Create payment plan
       const { data: paymentData, error: paymentError } = await supabase
         .from("project_payments")
         .insert({
@@ -85,7 +96,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
       if (paymentError) throw paymentError;
 
-      // Create entry installment
       const installmentRows: any[] = [
         {
           payment_id: paymentData.id,
@@ -94,10 +104,10 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           due_date: new Date().toISOString().split("T")[0],
           status: "pending",
           description: `Entrada (${entryPct}%)`,
+          paid_amount: 0,
         },
       ];
 
-      // Create remaining installments
       for (let i = 1; i <= count; i++) {
         const dueDate = new Date();
         dueDate.setMonth(dueDate.getMonth() + i);
@@ -108,13 +118,11 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           due_date: dueDate.toISOString().split("T")[0],
           status: "pending",
           description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
+          paid_amount: 0,
         });
       }
 
-      const { error: instError } = await supabase
-        .from("payment_installments")
-        .insert(installmentRows);
-
+      const { error: instError } = await supabase.from("payment_installments").insert(installmentRows);
       if (instError) throw instError;
 
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
@@ -140,7 +148,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       const remaining = total - entryAmount;
       const perInstallment = count > 0 ? remaining / count : 0;
 
-      // Update payment plan
       const { error: paymentError } = await supabase
         .from("project_payments")
         .update({
@@ -154,7 +161,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
       if (paymentError) throw paymentError;
 
-      // Delete old installments and recreate
       await supabase.from("payment_installments").delete().eq("payment_id", payment.id);
 
       const installmentRows: any[] = [
@@ -165,6 +171,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           due_date: new Date().toISOString().split("T")[0],
           status: "pending",
           description: `Entrada (${entryPct}%)`,
+          paid_amount: 0,
         },
       ];
 
@@ -178,6 +185,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           due_date: dueDate.toISOString().split("T")[0],
           status: "pending",
           description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
+          paid_amount: 0,
         });
       }
 
@@ -195,22 +203,54 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     setSubmitting(false);
   };
 
-  const handleMarkPaid = async () => {
-    if (!markPaidId) return;
+  const openEditInstallment = (inst: any) => {
+    setEditingInst(inst);
+    setEditInstStatus(inst.status);
+    setEditInstPaidAmount(String(inst.paid_amount || 0));
+    setEditInstPaidDate(inst.paid_date || new Date().toISOString().split("T")[0]);
+    setEditInstOpen(true);
+  };
+
+  const handleEditInstallment = async () => {
+    if (!editingInst) return;
     setSubmitting(true);
     try {
+      const paidAmt = parseFloat(editInstPaidAmount) || 0;
+      let newStatus = editInstStatus;
+
+      // Auto-detect status based on paid amount
+      if (newStatus === "paid" && paidAmt < editingInst.amount && paidAmt > 0) {
+        newStatus = "partial";
+      } else if (paidAmt >= editingInst.amount) {
+        newStatus = "paid";
+      } else if (paidAmt === 0 && newStatus !== "pending") {
+        newStatus = "pending";
+      }
+
+      const updateData: any = {
+        status: newStatus,
+        paid_amount: paidAmt,
+      };
+
+      if (newStatus === "paid" || newStatus === "partial") {
+        updateData.paid_date = editInstPaidDate || new Date().toISOString().split("T")[0];
+      } else {
+        updateData.paid_date = null;
+      }
+
       await supabase
         .from("payment_installments")
-        .update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] })
-        .eq("id", markPaidId);
+        .update(updateData)
+        .eq("id", editingInst.id);
 
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
-      toast({ title: "Pagamento registrado!" });
-    } catch {
-      toast({ title: "Erro ao registrar pagamento", variant: "destructive" });
+      toast({ title: "Parcela atualizada!" });
+      setEditInstOpen(false);
+      setEditingInst(null);
+    } catch (err: any) {
+      toast({ title: "Erro", description: err.message, variant: "destructive" });
     }
     setSubmitting(false);
-    setMarkPaidId(null);
   };
 
   const openEditDialog = () => {
@@ -232,7 +272,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
 
   if (loadingPayment) return <div className="space-y-3">{[1, 2].map(i => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>;
 
-  // No payment plan yet
   if (!payment) {
     return (
       <div className="text-center py-12 space-y-4">
@@ -248,14 +287,21 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     );
   }
 
-  // Has payment plan
-  const paidTotal = (installments || [])
-    .filter((i: any) => i.status === "paid")
-    .reduce((sum: number, i: any) => sum + Number(i.amount), 0);
+  // Calculate paid total using paid_amount when available
+  const paidTotal = (installments || []).reduce((sum: number, i: any) => {
+    if (i.status === "paid") return sum + Number(i.amount);
+    if (i.status === "partial") return sum + Number(i.paid_amount || 0);
+    return sum;
+  }, 0);
   const progressPct = payment.total_value > 0 ? Math.round((paidTotal / payment.total_value) * 100) : 0;
 
   return (
     <div className="space-y-6">
+      {/* Project link */}
+      <div className="bg-primary/5 border border-primary/20 rounded-lg px-4 py-2 text-xs text-primary">
+        <span className="font-medium">Projeto:</span> {projectName}
+      </div>
+
       {/* Summary card */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-4">
         <div className="flex items-center justify-between">
@@ -284,7 +330,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
             <div className="h-full rounded-full bg-success transition-all duration-500" style={{ width: `${progressPct}%` }} />
           </div>
         </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
+        <div className="flex items-center gap-4 text-xs text-muted-foreground flex-wrap">
           <span>Entrada: {payment.entry_percentage}% ({formatCurrency(payment.entry_amount)})</span>
           <span>•</span>
           <span>{payment.installments_count}x restante</span>
@@ -304,6 +350,8 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
             const status = getInstallmentStatus(inst);
             const config = statusConfig[status];
             const Icon = config.icon;
+            const paidAmt = Number(inst.paid_amount || 0);
+            const isPartial = inst.status === "partial" || (paidAmt > 0 && paidAmt < inst.amount);
             return (
               <div key={inst.id} className="bg-card border border-border rounded-xl px-4 py-3 flex items-center gap-3">
                 <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${config.className}`}>
@@ -315,12 +363,17 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
                     Vencimento: {formatDate(inst.due_date)}
                     {inst.paid_date && ` • Pago em ${formatDate(inst.paid_date)}`}
                   </p>
+                  {isPartial && paidAmt > 0 && (
+                    <p className="text-xs text-primary">
+                      Pago parcial: {formatCurrency(paidAmt)} de {formatCurrency(inst.amount)}
+                    </p>
+                  )}
                 </div>
                 <p className="text-sm font-semibold text-foreground whitespace-nowrap">{formatCurrency(inst.amount)}</p>
                 <span className={`text-[11px] px-2 py-0.5 rounded-full whitespace-nowrap ${config.className}`}>{config.label}</span>
-                {isAdmin && inst.status !== "paid" && (
-                  <Button size="sm" variant="ghost" className="text-xs h-7 px-2" onClick={() => setMarkPaidId(inst.id)}>
-                    <CheckCircle2 className="w-3.5 h-3.5 mr-1" /> Marcar Pago
+                {isAdmin && (
+                  <Button size="sm" variant="ghost" className="text-xs h-7 px-2" onClick={() => openEditInstallment(inst)}>
+                    <Pencil className="w-3.5 h-3.5 mr-1" /> Editar
                   </Button>
                 )}
               </div>
@@ -329,15 +382,57 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
         )}
       </div>
 
-      {/* Mark paid confirmation */}
-      <Dialog open={!!markPaidId} onOpenChange={() => setMarkPaidId(null)}>
+      {/* Edit installment dialog */}
+      <Dialog open={editInstOpen} onOpenChange={setEditInstOpen}>
         <DialogContent className="max-w-sm">
-          <DialogHeader><DialogTitle>Confirmar pagamento?</DialogTitle></DialogHeader>
-          <p className="text-sm text-muted-foreground">Deseja registrar esta parcela como paga?</p>
+          <DialogHeader><DialogTitle>Editar Parcela</DialogTitle></DialogHeader>
+          {editingInst && (
+            <div className="space-y-4">
+              <div className="bg-secondary/50 rounded-lg p-3 text-xs space-y-1">
+                <p><strong>{editingInst.description}</strong></p>
+                <p>Valor: {formatCurrency(editingInst.amount)}</p>
+                <p>Vencimento: {formatDate(editingInst.due_date)}</p>
+              </div>
+              <div>
+                <Label className="text-xs">Status</Label>
+                <Select value={editInstStatus} onValueChange={setEditInstStatus}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pendente</SelectItem>
+                    <SelectItem value="partial">Parcial</SelectItem>
+                    <SelectItem value="paid">Pago (total)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label className="text-xs">Valor Pago (R$)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  placeholder={String(editingInst.amount)}
+                  value={editInstPaidAmount}
+                  onChange={e => setEditInstPaidAmount(e.target.value)}
+                />
+                <p className="text-[10px] text-muted-foreground mt-1">
+                  Deixe menor que {formatCurrency(editingInst.amount)} para pagamento parcial
+                </p>
+              </div>
+              {(editInstStatus === "paid" || editInstStatus === "partial") && (
+                <div>
+                  <Label className="text-xs">Data do Pagamento</Label>
+                  <Input
+                    type="date"
+                    value={editInstPaidDate}
+                    onChange={e => setEditInstPaidDate(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setMarkPaidId(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleMarkPaid} disabled={submitting}>
-              {submitting ? "Registrando..." : "Confirmar"}
+            <Button variant="outline" onClick={() => setEditInstOpen(false)}>Cancelar</Button>
+            <Button onClick={handleEditInstallment} disabled={submitting}>
+              {submitting ? "Salvando..." : "Salvar"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -377,7 +472,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
               <Label className="text-xs">Observações</Label>
               <Textarea placeholder="Ex: Pagamento na entrega do projeto" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
             </div>
-
             {total > 0 && (
               <div className="bg-secondary/50 rounded-lg p-3 space-y-1 text-xs">
                 <p><strong>Entrada:</strong> {formatCurrency(entryAmount)} ({entryPct}%)</p>
@@ -426,7 +520,6 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
               <Label className="text-xs">Observações</Label>
               <Textarea placeholder="Ex: Pagamento na entrega do projeto" value={notes} onChange={e => setNotes(e.target.value)} rows={2} />
             </div>
-
             {total > 0 && (
               <div className="bg-secondary/50 rounded-lg p-3 space-y-1 text-xs">
                 <p><strong>Entrada:</strong> {formatCurrency(entryAmount)} ({entryPct}%)</p>

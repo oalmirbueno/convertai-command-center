@@ -1,0 +1,1 @@
+ALTER TABLE public.payment_installments ADD COLUMN paid_amount numeric DEFAULT 0;
