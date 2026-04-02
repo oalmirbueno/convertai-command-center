@@ -145,6 +145,20 @@ export default function AdminFiles() {
     }
   };
 
+  const handleMoveFolder = async (fileId: string, newFolder: string) => {
+    try {
+      await supabase.from("files").update({ folder: newFolder }).eq("id", fileId);
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      if (previewFile?.id === fileId) {
+        setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);
+      }
+      const folderLabel = FOLDERS.find(f => f.id === newFolder)?.label || newFolder;
+      toast({ title: `Movido para ${folderLabel}` });
+    } catch {
+      toast({ title: "Erro ao mover arquivo", variant: "destructive" });
+    }
+  };
+
   const isImage = (name: string) => {
     const ext = name?.split(".").pop()?.toLowerCase() || "";
     return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
