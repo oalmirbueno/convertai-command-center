@@ -358,6 +358,65 @@ export default function AdminFinanceiro() {
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
+  const handlePayFromPanel = async () => {
+    if (!payModal) return;
+    const today = new Date().toISOString().split("T")[0];
+    const paidAmount = payType === "full" ? payModal.amount : (parseFloat(payPartialAmount) || 0);
+
+    if (payModal.type === "billing") {
+      if (payType === "full") {
+        await handleMarkPaid(payModal.id);
+      } else {
+        // Partial: update billing with partial info — mark as paid with partial amount note
+        const remaining = payModal.amount - paidAmount;
+        await supabase.from("billing").update({
+          status: "paid",
+          paid_date: today,
+          description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
+        }).eq("id", payModal.id);
+        // Create new billing for remaining
+        if (remaining > 0 && payModal.clientId) {
+          const original = (billing || []).find((b: any) => b.id === payModal.id);
+          await supabase.from("billing").insert({
+            client_id: payModal.clientId,
+            type: original?.type || "renewal",
+            amount: remaining,
+            due_date: original?.due_date || today,
+            description: `Saldo restante — ${fmt(remaining)}`,
+          });
+        }
+        if (payModal.clientId) {
+          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
+        }
+        queryClient.invalidateQueries({ queryKey: ["billing"] });
+        queryClient.invalidateQueries({ queryKey: ["clients"] });
+        toast.success("Pagamento parcial registrado!");
+      }
+    } else if (payModal.type === "installment") {
+      if (payType === "full") {
+        await supabase.from("payment_installments").update({
+          status: "paid",
+          paid_amount: payModal.amount,
+          paid_date: today,
+        }).eq("id", payModal.id);
+      } else {
+        const newStatus = paidAmount >= payModal.amount ? "paid" : "partial";
+        await supabase.from("payment_installments").update({
+          status: newStatus,
+          paid_amount: paidAmount,
+          paid_date: today,
+        }).eq("id", payModal.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
+      toast.success(payType === "full" ? "Parcela paga!" : "Pagamento parcial registrado!");
+    }
+
+    setPayModal(null);
+    setPayType("full");
+    setPayPartialAmount("");
+  };
+
   // Group wallets by client
   const walletsByClient: Record<string, any[]> = {};
   (wallets || []).forEach((w: any) => {
