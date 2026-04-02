@@ -371,6 +371,14 @@ export default function AdminFinanceiro() {
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
+  const logAudit = async (entityType: string, entityId: string, action: string, oldStatus: string | null, newStatus: string, oldAmount: number | null, newAmount: number, notes?: string) => {
+    await supabase.from("payment_audit_log").insert({
+      entity_type: entityType, entity_id: entityId, action, old_status: oldStatus, new_status: newStatus,
+      old_amount: oldAmount, new_amount: newAmount, notes: notes || null, performed_by: user?.id || null,
+    } as any);
+    queryClient.invalidateQueries({ queryKey: ["payment-audit-log"] });
+  };
+
   const handlePayFromPanel = async () => {
     if (!payModal) return;
     const today = new Date().toISOString().split("T")[0];
@@ -378,16 +386,15 @@ export default function AdminFinanceiro() {
 
     if (payModal.type === "billing") {
       if (payType === "full") {
+        await logAudit("billing", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
         await handleMarkPaid(payModal.id);
       } else {
-        // Partial: update billing with partial info — mark as paid with partial amount note
         const remaining = payModal.amount - paidAmount;
         await supabase.from("billing").update({
           status: "paid",
           paid_date: today,
           description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
         }).eq("id", payModal.id);
-        // Create new billing for remaining
         if (remaining > 0 && payModal.clientId) {
           const original = (billing || []).find((b: any) => b.id === payModal.id);
           await supabase.from("billing").insert({
@@ -398,6 +405,7 @@ export default function AdminFinanceiro() {
             description: `Saldo restante — ${fmt(remaining)}`,
           });
         }
+        await logAudit("billing", payModal.id, "paid_partial", "pending", "paid", payModal.amount, paidAmount, `${payModal.label} — restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
           await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
         }
@@ -412,6 +420,7 @@ export default function AdminFinanceiro() {
           paid_amount: payModal.amount,
           paid_date: today,
         }).eq("id", payModal.id);
+        await logAudit("installment", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
       } else {
         const newStatus = paidAmount >= payModal.amount ? "paid" : "partial";
         await supabase.from("payment_installments").update({
@@ -419,6 +428,7 @@ export default function AdminFinanceiro() {
           paid_amount: paidAmount,
           paid_date: today,
         }).eq("id", payModal.id);
+        await logAudit("installment", payModal.id, "paid_partial", "pending", newStatus, payModal.amount, paidAmount, payModal.label);
       }
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
