@@ -1083,6 +1083,74 @@ export default function AdminFinanceiro() {
             );
           })}
         </TabsContent>
+
+        {/* Audit Log Tab */}
+        {isAdmin && (
+          <TabsContent value="audit" className="space-y-4">
+            <div className="bg-card border border-border rounded-xl overflow-hidden">
+              <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+                <History className="w-3.5 h-3.5 text-info" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Histórico de Alterações — Últimos 50 registros</span>
+              </div>
+              {(auditLogs || []).length === 0 ? (
+                <div className="px-5 py-8 text-center text-muted-foreground text-sm">
+                  Nenhuma alteração registrada ainda.
+                </div>
+              ) : (
+                <div className="divide-y divide-border max-h-[500px] overflow-y-auto">
+                  {(auditLogs || []).map((log: any) => {
+                    const actionLabels: Record<string, { label: string; color: string }> = {
+                      paid_full: { label: "Pago Total", color: "text-success bg-success/10" },
+                      paid_partial: { label: "Pago Parcial", color: "text-warning bg-warning/10" },
+                      status_change: { label: "Status Alterado", color: "text-info bg-info/10" },
+                      amount_change: { label: "Valor Alterado", color: "text-primary bg-primary/10" },
+                    };
+                    const actionInfo = actionLabels[log.action] || { label: log.action, color: "text-muted-foreground bg-secondary" };
+                    const typeLabel = log.entity_type === "billing" ? "Fatura" : "Parcela";
+
+                    return (
+                      <div key={log.id} className="flex items-center gap-3 px-5 py-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${actionInfo.color}`}>
+                              {actionInfo.label}
+                            </span>
+                            <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{typeLabel}</span>
+                          </div>
+                          {log.notes && <p className="text-[12px] text-foreground mt-1 truncate">{log.notes}</p>}
+                          <div className="flex items-center gap-3 mt-1">
+                            {log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount && (
+                              <span className="text-[11px] text-muted-foreground">
+                                {fmt(log.old_amount)} → {fmt(log.new_amount)}
+                              </span>
+                            )}
+                            {log.new_amount != null && log.old_amount === log.new_amount && (
+                              <span className="text-[11px] text-muted-foreground font-mono">{fmt(log.new_amount)}</span>
+                            )}
+                            {log.old_status && log.new_status && log.old_status !== log.new_status && (
+                              <span className="text-[11px] text-muted-foreground">{log.old_status} → {log.new_status}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-[11px] text-muted-foreground">
+                            {new Date(log.created_at).toLocaleDateString("pt-BR")}
+                          </p>
+                          <p className="text-[10px] text-muted-foreground/60">
+                            {new Date(log.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                          </p>
+                          {log.performer?.full_name && (
+                            <p className="text-[10px] text-primary mt-0.5">{log.performer.full_name}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </TabsContent>
+        )}
       </Tabs>
 
       {/* New Billing Modal */}
