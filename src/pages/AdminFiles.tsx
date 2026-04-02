@@ -65,6 +65,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
+  const [uploadMode, setUploadMode] = useState<"single" | "carousel">("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
