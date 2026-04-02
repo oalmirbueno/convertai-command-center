@@ -91,7 +91,7 @@ function CarouselSlider({ files }: { files: any[] }) {
   );
 }
 
-  const { user } = useAuth();
+  export default function AdminFiles() {
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
   const { data: allFiles, isLoading: loadingFiles } = useAllFiles();
