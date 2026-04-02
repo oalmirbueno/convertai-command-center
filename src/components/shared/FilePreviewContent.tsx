@@ -41,7 +41,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     );
   }
 
-  if (isPdf(fileName)) {
+  if (isPdf(fileName, fileUrl)) {
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border">
         <iframe
