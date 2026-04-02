@@ -65,7 +65,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
   const [uploadProject, setUploadProject] = useState("");
