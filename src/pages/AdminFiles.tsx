@@ -134,7 +134,7 @@ export default function AdminFiles() {
 
     try {
       const totalFiles = uploadFiles.length;
-      const isCarousel = totalFiles > 1;
+      const isCarousel = uploadMode === "carousel" && totalFiles > 1;
       // For carousel: first file gets the main record, others are linked via parent_file_id
       let parentFileId: string | null = null;
 
