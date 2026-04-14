@@ -115,7 +115,7 @@ export default function Kanban() {
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
-    if (column === "review" && task.project_id && authUser && previousStatus !== "review") {
+    if (["review", "done"].includes(column) && task.project_id && authUser && previousStatus !== column) {
       await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       queryClient.invalidateQueries({ queryKey: ["files"] });
