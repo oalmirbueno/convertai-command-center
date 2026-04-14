@@ -4,6 +4,7 @@ import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Clock, Plus, Filter, X, Paperclip, CalendarIcon } from "lucide-react";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -124,7 +125,10 @@ export default function Kanban() {
           project_id: task.project_id, author_id: authUser.id,
           message: `Task "${task.title}" em revisão`, update_type: "task",
         });
+        // Auto-send attachments to client approval
+        await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
       }
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
     }
 
     if (column === "done" && task.project_id) {
