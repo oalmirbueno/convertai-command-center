@@ -4,6 +4,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
@@ -220,6 +221,12 @@ export default function TimelinePage() {
 
   const handleChangeTaskStatus = async (task: any, newStatus: string) => {
     await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
+    const { data: { user } } = await supabase.auth.getUser();
+    if (["review", "done"].includes(newStatus) && task.status !== newStatus && task.project_id && user) {
+      await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, user.id);
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+    }
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
     toast.success(`Tarefa → ${taskStatusLabels[newStatus]}`);

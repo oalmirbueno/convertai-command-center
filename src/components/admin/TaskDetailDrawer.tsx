@@ -129,7 +129,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         await notifyUser(assignedTo, `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`, "task", "/kanban");
       }
 
-      if (status === "review" && previousStatus !== "review" && task.project_id && user) {
+      if (["review", "done"].includes(status) && previousStatus !== status && task.project_id && user) {
         await sendTaskAttachmentsToApproval(task.id, task.project_id, title.trim(), user.id);
         queryClient.invalidateQueries({ queryKey: ["all-files"] });
         queryClient.invalidateQueries({ queryKey: ["files"] });
@@ -333,6 +333,11 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
           task_id: task.id, file_name: file.name, file_url: publicUrl,
           file_type: file.type, file_size: file.size, uploaded_by: user.id,
         });
+      }
+      if (["review", "done"].includes(task.status) && task.project_id) {
+        await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, user.id);
+        queryClient.invalidateQueries({ queryKey: ["all-files"] });
+        queryClient.invalidateQueries({ queryKey: ["files"] });
       }
       queryClient.invalidateQueries({ queryKey: ["task-attachments", task.id] });
       queryClient.invalidateQueries({ queryKey: ["task-attachment-counts"] });
