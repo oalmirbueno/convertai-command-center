@@ -642,19 +642,39 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum anexo</p>
                 ) : (
                   <div className="space-y-2">
-                    {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).length > 0 && (
+                    {/* Carousel download button */}
+                    {isCarousel && (
+                      <button
+                        onClick={handleDownloadZip}
+                        disabled={downloadingZip}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[12px] font-medium transition-colors cursor-pointer border border-primary/20 disabled:opacity-50"
+                      >
+                        {downloadingZip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                        Baixar carrossel em ZIP ({imageAttachments.length} imagens)
+                      </button>
+                    )}
+
+                    {imageAttachments.length > 0 && (
                       <div className="grid grid-cols-3 gap-2">
-                        {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).map((a: any) => (
+                        {imageAttachments.map((a: any) => (
                           <div key={a.id} className="relative group rounded-lg overflow-hidden border border-border aspect-square">
                             <a href={a.file_url} target="_blank" rel="noopener noreferrer">
                               <img src={a.file_url} alt={a.file_name} className="w-full h-full object-cover" />
                             </a>
-                            {!readOnly && (
-                              <button onClick={() => setConfirmDelete(a.id)}
-                                className="absolute top-1 right-1 p-1 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-none">
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
+                            <div className="absolute bottom-0 inset-x-0 flex items-center justify-end gap-0.5 p-1 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                              {!isCarousel && (
+                                <button onClick={() => handleDownloadSingle(a.file_url, a.file_name)}
+                                  className="p-1 rounded bg-black/40 text-white hover:bg-black/60 cursor-pointer border-none">
+                                  <Download className="w-3 h-3" />
+                                </button>
+                              )}
+                              {!readOnly && (
+                                <button onClick={() => setConfirmDelete(a.id)}
+                                  className="p-1 rounded bg-black/40 text-white hover:bg-destructive cursor-pointer border-none">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
