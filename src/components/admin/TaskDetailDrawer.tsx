@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
@@ -126,6 +127,12 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       if (assignedTo && assignedTo !== previousAssignedTo) {
         const project = projects.find((p: any) => p.id === task.project_id);
         await notifyUser(assignedTo, `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`, "task", "/kanban");
+      }
+
+      if (status === "review" && previousStatus !== "review" && task.project_id && user) {
+        await sendTaskAttachmentsToApproval(task.id, task.project_id, title.trim(), user.id);
+        queryClient.invalidateQueries({ queryKey: ["all-files"] });
+        queryClient.invalidateQueries({ queryKey: ["files"] });
       }
 
       // Notify on status change to done

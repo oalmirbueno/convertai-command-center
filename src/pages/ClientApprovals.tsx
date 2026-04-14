@@ -29,8 +29,14 @@ const fileIcon = (name: string) => {
   return FileText;
 };
 
-const isImage = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
+const getExt = (value?: string) => {
+  if (!value) return "";
+  const normalized = value.split("?")[0].split("#")[0];
+  return normalized.split(".").pop()?.toLowerCase() || "";
+};
+
+const isImage = (name: string, url?: string) => {
+  const ext = getExt(name) || getExt(url);
   return ["jpg", "jpeg", "png", "gif", "webp"].includes(ext);
 };
 
@@ -45,7 +51,7 @@ function CarouselPreview({ images, small }: { images: { file_url: string; file_n
   return (
     <div className="relative group">
       <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
-        {isImage(current.file_name) ? (
+        {isImage(current.file_name, current.file_url) ? (
           <img src={current.file_url} alt={current.file_name} className={small ? "w-full h-full object-cover" : "max-w-full max-h-[400px] object-contain"} />
         ) : (
           <FileText className="w-12 h-12 text-muted-foreground/30" />
