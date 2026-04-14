@@ -359,8 +359,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   };
 
   const getFileIcon = (type: string) => {
-    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-blue-500" />;
-    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-purple-500" />;
+    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-primary" />;
+    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-primary" />;
     return <FileText className="w-4 h-4 text-muted-foreground" />;
   };
 
@@ -369,6 +369,47 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const imageAttachments = (attachments || []).filter((a: any) => a.file_type?.startsWith("image/"));
+  const isCarousel = imageAttachments.length > 1;
+
+  const handleDownloadZip = async () => {
+    if (imageAttachments.length === 0) return;
+    setDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
+      for (let i = 0; i < imageAttachments.length; i++) {
+        const a = imageAttachments[i];
+        const resp = await fetch(a.file_url);
+        const blob = await resp.blob();
+        const ext = a.file_name.split(".").pop() || "png";
+        folder!.file(`${String(i + 1).padStart(2, "0")}_${a.file_name}`, blob);
+      }
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel"}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("ZIP baixado!");
+    } catch (err: any) {
+      toast.error("Erro ao gerar ZIP");
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadSingle = (url: string, name: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.target = "_blank";
+    link.click();
   };
 
   const assignee = teamMembers.find((m: any) => m.id === (editing ? assignedTo : task.assigned_to));
