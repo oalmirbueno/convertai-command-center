@@ -147,7 +147,10 @@ export default function AdminFiles() {
 
   const handleMoveFolder = async (fileId: string, newFolder: string) => {
     try {
-      await supabase.from("files").update({ folder: newFolder }).eq("id", fileId);
+      await supabase
+        .from("files")
+        .update({ folder: newFolder })
+        .or(`id.eq.${fileId},parent_file_id.eq.${fileId}`);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       if (previewFile?.id === fileId) {
         setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);

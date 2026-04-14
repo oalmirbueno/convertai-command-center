@@ -2,145 +2,193 @@ import { supabase } from "@/integrations/supabase/client";
 import { notifyUser } from "@/lib/notifyHelpers";
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"];
-const VIDEO_EXTS = ["mp4", "mov", "avi"];
+const VIDEO_EXTS = ["mp4", "mov", "webm"];
+const GRAPHIC_EXTS = [...IMAGE_EXTS, ...VIDEO_EXTS];
 
-function getExt(name: string) {
-  return name?.split(".").pop()?.toLowerCase() || "";
-}
+type TaskAttachment = {
+  created_at?: string;
+  file_name: string;
+  file_type: string | null;
+  file_url: string;
+  uploaded_by: string;
+};
 
-function isVisualFile(name: string) {
-  const ext = getExt(name);
-  return IMAGE_EXTS.includes(ext) || VIDEO_EXTS.includes(ext);
-}
+const getExt = (value?: string) => {
+  if (!value) return "";
+  const normalized = value.split("?")[0].split("#")[0];
+  return normalized.split(".").pop()?.toLowerCase() || "";
+};
 
-/**
- * When a task moves to "review", fetch its attachments and create
- * file entries for client approval. Groups multiple visual files
- * as a carousel (parent + children), single files as static.
- */
+const resolveExt = (fileName: string, fileUrl?: string) => getExt(fileName) || getExt(fileUrl);
+
+const isGraphicAsset = (fileName: string, fileUrl?: string) =>
+  GRAPHIC_EXTS.includes(resolveExt(fileName, fileUrl));
+
+const buildGraphicName = (taskTitle: string, originalName: string, index?: number, total?: number) => {
+  const ext = resolveExt(originalName) || "png";
+
+  if (typeof index === "number" && typeof total === "number") {
+    return `${taskTitle} (${index}/${total}).${ext}`;
+  }
+
+  return `${taskTitle}.${ext}`;
+};
+
+const sortAttachments = (attachments: TaskAttachment[]) =>
+  [...attachments].sort(
+    (a, b) =>
+      (a.created_at || "").localeCompare(b.created_at || "") ||
+      a.file_name.localeCompare(b.file_name)
+  );
+
 export async function sendTaskAttachmentsToApproval(
   taskId: string,
   projectId: string,
   taskTitle: string,
   authorId: string
 ) {
-  // 1. Fetch task attachments
-  const { data: attachments } = await supabase
+  const { data: attachments, error: attachmentsError } = await supabase
     .from("task_attachments")
-    .select("*")
-    .eq("task_id", taskId)
-    .order("created_at", { ascending: true });
+    .select("created_at, file_name, file_type, file_url, uploaded_by")
+    .eq("task_id", taskId);
 
-  if (!attachments || attachments.length === 0) return;
+  if (attachmentsError) throw attachmentsError;
 
-  // 2. Get project info for client_id
-  const { data: project } = await supabase
+  const sortedAttachments = sortAttachments((attachments || []) as TaskAttachment[]);
+  if (sortedAttachments.length === 0) return { insertedCount: 0 };
+
+  const { data: project, error: projectError } = await supabase
     .from("projects")
-    .select("client_id, name")
+    .select("client_id")
     .eq("id", projectId)
     .maybeSingle();
 
-  if (!project?.client_id) return;
+  if (projectError) throw projectError;
+  if (!project?.client_id) return { insertedCount: 0 };
 
-  // 3. Filter only visual files (images/videos) for approval
-  const visualFiles = attachments.filter((a) => isVisualFile(a.file_name));
-  const nonVisualFiles = attachments.filter((a) => !isVisualFile(a.file_name));
-
-  // 4. Check if files already exist in approval (avoid duplicates)
-  const existingUrls = new Set<string>();
-  const { data: existingFiles } = await supabase
+  const attachmentUrls = sortedAttachments.map((attachment) => attachment.file_url);
+  const { data: existingFiles, error: existingFilesError } = await supabase
     .from("files")
     .select("file_url")
     .eq("project_id", projectId)
-    .in("file_url", attachments.map((a) => a.file_url));
-  (existingFiles || []).forEach((f) => existingUrls.add(f.file_url));
+    .in("file_url", attachmentUrls);
 
-  const newVisual = visualFiles.filter((a) => !existingUrls.has(a.file_url));
-  const newNonVisual = nonVisualFiles.filter((a) => !existingUrls.has(a.file_url));
+  if (existingFilesError) throw existingFilesError;
 
-  if (newVisual.length === 0 && newNonVisual.length === 0) return;
+  const existingUrls = new Set((existingFiles || []).map((file) => file.file_url));
+  const newAttachments = sortedAttachments.filter((attachment) => !existingUrls.has(attachment.file_url));
 
-  // 5. Handle visual files — carousel if >1, static if 1
-  if (newVisual.length > 1) {
-    // Create parent (first file)
-    const parent = newVisual[0];
-    const { data: parentFile } = await supabase
+  if (newAttachments.length === 0) return { insertedCount: 0 };
+
+  const graphicAttachments = newAttachments.filter((attachment) =>
+    isGraphicAsset(attachment.file_name, attachment.file_url)
+  );
+  const otherAttachments = newAttachments.filter(
+    (attachment) => !isGraphicAsset(attachment.file_name, attachment.file_url)
+  );
+
+  let insertedCount = 0;
+
+  if (graphicAttachments.length > 1) {
+    const parentAttachment = graphicAttachments[0];
+    const { data: parentFile, error: parentError } = await supabase
       .from("files")
       .insert({
-        file_name: parent.file_name,
-        file_url: parent.file_url,
-        file_type: parent.file_type || null,
-        project_id: projectId,
-        client_id: project.client_id,
-        uploaded_by: authorId,
         approval_status: "pending",
-        folder: "entregas",
         caption: `Carrossel — ${taskTitle}`,
-        description: `Gerado automaticamente da tarefa "${taskTitle}"`,
+        client_id: project.client_id,
+        description: `Gerado automaticamente da tarefa \"${taskTitle}\"`,
+        file_name: buildGraphicName(taskTitle, parentAttachment.file_name),
+        file_type: "creative",
+        file_url: parentAttachment.file_url,
+        folder: "materiais",
+        project_id: projectId,
+        uploaded_by: parentAttachment.uploaded_by || authorId,
       })
       .select("id")
       .single();
 
-    if (parentFile) {
-      // Create children
-      const children = newVisual.slice(1).map((a) => ({
-        file_name: a.file_name,
-        file_url: a.file_url,
-        file_type: a.file_type || null,
-        project_id: projectId,
-        client_id: project.client_id,
-        uploaded_by: authorId,
-        approval_status: "none",
-        folder: "entregas",
-        parent_file_id: parentFile.id,
-      }));
-      await supabase.from("files").insert(children);
+    if (parentError) throw parentError;
+    insertedCount += 1;
+
+    const childRows = graphicAttachments.slice(1).map((attachment, index) => ({
+      approval_status: "none",
+      client_id: project.client_id,
+      file_name: buildGraphicName(taskTitle, attachment.file_name, index + 2, graphicAttachments.length),
+      file_type: "creative",
+      file_url: attachment.file_url,
+      folder: "materiais",
+      parent_file_id: parentFile.id,
+      project_id: projectId,
+      uploaded_by: attachment.uploaded_by || authorId,
+    }));
+
+    if (childRows.length > 0) {
+      const { error: childrenError } = await supabase.from("files").insert(childRows);
+      if (childrenError) throw childrenError;
+      insertedCount += childRows.length;
     }
-  } else if (newVisual.length === 1) {
-    // Single static file
-    const file = newVisual[0];
-    await supabase.from("files").insert({
-      file_name: file.file_name,
-      file_url: file.file_url,
-      file_type: file.file_type || null,
-      project_id: projectId,
-      client_id: project.client_id,
-      uploaded_by: authorId,
+  } else if (graphicAttachments.length === 1) {
+    const attachment = graphicAttachments[0];
+    const { error: graphicError } = await supabase.from("files").insert({
       approval_status: "pending",
-      folder: "entregas",
-      description: `Gerado automaticamente da tarefa "${taskTitle}"`,
+      client_id: project.client_id,
+      description: `Gerado automaticamente da tarefa \"${taskTitle}\"`,
+      file_name: buildGraphicName(taskTitle, attachment.file_name),
+      file_type: "creative",
+      file_url: attachment.file_url,
+      folder: "materiais",
+      project_id: projectId,
+      uploaded_by: attachment.uploaded_by || authorId,
     });
+
+    if (graphicError) throw graphicError;
+    insertedCount += 1;
   }
 
-  // 6. Handle non-visual files (docs, zips, etc.) as individual static files
-  for (const file of newNonVisual) {
-    await supabase.from("files").insert({
-      file_name: file.file_name,
-      file_url: file.file_url,
-      file_type: file.file_type || null,
-      project_id: projectId,
-      client_id: project.client_id,
-      uploaded_by: authorId,
+  if (otherAttachments.length > 0) {
+    const otherRows = otherAttachments.map((attachment) => ({
       approval_status: "pending",
-      folder: "entregas",
-      description: `Gerado automaticamente da tarefa "${taskTitle}"`,
-    });
+      client_id: project.client_id,
+      description: `Gerado automaticamente da tarefa \"${taskTitle}\"`,
+      file_name: attachment.file_name,
+      file_type: attachment.file_type || "documento",
+      file_url: attachment.file_url,
+      folder: "operacionais",
+      project_id: projectId,
+      uploaded_by: attachment.uploaded_by || authorId,
+    }));
+
+    const { error: otherError } = await supabase.from("files").insert(otherRows);
+    if (otherError) throw otherError;
+    insertedCount += otherRows.length;
   }
 
-  // 7. Notify client about pending approval
-  const label = newVisual.length > 1 ? "Carrossel" : "Arte";
-  await notifyUser(
-    project.client_id,
-    `${label} "${taskTitle}" enviado para sua aprovação`,
-    "approval",
-    "/aprovacoes"
-  );
+  if (insertedCount === 0) return { insertedCount: 0 };
 
-  // 8. Create update entry
-  await supabase.from("updates").insert({
-    project_id: projectId,
-    author_id: authorId,
-    message: `${label} da tarefa "${taskTitle}" enviado para aprovação do cliente`,
-    update_type: "delivery",
-  });
+  const approvalLabel =
+    graphicAttachments.length > 1
+      ? "Carrossel"
+      : graphicAttachments.length === 1
+        ? "Arte"
+        : otherAttachments.length > 1
+          ? "Arquivos"
+          : "Arquivo";
+
+  await Promise.all([
+    notifyUser(
+      project.client_id,
+      `${approvalLabel} \"${taskTitle}\" enviado para sua aprovação`,
+      "approval",
+      "/aprovacoes"
+    ),
+    supabase.from("updates").insert({
+      author_id: authorId,
+      message: `${approvalLabel} da tarefa \"${taskTitle}\" enviado para aprovação do cliente`,
+      project_id: projectId,
+      update_type: "delivery",
+    }),
+  ]);
+
+  return { insertedCount };
 }

@@ -209,6 +209,7 @@ export function useAllFiles() {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 15000,
   });
 }
 
