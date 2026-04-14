@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
-import JSZip from "jszip";
+import * as JSZip from "jszip";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
   FileText, Image, Film, Download, ChevronDown, ChevronUp,
