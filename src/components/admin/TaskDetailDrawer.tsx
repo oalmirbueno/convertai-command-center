@@ -5,11 +5,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
+// @ts-ignore
+import JSZip from "jszip";
 import {
   X, Loader2, Pencil, Save, Trash2, Paperclip, Upload,
   FileText, Image, Film, Download, ChevronDown, ChevronUp,
   Clock, Flag, User, Folder, Calendar, MessageSquare,
-  CheckSquare, Square, Plus, Send,
+  CheckSquare, Square, Plus, Send, Archive,
 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -358,8 +360,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   };
 
   const getFileIcon = (type: string) => {
-    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-blue-500" />;
-    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-purple-500" />;
+    if (type?.startsWith("image/")) return <Image className="w-4 h-4 text-primary" />;
+    if (type?.startsWith("video/")) return <Film className="w-4 h-4 text-primary" />;
     return <FileText className="w-4 h-4 text-muted-foreground" />;
   };
 
@@ -368,6 +370,47 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     if (bytes < 1024) return `${bytes}B`;
     if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)}KB`;
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
+  };
+
+  const [downloadingZip, setDownloadingZip] = useState(false);
+
+  const imageAttachments = (attachments || []).filter((a: any) => a.file_type?.startsWith("image/"));
+  const isCarousel = imageAttachments.length > 1;
+
+  const handleDownloadZip = async () => {
+    if (imageAttachments.length === 0) return;
+    setDownloadingZip(true);
+    try {
+      const zip = new JSZip();
+      const folder = zip.folder(task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
+      for (let i = 0; i < imageAttachments.length; i++) {
+        const a = imageAttachments[i];
+        const resp = await fetch(a.file_url);
+        const blob = await resp.blob();
+        const ext = a.file_name.split(".").pop() || "png";
+        folder!.file(`${String(i + 1).padStart(2, "0")}_${a.file_name}`, blob);
+      }
+      const content = await zip.generateAsync({ type: "blob" });
+      const url = URL.createObjectURL(content);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel"}.zip`;
+      link.click();
+      URL.revokeObjectURL(url);
+      toast.success("ZIP baixado!");
+    } catch (err: any) {
+      toast.error("Erro ao gerar ZIP");
+    } finally {
+      setDownloadingZip(false);
+    }
+  };
+
+  const handleDownloadSingle = (url: string, name: string) => {
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = name;
+    link.target = "_blank";
+    link.click();
   };
 
   const assignee = teamMembers.find((m: any) => m.id === (editing ? assignedTo : task.assigned_to));
@@ -600,19 +643,39 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum anexo</p>
                 ) : (
                   <div className="space-y-2">
-                    {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).length > 0 && (
+                    {/* Carousel download button */}
+                    {isCarousel && (
+                      <button
+                        onClick={handleDownloadZip}
+                        disabled={downloadingZip}
+                        className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-primary/10 hover:bg-primary/20 text-primary text-[12px] font-medium transition-colors cursor-pointer border border-primary/20 disabled:opacity-50"
+                      >
+                        {downloadingZip ? <Loader2 className="w-4 h-4 animate-spin" /> : <Archive className="w-4 h-4" />}
+                        Baixar carrossel em ZIP ({imageAttachments.length} imagens)
+                      </button>
+                    )}
+
+                    {imageAttachments.length > 0 && (
                       <div className="grid grid-cols-3 gap-2">
-                        {(attachments || []).filter((a: any) => a.file_type?.startsWith("image/")).map((a: any) => (
+                        {imageAttachments.map((a: any) => (
                           <div key={a.id} className="relative group rounded-lg overflow-hidden border border-border aspect-square">
                             <a href={a.file_url} target="_blank" rel="noopener noreferrer">
                               <img src={a.file_url} alt={a.file_name} className="w-full h-full object-cover" />
                             </a>
-                            {!readOnly && (
-                              <button onClick={() => setConfirmDelete(a.id)}
-                                className="absolute top-1 right-1 p-1 rounded-lg bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer border-none">
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            )}
+                            <div className="absolute bottom-0 inset-x-0 flex items-center justify-end gap-0.5 p-1 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+                              {!isCarousel && (
+                                <button onClick={() => handleDownloadSingle(a.file_url, a.file_name)}
+                                  className="p-1 rounded bg-black/40 text-white hover:bg-black/60 cursor-pointer border-none">
+                                  <Download className="w-3 h-3" />
+                                </button>
+                              )}
+                              {!readOnly && (
+                                <button onClick={() => setConfirmDelete(a.id)}
+                                  className="p-1 rounded bg-black/40 text-white hover:bg-destructive cursor-pointer border-none">
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
+                            </div>
                           </div>
                         ))}
                       </div>
