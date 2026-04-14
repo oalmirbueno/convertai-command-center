@@ -125,7 +125,10 @@ export default function Kanban() {
           project_id: task.project_id, author_id: authUser.id,
           message: `Task "${task.title}" em revisão`, update_type: "task",
         });
+        // Auto-send attachments to client approval
+        await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
       }
+      queryClient.invalidateQueries({ queryKey: ["all-files"] });
     }
 
     if (column === "done" && task.project_id) {
