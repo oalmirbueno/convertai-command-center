@@ -1,9 +1,11 @@
 import { useAuth } from "@/contexts/AuthContext";
-import { Settings, User, Bell, Shield } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
+import { User, Bell, Shield, Sun, Moon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 export default function SettingsPage() {
   const { profile } = useAuth();
+  const { theme, setTheme } = useTheme();
   const navigate = useNavigate();
 
   const sections = [
@@ -15,6 +17,35 @@ export default function SettingsPage() {
   return (
     <div className="space-y-6 animate-fade-in max-w-lg w-full">
       <p className="heading-page">Configurações</p>
+
+      {/* Aparência */}
+      <div className="space-y-2">
+        <p className="label-sm">Aparência</p>
+        <div className="bg-card border border-border rounded-xl p-1.5 flex gap-1">
+          <button
+            onClick={() => setTheme("dark")}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              theme === "dark"
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Moon className="w-4 h-4" />
+            Escuro
+          </button>
+          <button
+            onClick={() => setTheme("light")}
+            className={`flex-1 flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg text-sm transition-colors ${
+              theme === "light"
+                ? "bg-secondary text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sun className="w-4 h-4" />
+            Claro
+          </button>
+        </div>
+      </div>
 
       <div className="space-y-2">
         {sections.map((s) => (

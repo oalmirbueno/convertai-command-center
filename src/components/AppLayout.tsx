@@ -9,7 +9,8 @@ import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon } from "lucide-react";
+import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
@@ -61,6 +62,7 @@ const clientMoreNav: NavItem[] = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
@@ -139,11 +141,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Floating TopNav */}
       <nav className="fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4"
         style={{
-          background: 'rgba(17, 17, 19, 0.85)',
+          background: theme === "dark" ? 'rgba(17, 17, 19, 0.85)' : 'rgba(255, 255, 255, 0.85)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          border: '1px solid rgba(39, 39, 42, 0.5)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+          border: theme === "dark" ? '1px solid rgba(39, 39, 42, 0.5)' : '1px solid rgba(0, 0, 0, 0.08)',
+          boxShadow: theme === "dark" ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.06)',
         }}
       >
         {/* Left: Logo */}
@@ -215,6 +217,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center gap-1 shrink-0">
           <button className="hidden sm:flex w-8 h-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors">
             <Search className="w-4 h-4" />
+          </button>
+          <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
           </button>
           <button
             data-tour="nav-notifications"
