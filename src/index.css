@@ -3,7 +3,8 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
+  :root,
+  .dark {
     --background: 0 0% 5%;
     --foreground: 0 0% 100%;
 
@@ -46,6 +47,49 @@
     --sidebar-accent-foreground: 0 0% 100%;
     --sidebar-border: 0 0% 17%;
     --sidebar-ring: 145 100% 50%;
+  }
+
+  .light {
+    --background: 0 0% 98%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 145 80% 38%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 94%;
+    --secondary-foreground: 0 0% 25%;
+
+    --muted: 0 0% 94%;
+    --muted-foreground: 0 0% 42%;
+
+    --accent: 145 80% 38%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 78% 52%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 145 80% 38%;
+    --warning: 38 92% 48%;
+    --info: 210 90% 48%;
+
+    --border: 0 0% 88%;
+    --input: 0 0% 90%;
+    --ring: 145 80% 38%;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 0 0% 35%;
+    --sidebar-primary: 145 80% 38%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 8%;
+    --sidebar-border: 0 0% 88%;
+    --sidebar-ring: 145 80% 38%;
   }
 }
 
