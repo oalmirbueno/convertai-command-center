@@ -141,11 +141,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* Floating TopNav */}
       <nav className="fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4"
         style={{
-          background: 'rgba(17, 17, 19, 0.85)',
+          background: theme === "dark" ? 'rgba(17, 17, 19, 0.85)' : 'rgba(255, 255, 255, 0.85)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
-          border: '1px solid rgba(39, 39, 42, 0.5)',
-          boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+          border: theme === "dark" ? '1px solid rgba(39, 39, 42, 0.5)' : '1px solid rgba(0, 0, 0, 0.08)',
+          boxShadow: theme === "dark" ? '0 4px 24px rgba(0,0,0,0.3)' : '0 4px 24px rgba(0,0,0,0.06)',
         }}
       >
         {/* Left: Logo */}
