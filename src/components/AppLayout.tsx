@@ -219,6 +219,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             <Search className="w-4 h-4" />
           </button>
           <button
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Tema claro" : "Tema escuro"}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+          <button
             data-tour="nav-notifications"
             className="relative w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setNotifOpen(true)}
