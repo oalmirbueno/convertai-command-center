@@ -62,6 +62,7 @@ const clientMoreNav: NavItem[] = [
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
