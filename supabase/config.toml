@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.ops-webhook]
 verify_jwt = false
+
+[functions.ops-projects-list]
+verify_jwt = false
