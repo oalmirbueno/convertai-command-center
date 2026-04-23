@@ -14,3 +14,6 @@ verify_jwt = false
 
 [functions.process-meeting-notes]
 verify_jwt = false
+
+[functions.ops-webhook]
+verify_jwt = false
