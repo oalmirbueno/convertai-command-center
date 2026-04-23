@@ -20,3 +20,6 @@ verify_jwt = false
 
 [functions.ops-projects-list]
 verify_jwt = false
+
+[functions.ops-clients-list]
+verify_jwt = false
