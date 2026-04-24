@@ -64,6 +64,46 @@ serve(async (req) => {
         ...rest,
       }, { onConflict: "token" });
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: cors });
+
+      // Empurra pro Ops (webhook unidirecional)
+      const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-lead";
+      const OPS_SECRET = "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+
+      try {
+        await fetch(OPS_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-webhook-secret": OPS_SECRET,
+          },
+          body: JSON.stringify({
+            token,
+            portal_submission_id: token,
+            lead_name: rest.lead_name,
+            lead_email: rest.lead_email,
+            lead_whatsapp: rest.lead_whatsapp,
+            lead_company: rest.lead_company,
+            positioning: rest.positioning,
+            differential: rest.differential,
+            icp: rest.icp,
+            main_pains: rest.main_pains,
+            goals_12m: rest.goals_12m,
+            success_metric: rest.success_metric,
+            revenue_range: rest.revenue_range,
+            team_size: rest.team_size,
+            maturity_digital: rest.maturity_digital,
+            ai_readiness: rest.ai_readiness,
+            icp_fit_score: score,
+            recommended_plan: plan,
+            origin: rest.origin ?? null,
+            submitted_at: new Date().toISOString(),
+          }),
+        });
+      } catch (err) {
+        // Portal não quebra se Ops estiver indisponível — só registra log
+        console.error("Falha ao empurrar pro Ops:", err);
+      }
+
       return new Response(JSON.stringify({ ok: true, score, plan }), { headers: { ...cors, "Content-Type": "application/json" } });
     }
 
