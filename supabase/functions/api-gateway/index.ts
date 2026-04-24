@@ -346,29 +346,6 @@ const handlers: Record<string, Handler> = {
     return ok(data)
   },
 
-  // ── Notifications ──
-  send_notification: async (db, p) => {
-    requireFields(p, ['user_id', 'message', 'notification_type'])
-    const { data, error } = await db.from('notifications').insert({
-      user_id: p.user_id,
-      message: p.message,
-      notification_type: p.notification_type,
-      link: p.link || null,
-    }).select().single()
-    if (error) throw error
-    return ok(data)
-  },
-
-  list_notifications: async (db, p) => {
-    requireFields(p, ['user_id'])
-    let q = db.from('notifications').select('*').eq('user_id', p.user_id)
-    if (p.read !== undefined) q = q.eq('read', p.read)
-    if (p.limit) q = q.limit(p.limit)
-    const { data, error } = await q.order('created_at', { ascending: false })
-    if (error) throw error
-    return ok(data)
-  },
-
   // ── Client Requests ──
   list_requests: async (db, p) => {
     let q = db.from('client_requests').select('*')
