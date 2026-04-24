@@ -27,7 +27,8 @@ function requireFields(params: Record<string, unknown>, fields: string[]) {
 
 // ─── Handlers ───────────────────────────────────────────────
 
-type DB = ReturnType<typeof createClient>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DB = any
 type Handler = (db: DB, params: Record<string, any>) => Promise<Response>
 
 const handlers: Record<string, Handler> = {
