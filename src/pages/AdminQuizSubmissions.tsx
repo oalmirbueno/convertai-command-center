@@ -233,9 +233,10 @@ export default function AdminQuizSubmissions() {
       </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Total" value={stats.total} />
-        <StatCard label="Não processados" value={stats.pending} accent="warning" />
+        <StatCard label="Em andamento" value={stats.drafts} accent="muted" />
+        <StatCard label="Submissões novas" value={stats.submitted} accent="warning" />
         <StatCard label="ICP ≥ 80" value={stats.high} accent="primary" />
         <StatCard label="Score médio" value={stats.avg} mono />
       </div>
