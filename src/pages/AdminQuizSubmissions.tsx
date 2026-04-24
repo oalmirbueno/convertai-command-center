@@ -261,6 +261,7 @@ export default function AdminQuizSubmissions() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
+              <SelectItem value="draft">Em andamento</SelectItem>
               <SelectItem value="submitted">Apenas novos</SelectItem>
               <SelectItem value="processed">Apenas processados</SelectItem>
             </SelectContent>
