@@ -65,9 +65,9 @@ serve(async (req) => {
       }, { onConflict: "token" });
       if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500, headers: cors });
 
-      // Empurra pro Ops (webhook unidirecional)
+      // Empurra pro Aceleriq Ops (webhook unidirecional)
       const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-lead";
-      const OPS_SECRET = "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+      const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
 
       try {
         await fetch(OPS_URL, {
