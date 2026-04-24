@@ -188,6 +188,16 @@ export default function AdminQuizSubmissions() {
 
   // ----------------- Render -----------------
 
+  // Guard: only admin
+  if (profile && profile.role !== "admin") {
+    return (
+      <div className="max-w-2xl mx-auto py-20 text-center">
+        <h1 className="text-2xl font-semibold mb-2">Acesso restrito</h1>
+        <p className="text-muted-foreground">Esta página está disponível apenas para administradores.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto px-4 md:px-6 py-8 space-y-8">
       {/* Header */}
