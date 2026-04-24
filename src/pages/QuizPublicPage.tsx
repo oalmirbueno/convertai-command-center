@@ -281,7 +281,7 @@ export default function QuizPublicPage() {
 
       {/* Header */}
       <header className="px-6 py-5 flex items-center justify-between max-w-5xl mx-auto">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-9 w-auto" />
+        <img src={aceleriqLogo} alt="Aceleriq" className="h-20 md:h-24 w-auto" />
         {phase === "quiz" && (
           <div className="text-xs font-mono text-muted-foreground">
             {savingHint ? "Salvando…" : "Salvo automaticamente"}
