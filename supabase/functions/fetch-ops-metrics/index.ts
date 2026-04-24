@@ -39,8 +39,8 @@ serve(async (req) => {
       .maybeSingle();
 
     if (!profile?.ops_client_id) {
-      return new Response(JSON.stringify({ error: "Perfil não vinculado ao Ops ainda" }),
-        { status: 404, headers: { ...cors, "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ linked: false, error: "Perfil não vinculado ao Ops ainda" }),
+        { status: 200, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
     // Chama Ops
