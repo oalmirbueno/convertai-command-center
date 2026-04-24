@@ -56,6 +56,16 @@ const PLAN_LABELS: Record<string, string> = {
   enterprise: "Escala IA-First",
 };
 
+const ANSWER_FIELDS: (keyof Submission)[] = [
+  "positioning", "differential", "icp", "main_pains",
+  "goals_12m", "success_metric", "revenue_range", "team_size",
+  "maturity_digital", "ai_readiness",
+];
+
+function answeredCount(s: Submission) {
+  return ANSWER_FIELDS.reduce((acc, k) => acc + (s[k] ? 1 : 0), 0);
+}
+
 function scoreTone(score: number | null) {
   if (score == null) return { label: "—", className: "bg-secondary text-muted-foreground border-border" };
   if (score >= 80) return { label: `${score}`, className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
@@ -66,7 +76,8 @@ function scoreTone(score: number | null) {
 
 function statusTone(status: string | null) {
   if (status === "processed") return { label: "Processado", className: "bg-primary/15 text-primary border-primary/30" };
-  return { label: "Novo", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+  if (status === "submitted") return { label: "Novo", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+  return { label: "Em andamento", className: "bg-muted text-muted-foreground border-border" };
 }
 
 // ----------------- Page -----------------
