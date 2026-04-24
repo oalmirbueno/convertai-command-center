@@ -69,7 +69,7 @@ Deno.serve(async (req) => {
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
       // Clean up ALL foreign key references before deleting auth user
-      const cleanup = async (label: string, promise: Promise<any>) => {
+      const cleanup = async (label: string, promise: any) => {
         const res = await promise;
         if (res.error) console.error(`Cleanup ${label} failed:`, res.error);
         else console.log(`Cleanup ${label}: ok`);
