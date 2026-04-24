@@ -48,6 +48,7 @@ type Submission = {
   origin: string | null;
   submitted_at: string | null;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 const PLAN_LABELS: Record<string, string> = {
