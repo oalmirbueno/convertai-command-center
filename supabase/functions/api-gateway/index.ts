@@ -27,7 +27,8 @@ function requireFields(params: Record<string, unknown>, fields: string[]) {
 
 // ─── Handlers ───────────────────────────────────────────────
 
-type DB = ReturnType<typeof createClient>
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type DB = any
 type Handler = (db: DB, params: Record<string, any>) => Promise<Response>
 
 const handlers: Record<string, Handler> = {
@@ -341,29 +342,6 @@ const handlers: Record<string, Handler> = {
     const { billing_id, ...updates } = p
     delete updates.action
     const { data, error } = await db.from('billing').update(updates).eq('id', billing_id).select().single()
-    if (error) throw error
-    return ok(data)
-  },
-
-  // ── Notifications ──
-  send_notification: async (db, p) => {
-    requireFields(p, ['user_id', 'message', 'notification_type'])
-    const { data, error } = await db.from('notifications').insert({
-      user_id: p.user_id,
-      message: p.message,
-      notification_type: p.notification_type,
-      link: p.link || null,
-    }).select().single()
-    if (error) throw error
-    return ok(data)
-  },
-
-  list_notifications: async (db, p) => {
-    requireFields(p, ['user_id'])
-    let q = db.from('notifications').select('*').eq('user_id', p.user_id)
-    if (p.read !== undefined) q = q.eq('read', p.read)
-    if (p.limit) q = q.limit(p.limit)
-    const { data, error } = await q.order('created_at', { ascending: false })
     if (error) throw error
     return ok(data)
   },
