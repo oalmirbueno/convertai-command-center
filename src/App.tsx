@@ -86,6 +86,7 @@ function AppRoutes() {
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
       <Route path="/financeiro/projecao" element={<ProtectedRoute><AppLayout><AdminProjection /></AppLayout></ProtectedRoute>} />
       <Route path="/api-docs" element={<ProtectedRoute><AppLayout><ApiDocs /></AppLayout></ProtectedRoute>} />
+      <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
