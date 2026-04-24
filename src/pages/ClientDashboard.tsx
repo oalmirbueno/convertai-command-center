@@ -50,16 +50,21 @@ export default function ClientDashboard({ impersonateClientId, impersonateClient
     (async () => {
       try {
         const { data, error } = await supabase.functions.invoke("fetch-ops-metrics");
-        if (error) throw error;
-        if (data?.error) {
-          setOpsError(data.error);
-        } else {
-          setOpsMetrics(data);
+        // Try to extract error body even on HTTP error responses
+        let payload: any = data;
+        if (error && (error as any)?.context?.json) {
+          try { payload = await (error as any).context.json(); } catch { /* ignore */ }
+        }
+        if (payload?.error) {
+          setOpsError(String(payload.error));
+        } else if (payload) {
+          setOpsMetrics(payload);
+        } else if (error) {
+          setOpsError(error.message || "Falha ao buscar métricas");
         }
       } catch (err: any) {
-        const msg = err?.message || "Falha ao buscar métricas";
-        console.error("Failed to fetch Ops metrics", err);
-        setOpsError(msg);
+        console.warn("fetch-ops-metrics:", err?.message ?? err);
+        setOpsError(err?.message || "Falha ao buscar métricas");
       } finally {
         setLoadingMetrics(false);
       }
