@@ -217,11 +217,25 @@ export default function AdminDashboard() {
     setMenuProject(null);
   };
 
+  const generateQuizLink = async () => {
+    const token = (crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    const url = `https://aceleriq.online/quiz/${token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link do quiz copiado!", {
+        description: "Envie ao lead pra ele responder o diagnóstico.",
+      });
+    } catch {
+      toast.error("Não foi possível copiar", { description: url });
+    }
+  };
+
   const quickActions = [
     { label: "Novo Projeto", icon: Plus, action: () => setCreateProjectOpen(true) },
     { label: "Novo Cliente", icon: UserPlus, action: () => setCreateClientOpen(true) },
     { label: "Nova Ata de Reunião", icon: FileText, action: () => setMeetingNotesOpen(true) },
     { label: "Gerar Link Briefing", icon: Link2, action: () => setBriefingLinkOpen(true) },
+    { label: "Gerar link de quiz", icon: ClipboardList, action: generateQuizLink },
     { label: "Upload", icon: Upload, action: () => navigate("/arquivos") },
   ];
 
