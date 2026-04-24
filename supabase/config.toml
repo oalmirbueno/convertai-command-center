@@ -29,3 +29,6 @@ verify_jwt = false
 
 [functions.backfill-to-ops]
 verify_jwt = false
+
+[functions.backfill-clients-to-ops]
+verify_jwt = false
