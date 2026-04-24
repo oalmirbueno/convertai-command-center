@@ -575,6 +575,7 @@ export type Database = {
           full_name: string
           id: string
           onboarding_done: boolean
+          ops_client_id: string | null
           overdue_since: string | null
           phone: string | null
           plan_name: string | null
@@ -592,6 +593,7 @@ export type Database = {
           full_name: string
           id: string
           onboarding_done?: boolean
+          ops_client_id?: string | null
           overdue_since?: string | null
           phone?: string | null
           plan_name?: string | null
@@ -609,6 +611,7 @@ export type Database = {
           full_name?: string
           id?: string
           onboarding_done?: boolean
+          ops_client_id?: string | null
           overdue_since?: string | null
           phone?: string | null
           plan_name?: string | null
