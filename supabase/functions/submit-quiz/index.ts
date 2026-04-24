@@ -8,11 +8,12 @@ const cors = {
 
 // ═══ Aceleriq Ops webhook — empurra leads automaticamente ═══
 const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-lead";
-const OPS_SECRET = "COLE_AQUI_O_VALOR_DO_SECRET";
+const OPS_SECRET = "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
 
 // Copia simplificada do ICP-Fit calculator
 const REVENUE_SCORE: Record<string, number> = {
   "Até R$ 20k/mês": 20,
+
   "R$ 20k-50k/mês": 35,
   "R$ 50k-200k/mês": 55,
   "R$ 200k-500k/mês": 75,
