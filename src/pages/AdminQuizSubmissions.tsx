@@ -560,10 +560,14 @@ function SubmissionDrawer({
             {s.lead_name || "Sem nome"}
           </SheetTitle>
           <SheetDescription>
-            {s.lead_company || "—"} · submetido em{" "}
+            {s.lead_company || "—"} ·{" "}
             {s.submitted_at
-              ? format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })
-              : "—"}
+              ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
+              : `em andamento — última atividade ${
+                  (s.updated_at ?? s.created_at)
+                    ? format(new Date((s.updated_at ?? s.created_at) as string), "dd MMM yyyy · HH:mm", { locale: ptBR })
+                    : "—"
+                }`}
           </SheetDescription>
         </SheetHeader>
 
