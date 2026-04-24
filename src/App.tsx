@@ -34,6 +34,7 @@ import ProfilePage from "@/pages/ProfilePage";
 import SettingsPage from "@/pages/SettingsPage";
 import AdminViewAsClient from "@/pages/AdminViewAsClient";
 import ApiDocs from "@/pages/ApiDocs";
+import AdminQuizSubmissions from "@/pages/AdminQuizSubmissions";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
