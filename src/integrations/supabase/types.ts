@@ -774,6 +774,84 @@ export type Database = {
         }
         Relationships: []
       }
+      quiz_submissions: {
+        Row: {
+          ai_readiness: string | null
+          created_at: string | null
+          differential: string | null
+          goals_12m: string | null
+          icp: string | null
+          icp_fit_score: number | null
+          id: string
+          lead_company: string | null
+          lead_email: string | null
+          lead_name: string | null
+          lead_whatsapp: string | null
+          main_pains: string | null
+          maturity_digital: string | null
+          origin: string | null
+          positioning: string | null
+          recommended_plan: string | null
+          revenue_range: string | null
+          status: string | null
+          submitted_at: string | null
+          success_metric: string | null
+          team_size: string | null
+          token: string
+          updated_at: string | null
+        }
+        Insert: {
+          ai_readiness?: string | null
+          created_at?: string | null
+          differential?: string | null
+          goals_12m?: string | null
+          icp?: string | null
+          icp_fit_score?: number | null
+          id?: string
+          lead_company?: string | null
+          lead_email?: string | null
+          lead_name?: string | null
+          lead_whatsapp?: string | null
+          main_pains?: string | null
+          maturity_digital?: string | null
+          origin?: string | null
+          positioning?: string | null
+          recommended_plan?: string | null
+          revenue_range?: string | null
+          status?: string | null
+          submitted_at?: string | null
+          success_metric?: string | null
+          team_size?: string | null
+          token: string
+          updated_at?: string | null
+        }
+        Update: {
+          ai_readiness?: string | null
+          created_at?: string | null
+          differential?: string | null
+          goals_12m?: string | null
+          icp?: string | null
+          icp_fit_score?: number | null
+          id?: string
+          lead_company?: string | null
+          lead_email?: string | null
+          lead_name?: string | null
+          lead_whatsapp?: string | null
+          main_pains?: string | null
+          maturity_digital?: string | null
+          origin?: string | null
+          positioning?: string | null
+          recommended_plan?: string | null
+          revenue_range?: string | null
+          status?: string | null
+          submitted_at?: string | null
+          success_metric?: string | null
+          team_size?: string | null
+          token?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       recharge_requests: {
         Row: {
           amount: number
