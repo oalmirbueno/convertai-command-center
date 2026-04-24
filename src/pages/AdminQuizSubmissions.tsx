@@ -86,7 +86,7 @@ export default function AdminQuizSubmissions() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "processed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted" | "processed">("all");
   const [scoreFilter, setScoreFilter] = useState<"all" | "80" | "60" | "40">("all");
   const [dateFilter, setDateFilter] = useState<"all" | "7d" | "30d" | "90d">("all");
   const [openSubmission, setOpenSubmission] = useState<Submission | null>(null);
@@ -99,8 +99,9 @@ export default function AdminQuizSubmissions() {
       const { data, error } = await supabase
         .from("quiz_submissions")
         .select("*")
-        .in("status", ["submitted", "processed"])
+        .in("status", ["draft", "submitted", "processed"])
         .order("submitted_at", { ascending: false, nullsFirst: false })
+        .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Submission[];
@@ -113,7 +114,8 @@ export default function AdminQuizSubmissions() {
     if (!submissions) return [];
     const now = Date.now();
     return submissions.filter((s) => {
-      if (statusFilter !== "all" && (s.status ?? "submitted") !== statusFilter) return false;
+      const st = s.status ?? "draft";
+      if (statusFilter !== "all" && st !== statusFilter) return false;
 
       if (scoreFilter !== "all") {
         const min = parseInt(scoreFilter, 10);
