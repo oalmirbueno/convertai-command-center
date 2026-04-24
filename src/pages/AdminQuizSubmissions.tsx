@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
 import {
   Eye, CheckCircle2, Copy, Loader2, Search, Filter,
-  Mail, Phone, Building2, Sparkles, ArrowDownToLine,
+  Mail, Phone, Building2, Sparkles, ArrowDownToLine, Link2, Hash,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -48,6 +48,7 @@ type Submission = {
   origin: string | null;
   submitted_at: string | null;
   created_at: string | null;
+  updated_at: string | null;
 };
 
 const PLAN_LABELS: Record<string, string> = {
@@ -55,6 +56,16 @@ const PLAN_LABELS: Record<string, string> = {
   growth: "Aceleração",
   enterprise: "Escala IA-First",
 };
+
+const ANSWER_FIELDS: (keyof Submission)[] = [
+  "positioning", "differential", "icp", "main_pains",
+  "goals_12m", "success_metric", "revenue_range", "team_size",
+  "maturity_digital", "ai_readiness",
+];
+
+function answeredCount(s: Submission) {
+  return ANSWER_FIELDS.reduce((acc, k) => acc + (s[k] ? 1 : 0), 0);
+}
 
 function scoreTone(score: number | null) {
   if (score == null) return { label: "—", className: "bg-secondary text-muted-foreground border-border" };
@@ -66,7 +77,8 @@ function scoreTone(score: number | null) {
 
 function statusTone(status: string | null) {
   if (status === "processed") return { label: "Processado", className: "bg-primary/15 text-primary border-primary/30" };
-  return { label: "Novo", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+  if (status === "submitted") return { label: "Novo", className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
+  return { label: "Em andamento", className: "bg-muted text-muted-foreground border-border" };
 }
 
 // ----------------- Page -----------------
@@ -75,7 +87,7 @@ export default function AdminQuizSubmissions() {
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState<"all" | "submitted" | "processed">("all");
+  const [statusFilter, setStatusFilter] = useState<"all" | "draft" | "submitted" | "processed">("all");
   const [scoreFilter, setScoreFilter] = useState<"all" | "80" | "60" | "40">("all");
   const [dateFilter, setDateFilter] = useState<"all" | "7d" | "30d" | "90d">("all");
   const [openSubmission, setOpenSubmission] = useState<Submission | null>(null);
@@ -88,8 +100,9 @@ export default function AdminQuizSubmissions() {
       const { data, error } = await supabase
         .from("quiz_submissions")
         .select("*")
-        .in("status", ["submitted", "processed"])
+        .in("status", ["draft", "submitted", "processed"])
         .order("submitted_at", { ascending: false, nullsFirst: false })
+        .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
       return (data ?? []) as Submission[];
@@ -102,22 +115,26 @@ export default function AdminQuizSubmissions() {
     if (!submissions) return [];
     const now = Date.now();
     return submissions.filter((s) => {
-      if (statusFilter !== "all" && (s.status ?? "submitted") !== statusFilter) return false;
+      const st = s.status ?? "draft";
+      if (statusFilter !== "all" && st !== statusFilter) return false;
 
       if (scoreFilter !== "all") {
         const min = parseInt(scoreFilter, 10);
         if ((s.icp_fit_score ?? -1) < min) return false;
       }
 
-      if (dateFilter !== "all" && s.submitted_at) {
-        const days = dateFilter === "7d" ? 7 : dateFilter === "30d" ? 30 : 90;
-        const diff = (now - new Date(s.submitted_at).getTime()) / (1000 * 60 * 60 * 24);
-        if (diff > days) return false;
+      if (dateFilter !== "all") {
+        const ref = s.submitted_at ?? s.updated_at ?? s.created_at;
+        if (ref) {
+          const days = dateFilter === "7d" ? 7 : dateFilter === "30d" ? 30 : 90;
+          const diff = (now - new Date(ref).getTime()) / (1000 * 60 * 60 * 24);
+          if (diff > days) return false;
+        }
       }
 
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp]
+        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp, s.token]
           .filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -128,12 +145,14 @@ export default function AdminQuizSubmissions() {
   // ---- Stats ----
   const stats = useMemo(() => {
     const list = submissions ?? [];
+    const drafts = list.filter(s => (s.status ?? "draft") === "draft").length;
+    const submitted = list.filter(s => s.status === "submitted").length;
     const high = list.filter(s => (s.icp_fit_score ?? 0) >= 80).length;
-    const pending = list.filter(s => (s.status ?? "submitted") !== "processed").length;
-    const avg = list.length
-      ? Math.round(list.reduce((acc, s) => acc + (s.icp_fit_score ?? 0), 0) / list.length)
+    const submittedList = list.filter(s => s.icp_fit_score != null);
+    const avg = submittedList.length
+      ? Math.round(submittedList.reduce((acc, s) => acc + (s.icp_fit_score ?? 0), 0) / submittedList.length)
       : 0;
-    return { total: list.length, high, pending, avg };
+    return { total: list.length, drafts, submitted, high, avg };
   }, [submissions]);
 
   // ---- Actions ----
@@ -186,6 +205,18 @@ export default function AdminQuizSubmissions() {
     }
   };
 
+  const copyQuizLink = async (s: Submission) => {
+    const url = `https://aceleriq.online/quiz/${s.token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link do quiz copiado.", {
+        description: s.lead_name ? `Lead: ${s.lead_name}` : undefined,
+      });
+    } catch {
+      toast.error("Falha ao copiar o link.");
+    }
+  };
+
   // ----------------- Render -----------------
 
   // Guard: only admin
@@ -214,9 +245,10 @@ export default function AdminQuizSubmissions() {
       </header>
 
       {/* Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
         <StatCard label="Total" value={stats.total} />
-        <StatCard label="Não processados" value={stats.pending} accent="warning" />
+        <StatCard label="Em andamento" value={stats.drafts} accent="muted" />
+        <StatCard label="Submissões novas" value={stats.submitted} accent="warning" />
         <StatCard label="ICP ≥ 80" value={stats.high} accent="primary" />
         <StatCard label="Score médio" value={stats.avg} mono />
       </div>
@@ -241,6 +273,7 @@ export default function AdminQuizSubmissions() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos os status</SelectItem>
+              <SelectItem value="draft">Em andamento</SelectItem>
               <SelectItem value="submitted">Apenas novos</SelectItem>
               <SelectItem value="processed">Apenas processados</SelectItem>
             </SelectContent>
@@ -288,10 +321,11 @@ export default function AdminQuizSubmissions() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/60">
-                  <TableHead className="w-[28%]">Lead</TableHead>
-                  <TableHead className="w-[100px] text-center">Score</TableHead>
+                  <TableHead className="w-[26%]">Lead</TableHead>
+                  <TableHead className="w-[110px]">Progresso</TableHead>
+                  <TableHead className="w-[90px] text-center">Score</TableHead>
                   <TableHead>Plano</TableHead>
-                  <TableHead>Submissão</TableHead>
+                  <TableHead>Última atividade</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right pr-4">Ações</TableHead>
                 </TableRow>
@@ -303,17 +337,22 @@ export default function AdminQuizSubmissions() {
                   const planLabel = s.recommended_plan
                     ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan)
                     : "—";
+                  const answered = answeredCount(s);
+                  const progressPct = Math.round((answered / ANSWER_FIELDS.length) * 100);
+                  const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
+                  const isDraft = (s.status ?? "draft") === "draft";
                   return (
                     <motion.tr
                       key={s.id}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.02, duration: 0.25 }}
-                      className="border-border/60 hover:bg-secondary/40"
+                      className="border-border/60 hover:bg-secondary/40 cursor-pointer"
+                      onClick={() => setOpenSubmission(s)}
                     >
                       <TableCell className="py-4">
                         <div className="font-medium text-foreground">
-                          {s.lead_name || "Sem nome"}
+                          {s.lead_name || <span className="text-muted-foreground italic">Sem nome ainda</span>}
                         </div>
                         <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                           {s.lead_company && (
@@ -331,6 +370,25 @@ export default function AdminQuizSubmissions() {
                               <Phone className="h-3 w-3" /> {s.lead_whatsapp}
                             </span>
                           )}
+                          {!s.lead_name && !s.lead_email && (
+                            <span className="inline-flex items-center gap-1 font-mono">
+                              <Hash className="h-3 w-3" /> {s.token.slice(0, 8)}…
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className={`h-full ${isDraft ? "bg-amber-400/70" : "bg-primary"}`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {answered}/{ANSWER_FIELDS.length}
+                          </span>
                         </div>
                       </TableCell>
 
@@ -345,8 +403,8 @@ export default function AdminQuizSubmissions() {
                       </TableCell>
 
                       <TableCell className="text-sm text-muted-foreground">
-                        {s.submitted_at
-                          ? format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })
+                        {lastActivity
+                          ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR })
                           : "—"}
                       </TableCell>
 
@@ -356,7 +414,7 @@ export default function AdminQuizSubmissions() {
                         </Badge>
                       </TableCell>
 
-                      <TableCell className="text-right pr-4">
+                      <TableCell className="text-right pr-4" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">
                           <Button
                             size="sm" variant="ghost"
@@ -369,7 +427,16 @@ export default function AdminQuizSubmissions() {
                           <Button
                             size="sm" variant="ghost"
                             className="h-8 w-8 p-0"
+                            title="Copiar link do quiz"
+                            onClick={() => copyQuizLink(s)}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-8 w-8 p-0"
                             title="Copiar JSON para o Ops"
+                            disabled={isDraft}
                             onClick={() => copyOpsPayload(s)}
                           >
                             <Copy className="h-4 w-4" />
@@ -378,7 +445,7 @@ export default function AdminQuizSubmissions() {
                             size="sm" variant="ghost"
                             className="h-8 w-8 p-0"
                             title="Marcar como processado"
-                            disabled={s.status === "processed" || updatingId === s.id}
+                            disabled={s.status === "processed" || isDraft || updatingId === s.id}
                             onClick={() => markProcessed(s)}
                           >
                             {updatingId === s.id
@@ -416,11 +483,12 @@ function StatCard({
   label: string;
   value: number | string;
   mono?: boolean;
-  accent?: "primary" | "warning";
+  accent?: "primary" | "warning" | "muted";
 }) {
   const accentClass =
     accent === "primary" ? "text-primary"
     : accent === "warning" ? "text-amber-400"
+    : accent === "muted" ? "text-muted-foreground"
     : "text-foreground";
   return (
     <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm p-4">
@@ -492,10 +560,14 @@ function SubmissionDrawer({
             {s.lead_name || "Sem nome"}
           </SheetTitle>
           <SheetDescription>
-            {s.lead_company || "—"} · submetido em{" "}
+            {s.lead_company || "—"} ·{" "}
             {s.submitted_at
-              ? format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })
-              : "—"}
+              ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
+              : `em andamento — última atividade ${
+                  (s.updated_at ?? s.created_at)
+                    ? format(new Date((s.updated_at ?? s.created_at) as string), "dd MMM yyyy · HH:mm", { locale: ptBR })
+                    : "—"
+                }`}
           </SheetDescription>
         </SheetHeader>
 
