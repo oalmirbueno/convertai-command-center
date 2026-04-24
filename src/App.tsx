@@ -35,6 +35,7 @@ import SettingsPage from "@/pages/SettingsPage";
 import AdminViewAsClient from "@/pages/AdminViewAsClient";
 import ApiDocs from "@/pages/ApiDocs";
 import AdminQuizSubmissions from "@/pages/AdminQuizSubmissions";
+import AdminBackfillPage from "@/pages/AdminBackfillPage";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -87,6 +88,7 @@ function AppRoutes() {
       <Route path="/financeiro/projecao" element={<ProtectedRoute><AppLayout><AdminProjection /></AppLayout></ProtectedRoute>} />
       <Route path="/api-docs" element={<ProtectedRoute><AppLayout><ApiDocs /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
+      <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
