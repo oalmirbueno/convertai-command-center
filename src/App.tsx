@@ -19,6 +19,7 @@ import AdminRequests from "@/pages/AdminRequests";
 import ClientRequests from "@/pages/ClientRequests";
 import Team from "@/pages/Team";
 import BriefingPublic from "@/pages/BriefingPublic";
+import QuizPublicPage from "@/pages/QuizPublicPage";
 import AdminBriefings from "@/pages/AdminBriefings";
 import Projects from "@/pages/Projects";
 import AdminFinanceiro from "@/pages/AdminFinanceiro";
