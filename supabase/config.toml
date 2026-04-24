@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.submit-quiz]
 verify_jwt = false
+
+[functions.backfill-to-ops]
+verify_jwt = false
