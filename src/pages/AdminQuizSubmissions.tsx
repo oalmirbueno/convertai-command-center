@@ -436,11 +436,12 @@ function StatCard({
   label: string;
   value: number | string;
   mono?: boolean;
-  accent?: "primary" | "warning";
+  accent?: "primary" | "warning" | "muted";
 }) {
   const accentClass =
     accent === "primary" ? "text-primary"
     : accent === "warning" ? "text-amber-400"
+    : accent === "muted" ? "text-muted-foreground"
     : "text-foreground";
   return (
     <div className="rounded-2xl border border-border/60 bg-card/40 backdrop-blur-sm p-4">
