@@ -205,6 +205,18 @@ export default function AdminQuizSubmissions() {
     }
   };
 
+  const copyQuizLink = async (s: Submission) => {
+    const url = `https://aceleriq.online/quiz/${s.token}`;
+    try {
+      await navigator.clipboard.writeText(url);
+      toast.success("Link do quiz copiado.", {
+        description: s.lead_name ? `Lead: ${s.lead_name}` : undefined,
+      });
+    } catch {
+      toast.error("Falha ao copiar o link.");
+    }
+  };
+
   // ----------------- Render -----------------
 
   // Guard: only admin
