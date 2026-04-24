@@ -14,7 +14,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
-  Eye, ShoppingBag, FileText, UserCircle,
+  Eye, ShoppingBag, FileText, UserCircle, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -37,6 +37,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Briefings", url: "/briefings", icon: FileText },
+  { title: "Quiz Submissions", url: "/admin/quiz", icon: ClipboardList },
   { title: "Equipe", url: "/equipe", icon: UsersRound },
   { title: "Timeline", url: "/timeline", icon: GitBranch },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
