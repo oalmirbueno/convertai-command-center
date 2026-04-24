@@ -321,10 +321,11 @@ export default function AdminQuizSubmissions() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-border/60">
-                  <TableHead className="w-[28%]">Lead</TableHead>
-                  <TableHead className="w-[100px] text-center">Score</TableHead>
+                  <TableHead className="w-[26%]">Lead</TableHead>
+                  <TableHead className="w-[110px]">Progresso</TableHead>
+                  <TableHead className="w-[90px] text-center">Score</TableHead>
                   <TableHead>Plano</TableHead>
-                  <TableHead>Submissão</TableHead>
+                  <TableHead>Última atividade</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-right pr-4">Ações</TableHead>
                 </TableRow>
