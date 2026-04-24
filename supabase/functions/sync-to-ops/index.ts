@@ -1,3 +1,7 @@
+// SUBSTITUI o conteúdo da edge function sync-to-ops NO PORTAL (aceleriq.online)
+// Nova versão: envia context junto com cada payload (email, nome, etc)
+// para que o Ops possa fazer auto-vínculo e auto-criação de clientes.
+
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
 
@@ -26,19 +30,16 @@ serve(async (req) => {
   const results: Record<string, number> = { projects: 0, briefings: 0, milestones: 0, updates: 0 };
   const errors: string[] = [];
 
-  async function pushToOps(type: string, data: Record<string, unknown>) {
+  async function pushToOps(type: string, data: Record<string, unknown>, context?: Record<string, unknown>) {
     try {
       const res = await fetch(OPS_URL, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-webhook-secret": OPS_SECRET,
-        },
-        body: JSON.stringify({ type, data }),
+        headers: { "Content-Type": "application/json", "x-webhook-secret": OPS_SECRET },
+        body: JSON.stringify({ type, data, context }),
       });
       if (res.ok) return true;
       const txt = await res.text();
-      errors.push(`${type} ${data.id}: ${res.status} ${txt.slice(0, 80)}`);
+      errors.push(`${type} ${data.id}: ${res.status} ${txt.slice(0, 100)}`);
       return false;
     } catch (err) {
       errors.push(`${type} ${data.id}: ${err instanceof Error ? err.message : "erro"}`);
@@ -46,16 +47,37 @@ serve(async (req) => {
     }
   }
 
-  // 1. Projects
+  // Pré-carrega TODOS os profiles pra usar como lookup table
+  const { data: profiles } = await supabase
+    .from("profiles")
+    .select("id, full_name, email, company_name, phone, plan_name");
+
+  const profileMap = new Map<string, any>();
+  (profiles ?? []).forEach((p) => profileMap.set(p.id, p));
+
+  // 1. Projects — envia com context enriquecido (email, nome, empresa do cliente)
   const { data: projects } = await supabase.from("projects").select("*");
   for (const p of projects ?? []) {
-    if (await pushToOps("project", p)) results.projects++;
+    const profile = profileMap.get(p.client_id);
+    const context = profile ? {
+      client_email: profile.email,
+      client_full_name: profile.full_name,
+      client_company: profile.company_name,
+      client_phone: profile.phone,
+      client_plan: profile.plan_name,
+    } : {};
+    if (await pushToOps("project", p, context)) results.projects++;
   }
 
-  // 2. Briefings (agrupados por client_id)
+  // 2. Briefings — com context do cliente
   const { data: briefings } = await supabase.from("briefings").select("*").eq("submitted", true);
   for (const b of briefings ?? []) {
-    if (await pushToOps("briefing", b)) results.briefings++;
+    const profile = profileMap.get(b.client_id);
+    const context = profile ? {
+      client_email: profile.email,
+      client_full_name: profile.full_name,
+    } : {};
+    if (await pushToOps("briefing", b, context)) results.briefings++;
   }
 
   // 3. Milestones
