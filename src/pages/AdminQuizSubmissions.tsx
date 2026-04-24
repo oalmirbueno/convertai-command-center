@@ -122,15 +122,18 @@ export default function AdminQuizSubmissions() {
         if ((s.icp_fit_score ?? -1) < min) return false;
       }
 
-      if (dateFilter !== "all" && s.submitted_at) {
-        const days = dateFilter === "7d" ? 7 : dateFilter === "30d" ? 30 : 90;
-        const diff = (now - new Date(s.submitted_at).getTime()) / (1000 * 60 * 60 * 24);
-        if (diff > days) return false;
+      if (dateFilter !== "all") {
+        const ref = s.submitted_at ?? s.updated_at ?? s.created_at;
+        if (ref) {
+          const days = dateFilter === "7d" ? 7 : dateFilter === "30d" ? 30 : 90;
+          const diff = (now - new Date(ref).getTime()) / (1000 * 60 * 60 * 24);
+          if (diff > days) return false;
+        }
       }
 
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp]
+        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp, s.token]
           .filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -141,12 +144,14 @@ export default function AdminQuizSubmissions() {
   // ---- Stats ----
   const stats = useMemo(() => {
     const list = submissions ?? [];
+    const drafts = list.filter(s => (s.status ?? "draft") === "draft").length;
+    const submitted = list.filter(s => s.status === "submitted").length;
     const high = list.filter(s => (s.icp_fit_score ?? 0) >= 80).length;
-    const pending = list.filter(s => (s.status ?? "submitted") !== "processed").length;
-    const avg = list.length
-      ? Math.round(list.reduce((acc, s) => acc + (s.icp_fit_score ?? 0), 0) / list.length)
+    const submittedList = list.filter(s => s.icp_fit_score != null);
+    const avg = submittedList.length
+      ? Math.round(submittedList.reduce((acc, s) => acc + (s.icp_fit_score ?? 0), 0) / submittedList.length)
       : 0;
-    return { total: list.length, high, pending, avg };
+    return { total: list.length, drafts, submitted, high, avg };
   }, [submissions]);
 
   // ---- Actions ----
