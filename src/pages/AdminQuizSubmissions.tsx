@@ -337,17 +337,22 @@ export default function AdminQuizSubmissions() {
                   const planLabel = s.recommended_plan
                     ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan)
                     : "—";
+                  const answered = answeredCount(s);
+                  const progressPct = Math.round((answered / ANSWER_FIELDS.length) * 100);
+                  const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
+                  const isDraft = (s.status ?? "draft") === "draft";
                   return (
                     <motion.tr
                       key={s.id}
                       initial={{ opacity: 0, y: 6 }}
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: idx * 0.02, duration: 0.25 }}
-                      className="border-border/60 hover:bg-secondary/40"
+                      className="border-border/60 hover:bg-secondary/40 cursor-pointer"
+                      onClick={() => setOpenSubmission(s)}
                     >
                       <TableCell className="py-4">
                         <div className="font-medium text-foreground">
-                          {s.lead_name || "Sem nome"}
+                          {s.lead_name || <span className="text-muted-foreground italic">Sem nome ainda</span>}
                         </div>
                         <div className="text-xs text-muted-foreground flex flex-wrap gap-x-3 gap-y-0.5 mt-0.5">
                           {s.lead_company && (
@@ -365,6 +370,25 @@ export default function AdminQuizSubmissions() {
                               <Phone className="h-3 w-3" /> {s.lead_whatsapp}
                             </span>
                           )}
+                          {!s.lead_name && !s.lead_email && (
+                            <span className="inline-flex items-center gap-1 font-mono">
+                              <Hash className="h-3 w-3" /> {s.token.slice(0, 8)}…
+                            </span>
+                          )}
+                        </div>
+                      </TableCell>
+
+                      <TableCell>
+                        <div className="flex items-center gap-2">
+                          <div className="h-1.5 w-16 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className={`h-full ${isDraft ? "bg-amber-400/70" : "bg-primary"}`}
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          </div>
+                          <span className="text-xs font-mono text-muted-foreground">
+                            {answered}/{ANSWER_FIELDS.length}
+                          </span>
                         </div>
                       </TableCell>
 
@@ -379,8 +403,8 @@ export default function AdminQuizSubmissions() {
                       </TableCell>
 
                       <TableCell className="text-sm text-muted-foreground">
-                        {s.submitted_at
-                          ? format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })
+                        {lastActivity
+                          ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR })
                           : "—"}
                       </TableCell>
 
@@ -390,7 +414,7 @@ export default function AdminQuizSubmissions() {
                         </Badge>
                       </TableCell>
 
-                      <TableCell className="text-right pr-4">
+                      <TableCell className="text-right pr-4" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1">
                           <Button
                             size="sm" variant="ghost"
@@ -403,7 +427,16 @@ export default function AdminQuizSubmissions() {
                           <Button
                             size="sm" variant="ghost"
                             className="h-8 w-8 p-0"
+                            title="Copiar link do quiz"
+                            onClick={() => copyQuizLink(s)}
+                          >
+                            <Link2 className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            size="sm" variant="ghost"
+                            className="h-8 w-8 p-0"
                             title="Copiar JSON para o Ops"
+                            disabled={isDraft}
                             onClick={() => copyOpsPayload(s)}
                           >
                             <Copy className="h-4 w-4" />
@@ -412,7 +445,7 @@ export default function AdminQuizSubmissions() {
                             size="sm" variant="ghost"
                             className="h-8 w-8 p-0"
                             title="Marcar como processado"
-                            disabled={s.status === "processed" || updatingId === s.id}
+                            disabled={s.status === "processed" || isDraft || updatingId === s.id}
                             onClick={() => markProcessed(s)}
                           >
                             {updatingId === s.id
