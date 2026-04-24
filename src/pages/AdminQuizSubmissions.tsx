@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
 import {
   Eye, CheckCircle2, Copy, Loader2, Search, Filter,
-  Mail, Phone, Building2, Sparkles, ArrowDownToLine,
+  Mail, Phone, Building2, Sparkles, ArrowDownToLine, Link2, Hash,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
