@@ -191,7 +191,7 @@ export default function AdminFiles() {
     const valid: File[] = [];
     for (const file of newFiles) {
       if (file.size > MAX_SIZE) {
-        toast({ title: "Arquivo muito grande", description: `${file.name} excede 50MB.`, variant: "destructive" });
+        toast({ title: "Arquivo muito grande", description: `${file.name} excede 100MB.`, variant: "destructive" });
         continue;
       }
       valid.push(file);
