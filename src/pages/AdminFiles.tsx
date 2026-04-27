@@ -32,7 +32,7 @@ const FOLDERS = [
 
 const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
 const ACCEPTED = ".jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.pptx,.xlsx,.mp4,.zip";
-const MAX_SIZE = 50 * 1024 * 1024;
+const MAX_SIZE = 100 * 1024 * 1024;
 
 const fileIcon = (name: string) => {
   const ext = name?.split(".").pop()?.toLowerCase() || "";
@@ -191,7 +191,7 @@ export default function AdminFiles() {
     const valid: File[] = [];
     for (const file of newFiles) {
       if (file.size > MAX_SIZE) {
-        toast({ title: "Arquivo muito grande", description: `${file.name} excede 50MB.`, variant: "destructive" });
+        toast({ title: "Arquivo muito grande", description: `${file.name} excede 100MB.`, variant: "destructive" });
         continue;
       }
       valid.push(file);
