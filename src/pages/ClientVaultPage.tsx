@@ -19,13 +19,13 @@ export default function ClientVaultPage() {
   const { impersonatedId } = useImpersonation();
   const role = profile?.role || "client";
   const isAdminOrTeam = role === "admin" || ["design", "traffic", "manager"].includes(role);
+  // Hub mode = admin/team browsing all clients (only when NOT impersonating)
+  const isHubMode = isAdminOrTeam && !impersonatedId;
 
-  // For admin/team, allow choosing which client's vault to view.
-  // Default: impersonated client (if any) -> first client in list.
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(impersonatedId);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  // Load all clients (admin/team only)
+  // Load all clients (hub mode only)
   const { data: clients } = useQuery({
     queryKey: ["vault-clients-list"],
     queryFn: async () => {
@@ -42,11 +42,11 @@ export default function ClientVaultPage() {
         .order("full_name", { ascending: true });
       return (data || []) as ClientOption[];
     },
-    enabled: isAdminOrTeam,
+    enabled: isHubMode,
   });
 
   // Effective client id being viewed
-  const effectiveClientId = isAdminOrTeam
+  const effectiveClientId = isHubMode
     ? (selectedClientId || clients?.[0]?.id || null)
     : (impersonatedId || user?.id || null);
 
