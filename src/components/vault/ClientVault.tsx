@@ -389,12 +389,11 @@ export default function ClientVault({ clientId, canManage }: Props) {
 
       <ConfirmModal
         open={!!confirmDelete}
-        onClose={() => setConfirmDelete(null)}
+        onCancel={() => setConfirmDelete(null)}
         onConfirm={() => confirmDelete && remove(confirmDelete)}
         title="Remover item do cofre?"
         description="Esta ação não pode ser desfeita."
-        confirmText="Remover"
-        variant="destructive"
+        confirmLabel="Remover"
       />
     </div>
   );
