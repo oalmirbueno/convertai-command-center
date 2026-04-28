@@ -181,6 +181,8 @@ export default function AdminViewAsClient() {
         return <ClientRequests />;
       case "financeiro":
         return <ClientFinanceiro />;
+      case "cofre":
+        return <ClientVaultPage />;
       default:
         return (
           <ClientDashboard
