@@ -42,6 +42,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Timeline", url: "/timeline", icon: GitBranch },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Config", url: "/config", icon: Settings },
   { title: "API", url: "/api-docs", icon: Zap },
 ];
