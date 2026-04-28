@@ -12,10 +12,11 @@ import ClientRequests from "@/pages/ClientRequests";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   ArrowLeft, Eye, ChevronDown, LayoutDashboard, CheckSquare,
-  FileText, BarChart3, DollarSign, ShoppingBag,
+  FileText, BarChart3, DollarSign, ShoppingBag, KeyRound,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
+import ClientVaultPage from "@/pages/ClientVaultPage";
 import type { UserProfile } from "@/contexts/AuthContext";
 
 const clientTabs = [
@@ -24,6 +25,7 @@ const clientTabs = [
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "relatorios", label: "Relatórios", icon: BarChart3 },
   { id: "pedidos", label: "Pedidos", icon: ShoppingBag },
+  { id: "cofre", label: "Cofre", icon: KeyRound },
   { id: "financeiro", label: "Financeiro", icon: DollarSign },
 ];
 
@@ -179,6 +181,8 @@ export default function AdminViewAsClient() {
         return <ClientRequests />;
       case "financeiro":
         return <ClientFinanceiro />;
+      case "cofre":
+        return <ClientVaultPage />;
       default:
         return (
           <ClientDashboard
