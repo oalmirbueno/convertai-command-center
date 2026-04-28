@@ -38,3 +38,6 @@ verify_jwt = false
 
 [functions.sync-to-ops]
 verify_jwt = false
+
+[functions.ops-leads-list]
+verify_jwt = false
