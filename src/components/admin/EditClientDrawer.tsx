@@ -494,6 +494,14 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </div>
             )}
 
+            {/* Cofre de Acessos */}
+            <div className="pt-2">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <KeyRound className="w-3 h-3" /> Cofre de Acessos
+              </label>
+              <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
+            </div>
+
             {/* Pagamentos de projetos não recorrentes */}
             {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
               <div className="pt-2">
