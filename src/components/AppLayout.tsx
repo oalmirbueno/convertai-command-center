@@ -59,7 +59,6 @@ const clientMoreNav: NavItem[] = [
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Documentos", url: "/documentos", icon: FileText },
-  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Perfil", url: "/perfil", icon: UserCircle },
 ];
