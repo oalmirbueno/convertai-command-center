@@ -51,6 +51,7 @@ const clientMainNav: NavItem[] = [
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Timeline", url: "/timeline", icon: GitBranch },
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
 ];
 
 const clientMoreNav: NavItem[] = [
