@@ -42,6 +42,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Timeline", url: "/timeline", icon: GitBranch },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Config", url: "/config", icon: Settings },
   { title: "API", url: "/api-docs", icon: Zap },
 ];
@@ -51,13 +52,13 @@ const clientMainNav: NavItem[] = [
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Timeline", url: "/timeline", icon: GitBranch },
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
 ];
 
 const clientMoreNav: NavItem[] = [
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Documentos", url: "/documentos", icon: FileText },
-  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Perfil", url: "/perfil", icon: UserCircle },
 ];
