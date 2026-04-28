@@ -90,6 +90,7 @@ function AppRoutes() {
       <Route path="/api-docs" element={<ProtectedRoute><AppLayout><ApiDocs /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
