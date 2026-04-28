@@ -123,9 +123,9 @@ export default function ClientVaultPage() {
         <MetricCard label="Sistemas" value={counts?.system ?? 0} icon={Server} accent="text-amber-400" />
       </div>
 
-      <div className={isAdminOrTeam ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
-        {/* Client selector — admin/team only */}
-        {isAdminOrTeam && (
+      <div className={isHubMode ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
+        {/* Client selector — hub mode only (admin/team not impersonating) */}
+        {isHubMode && (
           <aside className="space-y-3">
             <div className="bg-card border border-border rounded-2xl p-3">
               <div className="flex items-center gap-2 mb-3">
