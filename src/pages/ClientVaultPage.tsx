@@ -194,7 +194,7 @@ export default function ClientVaultPage() {
 
         {/* Vault content */}
         <div>
-          {isAdminOrTeam && selectedClient && (
+          {isHubMode && selectedClient && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-secondary/40 border border-border flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
                 <KeyRound className="w-4 h-4 text-primary" />
