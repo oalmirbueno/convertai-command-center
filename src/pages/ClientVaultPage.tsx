@@ -19,13 +19,13 @@ export default function ClientVaultPage() {
   const { impersonatedId } = useImpersonation();
   const role = profile?.role || "client";
   const isAdminOrTeam = role === "admin" || ["design", "traffic", "manager"].includes(role);
+  // Hub mode = admin/team browsing all clients (only when NOT impersonating)
+  const isHubMode = isAdminOrTeam && !impersonatedId;
 
-  // For admin/team, allow choosing which client's vault to view.
-  // Default: impersonated client (if any) -> first client in list.
-  const [selectedClientId, setSelectedClientId] = useState<string | null>(impersonatedId);
+  const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
-  // Load all clients (admin/team only)
+  // Load all clients (hub mode only)
   const { data: clients } = useQuery({
     queryKey: ["vault-clients-list"],
     queryFn: async () => {
@@ -42,11 +42,11 @@ export default function ClientVaultPage() {
         .order("full_name", { ascending: true });
       return (data || []) as ClientOption[];
     },
-    enabled: isAdminOrTeam,
+    enabled: isHubMode,
   });
 
   // Effective client id being viewed
-  const effectiveClientId = isAdminOrTeam
+  const effectiveClientId = isHubMode
     ? (selectedClientId || clients?.[0]?.id || null)
     : (impersonatedId || user?.id || null);
 
@@ -123,9 +123,9 @@ export default function ClientVaultPage() {
         <MetricCard label="Sistemas" value={counts?.system ?? 0} icon={Server} accent="text-amber-400" />
       </div>
 
-      <div className={isAdminOrTeam ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
-        {/* Client selector — admin/team only */}
-        {isAdminOrTeam && (
+      <div className={isHubMode ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
+        {/* Client selector — hub mode only (admin/team not impersonating) */}
+        {isHubMode && (
           <aside className="space-y-3">
             <div className="bg-card border border-border rounded-2xl p-3">
               <div className="flex items-center gap-2 mb-3">
@@ -194,7 +194,7 @@ export default function ClientVaultPage() {
 
         {/* Vault content */}
         <div>
-          {isAdminOrTeam && selectedClient && (
+          {isHubMode && selectedClient && (
             <div className="mb-4 px-4 py-3 rounded-xl bg-secondary/40 border border-border flex items-center gap-3">
               <div className="w-9 h-9 rounded-lg bg-primary/15 border border-primary/30 flex items-center justify-center">
                 <KeyRound className="w-4 h-4 text-primary" />
