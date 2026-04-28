@@ -5,7 +5,7 @@ import { KeyRound } from "lucide-react";
 
 export default function ClientVaultPage() {
   const { profile } = useAuth();
-  const { clientId: impersonatedId } = useImpersonation();
+  const { impersonatedId } = useImpersonation();
   const role = profile?.role || "client";
   const isAdminOrTeam = role === "admin" || ["design", "traffic", "manager"].includes(role);
   const clientId = impersonatedId || profile?.id;
