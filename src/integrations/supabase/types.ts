@@ -267,6 +267,54 @@ export type Database = {
           },
         ]
       }
+      client_vault: {
+        Row: {
+          category: string
+          client_id: string
+          created_at: string
+          created_by: string | null
+          icon_url: string | null
+          id: string
+          item_order: number
+          notes: string | null
+          password: string | null
+          title: string
+          updated_at: string
+          url: string | null
+          username: string | null
+        }
+        Insert: {
+          category?: string
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          icon_url?: string | null
+          id?: string
+          item_order?: number
+          notes?: string | null
+          password?: string | null
+          title: string
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Update: {
+          category?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          icon_url?: string | null
+          id?: string
+          item_order?: number
+          notes?: string | null
+          password?: string | null
+          title?: string
+          updated_at?: string
+          url?: string | null
+          username?: string | null
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           approval_status: string

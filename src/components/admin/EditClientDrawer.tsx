@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound } from "lucide-react";
+import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
@@ -492,6 +493,14 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 </button>
               </div>
             )}
+
+            {/* Cofre de Acessos */}
+            <div className="pt-2">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <KeyRound className="w-3 h-3" /> Cofre de Acessos
+              </label>
+              <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
+            </div>
 
             {/* Pagamentos de projetos não recorrentes */}
             {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
