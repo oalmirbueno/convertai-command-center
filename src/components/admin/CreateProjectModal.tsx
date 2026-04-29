@@ -99,6 +99,20 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         const { error } = await supabase.from("projects").update(payload).eq("id", editProject.id);
         if (error) throw error;
         toast.success("Projeto atualizado!");
+
+        // Notifica Ops do update
+        fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
+          },
+          body: JSON.stringify({
+            type: "project",
+            data: { id: editProject.id, client_id: clientId, ...payload },
+            context: {},
+          }),
+        }).catch(() => {});
       } else {
         const { data: newProject, error } = await supabase.from("projects").insert(payload).select().single();
         if (error) throw error;
@@ -119,6 +133,31 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
             message: `Projeto "${name.trim()}" criado`,
             update_type: "system",
           });
+
+          // Notifica o Ops que novo projeto foi criado — fire-and-forget
+          const opsProjectPayload = {
+            type: "project",
+            data: {
+              id: newProject.id,
+              client_id: clientId,
+              name: name.trim(),
+              description: description || null,
+              project_type: projectType,
+              status: "planning",
+              progress: 0,
+              start_date: startDate?.toISOString() ?? null,
+              deadline: deadline?.toISOString() ?? null,
+            },
+            context: {}, // Ops vai resolver o cliente pelo client_id
+          };
+          fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
+            },
+            body: JSON.stringify(opsProjectPayload),
+          }).catch(() => {}); // silencioso
 
           // Auto-generate milestones & tasks from templates
           if (useTemplates && projectTemplates[projectType]) {
