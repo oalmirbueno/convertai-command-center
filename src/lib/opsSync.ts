@@ -1,17 +1,26 @@
-// Fire-and-forget notifications to the Ops portal sync endpoint.
-// Never throws, never blocks the caller.
+/**
+ * opsSync — notificações fire-and-forget do portal para o Ops.
+ *
+ * Chama a edge function `notify-ops` do próprio portal (mesmo Supabase),
+ * que faz a chamada server-to-server para o Ops.
+ *
+ * Isso evita problemas de CORS/CSP que ocorrem quando o browser tenta
+ * chamar diretamente um domínio externo (grxljyocuadywcksfyvu.supabase.co).
+ */
 
-const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
-const OPS_SECRET = "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+// URL da edge function no próprio portal (sem CORS)
+const NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-ops`;
+const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 
 function push(type: string, data: any, context: Record<string, unknown> = {}) {
   if (!data) return;
   try {
-    fetch(OPS_URL, {
+    fetch(NOTIFY_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-webhook-secret": OPS_SECRET,
+        "apikey": ANON_KEY,
+        "Authorization": `Bearer ${ANON_KEY}`,
       },
       body: JSON.stringify({ type, data, context }),
     }).catch(() => {});
@@ -20,10 +29,16 @@ function push(type: string, data: any, context: Record<string, unknown> = {}) {
   }
 }
 
-export const notifyOpsMilestone = (milestone: any) => push("milestone", milestone);
+export const notifyOpsProfile = (profile: any, context?: Record<string, unknown>) =>
+  push("profile", profile, context ?? {});
+
+export const notifyOpsProject = (project: any, context?: Record<string, unknown>) =>
+  push("project", project, context ?? {});
+
+export const notifyOpsMilestone = (milestone: any) =>
+  push("milestone", milestone);
 
 export const notifyOpsUpdate = (update: any) => {
-  // Skip system-generated updates per spec
   if (!update || update.update_type === "system") return;
   push("update", update);
 };

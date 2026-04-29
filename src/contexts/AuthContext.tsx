@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsProfile } from "@/lib/opsSync";
 import type { User } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
@@ -163,33 +164,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
     }
 
-    // Notifica o Ops que novo cliente foi criado — fire-and-forget, nunca bloqueia o signup
+    // Notifica o Ops via proxy server-to-server (evita CORS/CSP do browser)
     if (data?.user) {
-      const opsPayload = {
-        type: "profile",
-        data: {
-          id: data.user.id,
-          email: email,
-          full_name: fullName,
-          company_name: companyName ?? null,
-          phone: phone ?? null,
-          role: "client",
-        },
-        context: {
-          client_email: email,
-          client_full_name: fullName,
-          client_company: companyName ?? null,
-          client_phone: phone ?? null,
-        },
-      };
-      fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
-        },
-        body: JSON.stringify(opsPayload),
-      }).catch(() => {}); // silencioso — nunca impede o signup
+      notifyOpsProfile(
+        { id: data.user.id, email, full_name: fullName, company_name: companyName ?? null, phone: phone ?? null },
+        { client_email: email, client_full_name: fullName, client_company: companyName ?? null, client_phone: phone ?? null }
+      );
     }
 
     // Try immediate login (works if auto-confirm is on)

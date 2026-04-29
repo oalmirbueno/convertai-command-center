@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from "react";
 import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
+import { notifyOpsMilestone, notifyOpsUpdate, notifyOpsProject } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useTeamMembers } from "@/hooks/useSupabaseData";
@@ -116,19 +116,11 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         if (error) throw error;
         toast.success("Projeto atualizado!");
 
-        // Notifica Ops do update
-        fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
-          },
-          body: JSON.stringify({
-            type: "project",
-            data: { id: editProject.id, client_id: clientId, ...payload },
-            context: buildOpsContext(),
-          }),
-        }).catch(() => {});
+        // Notifica Ops via proxy server-to-server
+        notifyOpsProject(
+          { id: editProject.id, client_id: clientId, ...payload },
+          buildOpsContext()
+        );
       } else {
         const { data: newProject, error } = await supabase.from("projects").insert(payload).select().single();
         if (error) throw error;
@@ -150,10 +142,9 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
             update_type: "system",
           });
 
-          // Notifica o Ops que novo projeto foi criado — fire-and-forget
-          const opsProjectPayload = {
-            type: "project",
-            data: {
+          // Notifica o Ops via proxy server-to-server (evita CORS/CSP)
+          notifyOpsProject(
+            {
               id: newProject.id,
               client_id: clientId,
               name: name.trim(),
@@ -164,16 +155,8 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
               start_date: startDate?.toISOString() ?? null,
               deadline: deadline?.toISOString() ?? null,
             },
-            context: buildOpsContext(),
-          };
-          fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
-            },
-            body: JSON.stringify(opsProjectPayload),
-          }).catch(() => {}); // silencioso
+            buildOpsContext()
+          );
 
           // Auto-generate milestones & tasks from templates
           if (useTemplates && projectTemplates[projectType]) {
