@@ -163,6 +163,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await supabase.from("profiles").update({ phone }).eq("id", data.user.id);
     }
 
+    // Notifica o Ops que novo cliente foi criado — fire-and-forget, nunca bloqueia o signup
+    if (data?.user) {
+      const opsPayload = {
+        type: "profile",
+        data: {
+          id: data.user.id,
+          email: email,
+          full_name: fullName,
+          company_name: companyName ?? null,
+          phone: phone ?? null,
+          role: "client",
+        },
+        context: {
+          client_email: email,
+          client_full_name: fullName,
+          client_company: companyName ?? null,
+          client_phone: phone ?? null,
+        },
+      };
+      fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
+        },
+        body: JSON.stringify(opsPayload),
+      }).catch(() => {}); // silencioso — nunca impede o signup
+    }
+
     // Try immediate login (works if auto-confirm is on)
     if (data?.user) {
       const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
