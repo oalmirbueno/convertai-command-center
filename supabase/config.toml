@@ -44,3 +44,6 @@ verify_jwt = false
 
 [functions.notify-ops]
 verify_jwt = false
+
+[functions.ops-full-export]
+verify_jwt = false
