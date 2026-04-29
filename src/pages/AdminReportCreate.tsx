@@ -213,12 +213,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         // Notify admin (if creator is not admin)
         await notifyAdmin(`Novo relatório publicado: ${title}`, "report", "/relatorios");
         // Update feed
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: projectId,
           author_id: user!.id,
           message: `Relatório publicado: ${title}`,
           update_type: "milestone",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
 
       queryClient.invalidateQueries({ queryKey: ["reports"] });

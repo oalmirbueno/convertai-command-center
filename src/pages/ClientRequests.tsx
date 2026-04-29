@@ -63,12 +63,13 @@ export default function ClientRequests() {
       // Create update
       const { data: projects } = await supabase.from("projects").select("id").eq("client_id", user!.id).limit(1);
       if (projects?.[0]) {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: projects[0].id,
           author_id: user!.id,
           message: `Novo pedido: "${title.trim()}"`,
           update_type: "system",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
 
       // Notify admin

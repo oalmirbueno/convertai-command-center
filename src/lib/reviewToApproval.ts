@@ -175,7 +175,7 @@ export async function sendTaskAttachmentsToApproval(
           ? "Arquivos"
           : "Arquivo";
 
-  await Promise.all([
+  const [, updRes] = await Promise.all([
     notifyUser(
       project.client_id,
       `${approvalLabel} \"${taskTitle}\" enviado para sua aprovação`,
@@ -187,8 +187,9 @@ export async function sendTaskAttachmentsToApproval(
       message: `${approvalLabel} da tarefa \"${taskTitle}\" enviado para aprovação do cliente`,
       project_id: projectId,
       update_type: "delivery",
-    }),
+    }).select().single(),
   ]);
+  notifyOpsUpdate(updRes?.data);
 
   return { insertedCount };
 }

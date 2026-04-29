@@ -123,10 +123,11 @@ export default function Kanban() {
 
     if (column === "done" && task.project_id) {
       if (authUser) {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: task.project_id, author_id: authUser.id,
           message: `"${task.title}" concluída`, update_type: "task",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
       // Notify assignee that task is done
       if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {

@@ -58,10 +58,11 @@ export default function AdminBriefings() {
       }).select().single();
       if (error) throw error;
 
-      await supabase.from("milestones").insert({
+      const { data: msIns } = await supabase.from("milestones").insert({
         project_id: project.id, title: "Kick-off",
         target_date: format(new Date(), "yyyy-MM-dd"), status: "completed", milestone_order: 0,
-      });
+      }).select().single();
+      notifyOpsMilestone(msIns);
       await supabase.from("notifications").insert({
         user_id: genClientId,
         message: `Novo projeto criado a partir do seu briefing`,

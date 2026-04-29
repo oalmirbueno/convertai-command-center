@@ -49,10 +49,11 @@ export default function AdminRequests() {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
         const label = statusOptions.find(s => s.value === status)?.label || status;
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: selected.project_id, author_id: authUser.id,
           message: `Pedido "${selected.title}": status → ${label}`, update_type: "request",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
     }
     queryClient.invalidateQueries({ queryKey: ["client-requests"] });
@@ -77,10 +78,11 @@ export default function AdminRequests() {
       if (selected.project_id) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          await supabase.from("updates").insert({
+          const { data: upd } = await supabase.from("updates").insert({
             project_id: selected.project_id, author_id: authUser.id,
             message: `Pedido "${selected.title}" transformado em tarefa`, update_type: "task",
-          });
+          }).select().single();
+          notifyOpsUpdate(upd);
         }
       }
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
@@ -99,10 +101,11 @@ export default function AdminRequests() {
     if (selected.project_id) {
       const { data: { user: authUser } } = await supabase.auth.getUser();
       if (authUser) {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: selected.project_id, author_id: authUser.id,
           message: `Pedido "${selected.title}" concluído`, update_type: "request",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
     }
     queryClient.invalidateQueries({ queryKey: ["client-requests"] });

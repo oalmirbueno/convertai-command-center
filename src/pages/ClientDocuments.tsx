@@ -133,12 +133,13 @@ export default function ClientDocuments() {
       await notifyAdmin(`Cliente aprovou: ${file?.file_name}`, "approval", "/aprovacoes");
 
       if (file?.project_id) {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: file.project_id,
           author_id: user.id,
           message: `Cliente aprovou: ${file?.file_name}`,
           update_type: "creative",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Aprovado com sucesso!" });
@@ -165,12 +166,13 @@ export default function ClientDocuments() {
       const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
 
       if (fileData?.project_id) {
-        await supabase.from("updates").insert({
+        const { data: upd2 } = await supabase.from("updates").insert({
           project_id: fileData.project_id,
           author_id: user.id,
           message: `Cliente solicitou ajustes em: ${fileData.file_name}`,
           update_type: "alert",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd2);
 
         // Create task in kanban on rejection
         const { error: taskErr } = await supabase.from("tasks").insert({

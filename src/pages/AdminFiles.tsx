@@ -295,12 +295,13 @@ export default function AdminFiles() {
       }
 
       if (uploadProject && uploadProject !== "none") {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
           message: fileLabel,
           update_type: "creative",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
 
       setUploadProgress(100);

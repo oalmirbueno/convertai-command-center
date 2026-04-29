@@ -55,11 +55,12 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
     await supabase.from("projects").update({ status: newStatus }).eq("id", project.id);
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser) {
-      await supabase.from("updates").insert({
+      const { data: upd } = await supabase.from("updates").insert({
         project_id: project.id, author_id: authUser.id,
         message: `Projeto "${project.name}": status → ${STATUS_OPTIONS.find(s => s.value === newStatus)?.label || newStatus}`,
         update_type: "progress",
-      });
+      }).select().single();
+      notifyOpsUpdate(upd);
     }
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Status atualizado");
@@ -71,11 +72,12 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
     await supabase.from("projects").update({ progress: value }).eq("id", project.id);
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser) {
-      await supabase.from("updates").insert({
+      const { data: upd } = await supabase.from("updates").insert({
         project_id: project.id, author_id: authUser.id,
         message: `Projeto "${project.name}": progresso atualizado para ${value}%`,
         update_type: "progress",
-      });
+      }).select().single();
+      notifyOpsUpdate(upd);
     }
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Progresso atualizado");

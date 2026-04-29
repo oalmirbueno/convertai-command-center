@@ -125,10 +125,11 @@ export default function AdminApprovals() {
       if (file?.project_id) {
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser) {
-          await supabase.from("updates").insert({
+          const { data: upd } = await supabase.from("updates").insert({
             project_id: file.project_id, author_id: authUser.id,
             message: `Criativo reenviado para aprovação: ${file.file_name}`, update_type: "delivery",
-          });
+          }).select().single();
+          notifyOpsUpdate(upd);
         }
         if (file.client_id) {
           await supabase.from("notifications").insert({

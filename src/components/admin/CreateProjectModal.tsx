@@ -186,6 +186,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
                 status: "pending",
                 milestone_order: mIdx + 1,
               }).select().single();
+              notifyOpsMilestone(milestone);
 
               if (milestone) {
                 const taskInserts = tmpl.tasks.map((t, tIdx) => ({
