@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
@@ -33,6 +33,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const { user } = useAuth();
   const { data: clients } = useClients();
   const { data: teamMembers } = useTeamMembers();
+
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [useTemplates, setUseTemplates] = useState(true);
@@ -45,6 +46,20 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [scope, setScope] = useState("");
   const [objectives, setObjectives] = useState("");
+
+  // Resolve dados do cliente selecionado para enriquecer o context do Ops
+  const selectedClient = useMemo(
+    () => (clients || []).find((c: any) => c.id === clientId),
+    [clients, clientId]
+  );
+
+  const buildOpsContext = () => ({
+    client_email: selectedClient?.email ?? null,
+    client_full_name: selectedClient?.full_name ?? null,
+    client_company: selectedClient?.company_name ?? null,
+    client_phone: selectedClient?.phone ?? null,
+    client_plan: selectedClient?.plan_name ?? null,
+  });
 
   useEffect(() => {
     if (editProject) {
@@ -111,7 +126,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
           body: JSON.stringify({
             type: "project",
             data: { id: editProject.id, client_id: clientId, ...payload },
-            context: {},
+            context: buildOpsContext(),
           }),
         }).catch(() => {});
       } else {
@@ -149,7 +164,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
               start_date: startDate?.toISOString() ?? null,
               deadline: deadline?.toISOString() ?? null,
             },
-            context: {}, // Ops vai resolver o cliente pelo client_id
+            context: buildOpsContext(),
           };
           fetch("https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync", {
             method: "POST",
