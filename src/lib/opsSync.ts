@@ -8,8 +8,8 @@
  * chamar diretamente um domínio externo (grxljyocuadywcksfyvu.supabase.co).
  */
 
-// URL da edge function no próprio portal (sem CORS)
-const NOTIFY_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/notify-ops`;
+// URL hardcoded do portal — VITE_SUPABASE_URL pode ser undefined em alguns contextos
+const NOTIFY_URL = "https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/notify-ops";
 const ANON_KEY   = import.meta.env.VITE_SUPABASE_ANON_KEY ?? "";
 
 function push(type: string, data: any, context: Record<string, unknown> = {}) {
