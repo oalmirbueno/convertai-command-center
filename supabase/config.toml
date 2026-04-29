@@ -41,3 +41,6 @@ verify_jwt = false
 
 [functions.ops-leads-list]
 verify_jwt = false
+
+[functions.notify-ops]
+verify_jwt = false

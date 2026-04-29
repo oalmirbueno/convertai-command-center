@@ -1,11 +1,3 @@
-/**
- * notify-ops — proxy server-to-server do portal para o Ops.
- *
- * O frontend do portal chama ESTA função (mesmo domínio Supabase = sem CORS).
- * Esta função então chama receive-portal-sync no Ops (server-to-server = sem CSP).
- *
- * Resolve o problema de CSP/CORS que impede chamadas browser → Ops.
- */
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 
 const cors = {
@@ -15,7 +7,7 @@ const cors = {
 };
 
 const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
-const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
+const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
@@ -29,12 +21,11 @@ serve(async (req) => {
         { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
     }
 
-    // Chama o Ops server-to-server (sem CORS, sem CSP)
     const res = await fetch(OPS_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-webhook-secret": OPS_SECRET || "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q",
+        "x-webhook-secret": OPS_SECRET,
       },
       body: JSON.stringify({ type, data, context: context ?? {} }),
     });
