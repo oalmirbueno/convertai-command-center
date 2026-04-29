@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTasks, useMilestones } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";

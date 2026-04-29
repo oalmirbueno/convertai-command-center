@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";

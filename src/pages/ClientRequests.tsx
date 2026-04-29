@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";

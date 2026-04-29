@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";

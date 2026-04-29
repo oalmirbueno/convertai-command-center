@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";

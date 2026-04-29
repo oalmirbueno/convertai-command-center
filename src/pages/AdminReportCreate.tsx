@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart } from "lucide-react";

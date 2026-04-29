@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useTeamMembers } from "@/hooks/useSupabaseData";

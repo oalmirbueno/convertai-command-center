@@ -1,4 +1,5 @@
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 
 const IMAGE_EXTS = ["jpg", "jpeg", "png", "gif", "webp"];

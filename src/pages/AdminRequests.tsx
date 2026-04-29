@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useClientRequests, useClients, useProjects } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
