@@ -34,6 +34,19 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const { data: clients } = useClients();
   const { data: teamMembers } = useTeamMembers();
 
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState(false);
+  const [useTemplates, setUseTemplates] = useState(true);
+
+  const [clientId, setClientId] = useState("");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [projectType, setProjectType] = useState("other");
+  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
+  const [deadline, setDeadline] = useState<Date | undefined>(undefined);
+  const [scope, setScope] = useState("");
+  const [objectives, setObjectives] = useState("");
+
   // Resolve dados do cliente selecionado para enriquecer o context do Ops
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
@@ -47,18 +60,6 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
     client_phone: selectedClient?.phone ?? null,
     client_plan: selectedClient?.plan_name ?? null,
   });
-  const queryClient = useQueryClient();
-  const [saving, setSaving] = useState(false);
-  const [useTemplates, setUseTemplates] = useState(true);
-
-  const [clientId, setClientId] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [projectType, setProjectType] = useState("other");
-  const [startDate, setStartDate] = useState<Date | undefined>(new Date());
-  const [deadline, setDeadline] = useState<Date | undefined>(undefined);
-  const [scope, setScope] = useState("");
-  const [objectives, setObjectives] = useState("");
 
   useEffect(() => {
     if (editProject) {
