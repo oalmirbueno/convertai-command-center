@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -111,10 +112,11 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
         // Create update for new task
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser && projectId) {
-          await supabase.from("updates").insert({
+          const { data: upd } = await supabase.from("updates").insert({
             project_id: projectId, author_id: authUser.id,
             message: `Nova tarefa criada: ${title.trim()}`, update_type: "task",
-          });
+          }).select().single();
+          notifyOpsUpdate(upd);
         }
         toast.success("Tarefa criada!");
       }

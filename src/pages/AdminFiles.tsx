@@ -3,6 +3,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -295,12 +296,13 @@ export default function AdminFiles() {
       }
 
       if (uploadProject && uploadProject !== "none") {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
           message: fileLabel,
           update_type: "creative",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
 
       setUploadProgress(100);

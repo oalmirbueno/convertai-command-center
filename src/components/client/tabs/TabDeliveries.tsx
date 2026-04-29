@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useCallback } from "react";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { useQueryClient } from "@tanstack/react-query";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -146,10 +147,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
       const parentFile = previewGroup?.parent;
       await supabase.from("files").update({ approval_status: "approved" }).eq("id", confirmApprove);
       await notifyAdmin(`Cliente aprovou: ${parentFile?.file_name || "arquivo"}`, "approval", "/aprovacoes");
-      await supabase.from("updates").insert({
+      const { data: updA } = await supabase.from("updates").insert({
         project_id: projectId, author_id: user.id,
         message: `Cliente aprovou: ${parentFile?.file_name || "arquivo"}`, update_type: "creative",
-      });
+      }).select().single();
+      notifyOpsUpdate(updA);
       queryClient.invalidateQueries({ queryKey: ["files"] });
       toast({ title: "Aprovado!", description: "A entrega foi aprovada com sucesso." });
     } catch {
@@ -167,10 +169,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
       const parentFile = files?.find((f: any) => f.id === feedbackFileId);
       await supabase.from("files").update({ approval_status: "rejected", feedback: feedbackText }).eq("id", feedbackFileId);
       await notifyAdmin(`Cliente solicitou ajustes em: ${parentFile?.file_name}`, "approval", "/aprovacoes");
-      await supabase.from("updates").insert({
+      const { data: updR } = await supabase.from("updates").insert({
         project_id: projectId, author_id: user.id,
         message: `Cliente solicitou ajustes em: ${parentFile?.file_name}`, update_type: "alert",
-      });
+      }).select().single();
+      notifyOpsUpdate(updR);
       const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
       if (fileData?.project_id) {
         await supabase.from("tasks").insert({

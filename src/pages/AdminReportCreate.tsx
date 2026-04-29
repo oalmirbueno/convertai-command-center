@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart } from "lucide-react";
@@ -213,12 +214,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         // Notify admin (if creator is not admin)
         await notifyAdmin(`Novo relatório publicado: ${title}`, "report", "/relatorios");
         // Update feed
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: projectId,
           author_id: user!.id,
           message: `Relatório publicado: ${title}`,
           update_type: "milestone",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
 
       queryClient.invalidateQueries({ queryKey: ["reports"] });

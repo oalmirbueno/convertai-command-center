@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { notifyAdmin } from "@/lib/notifyHelpers";
@@ -48,12 +49,13 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
       await notifyAdmin(`Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`, "request", "/pedidos");
 
       // Create update in feed
-      await supabase.from("updates").insert({
+      const { data: upd } = await supabase.from("updates").insert({
         project_id: projectId,
         author_id: user.id,
         message: `Novo pedido: ${title}`,
         update_type: "system",
-      });
+      }).select().single();
+      notifyOpsUpdate(upd);
 
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
       queryClient.invalidateQueries({ queryKey: ["project-updates"] });

@@ -2,6 +2,7 @@ import { useState, Fragment } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
@@ -207,11 +208,12 @@ export default function TimelinePage() {
     const project = (projects || []).find((p: any) => p.id === milestone.project_id);
     const { data: { user: authUser } } = await supabase.auth.getUser();
     if (authUser && milestone.project_id) {
-      await supabase.from("updates").insert({
+      const { data: upd } = await supabase.from("updates").insert({
         project_id: milestone.project_id, author_id: authUser.id,
         message: `Milestone "${milestone.title}" → ${statusLabels[next]}${project ? ` (${project.name})` : ""}`,
         update_type: "progress",
-      });
+      }).select().single();
+      notifyOpsUpdate(upd);
     }
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
@@ -288,22 +290,24 @@ export default function TimelinePage() {
         }
       }
 
-      await supabase.from("milestones").insert({
+      const { data: newMs } = await supabase.from("milestones").insert({
         project_id: addMilestoneProject,
         title: newTitle,
         target_date: newDate,
         description: newDesc || null,
         status: newStatus,
         milestone_order: insertOrder,
-      });
+      }).select().single();
+      notifyOpsMilestone(newMs);
       const { data: { user: authUser } } = await supabase.auth.getUser();
       const proj = (projects || []).find((p: any) => p.id === addMilestoneProject);
       if (authUser && addMilestoneProject) {
-        await supabase.from("updates").insert({
+        const { data: upd } = await supabase.from("updates").insert({
           project_id: addMilestoneProject, author_id: authUser.id,
           message: `Novo milestone criado: ${newTitle}${proj ? ` (${proj.name})` : ""}`,
           update_type: "progress",
-        });
+        }).select().single();
+        notifyOpsUpdate(upd);
       }
       queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
       toast.success("Milestone criado!");
