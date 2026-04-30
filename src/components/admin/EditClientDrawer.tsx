@@ -261,7 +261,9 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         const res = await supabase.functions.invoke("manage-team", {
           body: { action: "update_password", user_id: client.id, password: clientPassword },
         });
+        if (res.error) throw new Error(res.error.message || "Erro ao alterar senha");
         if (res.data?.error) throw new Error(res.data.error);
+        toast.success("Senha do cliente alterada!");
       }
 
       toast.success("Cliente atualizado!");
