@@ -137,7 +137,9 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const handleDelete = async () => {
     if (!editTask) return;
     try {
+      const opsNodeId = (editTask as any)?.ops_node_id ?? null;
       await supabase.from("tasks").delete().eq("id", editTask.id);
+      notifyOpsTaskDeleted(editTask.id, opsNodeId);
       toast.success("Tarefa excluída");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setConfirmDelete(false);
