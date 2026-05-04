@@ -1186,6 +1186,7 @@ export type Database = {
           due_date: string | null
           id: string
           milestone_id: string | null
+          ops_node_id: string | null
           priority: string
           project_id: string
           status: string
@@ -1200,6 +1201,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           milestone_id?: string | null
+          ops_node_id?: string | null
           priority?: string
           project_id: string
           status?: string
@@ -1214,6 +1216,7 @@ export type Database = {
           due_date?: string | null
           id?: string
           milestone_id?: string | null
+          ops_node_id?: string | null
           priority?: string
           project_id?: string
           status?: string
