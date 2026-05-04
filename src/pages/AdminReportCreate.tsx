@@ -264,7 +264,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
             onClick={() => csvInputRef.current?.click()}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-primary border border-primary/30 hover:bg-primary/10 transition-colors cursor-pointer bg-transparent"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV / XLSX
           </button>
           <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleCsvImport} />
         </div>
