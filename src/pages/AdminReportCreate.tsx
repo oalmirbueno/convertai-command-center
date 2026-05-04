@@ -270,8 +270,15 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         </div>
 
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Preencha manualmente ou importe um CSV. Formato: primeira coluna = período (ex: "Sem 1"), demais colunas = métricas.
+          Importe export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX) — o sistema detecta o tipo, normaliza colunas e gera o dashboard automaticamente.
         </p>
+        {parsedSource && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-[12px] text-foreground">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            Fonte detectada: <span className="font-semibold text-primary">{parsedSource.label}</span>
+            <span className="text-muted-foreground">· {parsedSource.rows.length} linhas · dimensão: {parsedSource.dimensionKey}</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {defaultMetrics.map(m => (
