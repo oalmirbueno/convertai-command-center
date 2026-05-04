@@ -124,6 +124,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
       }).eq("id", task.id);
+      notifyOpsTaskUpdated(task.id);
 
       const { data: { user } } = await supabase.auth.getUser();
 
