@@ -238,10 +238,13 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                   </span>
                 </div>
               </div>
-            );
-          })}
+              );
+            })}
+            </div>
+          )}
         </div>
-      )}
+      ))}
     </div>
   );
 }
+
