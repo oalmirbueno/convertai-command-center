@@ -136,7 +136,7 @@ export default function Login() {
   const labelCls = "text-[11px] uppercase tracking-[0.5px] text-muted-foreground font-semibold mb-1.5 block";
 
   return (
-    <div className="relative min-h-screen flex flex-col lg:flex-row overflow-hidden bg-background">
+    <div className="dark relative min-h-screen flex flex-col lg:flex-row overflow-hidden bg-background">
       {/* ═══ LEFT PANEL ═══ */}
       <div className="hidden lg:flex lg:w-[55%] relative overflow-hidden login-left" style={{ background: "#0D0D0D" }}>
         <div className="tech-grid-bg" />
