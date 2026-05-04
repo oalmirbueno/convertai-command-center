@@ -5,9 +5,12 @@ import { useClientIdentity } from "@/hooks/useClientIdentity";
 import {
   FileText, BarChart3, TrendingUp, Calendar, ArrowRight,
   Eye, MousePointerClick, Users, Zap, DollarSign, Target, MessageCircle,
+  Folder, ChevronRight,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
 import {
   AreaChart, Area, ResponsiveContainer,
 } from "recharts";
