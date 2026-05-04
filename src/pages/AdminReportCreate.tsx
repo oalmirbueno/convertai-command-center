@@ -68,6 +68,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   const [chartData, setChartData] = useState<ChartDataRow[]>([]);
   const [chartType, setChartType] = useState("area");
   const [chartColumns, setChartColumns] = useState<string[]>([]);
+  const [parsedSource, setParsedSource] = useState<{ source: string; label: string; rows: any[]; dimensionKey: string } | null>(null);
 
   const filteredProjects = (projects || []).filter((p: any) => !clientId || p.client_id === clientId);
 
