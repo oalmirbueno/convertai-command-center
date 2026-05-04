@@ -3,6 +3,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { X, Loader2, CalendarIcon } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
+import { notifyOpsTaskCreated, notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -105,10 +106,12 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       if (isEdit) {
         const { error } = await supabase.from("tasks").update(payload).eq("id", editTask.id);
         if (error) throw error;
+        notifyOpsTaskUpdated(editTask.id);
         toast.success("Tarefa atualizada!");
       } else {
-        const { error } = await supabase.from("tasks").insert(payload);
+        const { data: inserted, error } = await supabase.from("tasks").insert(payload).select().single();
         if (error) throw error;
+        if (inserted?.id) notifyOpsTaskCreated(inserted.id);
         // Create update for new task
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser && projectId) {
@@ -134,7 +137,9 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const handleDelete = async () => {
     if (!editTask) return;
     try {
+      const opsNodeId = (editTask as any)?.ops_node_id ?? null;
       await supabase.from("tasks").delete().eq("id", editTask.id);
+      notifyOpsTaskDeleted(editTask.id, opsNodeId);
       toast.success("Tarefa excluída");
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       setConfirmDelete(false);

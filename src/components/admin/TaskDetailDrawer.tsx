@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
 // @ts-ignore
@@ -123,6 +124,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
       }).eq("id", task.id);
+      notifyOpsTaskUpdated(task.id);
 
       const { data: { user } } = await supabase.auth.getUser();
 

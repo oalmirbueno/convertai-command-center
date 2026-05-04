@@ -4,6 +4,7 @@ import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
+import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -113,6 +114,7 @@ export default function Kanban() {
     if (!task) return;
     const previousStatus = task.status;
     await supabase.from("tasks").update({ status: column }).eq("id", draggedTask);
+    notifyOpsTaskUpdated(draggedTask);
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
