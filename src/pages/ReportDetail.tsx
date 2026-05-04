@@ -17,6 +17,7 @@ import {
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, RadialBarChart, RadialBar,
 } from "recharts";
+import SourceDashboard from "@/components/reports/SourceDashboard";
 
 /* ── Metric Config ────────────────────────────────────────── */
 const metricConfig: Record<string, {
