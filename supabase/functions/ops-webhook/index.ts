@@ -7,9 +7,26 @@ const corsHeaders = {
 };
 
 interface OpsEvent {
-  event: "file_approved" | "node_completed" | "stage_advanced";
+  event:
+    | "file_approved"
+    | "node_completed"
+    | "stage_advanced"
+    | "node_created"
+    | "node_updated"
+    | "node_deleted";
   data: Record<string, any>;
 }
+
+const OPS_TO_KANBAN_STATUS: Record<string, string> = {
+  draft: "backlog",
+  not_started: "backlog",
+  active: "in_progress",
+  in_progress: "in_progress",
+  in_review: "review",
+  blocked: "blocked",
+  done: "done",
+  completed: "done",
+};
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
