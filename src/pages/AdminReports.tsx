@@ -3,9 +3,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Edit } from "lucide-react";
+import { Plus, FileText, Eye, Send, Edit, Folder, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 
 const metricLabels: Record<string, string> = {
   reach: "Alcance", impressions: "Impressões", engagement: "Engaj. %",
@@ -78,54 +80,123 @@ export default function AdminReports() {
           <p className="text-sm text-muted-foreground">Nenhum relatório criado ainda</p>
         </div>
       ) : (
-        <div className="space-y-4">
-          {reports.map((r: any) => {
-            const m = (r.metrics || {}) as Record<string, any>;
-            const visibleMetrics = Object.entries(m)
-              .filter(([k]) => k !== "custom" && metricLabels[k] && m[k] !== undefined)
-              .slice(0, 6);
-
-            return (
-              <div key={r.id} className="bg-card border border-border rounded-2xl p-5">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">📊 {r.title}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {(r as any).client?.company_name || (r as any).client?.full_name} • {(r as any).project?.name}
-                      {r.period_start && r.period_end && ` • ${formatDate(r.period_start)}-${formatDate(r.period_end)}`}
-                    </p>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${r.status === "published" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
-                    {r.status === "published" ? "Publicado" : "Rascunho"}
-                  </span>
-                </div>
-
-                {visibleMetrics.length > 0 && (
-                  <div className="flex flex-wrap gap-4 mt-4">
-                    {visibleMetrics.map(([key, val]) => (
-                      <div key={key} className="min-w-[80px]">
-                        <p className="text-base font-mono text-foreground">
-                          {key === "engagement" || key === "ctr" ? val + "%" : formatNumber(val as number)}
-                        </p>
-                        <p className="text-[10px] uppercase text-muted-foreground">{metricLabels[key]}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div className="flex gap-2 mt-4">
-                  <button onClick={() => navigate(`/relatorios/${r.id}`)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
-                    <Eye className="w-3 h-3" /> Ver
-                  </button>
-                  <button onClick={() => handleSendToClient(r)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
-                    <Send className="w-3 h-3" /> Enviar ao Cliente
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <GroupedReports
+          reports={reports}
+          metricLabels={metricLabels}
+          formatNumber={formatNumber}
+          formatDate={formatDate}
+          onView={(id) => navigate(`/relatorios/${id}`)}
+          onSend={handleSendToClient}
+        />
       )}
+    </div>
+  );
+}
+
+function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onView, onSend }: any) {
+  const grouped = groupReports(reports as any[], getClientName);
+  const clients = Object.keys(grouped).sort();
+  const [openClients, setOpenClients] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(clients.map(c => [c, true]))
+  );
+  const [openModels, setOpenModels] = useState<Record<string, boolean>>({});
+
+  const toggleClient = (c: string) => setOpenClients(s => ({ ...s, [c]: !s[c] }));
+  const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: s[k] === false ? true : false }));
+
+  return (
+    <div className="space-y-3">
+      {clients.map((client) => {
+        const models = grouped[client];
+        const modelKeys = PERIOD_ORDER.filter(p => models[p]);
+        const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
+        const isOpen = openClients[client] !== false;
+        return (
+          <div key={client} className="bg-card border border-border rounded-2xl overflow-hidden">
+            <button
+              onClick={() => toggleClient(client)}
+              className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-secondary/30 transition-colors cursor-pointer"
+            >
+              <div className="flex items-center gap-3 min-w-0">
+                <Folder className="w-4 h-4 text-primary shrink-0" />
+                <p className="text-sm font-semibold text-foreground truncate">{client}</p>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{totalCount}</span>
+              </div>
+              <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${isOpen ? "rotate-90" : ""}`} />
+            </button>
+            {isOpen && (
+              <div className="border-t border-border/60 divide-y divide-border/40">
+                {modelKeys.map((model) => {
+                  const list = models[model];
+                  const key = `${client}::${model}`;
+                  const modelOpen = openModels[key] !== false;
+                  return (
+                    <div key={model} className="bg-background/40">
+                      <button
+                        onClick={() => toggleModel(key)}
+                        className="w-full flex items-center justify-between gap-3 px-5 py-3 hover:bg-secondary/20 transition-colors cursor-pointer"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <Folder className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                          <p className="text-[12px] font-medium text-foreground">{model}</p>
+                          <span className="text-[10px] text-muted-foreground">({list.length})</span>
+                        </div>
+                        <ChevronRight className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${modelOpen ? "rotate-90" : ""}`} />
+                      </button>
+                      {modelOpen && (
+                        <div className="px-5 pb-4 space-y-2">
+                          {list.map((r: any) => {
+                            const m = (r.metrics || {}) as Record<string, any>;
+                            const visibleMetrics = Object.entries(m)
+                              .filter(([k]) => k !== "custom" && metricLabels[k] && m[k] !== undefined)
+                              .slice(0, 4);
+                            return (
+                              <div key={r.id} className="bg-card border border-border rounded-xl p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="text-[13px] font-semibold text-foreground truncate">📊 {r.title}</p>
+                                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                                      {r.project?.name}
+                                      {r.period_start && r.period_end && ` • ${formatDate(r.period_start)}-${formatDate(r.period_end)}`}
+                                    </p>
+                                  </div>
+                                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${r.status === "published" ? "bg-success/10 text-success" : "bg-muted text-muted-foreground"}`}>
+                                    {r.status === "published" ? "Publicado" : "Rascunho"}
+                                  </span>
+                                </div>
+                                {visibleMetrics.length > 0 && (
+                                  <div className="flex flex-wrap gap-3 mt-3">
+                                    {visibleMetrics.map(([key, val]) => (
+                                      <div key={key} className="min-w-[70px]">
+                                        <p className="text-sm font-mono text-foreground">
+                                          {key === "engagement" || key === "ctr" ? val + "%" : formatNumber(val as number)}
+                                        </p>
+                                        <p className="text-[9px] uppercase text-muted-foreground">{metricLabels[key]}</p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
+                                <div className="flex gap-3 mt-3">
+                                  <button onClick={() => onView(r.id)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
+                                    <Eye className="w-3 h-3" /> Ver
+                                  </button>
+                                  <button onClick={() => onSend(r)} className="text-[12px] text-muted-foreground hover:text-foreground transition-colors cursor-pointer flex items-center gap-1">
+                                    <Send className="w-3 h-3" /> Enviar ao Cliente
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
