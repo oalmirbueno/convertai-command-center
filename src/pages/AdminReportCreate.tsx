@@ -6,7 +6,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart } from "lucide-react";
+import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart, Sparkles } from "lucide-react";
+import { parseFile, type ParsedReport } from "@/lib/adsParser";
 import { notifyAdmin } from "@/lib/notifyHelpers";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -67,6 +68,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   const [chartData, setChartData] = useState<ChartDataRow[]>([]);
   const [chartType, setChartType] = useState("area");
   const [chartColumns, setChartColumns] = useState<string[]>([]);
+  const [parsedSource, setParsedSource] = useState<{ source: string; label: string; rows: any[]; dimensionKey: string } | null>(null);
 
   const filteredProjects = (projects || []).filter((p: any) => !clientId || p.client_id === clientId);
 
@@ -77,59 +79,23 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   };
 
   // CSV IMPORT
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) { toast.error("CSV precisa ter cabeçalho + dados"); return; }
-
-        const separator = lines[0].includes(";") ? ";" : ",";
-        const headers = lines[0].split(separator).map(h => h.trim().replace(/^"|"$/g, ""));
-        const cols = headers.slice(1); // first column is label/date
-
-        const rows: ChartDataRow[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const cells = lines[i].split(separator).map(c => c.trim().replace(/^"|"$/g, ""));
-          if (cells.length < 2) continue;
-          const row: ChartDataRow = { label: cells[0] };
-          cols.forEach((col, j) => {
-            const val = cells[j + 1]?.replace(/[^\d.,\-]/g, "").replace(",", ".");
-            row[col] = val ? Number(val) || 0 : 0;
-          });
-          rows.push(row);
-        }
-
-        setChartData(rows);
-        setChartColumns(cols);
-
-        // Auto-fill metrics from last row totals or averages
-        if (rows.length > 0) {
-          const lastRow = rows[rows.length - 1];
-          const autoMetrics: Record<string, number> = {};
-          cols.forEach(col => {
-            const metricKey = defaultMetrics.find(m => m.label.toLowerCase() === col.toLowerCase())?.key;
-            if (metricKey) {
-              // Sum all values for this column
-              const total = rows.reduce((sum, r) => sum + (Number(r[col]) || 0), 0);
-              autoMetrics[metricKey] = total;
-            }
-          });
-          if (Object.keys(autoMetrics).length > 0) {
-            setMetrics(prev => ({ ...prev, ...autoMetrics }));
-          }
-        }
-
-        toast.success(`${rows.length} linhas importadas com ${cols.length} colunas`);
-      } catch {
-        toast.error("Erro ao processar CSV");
-      }
-    };
-    reader.readAsText(file);
+    try {
+      const parsed: ParsedReport = await parseFile(file);
+      if (!parsed.chartData.length) { toast.error("Não consegui ler dados do arquivo."); return; }
+      setChartData(parsed.chartData as any);
+      setChartColumns(parsed.chartColumns);
+      setMetrics(prev => ({ ...prev, ...Object.fromEntries(Object.entries(parsed.metrics).map(([k, v]) => [k, Math.round(Number(v) * 100) / 100])) }));
+      if (parsed.periodStart && !periodStart) setPeriodStart(parsed.periodStart);
+      if (parsed.periodEnd && !periodEnd) setPeriodEnd(parsed.periodEnd);
+      setParsedSource({ source: parsed.source, label: parsed.sourceLabel, rows: parsed.rows, dimensionKey: parsed.dimensionKey });
+      toast.success(`${parsed.sourceLabel} detectado · ${parsed.rows.length} linhas, ${parsed.chartColumns.length} métricas`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao processar arquivo: " + (err?.message || "desconhecido"));
+    }
     e.target.value = "";
   };
 
@@ -182,7 +148,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
     }
     setSaving(true);
     try {
-      const metricsPayload = { ...metrics, custom: customMetrics.filter(m => m.label) };
+      const metricsPayload: any = { ...metrics, custom: customMetrics.filter(m => m.label) };
+      if (parsedSource) {
+        metricsPayload.__source = parsedSource.source;
+        metricsPayload.__source_label = parsedSource.label;
+        metricsPayload.__breakdown = parsedSource.rows.slice(0, 200);
+        metricsPayload.__dimension = parsedSource.dimensionKey;
+      }
       const payload: any = {
         client_id: clientId,
         project_id: projectId,
@@ -292,14 +264,21 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
             onClick={() => csvInputRef.current?.click()}
             className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[12px] text-primary border border-primary/30 hover:bg-primary/10 transition-colors cursor-pointer bg-transparent"
           >
-            <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV
+            <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV / XLSX
           </button>
-          <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt" className="hidden" onChange={handleCsvImport} />
+          <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleCsvImport} />
         </div>
 
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Preencha manualmente ou importe um CSV. Formato: primeira coluna = período (ex: "Sem 1"), demais colunas = métricas.
+          Importe export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX) — o sistema detecta o tipo, normaliza colunas e gera o dashboard automaticamente.
         </p>
+        {parsedSource && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-[12px] text-foreground">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+            Fonte detectada: <span className="font-semibold text-primary">{parsedSource.label}</span>
+            <span className="text-muted-foreground">· {parsedSource.rows.length} linhas · dimensão: {parsedSource.dimensionKey}</span>
+          </div>
+        )}
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
           {defaultMetrics.map(m => (

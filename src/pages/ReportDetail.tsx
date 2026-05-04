@@ -17,6 +17,7 @@ import {
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, RadialBarChart, RadialBar,
 } from "recharts";
+import SourceDashboard from "@/components/reports/SourceDashboard";
 
 /* ── Metric Config ────────────────────────────────────────── */
 const metricConfig: Record<string, {
@@ -455,7 +456,18 @@ export default function ReportDetail() {
               ))}
             </div>
           )}
-        </div>
+      </div>
+
+      {/* ═══════════════ DASHBOARD AUTO POR FONTE ═══════════════ */}
+      {(report.metrics as any)?.__source && Array.isArray((report.metrics as any)?.__breakdown) && (report.metrics as any).__breakdown.length > 0 && (
+        <SourceDashboard
+          source={(report.metrics as any).__source}
+          sourceLabel={(report.metrics as any).__source_label || "Detectado"}
+          rows={(report.metrics as any).__breakdown}
+          dimensionKey={(report.metrics as any).__dimension || "Item"}
+          metrics={report.metrics as any}
+        />
+      )}
       </div>
 
       {/* ═══════════════ KPI CARDS ═══════════════ */}
