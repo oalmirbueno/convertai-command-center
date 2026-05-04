@@ -106,10 +106,12 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       if (isEdit) {
         const { error } = await supabase.from("tasks").update(payload).eq("id", editTask.id);
         if (error) throw error;
+        notifyOpsTaskUpdated(editTask.id);
         toast.success("Tarefa atualizada!");
       } else {
-        const { error } = await supabase.from("tasks").insert(payload);
+        const { data: inserted, error } = await supabase.from("tasks").insert(payload).select().single();
         if (error) throw error;
+        if (inserted?.id) notifyOpsTaskCreated(inserted.id);
         // Create update for new task
         const { data: { user: authUser } } = await supabase.auth.getUser();
         if (authUser && projectId) {
