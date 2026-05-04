@@ -79,59 +79,23 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   };
 
   // CSV IMPORT
-  const handleCsvImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCsvImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      try {
-        const text = event.target?.result as string;
-        const lines = text.split("\n").map(l => l.trim()).filter(Boolean);
-        if (lines.length < 2) { toast.error("CSV precisa ter cabeçalho + dados"); return; }
-
-        const separator = lines[0].includes(";") ? ";" : ",";
-        const headers = lines[0].split(separator).map(h => h.trim().replace(/^"|"$/g, ""));
-        const cols = headers.slice(1); // first column is label/date
-
-        const rows: ChartDataRow[] = [];
-        for (let i = 1; i < lines.length; i++) {
-          const cells = lines[i].split(separator).map(c => c.trim().replace(/^"|"$/g, ""));
-          if (cells.length < 2) continue;
-          const row: ChartDataRow = { label: cells[0] };
-          cols.forEach((col, j) => {
-            const val = cells[j + 1]?.replace(/[^\d.,\-]/g, "").replace(",", ".");
-            row[col] = val ? Number(val) || 0 : 0;
-          });
-          rows.push(row);
-        }
-
-        setChartData(rows);
-        setChartColumns(cols);
-
-        // Auto-fill metrics from last row totals or averages
-        if (rows.length > 0) {
-          const lastRow = rows[rows.length - 1];
-          const autoMetrics: Record<string, number> = {};
-          cols.forEach(col => {
-            const metricKey = defaultMetrics.find(m => m.label.toLowerCase() === col.toLowerCase())?.key;
-            if (metricKey) {
-              // Sum all values for this column
-              const total = rows.reduce((sum, r) => sum + (Number(r[col]) || 0), 0);
-              autoMetrics[metricKey] = total;
-            }
-          });
-          if (Object.keys(autoMetrics).length > 0) {
-            setMetrics(prev => ({ ...prev, ...autoMetrics }));
-          }
-        }
-
-        toast.success(`${rows.length} linhas importadas com ${cols.length} colunas`);
-      } catch {
-        toast.error("Erro ao processar CSV");
-      }
-    };
-    reader.readAsText(file);
+    try {
+      const parsed: ParsedReport = await parseFile(file);
+      if (!parsed.chartData.length) { toast.error("Não consegui ler dados do arquivo."); return; }
+      setChartData(parsed.chartData as any);
+      setChartColumns(parsed.chartColumns);
+      setMetrics(prev => ({ ...prev, ...Object.fromEntries(Object.entries(parsed.metrics).map(([k, v]) => [k, Math.round(Number(v) * 100) / 100])) }));
+      if (parsed.periodStart && !periodStart) setPeriodStart(parsed.periodStart);
+      if (parsed.periodEnd && !periodEnd) setPeriodEnd(parsed.periodEnd);
+      setParsedSource({ source: parsed.source, label: parsed.sourceLabel, rows: parsed.rows, dimensionKey: parsed.dimensionKey });
+      toast.success(`${parsed.sourceLabel} detectado · ${parsed.rows.length} linhas, ${parsed.chartColumns.length} métricas`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Erro ao processar arquivo: " + (err?.message || "desconhecido"));
+    }
     e.target.value = "";
   };
 
