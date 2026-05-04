@@ -3,9 +3,11 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Edit } from "lucide-react";
+import { Plus, FileText, Eye, Send, Edit, Folder, ChevronRight } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 
 const metricLabels: Record<string, string> = {
   reach: "Alcance", impressions: "Impressões", engagement: "Engaj. %",
