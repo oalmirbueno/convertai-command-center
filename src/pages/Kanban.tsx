@@ -114,6 +114,7 @@ export default function Kanban() {
     if (!task) return;
     const previousStatus = task.status;
     await supabase.from("tasks").update({ status: column }).eq("id", draggedTask);
+    notifyOpsTaskUpdated(draggedTask);
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
