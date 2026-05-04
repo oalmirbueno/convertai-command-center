@@ -80,8 +80,42 @@ export default function ClientReports() {
           <p className="text-xs text-muted-foreground/60 mt-1">Você será notificado assim que um novo relatório estiver disponível.</p>
         </div>
       ) : (
-        <div className="space-y-5">
-          {reports.map((r: any) => {
+        <ClientReportsGrouped reports={reports} navigate={navigate} />
+      )}
+    </div>
+  );
+}
+
+function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate: any }) {
+  const groups: Record<string, any[]> = {};
+  for (const r of reports) {
+    const m = getPeriodModel(r.period_start, r.period_end);
+    (groups[m] ||= []).push(r);
+  }
+  const modelKeys = PERIOD_ORDER.filter(p => groups[p]);
+  const [open, setOpen] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(modelKeys.map(k => [k, true]))
+  );
+  const toggle = (k: string) => setOpen(s => ({ ...s, [k]: !s[k] }));
+
+  return (
+    <div className="space-y-4">
+      {modelKeys.map((model) => (
+        <div key={model} className="space-y-3">
+          <button
+            onClick={() => toggle(model)}
+            className="w-full flex items-center justify-between gap-3 px-4 py-3 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors cursor-pointer"
+          >
+            <div className="flex items-center gap-2.5">
+              <Folder className="w-4 h-4 text-primary" />
+              <p className="text-sm font-semibold text-foreground">{model}</p>
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{groups[model].length}</span>
+            </div>
+            <ChevronRight className={`w-4 h-4 text-muted-foreground transition-transform ${open[model] ? "rotate-90" : ""}`} />
+          </button>
+          {open[model] && (
+            <div className="space-y-5 pl-2">
+              {groups[model].map((r: any) => {
             const m = (r.metrics || {}) as Record<string, any>;
             const visibleMetrics = Object.entries(m)
               .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== 0)
