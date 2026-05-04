@@ -17,12 +17,17 @@ interface OpsEvent {
   data: Record<string, any>;
 }
 
+// Ops status -> kanban column id used in the portal
+// Kanban columns currently: backlog, doing, review, done. We add "blocked" as a new status value.
 const OPS_TO_KANBAN_STATUS: Record<string, string> = {
+  todo: "backlog",
   draft: "backlog",
   not_started: "backlog",
-  active: "in_progress",
-  in_progress: "in_progress",
+  active: "doing",
+  in_progress: "doing",
+  doing: "doing",
   in_review: "review",
+  review: "review",
   blocked: "blocked",
   done: "done",
   completed: "done",
