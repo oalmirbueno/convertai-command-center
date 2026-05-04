@@ -148,7 +148,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
     }
     setSaving(true);
     try {
-      const metricsPayload = { ...metrics, custom: customMetrics.filter(m => m.label) };
+      const metricsPayload: any = { ...metrics, custom: customMetrics.filter(m => m.label) };
+      if (parsedSource) {
+        metricsPayload.__source = parsedSource.source;
+        metricsPayload.__source_label = parsedSource.label;
+        metricsPayload.__breakdown = parsedSource.rows.slice(0, 200);
+        metricsPayload.__dimension = parsedSource.dimensionKey;
+      }
       const payload: any = {
         client_id: clientId,
         project_id: projectId,
