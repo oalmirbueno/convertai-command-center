@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { notifyUser } from "@/lib/notifyHelpers";
+import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { toast } from "sonner";
 // @ts-ignore
