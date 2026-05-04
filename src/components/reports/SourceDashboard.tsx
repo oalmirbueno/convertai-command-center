@@ -236,14 +236,14 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
                 <Treemap data={treemapData} dataKey="size" stroke="hsl(var(--card))" fill="hsl(var(--primary))"
-                  content={({ x, y, width, height, name, payload }: any) => (
+                  content={(({ x, y, width, height, name, payload }: any) => (
                     <g>
                       <rect x={x} y={y} width={width} height={height} fill={payload?.fill} stroke="hsl(var(--card))" strokeWidth={2} rx={6} />
                       {width > 60 && height > 30 && (
                         <text x={x + 8} y={y + 18} fill="#000" fontSize={11} fontWeight={600}>{name}</text>
                       )}
                     </g>
-                  )}
+                  )) as any}
                 />
               </ResponsiveContainer>
             </div>
