@@ -161,6 +161,127 @@ Deno.serve(async (req) => {
         break;
       }
 
+      case "node_created": {
+        const required = ["project_id", "author_id", "node_id", "node_title"];
+        const missing = required.filter((k) => !data[k]);
+        if (missing.length) {
+          return new Response(
+            JSON.stringify({ error: `Missing fields: ${missing.join(", ")}` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { data: task, error: taskErr } = await supabase
+          .from("tasks")
+          .upsert(
+            {
+              ops_node_id: data.node_id,
+              project_id: data.project_id,
+              title: data.node_title,
+              status: "backlog",
+              priority: "medium",
+            },
+            { onConflict: "ops_node_id" }
+          )
+          .select()
+          .single();
+        if (taskErr) throw taskErr;
+
+        const { data: upd, error: updErr } = await supabase
+          .from("updates")
+          .insert({
+            project_id: data.project_id,
+            author_id: data.author_id,
+            message: data.message ?? `Tarefa criada: ${data.node_title}`,
+            update_type: "task_created",
+          })
+          .select()
+          .single();
+        if (updErr) throw updErr;
+
+        result = { task, update: upd };
+        break;
+      }
+
+      case "node_updated": {
+        const required = ["project_id", "author_id", "node_id", "node_title"];
+        const missing = required.filter((k) => !data[k]);
+        if (missing.length) {
+          return new Response(
+            JSON.stringify({ error: `Missing fields: ${missing.join(", ")}` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const mappedStatus = data.status
+          ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
+          : "backlog";
+
+        const { data: task, error: taskErr } = await supabase
+          .from("tasks")
+          .upsert(
+            {
+              ops_node_id: data.node_id,
+              project_id: data.project_id,
+              title: data.node_title,
+              status: mappedStatus,
+              priority: "medium",
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "ops_node_id" }
+          )
+          .select()
+          .single();
+        if (taskErr) throw taskErr;
+
+        const { data: upd, error: updErr } = await supabase
+          .from("updates")
+          .insert({
+            project_id: data.project_id,
+            author_id: data.author_id,
+            message: data.message ?? `Tarefa atualizada: ${data.node_title}`,
+            update_type: data.update_type ?? "task_updated",
+          })
+          .select()
+          .single();
+        if (updErr) throw updErr;
+
+        result = { task, update: upd };
+        break;
+      }
+
+      case "node_deleted": {
+        const required = ["project_id", "author_id", "node_id"];
+        const missing = required.filter((k) => !data[k]);
+        if (missing.length) {
+          return new Response(
+            JSON.stringify({ error: `Missing fields: ${missing.join(", ")}` }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const { error: delErr } = await supabase
+          .from("tasks")
+          .delete()
+          .eq("ops_node_id", data.node_id);
+        if (delErr) throw delErr;
+
+        const { data: upd, error: updErr } = await supabase
+          .from("updates")
+          .insert({
+            project_id: data.project_id,
+            author_id: data.author_id,
+            message: data.message ?? `Tarefa removida (node ${data.node_id})`,
+            update_type: "task_deleted",
+          })
+          .select()
+          .single();
+        if (updErr) throw updErr;
+
+        result = { update: upd };
+        break;
+      }
+
       default:
         return new Response(
           JSON.stringify({ error: `Unknown event type: ${event}` }),
