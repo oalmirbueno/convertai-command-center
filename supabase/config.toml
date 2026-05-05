@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.ops-full-export]
 verify_jwt = false
+
+[functions.ops-tasks-list]
+verify_jwt = false
