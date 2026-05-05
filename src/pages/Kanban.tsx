@@ -315,6 +315,15 @@ export default function Kanban() {
                         {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                       </AvatarFallback>
                     </Avatar>
+                    {!isClient && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                        className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                        title="Excluir tarefa"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
