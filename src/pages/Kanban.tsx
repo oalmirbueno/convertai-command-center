@@ -398,7 +398,7 @@ export default function Kanban() {
                             {!isClient && (
                               <button
                                 onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded opacity-0 group-hover:opacity-100"
+                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
                                 title="Excluir tarefa"
                               >
                                 <Trash2 className="w-3.5 h-3.5" />
