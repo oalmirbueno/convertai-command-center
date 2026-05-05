@@ -4,11 +4,12 @@ import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
-import { notifyOpsTaskUpdated } from "@/lib/opsTaskSync";
+import { notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X, Paperclip, CalendarIcon } from "lucide-react";
+import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2 } from "lucide-react";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
 import TaskDetailDrawer from "@/components/admin/TaskDetailDrawer";
@@ -73,6 +74,20 @@ export default function Kanban() {
   // Modals & drawer
   const [createStatus, setCreateStatus] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<any>(null);
+  const [deleteTask, setDeleteTask] = useState<any>(null);
+
+  const handleDeleteTask = async () => {
+    if (!deleteTask) return;
+    const { error } = await supabase.from("tasks").delete().eq("id", deleteTask.id);
+    if (error) {
+      toast.error("Erro ao excluir tarefa");
+      return;
+    }
+    notifyOpsTaskDeleted(deleteTask.id, deleteTask.ops_node_id);
+    toast.success("Tarefa excluída");
+    setDeleteTask(null);
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  };
 
   // Filters
   const [searchParams] = useSearchParams();
@@ -300,6 +315,15 @@ export default function Kanban() {
                         {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                       </AvatarFallback>
                     </Avatar>
+                    {!isClient && (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                        className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                        title="Excluir tarefa"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -365,11 +389,22 @@ export default function Kanban() {
                               </div>
                             )}
                           </div>
-                          <Avatar className="w-6 h-6">
-                            <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                              {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="flex items-center gap-1.5">
+                            <Avatar className="w-6 h-6">
+                              <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                                {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            {!isClient && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                                title="Excluir tarefa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -400,6 +435,14 @@ export default function Kanban() {
           teamMembers={teamMembers || []}
         />
       )}
+
+      <ConfirmModal
+        open={!!deleteTask}
+        title="Excluir tarefa"
+        description={`Tem certeza que deseja excluir "${deleteTask?.title}"? Esta ação removerá comentários, checklists e anexos vinculados.`}
+        onConfirm={handleDeleteTask}
+        onCancel={() => setDeleteTask(null)}
+      />
     </div>
   );
 }
