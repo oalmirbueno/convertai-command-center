@@ -166,62 +166,7 @@ Deno.serve(async (req) => {
         break;
       }
 
-      case "node_created": {
-        const required = ["project_id", "node_id", "node_title"];
-        const missing = required.filter((k) => !data[k]);
-        if (missing.length) {
-          return new Response(
-            JSON.stringify({ error: `Missing fields: ${missing.join(", ")}` }),
-            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-          );
-        }
-
-        const mappedStatus = data.status
-          ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
-          : "backlog";
-
-        // Pairing flow: if Ops echoes back portal_task_id, just attach ops_node_id
-        if (data.portal_task_id) {
-          const { data: paired, error: pairErr } = await supabase
-            .from("tasks")
-            .update({ ops_node_id: data.node_id, updated_at: new Date().toISOString() })
-            .eq("id", data.portal_task_id)
-            .select()
-            .single();
-          if (pairErr) throw pairErr;
-          result = { task: paired, paired: true };
-          break;
-        }
-
-        const { data: task, error: taskErr } = await supabase
-          .from("tasks")
-          .upsert(
-            {
-              ops_node_id: data.node_id,
-              project_id: data.project_id,
-              title: data.node_title,
-              status: mappedStatus,
-              priority: "medium",
-            },
-            { onConflict: "ops_node_id" }
-          )
-          .select()
-          .single();
-        if (taskErr) throw taskErr;
-
-        if (data.author_id) {
-          await supabase.from("updates").insert({
-            project_id: data.project_id,
-            author_id: data.author_id,
-            message: data.message ?? `Tarefa criada: ${data.node_title}`,
-            update_type: "task_created",
-          });
-        }
-
-        result = { task };
-        break;
-      }
-
+      case "node_created":
       case "node_updated": {
         const required = ["project_id", "node_id", "node_title"];
         const missing = required.filter((k) => !data[k]);
@@ -236,48 +181,77 @@ Deno.serve(async (req) => {
           ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
           : "backlog";
 
-        const { data: task, error: taskErr } = await supabase
+        // Find existing row by portal_task_id OR ops_node_id
+        const orFilter = data.portal_task_id
+          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${data.node_id}`
+          : `ops_node_id.eq.${data.node_id}`;
+
+        const { data: existing } = await supabase
           .from("tasks")
-          .upsert(
-            {
-              ops_node_id: data.node_id,
-              project_id: data.project_id,
-              title: data.node_title,
-              status: mappedStatus,
-              priority: "medium",
-              updated_at: new Date().toISOString(),
-            },
-            { onConflict: "ops_node_id" }
-          )
-          .select()
-          .single();
-        if (taskErr) throw taskErr;
+          .select("id")
+          .or(orFilter)
+          .maybeSingle();
+
+        const row: Record<string, any> = {
+          project_id: data.project_id,
+          milestone_id: data.portal_milestone_id ?? null,
+          title: data.node_title,
+          status: mappedStatus,
+          ops_node_id: data.node_id,
+          updated_at: new Date().toISOString(),
+        };
+
+        let task: any;
+        if (existing) {
+          const { data: upd, error: updErr } = await supabase
+            .from("tasks")
+            .update(row)
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (updErr) throw updErr;
+          task = upd;
+        } else {
+          const { data: ins, error: insErr } = await supabase
+            .from("tasks")
+            .insert({ ...row, priority: "medium" })
+            .select()
+            .single();
+          if (insErr) throw insErr;
+          task = ins;
+        }
 
         if (data.author_id) {
           await supabase.from("updates").insert({
             project_id: data.project_id,
             author_id: data.author_id,
-            message: data.message ?? `Tarefa atualizada: ${data.node_title}`,
-            update_type: data.update_type ?? "task_updated",
+            message:
+              data.message ??
+              (event === "node_created"
+                ? `Tarefa criada: ${data.node_title}`
+                : `Tarefa atualizada: ${data.node_title}`),
+            update_type:
+              data.update_type ?? (event === "node_created" ? "task_created" : "task_updated"),
           });
         }
 
-        result = { task };
+        result = { task, paired: !!data.portal_task_id };
         break;
       }
 
       case "node_deleted": {
-        if (!data.node_id) {
+        if (!data.node_id && !data.portal_task_id) {
           return new Response(
-            JSON.stringify({ error: "Missing fields: node_id" }),
+            JSON.stringify({ error: "Missing fields: node_id or portal_task_id" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        const { error: delErr } = await supabase
-          .from("tasks")
-          .delete()
-          .eq("ops_node_id", data.node_id);
+        const orFilter = data.portal_task_id
+          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${data.node_id ?? "00000000-0000-0000-0000-000000000000"}`
+          : `ops_node_id.eq.${data.node_id}`;
+
+        const { error: delErr } = await supabase.from("tasks").delete().or(orFilter);
         if (delErr) throw delErr;
 
         if (data.project_id && data.author_id) {
