@@ -389,11 +389,22 @@ export default function Kanban() {
                               </div>
                             )}
                           </div>
-                          <Avatar className="w-6 h-6">
-                            <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                              {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                            </AvatarFallback>
-                          </Avatar>
+                          <div className="flex items-center gap-1.5">
+                            <Avatar className="w-6 h-6">
+                              <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                                {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                              </AvatarFallback>
+                            </Avatar>
+                            {!isClient && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded opacity-0 group-hover:opacity-100"
+                                title="Excluir tarefa"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
