@@ -74,6 +74,20 @@ export default function Kanban() {
   // Modals & drawer
   const [createStatus, setCreateStatus] = useState<string | null>(null);
   const [detailTask, setDetailTask] = useState<any>(null);
+  const [deleteTask, setDeleteTask] = useState<any>(null);
+
+  const handleDeleteTask = async () => {
+    if (!deleteTask) return;
+    const { error } = await supabase.from("tasks").delete().eq("id", deleteTask.id);
+    if (error) {
+      toast.error("Erro ao excluir tarefa");
+      return;
+    }
+    notifyOpsTaskDeleted(deleteTask.id, deleteTask.ops_node_id);
+    toast.success("Tarefa excluída");
+    setDeleteTask(null);
+    queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  };
 
   // Filters
   const [searchParams] = useSearchParams();
