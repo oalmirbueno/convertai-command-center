@@ -435,6 +435,14 @@ export default function Kanban() {
           teamMembers={teamMembers || []}
         />
       )}
+
+      <ConfirmModal
+        open={!!deleteTask}
+        title="Excluir tarefa"
+        description={`Tem certeza que deseja excluir "${deleteTask?.title}"? Esta ação removerá comentários, checklists e anexos vinculados.`}
+        onConfirm={handleDeleteTask}
+        onCancel={() => setDeleteTask(null)}
+      />
     </div>
   );
 }
