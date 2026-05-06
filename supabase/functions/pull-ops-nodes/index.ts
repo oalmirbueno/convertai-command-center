@@ -68,28 +68,28 @@ const isMissingFunction = (status: number, detail: string) =>
 const fetchOpsNodes = async (projectFilter: string | undefined, secret: string) => {
   const attempts: Array<{ url: string; status?: number; detail?: string }> = [];
 
-  for (const url of getOpsPullUrls()) {
+  for (const ep of getOpsEndpoints()) {
     try {
-      const res = await fetch(url, {
+      const res = await fetch(ep.url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-webhook-secret": secret,
         },
-        body: JSON.stringify({ project_id: projectFilter ?? null }),
+        body: JSON.stringify(ep.buildBody(projectFilter)),
       });
 
       const text = await res.text();
       if (!res.ok) {
-        attempts.push({ url, status: res.status, detail: text.slice(0, 500) });
+        attempts.push({ url: ep.url, status: res.status, detail: text.slice(0, 500) });
         if (isMissingFunction(res.status, text)) continue;
         return { nodes: [], unavailable: true, attempts };
       }
 
       const payload = text ? JSON.parse(text) : {};
-      return { nodes: extractNodes(payload), unavailable: false, attempts: [...attempts, { url, status: res.status }] };
+      return { nodes: extractNodes(payload), unavailable: false, attempts: [...attempts, { url: ep.url, status: res.status }] };
     } catch (err: any) {
-      attempts.push({ url, detail: err?.message ?? "Fetch failed" });
+      attempts.push({ url: ep.url, detail: err?.message ?? "Fetch failed" });
     }
   }
 
