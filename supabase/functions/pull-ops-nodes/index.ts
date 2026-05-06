@@ -21,16 +21,37 @@ const corsHeaders = {
 
 const OPS_FUNCTIONS_BASE =
   Deno.env.get("OPS_BASE_URL") ?? "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
-const DEFAULT_OPS_NODES_URL = `${OPS_FUNCTIONS_BASE}/ops-nodes-list`;
-const FALLBACK_OPS_EXPORT_URL = `${OPS_FUNCTIONS_BASE}/ops-full-export`;
 
-const getOpsPullUrls = () =>
-  Array.from(
-    new Set(
-      [Deno.env.get("OPS_NODES_LIST_URL"), DEFAULT_OPS_NODES_URL, FALLBACK_OPS_EXPORT_URL]
-        .filter((url): url is string => Boolean(url))
-    )
-  );
+type OpsEndpoint = {
+  url: string;
+  buildBody: (projectFilter: string | undefined) => Record<string, unknown>;
+};
+
+const getOpsEndpoints = (): OpsEndpoint[] => {
+  const customUrl = Deno.env.get("OPS_NODES_LIST_URL");
+  const endpoints: OpsEndpoint[] = [];
+  if (customUrl) {
+    endpoints.push({
+      url: customUrl,
+      buildBody: (p) => ({ project_id: p ?? null }),
+    });
+  }
+  endpoints.push({
+    url: `${OPS_FUNCTIONS_BASE}/ops-nodes-list`,
+    buildBody: (p) => ({ project_id: p ?? null }),
+  });
+  endpoints.push({
+    url: `${OPS_FUNCTIONS_BASE}/sync-to-portal`,
+    buildBody: (p) => ({ event: "ops_nodes_list", data: { project_id: p ?? null } }),
+  });
+  endpoints.push({
+    url: `${OPS_FUNCTIONS_BASE}/ops-full-export`,
+    buildBody: (p) => ({ project_id: p ?? null }),
+  });
+  // dedupe by url
+  const seen = new Set<string>();
+  return endpoints.filter((e) => (seen.has(e.url) ? false : (seen.add(e.url), true)));
+};
 
 const extractNodes = (payload: any): any[] => {
   if (Array.isArray(payload?.nodes)) return payload.nodes;
