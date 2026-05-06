@@ -60,6 +60,38 @@ export default function Kanban() {
 
   const isClient = profile?.role === "client";
 
+  // ── Pull from Ops on mount + realtime subscription ──────────────────────
+  useEffect(() => {
+    // Initial sync (past + present nodes from Ops)
+    supabase.functions.invoke("pull-ops-nodes", { body: {} })
+      .then(() => queryClient.invalidateQueries({ queryKey: ["tasks"] }))
+      .catch(() => {});
+
+    // Periodic refresh as a safety net
+    const poll = setInterval(() => {
+      supabase.functions.invoke("pull-ops-nodes", { body: {} })
+        .then(() => queryClient.invalidateQueries({ queryKey: ["tasks"] }))
+        .catch(() => {});
+    }, 30000);
+
+    // Realtime: any change on tasks table refreshes the board instantly
+    const channel = supabase
+      .channel("kanban-tasks-realtime")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks" },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      clearInterval(poll);
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   // Fetch attachment counts per task
   const { data: attachmentCounts } = useQuery({
     queryKey: ["task-attachment-counts"],

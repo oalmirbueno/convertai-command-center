@@ -56,3 +56,6 @@ verify_jwt = false
 
 [functions.ops-tasks-list]
 verify_jwt = false
+
+[functions.pull-ops-nodes]
+verify_jwt = false
