@@ -101,6 +101,23 @@ Deno.serve(async (req) => {
         throw new Error(deleteError.message || "Error deleting user");
       }
 
+      // Notify Ops (best-effort) — local-first delete already done.
+      try {
+        await fetch(
+          `${supabaseUrl}/functions/v1/notify-ops`,
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "profile_deleted",
+              data: { id: user_id },
+            }),
+          },
+        );
+      } catch (e) {
+        console.warn("notify-ops profile_deleted failed:", e);
+      }
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
