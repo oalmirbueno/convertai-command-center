@@ -449,39 +449,48 @@ export type Database = {
       milestones: {
         Row: {
           created_at: string
+          deleted_at: string | null
           description: string | null
           id: string
           milestone_order: number | null
           ops_milestone_id: string | null
           project_id: string
           status: string
+          sync_error: string | null
           sync_origin: string | null
+          sync_status: string
           target_date: string
           title: string
           updated_at: string
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           milestone_order?: number | null
           ops_milestone_id?: string | null
           project_id: string
           status?: string
+          sync_error?: string | null
           sync_origin?: string | null
+          sync_status?: string
           target_date: string
           title: string
           updated_at?: string
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           milestone_order?: number | null
           ops_milestone_id?: string | null
           project_id?: string
           status?: string
+          sync_error?: string | null
           sync_origin?: string | null
+          sync_status?: string
           target_date?: string
           title?: string
           updated_at?: string
@@ -628,6 +637,7 @@ export type Database = {
           avatar_url: string | null
           company_name: string | null
           created_at: string
+          deleted_at: string | null
           email: string
           full_name: string
           id: string
@@ -640,12 +650,15 @@ export type Database = {
           plan_status: string
           plan_value: number | null
           services_config: Json | null
+          sync_error: string | null
+          sync_status: string
           updated_at: string
         }
         Insert: {
           avatar_url?: string | null
           company_name?: string | null
           created_at?: string
+          deleted_at?: string | null
           email: string
           full_name: string
           id: string
@@ -658,12 +671,15 @@ export type Database = {
           plan_status?: string
           plan_value?: number | null
           services_config?: Json | null
+          sync_error?: string | null
+          sync_status?: string
           updated_at?: string
         }
         Update: {
           avatar_url?: string | null
           company_name?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string
           full_name?: string
           id?: string
@@ -676,6 +692,8 @@ export type Database = {
           plan_status?: string
           plan_value?: number | null
           services_config?: Json | null
+          sync_error?: string | null
+          sync_status?: string
           updated_at?: string
         }
         Relationships: []
@@ -747,15 +765,19 @@ export type Database = {
           created_at: string
           created_by: string | null
           deadline: string
+          deleted_at: string | null
           description: string | null
           id: string
           name: string
           objectives: string | null
+          ops_workspace_id: string | null
           progress: number
           project_type: string
           scope: string | null
           start_date: string
           status: string
+          sync_error: string | null
+          sync_status: string
           updated_at: string
         }
         Insert: {
@@ -763,15 +785,19 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deadline: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           name: string
           objectives?: string | null
+          ops_workspace_id?: string | null
           progress?: number
           project_type: string
           scope?: string | null
           start_date: string
           status?: string
+          sync_error?: string | null
+          sync_status?: string
           updated_at?: string
         }
         Update: {
@@ -779,15 +805,19 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deadline?: string
+          deleted_at?: string | null
           description?: string | null
           id?: string
           name?: string
           objectives?: string | null
+          ops_workspace_id?: string | null
           progress?: number
           project_type?: string
           scope?: string | null
           start_date?: string
           status?: string
+          sync_error?: string | null
+          sync_status?: string
           updated_at?: string
         }
         Relationships: [
@@ -1191,6 +1221,7 @@ export type Database = {
         Row: {
           assigned_to: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           due_date: string | null
           id: string
@@ -1204,6 +1235,8 @@ export type Database = {
           project_id: string
           source: string | null
           status: string
+          sync_error: string | null
+          sync_status: string
           task_order: number | null
           title: string
           updated_at: string
@@ -1211,6 +1244,7 @@ export type Database = {
         Insert: {
           assigned_to?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
@@ -1224,6 +1258,8 @@ export type Database = {
           project_id: string
           source?: string | null
           status?: string
+          sync_error?: string | null
+          sync_status?: string
           task_order?: number | null
           title: string
           updated_at?: string
@@ -1231,6 +1267,7 @@ export type Database = {
         Update: {
           assigned_to?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           due_date?: string | null
           id?: string
@@ -1244,6 +1281,8 @@ export type Database = {
           project_id?: string
           source?: string | null
           status?: string
+          sync_error?: string | null
+          sync_status?: string
           task_order?: number | null
           title?: string
           updated_at?: string
