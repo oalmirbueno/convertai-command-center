@@ -203,7 +203,9 @@ Deno.serve(async (req) => {
           milestone_id: milestoneId,
           title,
           status: mappedStatus,
+          kanban_status: mappedStatus,
           ops_node_id: opsNodeId,
+          ops_updated_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
 
