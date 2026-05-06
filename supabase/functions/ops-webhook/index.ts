@@ -61,6 +61,9 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as OpsEvent;
     const { event, data } = body || ({} as OpsEvent);
 
+    console.log("[ops-webhook] received event:", event);
+    console.log("[ops-webhook] received data:", JSON.stringify(data));
+
     if (!event || !data || typeof data !== "object") {
       return new Response(
         JSON.stringify({ error: "Invalid payload. Expected { event, data }" }),
@@ -178,13 +181,25 @@ Deno.serve(async (req) => {
           );
         }
 
-        const mappedStatus = data.kanban_status
-          ? String(data.kanban_status)
-          : data.status
-            ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
-            : "doing";
+        const rawStatus = data.kanban_status ?? data.status;
+        const mappedStatus = rawStatus
+          ? OPS_TO_KANBAN_STATUS[String(rawStatus).toLowerCase()] ?? String(rawStatus).toLowerCase()
+          : "backlog";
+        const validColumns = new Set(["backlog", "doing", "review", "done", "blocked"]);
+        const finalStatus = validColumns.has(mappedStatus) ? mappedStatus : "backlog";
 
-        const milestoneId = data.portal_milestone_id ?? data.milestone_id ?? null;
+        let milestoneId: string | null = data.portal_milestone_id ?? data.milestone_id ?? null;
+        if (milestoneId) {
+          const { data: ms } = await supabase
+            .from("milestones")
+            .select("id")
+            .eq("id", milestoneId)
+            .maybeSingle();
+          if (!ms) {
+            console.warn("[ops-webhook] milestone not found, dropping link:", milestoneId);
+            milestoneId = null;
+          }
+        }
 
         // Find existing row by portal_task_id OR ops_node_id (scoped to project)
         const orFilter = data.portal_task_id
@@ -202,8 +217,8 @@ Deno.serve(async (req) => {
           project_id: projectId,
           milestone_id: milestoneId,
           title,
-          status: mappedStatus,
-          kanban_status: mappedStatus,
+          status: finalStatus,
+          kanban_status: finalStatus,
           ops_node_id: opsNodeId,
           ops_updated_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
