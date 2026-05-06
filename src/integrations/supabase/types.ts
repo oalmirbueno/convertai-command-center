@@ -452,30 +452,39 @@ export type Database = {
           description: string | null
           id: string
           milestone_order: number | null
+          ops_milestone_id: string | null
           project_id: string
           status: string
+          sync_origin: string | null
           target_date: string
           title: string
+          updated_at: string
         }
         Insert: {
           created_at?: string
           description?: string | null
           id?: string
           milestone_order?: number | null
+          ops_milestone_id?: string | null
           project_id: string
           status?: string
+          sync_origin?: string | null
           target_date: string
           title: string
+          updated_at?: string
         }
         Update: {
           created_at?: string
           description?: string | null
           id?: string
           milestone_order?: number | null
+          ops_milestone_id?: string | null
           project_id?: string
           status?: string
+          sync_origin?: string | null
           target_date?: string
           title?: string
+          updated_at?: string
         }
         Relationships: [
           {
