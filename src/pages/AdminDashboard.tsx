@@ -207,10 +207,14 @@ export default function AdminDashboard() {
 
   const handleDeleteProject = async () => {
     if (!confirmDeleteProject) return;
-    await supabase.from("tasks").delete().eq("project_id", confirmDeleteProject);
-    await supabase.from("milestones").delete().eq("project_id", confirmDeleteProject);
-    await supabase.from("updates").delete().eq("project_id", confirmDeleteProject);
-    await supabase.from("projects").delete().eq("id", confirmDeleteProject);
+    const projectId = confirmDeleteProject;
+    await supabase.from("tasks").delete().eq("project_id", projectId);
+    await supabase.from("milestones").delete().eq("project_id", projectId);
+    await supabase.from("updates").delete().eq("project_id", projectId);
+    await supabase.from("projects").delete().eq("id", projectId);
+    // Avisa o Ops em background — UI já foi liberada.
+    const { notifyOpsDelete } = await import("@/lib/opsSync");
+    notifyOpsDelete("project", projectId);
     queryClient.invalidateQueries({ queryKey: ["projects"] });
     toast.success("Projeto excluído");
     setConfirmDeleteProject(null);
