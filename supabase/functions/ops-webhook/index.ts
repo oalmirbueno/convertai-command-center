@@ -13,7 +13,8 @@ interface OpsEvent {
     | "stage_advanced"
     | "node_created"
     | "node_updated"
-    | "node_deleted";
+    | "node_deleted"
+    | "milestone.upserted";
   data: Record<string, any>;
 }
 
@@ -295,6 +296,91 @@ Deno.serve(async (req) => {
 
         result = { deleted: true };
         break;
+      }
+
+      case "milestone.upserted": {
+        const opsMilestoneId = data.ops_milestone_id;
+        const projectId = data.portal_project_id ?? data.project_id;
+        const title = data.title ?? "Milestone";
+        if (!opsMilestoneId || !projectId) {
+          return new Response(
+            JSON.stringify({ error: "Missing fields: portal_project_id and ops_milestone_id" }),
+            { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        const statusMap: Record<string, string> = {
+          active: "in_progress",
+          in_progress: "in_progress",
+          doing: "in_progress",
+          done: "completed",
+          completed: "completed",
+          pending: "pending",
+          todo: "pending",
+        };
+        const rawStatus = String(data.status ?? "pending").toLowerCase();
+        const finalStatus = statusMap[rawStatus] ?? "pending";
+
+        const order =
+          typeof data.position === "number"
+            ? data.position
+            : typeof data.position?.order === "number"
+              ? data.position.order
+              : typeof data.order === "number"
+                ? data.order
+                : 0;
+
+        // Look up existing by (project_id, ops_milestone_id)
+        const { data: existing } = await supabase
+          .from("milestones")
+          .select("id")
+          .eq("project_id", projectId)
+          .eq("ops_milestone_id", opsMilestoneId)
+          .maybeSingle();
+
+        const row: Record<string, any> = {
+          project_id: projectId,
+          title,
+          status: finalStatus,
+          ops_milestone_id: opsMilestoneId,
+          sync_origin: data.sync_origin ?? "ops",
+          milestone_order: order,
+          updated_at: new Date().toISOString(),
+        };
+
+        let milestone: any;
+        if (existing) {
+          const { data: upd, error: updErr } = await supabase
+            .from("milestones")
+            .update(row)
+            .eq("id", existing.id)
+            .select()
+            .single();
+          if (updErr) throw updErr;
+          milestone = upd;
+        } else {
+          const { data: ins, error: insErr } = await supabase
+            .from("milestones")
+            .insert({
+              ...row,
+              target_date: data.target_date ?? new Date().toISOString().slice(0, 10),
+            })
+            .select()
+            .single();
+          if (insErr) throw insErr;
+          milestone = ins;
+        }
+
+        return new Response(
+          JSON.stringify({
+            ok: true,
+            portal_milestone_id: milestone.id,
+            id: milestone.id,
+            milestone_id: milestone.id,
+            event,
+          }),
+          { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
       }
 
       default:
