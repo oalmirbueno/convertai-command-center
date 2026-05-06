@@ -4,9 +4,11 @@
 // POST body (all optional):
 //   { project_id?: string }   // limit to a single project, otherwise all
 //
-// Calls the Ops endpoint `ops-nodes-list` with x-webhook-secret = PORTAL_TO_OPS_SECRET.
-// Ops MUST return: { nodes: [{ ops_node_id, project_id, milestone_id?, title, status,
-//                              progress?, node_type?, updated_at? }] }
+// Calls the Ops endpoint with x-webhook-secret = PORTAL_TO_OPS_SECRET.
+// Preferred Ops response: { nodes: [{ ops_node_id, project_id, milestone_id?, title,
+//                                    status, progress?, node_type?, updated_at? }] }
+// If the Ops pull endpoint is not deployed yet, this function returns 200 with
+// success=false so the Kanban UI never blanks because of a background sync miss.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 
@@ -17,9 +19,60 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_NODES_URL =
-  Deno.env.get("OPS_NODES_LIST_URL") ??
-  "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/ops-nodes-list";
+const OPS_FUNCTIONS_BASE = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
+const DEFAULT_OPS_NODES_URL = `${OPS_FUNCTIONS_BASE}/ops-nodes-list`;
+const FALLBACK_OPS_EXPORT_URL = `${OPS_FUNCTIONS_BASE}/ops-full-export`;
+
+const getOpsPullUrls = () =>
+  Array.from(
+    new Set(
+      [Deno.env.get("OPS_NODES_LIST_URL"), DEFAULT_OPS_NODES_URL, FALLBACK_OPS_EXPORT_URL]
+        .filter((url): url is string => Boolean(url))
+    )
+  );
+
+const extractNodes = (payload: any): any[] => {
+  if (Array.isArray(payload?.nodes)) return payload.nodes;
+  if (Array.isArray(payload?.tasks)) return payload.tasks;
+  if (Array.isArray(payload?.data?.nodes)) return payload.data.nodes;
+  if (Array.isArray(payload?.data?.tasks)) return payload.data.tasks;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+};
+
+const isMissingFunction = (status: number, detail: string) =>
+  status === 404 && /Requested function was not found|NOT_FOUND/i.test(detail);
+
+const fetchOpsNodes = async (projectFilter: string | undefined, secret: string) => {
+  const attempts: Array<{ url: string; status?: number; detail?: string }> = [];
+
+  for (const url of getOpsPullUrls()) {
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-webhook-secret": secret,
+        },
+        body: JSON.stringify({ project_id: projectFilter ?? null }),
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        attempts.push({ url, status: res.status, detail: text.slice(0, 500) });
+        if (isMissingFunction(res.status, text)) continue;
+        return { nodes: [], unavailable: true, attempts };
+      }
+
+      const payload = text ? JSON.parse(text) : {};
+      return { nodes: extractNodes(payload), unavailable: false, attempts: [...attempts, { url, status: res.status }] };
+    } catch (err: any) {
+      attempts.push({ url, detail: err?.message ?? "Fetch failed" });
+    }
+  }
+
+  return { nodes: [], unavailable: true, attempts };
+};
 
 const OPS_TO_KANBAN_STATUS: Record<string, string> = {
   todo: "backlog",
@@ -49,25 +102,24 @@ Deno.serve(async (req) => {
     const projectFilter: string | undefined = body?.project_id;
 
     const secret = Deno.env.get("PORTAL_TO_OPS_SECRET") ?? "";
-    const opsRes = await fetch(OPS_NODES_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-webhook-secret": secret,
-      },
-      body: JSON.stringify({ project_id: projectFilter ?? null }),
-    });
+    const { nodes, unavailable, attempts } = await fetchOpsNodes(projectFilter, secret);
 
-    if (!opsRes.ok) {
-      const text = await opsRes.text();
+    if (unavailable) {
+      console.warn("Ops pull endpoint unavailable; keeping existing Kanban data", attempts);
       return new Response(
-        JSON.stringify({ error: `Ops responded ${opsRes.status}`, detail: text }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          unavailable: true,
+          total: 0,
+          inserted: 0,
+          updated: 0,
+          skipped: 0,
+          errors: [],
+          attempts,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const opsJson = await opsRes.json();
-    const nodes: any[] = Array.isArray(opsJson?.nodes) ? opsJson.nodes : [];
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -81,7 +133,7 @@ Deno.serve(async (req) => {
 
     for (const n of nodes) {
       const opsNodeId = n.ops_node_id ?? n.node_id ?? n.id;
-      const projectId = n.project_id;
+      const projectId = n.project_id ?? n.portal_project_id;
       if (!opsNodeId || !projectId) {
         skipped++;
         continue;
@@ -141,6 +193,7 @@ Deno.serve(async (req) => {
         updated,
         skipped,
         errors: errors.slice(0, 20),
+        attempts,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
