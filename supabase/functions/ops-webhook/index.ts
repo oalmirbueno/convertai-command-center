@@ -13,7 +13,8 @@ interface OpsEvent {
     | "stage_advanced"
     | "node_created"
     | "node_updated"
-    | "node_deleted";
+    | "node_deleted"
+    | "milestone.upserted";
   data: Record<string, any>;
 }
 
