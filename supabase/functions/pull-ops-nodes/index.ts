@@ -153,8 +153,10 @@ Deno.serve(async (req) => {
         milestone_id: n.milestone_id ?? n.portal_milestone_id ?? null,
         title: n.title ?? n.node_title ?? "Tarefa",
         status,
+        kanban_status: status,
         ops_node_id: opsNodeId,
         source: "ops",
+        ops_updated_at: n.updated_at ?? new Date().toISOString(),
         updated_at: n.updated_at ?? new Date().toISOString(),
       };
       if (typeof n.progress === "number") row.progress = n.progress;
