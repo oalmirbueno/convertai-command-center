@@ -19,7 +19,8 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_FUNCTIONS_BASE = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
+const OPS_FUNCTIONS_BASE =
+  Deno.env.get("OPS_BASE_URL") ?? "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
 const DEFAULT_OPS_NODES_URL = `${OPS_FUNCTIONS_BASE}/ops-nodes-list`;
 const FALLBACK_OPS_EXPORT_URL = `${OPS_FUNCTIONS_BASE}/ops-full-export`;
 
@@ -153,8 +154,10 @@ Deno.serve(async (req) => {
         milestone_id: n.milestone_id ?? n.portal_milestone_id ?? null,
         title: n.title ?? n.node_title ?? "Tarefa",
         status,
+        kanban_status: status,
         ops_node_id: opsNodeId,
         source: "ops",
+        ops_updated_at: n.updated_at ?? new Date().toISOString(),
         updated_at: n.updated_at ?? new Date().toISOString(),
       };
       if (typeof n.progress === "number") row.progress = n.progress;

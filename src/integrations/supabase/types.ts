@@ -1185,9 +1185,11 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          kanban_status: string | null
           milestone_id: string | null
           node_type: string | null
           ops_node_id: string | null
+          ops_updated_at: string | null
           priority: string
           progress: number | null
           project_id: string
@@ -1203,9 +1205,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          kanban_status?: string | null
           milestone_id?: string | null
           node_type?: string | null
           ops_node_id?: string | null
+          ops_updated_at?: string | null
           priority?: string
           progress?: number | null
           project_id: string
@@ -1221,9 +1225,11 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          kanban_status?: string | null
           milestone_id?: string | null
           node_type?: string | null
           ops_node_id?: string | null
+          ops_updated_at?: string | null
           priority?: string
           progress?: number | null
           project_id?: string
