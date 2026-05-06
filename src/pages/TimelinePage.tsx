@@ -363,9 +363,12 @@ export default function TimelinePage() {
   };
   const handleDeleteMilestone = async () => {
     if (!deleteMilestone) return;
+    const ms = deleteMilestone;
     // Delete tasks associated with this milestone first
-    await supabase.from("tasks").delete().eq("milestone_id", deleteMilestone.id);
-    await supabase.from("milestones").delete().eq("id", deleteMilestone.id);
+    await supabase.from("tasks").delete().eq("milestone_id", ms.id);
+    await supabase.from("milestones").delete().eq("id", ms.id);
+    const { notifyOpsDelete } = await import("@/lib/opsSync");
+    notifyOpsDelete("milestone", ms.id, { ops_milestone_id: ms.ops_milestone_id ?? null });
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     toast.success("Milestone excluído!");
@@ -374,7 +377,10 @@ export default function TimelinePage() {
 
   const handleDeleteTask = async () => {
     if (!deleteTask) return;
-    await supabase.from("tasks").delete().eq("id", deleteTask.id);
+    const t = deleteTask;
+    await supabase.from("tasks").delete().eq("id", t.id);
+    const { notifyOpsTaskDeleted } = await import("@/lib/opsTaskSync");
+    notifyOpsTaskDeleted(t.id, t.ops_node_id ?? null);
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     toast.success("Tarefa excluída!");
     setDeleteTask(null);
