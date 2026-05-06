@@ -102,25 +102,24 @@ Deno.serve(async (req) => {
     const projectFilter: string | undefined = body?.project_id;
 
     const secret = Deno.env.get("PORTAL_TO_OPS_SECRET") ?? "";
-    const opsRes = await fetch(OPS_NODES_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-webhook-secret": secret,
-      },
-      body: JSON.stringify({ project_id: projectFilter ?? null }),
-    });
+    const { nodes, unavailable, attempts } = await fetchOpsNodes(projectFilter, secret);
 
-    if (!opsRes.ok) {
-      const text = await opsRes.text();
+    if (unavailable) {
+      console.warn("Ops pull endpoint unavailable; keeping existing Kanban data", attempts);
       return new Response(
-        JSON.stringify({ error: `Ops responded ${opsRes.status}`, detail: text }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: false,
+          unavailable: true,
+          total: 0,
+          inserted: 0,
+          updated: 0,
+          skipped: 0,
+          errors: [],
+          attempts,
+        }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
-
-    const opsJson = await opsRes.json();
-    const nodes: any[] = Array.isArray(opsJson?.nodes) ? opsJson.nodes : [];
 
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
@@ -134,7 +133,7 @@ Deno.serve(async (req) => {
 
     for (const n of nodes) {
       const opsNodeId = n.ops_node_id ?? n.node_id ?? n.id;
-      const projectId = n.project_id;
+      const projectId = n.project_id ?? n.portal_project_id;
       if (!opsNodeId || !projectId) {
         skipped++;
         continue;
