@@ -207,6 +207,10 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         };
 
+        if (typeof data.progress === "number") row.progress = data.progress;
+        if (data.node_type) row.node_type = data.node_type;
+        row.source = "ops";
+
         let task: any;
         if (existing) {
           const { data: upd, error: updErr } = await supabase
@@ -220,7 +224,7 @@ Deno.serve(async (req) => {
         } else {
           const { data: ins, error: insErr } = await supabase
             .from("tasks")
-            .insert({ ...row, priority: "medium" })
+            .insert({ ...row, priority: "medium", created_at: new Date().toISOString() })
             .select()
             .single();
           if (insErr) throw insErr;
@@ -229,13 +233,13 @@ Deno.serve(async (req) => {
 
         if (data.author_id) {
           await supabase.from("updates").insert({
-            project_id: data.project_id,
+            project_id: projectId,
             author_id: data.author_id,
             message:
               data.message ??
               (event === "node_created"
-                ? `Tarefa criada: ${data.node_title}`
-                : `Tarefa atualizada: ${data.node_title}`),
+                ? `Tarefa criada: ${title}`
+                : `Tarefa atualizada: ${title}`),
             update_type:
               data.update_type ?? (event === "node_created" ? "task_created" : "task_updated"),
           });
@@ -246,25 +250,28 @@ Deno.serve(async (req) => {
       }
 
       case "node_deleted": {
-        if (!data.node_id && !data.portal_task_id) {
+        const opsNodeId = data.ops_node_id ?? data.node_id;
+        if (!opsNodeId && !data.portal_task_id) {
           return new Response(
-            JSON.stringify({ error: "Missing fields: node_id or portal_task_id" }),
+            JSON.stringify({ error: "Missing fields: ops_node_id/node_id or portal_task_id" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
         const orFilter = data.portal_task_id
-          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${data.node_id ?? "00000000-0000-0000-0000-000000000000"}`
-          : `ops_node_id.eq.${data.node_id}`;
+          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${opsNodeId ?? "00000000-0000-0000-0000-000000000000"}`
+          : `ops_node_id.eq.${opsNodeId}`;
 
-        const { error: delErr } = await supabase.from("tasks").delete().or(orFilter);
+        let q = supabase.from("tasks").delete();
+        if (data.project_id) q = q.eq("project_id", data.project_id);
+        const { error: delErr } = await q.or(orFilter);
         if (delErr) throw delErr;
 
         if (data.project_id && data.author_id) {
           await supabase.from("updates").insert({
             project_id: data.project_id,
             author_id: data.author_id,
-            message: data.message ?? `Tarefa removida (node ${data.node_id})`,
+            message: data.message ?? `Tarefa removida (node ${opsNodeId})`,
             update_type: "task_deleted",
           });
         }
