@@ -168,36 +168,42 @@ Deno.serve(async (req) => {
 
       case "node_created":
       case "node_updated": {
-        const required = ["project_id", "node_id", "node_title"];
-        const missing = required.filter((k) => !data[k]);
-        if (missing.length) {
+        const opsNodeId = data.ops_node_id ?? data.node_id;
+        const projectId = data.project_id;
+        const title = data.title ?? data.node_title ?? "Tarefa";
+        if (!opsNodeId || !projectId) {
           return new Response(
-            JSON.stringify({ error: `Missing fields: ${missing.join(", ")}` }),
+            JSON.stringify({ error: "Missing fields: project_id and ops_node_id/node_id" }),
             { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
           );
         }
 
-        const mappedStatus = data.status
-          ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
-          : "backlog";
+        const mappedStatus = data.kanban_status
+          ? String(data.kanban_status)
+          : data.status
+            ? OPS_TO_KANBAN_STATUS[String(data.status).toLowerCase()] ?? "backlog"
+            : "doing";
 
-        // Find existing row by portal_task_id OR ops_node_id
+        const milestoneId = data.portal_milestone_id ?? data.milestone_id ?? null;
+
+        // Find existing row by portal_task_id OR ops_node_id (scoped to project)
         const orFilter = data.portal_task_id
-          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${data.node_id}`
-          : `ops_node_id.eq.${data.node_id}`;
+          ? `id.eq.${data.portal_task_id},ops_node_id.eq.${opsNodeId}`
+          : `ops_node_id.eq.${opsNodeId}`;
 
         const { data: existing } = await supabase
           .from("tasks")
           .select("id")
+          .eq("project_id", projectId)
           .or(orFilter)
           .maybeSingle();
 
         const row: Record<string, any> = {
-          project_id: data.project_id,
-          milestone_id: data.portal_milestone_id ?? null,
-          title: data.node_title,
+          project_id: projectId,
+          milestone_id: milestoneId,
+          title,
           status: mappedStatus,
-          ops_node_id: data.node_id,
+          ops_node_id: opsNodeId,
           updated_at: new Date().toISOString(),
         };
 
