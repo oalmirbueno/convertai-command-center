@@ -193,6 +193,7 @@ Deno.serve(async (req) => {
         updated,
         skipped,
         errors: errors.slice(0, 20),
+        attempts,
       }),
       { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
