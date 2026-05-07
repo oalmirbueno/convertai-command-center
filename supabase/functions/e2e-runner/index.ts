@@ -38,10 +38,20 @@ Deno.serve(async (req) => {
 
   try {
     const body = await req.json().catch(() => ({}));
-    const clientUserId: string = body.client_user_id;
-    if (!clientUserId) throw new Error("client_user_id required (auth user already created)");
+    const tag: string = body.tag || "Definitivo 2026-05-07";
+    const email: string = body.email || `e2e-definitivo-2026-05-07-${Date.now()}@test.local`;
 
-    // ── Step 1: client (profile already exists from manage-team)
+    // Create auth user (so profile trigger fires) — keeps RLS-clean parity
+    const { data: au, error: ae } = await sb.auth.admin.createUser({
+      email,
+      password: crypto.randomUUID() + "Aa1!",
+      email_confirm: true,
+      user_metadata: { full_name: `E2E ${tag} Cliente`, company_name: `E2E ${tag} Co` },
+    });
+    if (ae) throw ae;
+    const clientUserId = au.user!.id;
+
+    // ── Step 1: client
     await sb.from("profiles").update({
       sync_status: "pending_ops_sync",
       sync_error: null,
@@ -49,9 +59,9 @@ Deno.serve(async (req) => {
 
     const r1 = await notify("profile", {
       id: clientUserId,
-      email: "e2efinal-2026-05-07@test.local",
-      full_name: "E2E Final Cliente 2026-05-07",
-      company_name: "E2E Final Co",
+      email,
+      full_name: `E2E ${tag} Cliente`,
+      company_name: `E2E ${tag} Co`,
     });
     const opsClientId = r1.body?.result?.client_id ?? null;
     await sb.from("profiles").update({
@@ -64,7 +74,7 @@ Deno.serve(async (req) => {
     // ── Step 2: project
     const { data: proj, error: pe } = await sb.from("projects").insert({
       client_id: clientUserId,
-      name: "E2E Final Projeto 2026-05-07",
+      name: `E2E ${tag} Projeto`,
       project_type: "individual",
       start_date: "2026-05-07",
       deadline: "2026-06-07",
@@ -74,7 +84,7 @@ Deno.serve(async (req) => {
     if (pe) throw pe;
 
     const r2 = await notify("project", proj, { client_id: clientUserId });
-    const opsWsId = r2.body?.result?.workspace_id ?? null;
+    const opsWsId = r2.body?.result?.workspace_id ?? r2.body?.result?.id ?? null;
     await sb.from("projects").update({
       sync_status: r2.body?.ok ? "synced" : "sync_error",
       ops_workspace_id: opsWsId,
@@ -85,7 +95,7 @@ Deno.serve(async (req) => {
     // ── Step 3: milestone
     const { data: ms, error: me } = await sb.from("milestones").insert({
       project_id: proj.id,
-      title: "E2E Final Milestone",
+      title: `E2E ${tag} Milestone`,
       target_date: "2026-05-30",
       status: "pending",
       milestone_order: 0,
@@ -97,7 +107,11 @@ Deno.serve(async (req) => {
       ops_workspace_id: opsWsId,
       client_id: clientUserId,
     });
-    const opsMsId = r3.body?.result?.milestone_id ?? r3.body?.result?.id ?? null;
+    const opsMsId =
+      r3.body?.result?.milestone_id ??
+      r3.body?.result?.node_id ??
+      r3.body?.result?.id ??
+      null;
     await sb.from("milestones").update({
       sync_status: r3.body?.ok ? "synced" : "sync_error",
       ops_milestone_id: opsMsId,
@@ -109,7 +123,7 @@ Deno.serve(async (req) => {
     const { data: tk, error: te } = await sb.from("tasks").insert({
       project_id: proj.id,
       milestone_id: ms.id,
-      title: "E2E Final Task",
+      title: `E2E ${tag} Task`,
       status: "backlog",
       priority: "medium",
       sync_status: "pending_ops_sync",
@@ -122,7 +136,7 @@ Deno.serve(async (req) => {
       ops_milestone_id: opsMsId,
       client_id: clientUserId,
     });
-    const opsNodeId = r4.body?.result?.node_id ?? r4.body?.result?.id ?? null;
+    const opsNodeId = r4.body?.result?.node_id ?? r4.body?.result?.task_id ?? r4.body?.result?.id ?? null;
     await sb.from("tasks").update({
       sync_status: r4.body?.ok ? "synced" : "sync_error",
       ops_node_id: opsNodeId,
@@ -132,7 +146,7 @@ Deno.serve(async (req) => {
 
     // ── Step 5: update task
     const { data: tk2 } = await sb.from("tasks").update({
-      title: "E2E Final Task (updated)",
+      title: `E2E ${tag} Task (updated)`,
       status: "doing",
       progress: 50,
     }).eq("id", tk.id).select().single();
@@ -143,7 +157,7 @@ Deno.serve(async (req) => {
     });
     log("5_task_update", { portal_id: tk.id, http: r5.http, body: r5.body });
 
-    // ── Step 6: delete task (soft)
+    // ── Step 6: delete task (soft) + idempotency
     await sb.from("tasks").update({
       deleted_at: new Date().toISOString(),
       sync_status: "pending_ops_sync",
@@ -170,7 +184,7 @@ Deno.serve(async (req) => {
     const r8b = await notify("project_deleted", { id: proj.id, ops_workspace_id: opsWsId });
     log("8_project_delete", { portal_id: proj.id, first: r8a.body, second_idempotency: r8b.body });
 
-    // ── Step 9: delete client (soft on profile only — keep auth user to avoid cleanup chaos)
+    // ── Step 9: delete client (soft on profile)
     await sb.from("profiles").update({
       deleted_at: new Date().toISOString(),
       sync_status: "pending_ops_sync",
@@ -179,7 +193,6 @@ Deno.serve(async (req) => {
     const r9b = await notify("profile_deleted", { id: clientUserId, ops_client_id: opsClientId });
     log("9_client_delete", { portal_id: clientUserId, first: r9a.body, second_idempotency: r9b.body });
 
-    // Final state
     const finalState = {
       profile: (await sb.from("profiles").select("id,sync_status,deleted_at,ops_client_id").eq("id", clientUserId).maybeSingle()).data,
       project: (await sb.from("projects").select("id,sync_status,deleted_at,ops_workspace_id").eq("id", proj.id).maybeSingle()).data,
@@ -187,7 +200,33 @@ Deno.serve(async (req) => {
       task: (await sb.from("tasks").select("id,sync_status,deleted_at,ops_node_id").eq("id", tk.id).maybeSingle()).data,
     };
 
-    return new Response(JSON.stringify({ ok: true, report, finalState }, null, 2), {
+    // PASS/FAIL evaluation
+    const isDeleteOk = (b: any) => {
+      const a = (b?.result?.action || b?.action || "").toString();
+      return /soft_deleted|already_deleted/i.test(a);
+    };
+    const isDeleteBad = (b: any) => {
+      const a = (b?.result?.action || b?.action || "").toString();
+      return /^(ignored|created|updated)$/i.test(a);
+    };
+    const checks = {
+      client_synced: r1.body?.ok && !!opsClientId,
+      project_synced: r2.body?.ok && !!opsWsId,
+      milestone_synced: r3.body?.ok && !!opsMsId,
+      task_synced: r4.body?.ok && !!opsNodeId,
+      task_update_synced: r5.body?.ok,
+      task_delete_ok: isDeleteOk(r6a.body) && !isDeleteBad(r6a.body),
+      task_delete_idem_ok: isDeleteOk(r6b.body) && !isDeleteBad(r6b.body),
+      milestone_delete_ok: isDeleteOk(r7a.body) && !isDeleteBad(r7a.body),
+      milestone_delete_idem_ok: isDeleteOk(r7b.body) && !isDeleteBad(r7b.body),
+      project_delete_ok: isDeleteOk(r8a.body) && !isDeleteBad(r8a.body),
+      project_delete_idem_ok: isDeleteOk(r8b.body) && !isDeleteBad(r8b.body),
+      client_delete_ok: isDeleteOk(r9a.body) && !isDeleteBad(r9a.body),
+      client_delete_idem_ok: isDeleteOk(r9b.body) && !isDeleteBad(r9b.body),
+    };
+    const verdict = Object.values(checks).every(Boolean) ? "PASS" : "FAIL";
+
+    return new Response(JSON.stringify({ ok: true, verdict, checks, report, finalState }, null, 2), {
       headers: { ...cors, "Content-Type": "application/json" },
     });
   } catch (err) {
