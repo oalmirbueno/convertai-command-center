@@ -68,17 +68,49 @@ Deno.serve(async (req) => {
       const pick = (rows ?? []).find((r: any) =>
         r.projects && !r.projects.deleted_at && r.projects.ops_workspace_id
       );
-      if (!pick) {
-        return new Response(JSON.stringify({
-          ok: false,
-          error: "No controlled project+milestone with ops_* ids found. Pass {project_id, milestone_id} explicitly.",
-        }, null, 2), { status: 400, headers: { ...cors, "Content-Type": "application/json" } });
+      if (pick) {
+        projectId = pick.project_id;
+        milestoneId = pick.id;
+        opsMsId = pick.ops_milestone_id;
+        opsWsId = (pick as any).projects.ops_workspace_id;
+        clientId = (pick as any).projects.client_id;
+        report.push({ step: "0_reused_existing", reason: "found active project+milestone with ops_*" });
+      } else {
+        // Auto-scaffold: create minimal client+project+milestone, sync each to Ops
+        const email = `e2e-delonly-${Date.now()}@test.local`;
+        const { data: au, error: ae } = await sb.auth.admin.createUser({
+          email, password: crypto.randomUUID() + "Aa1!", email_confirm: true,
+          user_metadata: { full_name: `E2E ${tag} Cliente`, company_name: `E2E ${tag} Co` },
+        });
+        if (ae) throw ae;
+        clientId = au.user!.id;
+        const rc = await notify("profile", { id: clientId, email, full_name: `E2E ${tag} Cliente`, company_name: `E2E ${tag} Co` });
+        const opsClientId = rc.body?.result?.client_id ?? null;
+        await sb.from("profiles").update({ sync_status: rc.body?.ok ? "synced" : "sync_error", ops_client_id: opsClientId }).eq("id", clientId);
+        report.push({ step: "0a_scaffold_client", portal_id: clientId, ops_client_id: opsClientId, http: rc.http, body: rc.body });
+
+        const { data: proj, error: pe } = await sb.from("projects").insert({
+          client_id: clientId, name: `E2E ${tag} Projeto`, project_type: "individual",
+          start_date: "2026-05-07", deadline: "2026-06-07", status: "planning", sync_status: "pending_ops_sync",
+        }).select().single();
+        if (pe) throw pe;
+        projectId = proj.id;
+        const rp = await notify("project", proj, { client_id: clientId });
+        opsWsId = rp.body?.result?.workspace_id ?? rp.body?.result?.id ?? null;
+        await sb.from("projects").update({ sync_status: rp.body?.ok ? "synced" : "sync_error", ops_workspace_id: opsWsId }).eq("id", projectId);
+        report.push({ step: "0b_scaffold_project", portal_id: projectId, ops_workspace_id: opsWsId, http: rp.http, body: rp.body });
+
+        const { data: ms, error: me } = await sb.from("milestones").insert({
+          project_id: projectId, title: `E2E ${tag} Milestone`, target_date: "2026-05-30",
+          status: "pending", milestone_order: 0, sync_status: "pending_ops_sync",
+        }).select().single();
+        if (me) throw me;
+        milestoneId = ms.id;
+        const rm = await notify("milestone", ms, { ops_workspace_id: opsWsId, client_id: clientId });
+        opsMsId = rm.body?.result?.milestone_id ?? rm.body?.result?.node_id ?? rm.body?.result?.id ?? null;
+        await sb.from("milestones").update({ sync_status: rm.body?.ok ? "synced" : "sync_error", ops_milestone_id: opsMsId }).eq("id", milestoneId);
+        report.push({ step: "0c_scaffold_milestone", portal_id: milestoneId, ops_milestone_id: opsMsId, http: rm.http, body: rm.body });
       }
-      projectId = pick.project_id;
-      milestoneId = pick.id;
-      opsMsId = pick.ops_milestone_id;
-      opsWsId = (pick as any).projects.ops_workspace_id;
-      clientId = (pick as any).projects.client_id;
     }
 
     report.push({ step: "0_target", project_id: projectId, milestone_id: milestoneId, ops_workspace_id: opsWsId, ops_milestone_id: opsMsId, client_id: clientId });
