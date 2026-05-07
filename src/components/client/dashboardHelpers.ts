@@ -69,7 +69,7 @@ export function useClientDashboardData(clientId: string) {
   const { data: projects, isLoading: loadingProjects } = useQuery({
     queryKey: ["client-projects", clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
