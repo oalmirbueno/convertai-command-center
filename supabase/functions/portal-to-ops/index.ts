@@ -135,8 +135,7 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${PORTAL_TO_OPS_SECRET}`,
-        "x-webhook-secret": PORTAL_TO_OPS_SECRET,
+        "x-webhook-secret": OPS_WEBHOOK_SECRET,
       },
       body: JSON.stringify(payload),
     });
