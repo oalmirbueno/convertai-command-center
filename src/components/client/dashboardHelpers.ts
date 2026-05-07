@@ -132,7 +132,7 @@ export function useClientDashboardData(clientId: string) {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("tasks")
         .select("id, title, status, due_date, priority, project_id, updated_at, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name), project:projects!tasks_project_id_fkey(name)")
-        .in("project_id", projectIds).order("updated_at", { ascending: false });
+        .in("project_id", projectIds).is("deleted_at", null).order("updated_at", { ascending: false });
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
