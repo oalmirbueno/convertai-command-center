@@ -10,7 +10,10 @@ const OPS_RECEIVE_URL =
   Deno.env.get("OPS_RECEIVE_URL") ??
   "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
 
-const PORTAL_TO_OPS_SECRET = Deno.env.get("PORTAL_TO_OPS_SECRET") ?? "";
+const OPS_WEBHOOK_SECRET =
+  Deno.env.get("OPS_WEBHOOK_SECRET") ??
+  Deno.env.get("PORTAL_TO_OPS_SECRET") ??
+  "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
 
 // kanban -> ops
 const KANBAN_TO_OPS_STATUS: Record<string, string> = {
