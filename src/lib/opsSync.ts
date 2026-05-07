@@ -93,14 +93,21 @@ function push(
             };
 
         // Persiste id retornado pelo Ops, se aplicável.
+        // Mapeamento por entidade — Ops usa nomes diferentes em cada action,
+        // então olhamos os campos relevantes em ordem por tipo.
         if (ok && opts.opsIdField) {
-          const opsId =
-            parsed?.result?.workspace_id ??
-            parsed?.result?.client_id ??
-            parsed?.result?.milestone_id ??
-            parsed?.result?.node_id ??
-            parsed?.result?.id ??
-            null;
+          const r = parsed?.result ?? {};
+          const pickByField: Record<string, string[]> = {
+            ops_client_id:    ["client_id", "id"],
+            ops_workspace_id: ["workspace_id", "id"],
+            ops_milestone_id: ["milestone_id", "node_id", "id"],
+            ops_node_id:      ["node_id", "task_id", "id"],
+          };
+          const candidates = pickByField[opts.opsIdField] ?? ["id"];
+          let opsId: string | null = null;
+          for (const k of candidates) {
+            if (r[k]) { opsId = r[k]; break; }
+          }
           if (opsId) patch[opts.opsIdField] = opsId;
         }
 
