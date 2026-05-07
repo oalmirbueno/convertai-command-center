@@ -252,7 +252,8 @@ export default function AdminFinanceiro() {
           .from("projects")
           .select("id")
           .eq("client_id", bill.client_id)
-          .eq("status", "paused");
+          .eq("status", "paused")
+          .is("deleted_at", null);
         if (pausedProjects && pausedProjects.length > 0) {
           for (const p of pausedProjects) {
             await supabase.from("projects").update({ status: "in_progress" }).eq("id", p.id);

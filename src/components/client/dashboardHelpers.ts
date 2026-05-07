@@ -69,7 +69,7 @@ export function useClientDashboardData(clientId: string) {
   const { data: projects, isLoading: loadingProjects } = useQuery({
     queryKey: ["client-projects", clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -98,7 +98,7 @@ export function useClientDashboardData(clientId: string) {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("milestones")
         .select("*, project:projects!milestones_project_id_fkey(name)")
-        .in("project_id", projectIds).order("target_date", { ascending: true }).limit(10);
+        .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true }).limit(10);
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
@@ -108,7 +108,7 @@ export function useClientDashboardData(clientId: string) {
     queryKey: ["client-done-milestones", clientId, projectIds.join(",")],
     queryFn: async () => {
       if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones").select("id").in("project_id", projectIds).eq("status", "completed");
+      const { data } = await supabase.from("milestones").select("id").in("project_id", projectIds).eq("status", "completed").is("deleted_at", null);
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
@@ -132,7 +132,7 @@ export function useClientDashboardData(clientId: string) {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("tasks")
         .select("id, title, status, due_date, priority, project_id, updated_at, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name), project:projects!tasks_project_id_fkey(name)")
-        .in("project_id", projectIds).order("updated_at", { ascending: false });
+        .in("project_id", projectIds).is("deleted_at", null).order("updated_at", { ascending: false });
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,

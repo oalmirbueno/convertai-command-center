@@ -48,7 +48,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
     queryKey: ["milestones-for-task", projectId],
     queryFn: async () => {
       if (!projectId) return [];
-      const { data } = await supabase.from("milestones").select("id, title, milestone_order").eq("project_id", projectId).order("milestone_order", { ascending: true });
+      const { data } = await supabase.from("milestones").select("id, title, milestone_order").eq("project_id", projectId).is("deleted_at", null).order("milestone_order", { ascending: true });
       return data || [];
     },
     enabled: !!projectId,

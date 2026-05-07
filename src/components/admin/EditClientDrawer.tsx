@@ -90,6 +90,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         .from("projects")
         .select("id, name, project_type")
         .eq("client_id", client.id)
+        .is("deleted_at", null)
         .in("project_type", NON_RECURRING_TYPES);
       if (!projects?.length) return [];
 
@@ -111,7 +112,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     queryKey: ["client-exec-projects", client?.id],
     queryFn: async () => {
       const { data } = await supabase.from("projects").select("id, name, status, progress, project_type, deadline")
-        .eq("client_id", client.id).order("created_at", { ascending: false });
+        .eq("client_id", client.id).is("deleted_at", null).order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!client?.id,
@@ -124,7 +125,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     queryFn: async () => {
       if (!clientProjectIds.length) return [];
       const { data } = await supabase.from("tasks").select("id, status, priority")
-        .in("project_id", clientProjectIds);
+        .in("project_id", clientProjectIds).is("deleted_at", null);
       return data || [];
     },
     enabled: !!client?.id && clientProjectIds.length > 0,
