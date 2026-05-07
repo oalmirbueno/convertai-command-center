@@ -98,7 +98,7 @@ export function useClientDashboardData(clientId: string) {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("milestones")
         .select("*, project:projects!milestones_project_id_fkey(name)")
-        .in("project_id", projectIds).order("target_date", { ascending: true }).limit(10);
+        .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true }).limit(10);
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
