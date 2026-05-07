@@ -110,21 +110,24 @@ export function useClients() {
         const { data: myTasks } = await supabase
           .from("tasks")
           .select("project_id")
-          .eq("assigned_to", user!.id);
+          .eq("assigned_to", user!.id)
+          .is("deleted_at", null);
         const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
         if (projectIds.length === 0) return [];
 
         const { data: projects } = await supabase
           .from("projects")
           .select("id, client_id")
-          .in("id", projectIds);
+          .in("id", projectIds)
+          .is("deleted_at", null);
         const clientIds = [...new Set((projects || []).map((p: any) => p.client_id))];
         if (clientIds.length === 0) return [];
 
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
-          .in("id", clientIds);
+          .in("id", clientIds)
+          .is("deleted_at", null);
         if (error) throw error;
 
         return (data || []).map((p: any) => ({
@@ -146,12 +149,14 @@ export function useClients() {
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
-        .in("id", clientIds);
+        .in("id", clientIds)
+        .is("deleted_at", null);
       if (error) throw error;
 
       const { data: projects } = await supabase
         .from("projects")
-        .select("client_id");
+        .select("client_id")
+        .is("deleted_at", null);
 
       return (data || []).map((profile: any) => ({
         ...profile,
