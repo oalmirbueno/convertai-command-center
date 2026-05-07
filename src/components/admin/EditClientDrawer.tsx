@@ -112,7 +112,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     queryKey: ["client-exec-projects", client?.id],
     queryFn: async () => {
       const { data } = await supabase.from("projects").select("id, name, status, progress, project_type, deadline")
-        .eq("client_id", client.id).order("created_at", { ascending: false });
+        .eq("client_id", client.id).is("deleted_at", null).order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!client?.id,
