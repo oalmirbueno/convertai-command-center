@@ -125,7 +125,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     queryFn: async () => {
       if (!clientProjectIds.length) return [];
       const { data } = await supabase.from("tasks").select("id, status, priority")
-        .in("project_id", clientProjectIds);
+        .in("project_id", clientProjectIds).is("deleted_at", null);
       return data || [];
     },
     enabled: !!client?.id && clientProjectIds.length > 0,
