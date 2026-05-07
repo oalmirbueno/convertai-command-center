@@ -90,6 +90,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         .from("projects")
         .select("id, name, project_type")
         .eq("client_id", client.id)
+        .is("deleted_at", null)
         .in("project_type", NON_RECURRING_TYPES);
       if (!projects?.length) return [];
 
