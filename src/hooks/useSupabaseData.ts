@@ -175,6 +175,7 @@ export function useMilestones(projectId?: string) {
       let query = supabase
         .from("milestones")
         .select("*")
+        .is("deleted_at", null)
         .order("milestone_order", { ascending: true });
       if (projectId) query = query.eq("project_id", projectId);
       const { data, error } = await query;
