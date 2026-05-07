@@ -15,13 +15,15 @@ export function useProjects() {
         const { data: myTasks } = await supabase
           .from("tasks")
           .select("project_id")
-          .eq("assigned_to", user!.id);
+          .eq("assigned_to", user!.id)
+          .is("deleted_at", null);
         const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
         if (projectIds.length === 0) return [];
         const { data, error } = await supabase
           .from("projects")
           .select("*, client:profiles!projects_client_id_fkey(full_name, company_name)")
           .in("id", projectIds)
+          .is("deleted_at", null)
           .order("created_at", { ascending: false });
         if (error) throw error;
         return data;
@@ -29,6 +31,7 @@ export function useProjects() {
       const { data, error } = await supabase
         .from("projects")
         .select("*, client:profiles!projects_client_id_fkey(full_name, company_name)")
+        .is("deleted_at", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
