@@ -49,6 +49,7 @@ export function useTasks(projectId?: string) {
       let query = supabase
         .from("tasks")
         .select("*, project:projects(name), assignee:profiles!tasks_assigned_to_fkey(id, full_name), milestone:milestones!tasks_milestone_id_fkey(id, title)")
+        .is("deleted_at", null)
         .order("task_order", { ascending: true });
       if (projectId) query = query.eq("project_id", projectId);
       const { data, error } = await query;
