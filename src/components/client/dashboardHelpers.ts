@@ -108,7 +108,7 @@ export function useClientDashboardData(clientId: string) {
     queryKey: ["client-done-milestones", clientId, projectIds.join(",")],
     queryFn: async () => {
       if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones").select("id").in("project_id", projectIds).eq("status", "completed");
+      const { data } = await supabase.from("milestones").select("id").in("project_id", projectIds).eq("status", "completed").is("deleted_at", null);
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
