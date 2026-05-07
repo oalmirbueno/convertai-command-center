@@ -74,7 +74,7 @@ Deno.serve(async (req) => {
     } else {
       const { data: task, error } = await supabase
         .from("tasks")
-        .select("id, title, status, ops_node_id, project_id, projects:project_id(client_id, name)")
+        .select("id, title, status, ops_node_id, project_id, milestone_id, projects:project_id(client_id, name), milestones:milestone_id(id, ops_milestone_id, title)")
         .eq("id", task_id)
         .maybeSingle();
       if (error) throw error;
@@ -86,16 +86,45 @@ Deno.serve(async (req) => {
       }
 
       const project: any = (task as any).projects ?? {};
+      const milestone: any = (task as any).milestones ?? null;
+      const portalMilestoneId = (task as any).milestone_id ?? null;
+      const opsMilestoneId = milestone?.ops_milestone_id ?? null;
+
       payload = {
         event,
+        type: "task",
+        source: "portal",
         task_id: task.id,
         title: task.title,
         status: KANBAN_TO_OPS_STATUS[task.status] ?? "todo",
         progress: PROGRESS_BY_STATUS[task.status] ?? 0,
         ops_node_id: task.ops_node_id ?? null,
         project_id: task.project_id,
+        milestone_id: portalMilestoneId,
+        portal_milestone_id: portalMilestoneId,
+        ops_milestone_id: opsMilestoneId,
         client_id: project.client_id ?? null,
         client_name: project.name ?? null,
+        data: {
+          id: task.id,
+          project_id: task.project_id,
+          milestone_id: portalMilestoneId,
+          portal_milestone_id: portalMilestoneId,
+          ops_milestone_id: opsMilestoneId,
+          ops_node_id: task.ops_node_id ?? null,
+          title: task.title,
+          status: KANBAN_TO_OPS_STATUS[task.status] ?? "todo",
+          progress: PROGRESS_BY_STATUS[task.status] ?? 0,
+        },
+        context: {
+          project_id: task.project_id,
+          milestone_id: portalMilestoneId,
+          portal_milestone_id: portalMilestoneId,
+          ops_milestone_id: opsMilestoneId,
+          milestone_title: milestone?.title ?? null,
+          client_id: project.client_id ?? null,
+          project_name: project.name ?? null,
+        },
       };
     }
 
