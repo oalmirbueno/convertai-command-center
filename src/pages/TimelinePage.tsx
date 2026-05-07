@@ -175,6 +175,7 @@ export default function TimelinePage() {
       const { data } = await supabase
         .from("milestones")
         .select("*")
+        .is("deleted_at", null)
         .order("milestone_order", { ascending: true });
       return data || [];
     },
@@ -187,6 +188,7 @@ export default function TimelinePage() {
       const { data } = await supabase
         .from("tasks")
         .select("*, assignee:profiles!tasks_assigned_to_fkey(full_name)")
+        .is("deleted_at", null)
         .order("task_order", { ascending: true });
       return data || [];
     },
