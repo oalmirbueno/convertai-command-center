@@ -26,6 +26,20 @@ export default function ClientVaultPage() {
 
   const [selectedClientId, setSelectedClientId] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+  const [confirmClearId, setConfirmClearId] = useState<string | null>(null);
+  const [clearing, setClearing] = useState(false);
+  const qc = useQueryClient();
+
+  const clearClientVault = async (cid: string) => {
+    setClearing(true);
+    const { error } = await supabase.from("client_vault").delete().eq("client_id", cid);
+    setClearing(false);
+    if (error) { toast.error(error.message); return; }
+    toast.success("Cofre do cliente limpo");
+    setConfirmClearId(null);
+    qc.invalidateQueries({ queryKey: ["client-vault", cid] });
+    qc.invalidateQueries({ queryKey: ["vault-counts", cid] });
+  };
 
   // Load all clients (hub mode only)
   const { data: clients } = useQuery({
