@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useImpersonation } from "@/contexts/ImpersonationContext";
 import ClientVault from "@/components/vault/ClientVault";
-import { KeyRound, Link2, Server, Search, Users, ShieldCheck } from "lucide-react";
+import { KeyRound, Link2, Server, Search, Users, ShieldCheck, Trash2 } from "lucide-react";
 import { motion } from "framer-motion";
+import ConfirmModal from "@/components/ui/ConfirmModal";
+import { toast } from "sonner";
 
 interface ClientOption {
   id: string;
