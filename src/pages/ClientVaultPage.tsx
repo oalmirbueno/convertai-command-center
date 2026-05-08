@@ -176,30 +176,43 @@ export default function ClientVaultPage() {
                       .slice(0, 2)
                       .toUpperCase();
                     return (
-                      <button
+                      <div
                         key={c.id}
-                        onClick={() => setSelectedClientId(c.id)}
-                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg text-left transition-colors cursor-pointer border ${
+                        className={`w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition-colors border ${
                           active
                             ? "bg-primary/10 border-primary/40 text-foreground"
                             : "bg-transparent border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/60"
                         }`}
                       >
-                        <div className="w-7 h-7 rounded-lg bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
-                          {c.avatar_url ? (
-                            <img src={c.avatar_url} alt="" className="w-full h-full object-cover" />
-                          ) : (
-                            <span className="text-[10px] font-semibold text-primary">{initials}</span>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-[12px] font-medium truncate">{c.full_name}</p>
-                          {c.company_name && (
-                            <p className="text-[10px] opacity-70 truncate">{c.company_name}</p>
-                          )}
-                        </div>
+                        <button
+                          onClick={() => setSelectedClientId(c.id)}
+                          className="flex-1 min-w-0 flex items-center gap-2.5 bg-transparent border-none cursor-pointer text-inherit p-0 text-left"
+                        >
+                          <div className="w-7 h-7 rounded-lg bg-secondary border border-border flex items-center justify-center overflow-hidden shrink-0">
+                            {c.avatar_url ? (
+                              <img src={c.avatar_url} alt="" className="w-full h-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-semibold text-primary">{initials}</span>
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-medium truncate">{c.full_name}</p>
+                            {c.company_name && (
+                              <p className="text-[10px] opacity-70 truncate">{c.company_name}</p>
+                            )}
+                          </div>
+                        </button>
+                        {isAdminOrTeam && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setConfirmClearId(c.id); }}
+                            className="w-6 h-6 flex items-center justify-center rounded-md text-muted-foreground hover:text-destructive hover:bg-secondary bg-transparent border-none cursor-pointer shrink-0"
+                            title="Limpar cofre deste cliente"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        )}
                         {active && <span className="w-1.5 h-1.5 rounded-full bg-primary shrink-0" />}
-                      </button>
+                      </div>
                     );
                   })
                 )}
