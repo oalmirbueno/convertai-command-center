@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
 
     let query = supabase
       .from("tasks")
-      .select("id, title, status, project_id, ops_node_id")
+      .select("id, title, status, project_id, milestone_id, ops_node_id")
       .order("created_at", { ascending: false })
       .limit(Math.min(Math.max(Number(limit) || 200, 1), 1000));
 
