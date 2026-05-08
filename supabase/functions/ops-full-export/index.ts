@@ -35,9 +35,31 @@ serve(async (req) => {
   }
 
   // 2. Todos os projetos
-  const { data: projects } = await db.from("projects")
+  const { data: projectsRaw } = await db.from("projects")
     .select("id, client_id, name, description, project_type, status, progress, scope, objectives, start_date, deadline, created_at")
     .order("created_at", { ascending: false });
+
+  // Hydrate client info on each project (read-only denormalization)
+  const profileById = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  const projects = (projectsRaw ?? []).map((p: any) => {
+    const cp: any = profileById.get(p.client_id);
+    return {
+      ...p,
+      client_name: cp?.full_name ?? null,
+      client_display_name: cp?.company_name ?? cp?.full_name ?? null,
+      client_company: cp?.company_name ?? null,
+      client_email: cp?.email ?? null,
+    };
+  });
+
+  // Clients array (mirror of profiles, simplified for OPS hydration)
+  const clients = (profiles ?? []).map((p: any) => ({
+    id: p.id,
+    name: p.full_name ?? null,
+    company: p.company_name ?? null,
+    display_name: p.company_name ?? p.full_name ?? null,
+    email: p.email ?? null,
+  }));
 
   // 3. Todos os briefings submetidos
   const { data: briefings } = await db.from("briefings")
