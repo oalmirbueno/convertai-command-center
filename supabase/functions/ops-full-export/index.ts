@@ -51,7 +51,8 @@ serve(async (req) => {
 
   // 5. Todas as tasks
   const { data: tasks } = await db.from("tasks")
-    .select("id, project_id, title, description, status, priority, assigned_to, created_at")
+    .select("id, project_id, milestone_id, title, description, status, priority, assigned_to, created_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(500);
 
