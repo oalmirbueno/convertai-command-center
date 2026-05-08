@@ -268,10 +268,8 @@ export default function ClientVaultPage() {
       <ConfirmModal
         open={!!confirmClearId}
         title="Limpar cofre do cliente?"
-        description="Todos os itens (senhas, links e sistemas) deste cliente serão removidos permanentemente. Esta ação não pode ser desfeita."
+        description="Todos os itens (senhas, links e sistemas) deste cliente serão removidos permanentemente."
         confirmLabel={clearing ? "Removendo..." : "Limpar tudo"}
-        cancelLabel="Cancelar"
-        variant="destructive"
         onConfirm={() => confirmClearId && clearClientVault(confirmClearId)}
         onCancel={() => !clearing && setConfirmClearId(null)}
       />
