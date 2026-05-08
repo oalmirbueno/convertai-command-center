@@ -73,7 +73,10 @@ serve(async (req) => {
   const clients = (profiles ?? []).map((p) => ({
     id: p.id,
     full_name: p.full_name ?? "Cliente",
+    name: p.full_name ?? null,
     company_name: p.company_name ?? null,
+    company: p.company_name ?? null,
+    display_name: p.company_name ?? p.full_name ?? null,
     email: p.email ?? null,
     active_projects: projectsByClient.get(p.id) ?? 0,
   }));
