@@ -87,16 +87,19 @@ serve(async (req) => {
 
   return new Response(JSON.stringify({
     profiles: profiles ?? [],
-    projects: projects ?? [],
+    clients,
+    projects,
     briefings: briefings ?? [],
     milestones: milestones ?? [],
     tasks: tasks ?? [],
     updates: updates ?? [],
     _meta: {
       exported_at: new Date().toISOString(),
+      version: "v2.4.0",
       counts: {
         profiles: profiles?.length ?? 0,
-        projects: projects?.length ?? 0,
+        clients: clients.length,
+        projects: projects.length,
         briefings: briefings?.length ?? 0,
         milestones: milestones?.length ?? 0,
         tasks: tasks?.length ?? 0,
