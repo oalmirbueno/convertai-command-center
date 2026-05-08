@@ -35,9 +35,31 @@ serve(async (req) => {
   }
 
   // 2. Todos os projetos
-  const { data: projects } = await db.from("projects")
+  const { data: projectsRaw } = await db.from("projects")
     .select("id, client_id, name, description, project_type, status, progress, scope, objectives, start_date, deadline, created_at")
     .order("created_at", { ascending: false });
+
+  // Hydrate client info on each project (read-only denormalization)
+  const profileById = new Map((profiles ?? []).map((p: any) => [p.id, p]));
+  const projects = (projectsRaw ?? []).map((p: any) => {
+    const cp: any = profileById.get(p.client_id);
+    return {
+      ...p,
+      client_name: cp?.full_name ?? null,
+      client_display_name: cp?.company_name ?? cp?.full_name ?? null,
+      client_company: cp?.company_name ?? null,
+      client_email: cp?.email ?? null,
+    };
+  });
+
+  // Clients array (mirror of profiles, simplified for OPS hydration)
+  const clients = (profiles ?? []).map((p: any) => ({
+    id: p.id,
+    name: p.full_name ?? null,
+    company: p.company_name ?? null,
+    display_name: p.company_name ?? p.full_name ?? null,
+    email: p.email ?? null,
+  }));
 
   // 3. Todos os briefings submetidos
   const { data: briefings } = await db.from("briefings")
@@ -65,16 +87,19 @@ serve(async (req) => {
 
   return new Response(JSON.stringify({
     profiles: profiles ?? [],
-    projects: projects ?? [],
+    clients,
+    projects,
     briefings: briefings ?? [],
     milestones: milestones ?? [],
     tasks: tasks ?? [],
     updates: updates ?? [],
     _meta: {
       exported_at: new Date().toISOString(),
+      version: "v2.4.0",
       counts: {
         profiles: profiles?.length ?? 0,
-        projects: projects?.length ?? 0,
+        clients: clients.length,
+        projects: projects.length,
         briefings: briefings?.length ?? 0,
         milestones: milestones?.length ?? 0,
         tasks: tasks?.length ?? 0,
