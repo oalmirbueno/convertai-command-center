@@ -239,6 +239,16 @@ export default function ClientVaultPage() {
                   )}
                 </p>
               </div>
+              {isAdminOrTeam && effectiveClientId && (
+                <button
+                  onClick={() => setConfirmClearId(effectiveClientId)}
+                  className="flex items-center gap-1.5 text-[11px] text-muted-foreground hover:text-destructive bg-transparent border border-border hover:border-destructive/40 rounded-lg px-2.5 py-1.5 cursor-pointer transition-colors"
+                  title="Limpar todo o cofre deste cliente"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  Limpar cofre
+                </button>
+              )}
             </div>
           )}
 
