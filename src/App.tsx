@@ -37,6 +37,7 @@ import ApiDocs from "@/pages/ApiDocs";
 import AdminQuizSubmissions from "@/pages/AdminQuizSubmissions";
 import AdminBackfillPage from "@/pages/AdminBackfillPage";
 import ClientVaultPage from "@/pages/ClientVaultPage";
+import UnsubscribePage from "@/pages/UnsubscribePage";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -67,6 +68,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />
+      <Route path="/unsubscribe" element={<UnsubscribePage />} />
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />

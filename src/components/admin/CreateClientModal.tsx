@@ -115,6 +115,21 @@ export default function CreateClientModal({ open, onClose }: Props) {
       setCreatedSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
 
+      // Send welcome email with credentials (fire and forget)
+      supabase.functions.invoke("send-transactional-email", {
+        body: {
+          templateName: "client-welcome",
+          recipientEmail: email.trim(),
+          idempotencyKey: `client-welcome-${newUserId ?? email.trim()}`,
+          templateData: {
+            name: fullName.trim(),
+            company: company.trim(),
+            email: email.trim(),
+            password,
+          },
+        },
+      }).catch((e) => console.warn("welcome email failed", e));
+
       // Fire webhook (fire and forget)
       if (newUserId) {
         fireWebhook(webhooks.onboardClient, {
