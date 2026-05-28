@@ -1503,6 +1503,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_staff: { Args: { _user_id: string }; Returns: boolean }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -1519,6 +1520,14 @@ export type Database = {
           msg_id: number
           read_ct: number
         }[]
+      }
+      user_owns_project: {
+        Args: { _project_id: string; _user_id: string }
+        Returns: boolean
+      }
+      user_owns_task: {
+        Args: { _task_id: string; _user_id: string }
+        Returns: boolean
       }
       validate_api_key: {
         Args: { _key_hash: string }
