@@ -983,6 +983,7 @@ export default function AdminFinanceiro() {
                 {!receivedCollapsed && (
                   <>
                     <div className="flex gap-1.5 flex-wrap">
+                      {[
                         { value: "all", label: "Todos" },
                         { value: "month", label: `${MONTHS_SHORT[selMonth]}/${selYear}` },
                         { value: "last3", label: "Últimos 3 meses" },
