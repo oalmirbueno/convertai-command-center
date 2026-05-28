@@ -726,6 +726,8 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           email: string
+          first_access_token: string | null
+          first_access_used_at: string | null
           full_name: string
           id: string
           onboarding_done: boolean
@@ -736,6 +738,7 @@ export type Database = {
           plan_renewal_date: string | null
           plan_status: string
           plan_value: number | null
+          portal_password: string | null
           services_config: Json | null
           sync_error: string | null
           sync_status: string
@@ -747,6 +750,8 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email: string
+          first_access_token?: string | null
+          first_access_used_at?: string | null
           full_name: string
           id: string
           onboarding_done?: boolean
@@ -757,6 +762,7 @@ export type Database = {
           plan_renewal_date?: string | null
           plan_status?: string
           plan_value?: number | null
+          portal_password?: string | null
           services_config?: Json | null
           sync_error?: string | null
           sync_status?: string
@@ -768,6 +774,8 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email?: string
+          first_access_token?: string | null
+          first_access_used_at?: string | null
           full_name?: string
           id?: string
           onboarding_done?: boolean
@@ -778,6 +786,7 @@ export type Database = {
           plan_renewal_date?: string | null
           plan_status?: string
           plan_value?: number | null
+          portal_password?: string | null
           services_config?: Json | null
           sync_error?: string | null
           sync_status?: string
