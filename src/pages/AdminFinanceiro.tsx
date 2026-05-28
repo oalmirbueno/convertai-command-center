@@ -87,6 +87,7 @@ export default function AdminFinanceiro() {
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
+  const [receivedCollapsed, setReceivedCollapsed] = useState(true);
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
@@ -603,25 +604,37 @@ export default function AdminFinanceiro() {
                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
                     {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
                   </span>
-                  {item.itemType !== "extra" && (
-                    <button
-                      onClick={() => {
-                        setPayModal({
-                          id: item.id,
-                          type: item.itemType,
-                          label: item.label,
-                          amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
-                          clientId: item.clientId,
-                          billingType: item.billingType,
-                        });
-                        setPayType("full");
-                        setPayPartialAmount("");
-                      }}
-                      className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
-                    >
-                      💰 Pagar
-                    </button>
-                  )}
+                  <button
+                    onClick={async () => {
+                      let realId = item.id;
+                      // For "extra" items (plan_value but no billing row), create the billing first
+                      if (item.itemType === "extra" && item.clientId) {
+                        const { data: newBill, error } = await supabase.from("billing").insert({
+                          client_id: item.clientId,
+                          type: "renewal",
+                          amount: item.amount,
+                          due_date: item.due || new Date().toISOString().split("T")[0],
+                          description: item.label,
+                        }).select().single();
+                        if (error || !newBill) { toast.error("Erro ao gerar cobrança"); return; }
+                        realId = newBill.id;
+                        await queryClient.invalidateQueries({ queryKey: ["billing"] });
+                      }
+                      setPayModal({
+                        id: realId,
+                        type: item.itemType === "installment" ? "installment" : "billing",
+                        label: item.label,
+                        amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
+                        clientId: item.clientId,
+                        billingType: item.billingType || "renewal",
+                      });
+                      setPayType("full");
+                      setPayPartialAmount("");
+                    }}
+                    className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
+                  >
+                    💰 Pagar
+                  </button>
                 </div>
               ))}
             </div>
@@ -853,13 +866,19 @@ export default function AdminFinanceiro() {
 
           {/* Já Recebido */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setReceivedCollapsed(v => !v)}
+              className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
+            >
               <div className="w-2 h-2 rounded-full bg-success" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Já Recebido
+                Histórico — Já Recebido ({paidBills.length})
               </span>
               <span className="text-xs font-mono text-success ml-auto">{fmt(receivedTotal)}</span>
-            </div>
+              <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
+            </button>
+            {!receivedCollapsed && (
+            <>
             {/* Filter */}
             <div className="flex gap-1.5 flex-wrap">
               {[
@@ -903,6 +922,8 @@ export default function AdminFinanceiro() {
                 </>
               );
             })()}
+            </>
+            )}
           </div>
 
           {/* Projetos Individuais */}
