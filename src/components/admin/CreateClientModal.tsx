@@ -6,12 +6,20 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 
-function generatePassword(len = 10) {
+function generatePassword(len = 16) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
   return Array.from(crypto.getRandomValues(new Uint8Array(len)))
     .map((b) => chars[b % chars.length])
     .join("");
 }
+
+function generateToken() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+const PORTAL_URL = "https://aceleriq.online";
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
