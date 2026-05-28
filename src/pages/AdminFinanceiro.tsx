@@ -514,10 +514,15 @@ export default function AdminFinanceiro() {
         const nextMonthFull = MONTHS_FULL[nextMonth];
         const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
 
+        const receivedBreakdown = brandFilter === "all"
+          ? `Planos ${fmt(showMonthly ? receivedTotal : 0)} · Projetos ${fmt(showIndiv ? indivPaid : 0)}`
+          : recSub;
+
         const cards = [
-          ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: periodFilter === "month" ? `de ${fmt(expectedMonthlyRevenue)} esperado` : recSub, icon: TrendingUp, color: "text-success" }] : [
-            { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: recSub, icon: TrendingUp, color: "text-success" },
+          ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" }] : [
+            { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" },
           ]),
+
           ...(!showMonthly ? [] : []),
           { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
           { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
