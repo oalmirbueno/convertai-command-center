@@ -161,7 +161,7 @@ export const template = {
     name: 'André Weglandala',
     company: 'Stop Informática',
     email: 'andre@stopinformatica.com.br',
-    password: 'Acl-9k2P-q8XZ',
+    firstAccessUrl: 'https://aceleriq.online/primeiro-acesso?token=exemplo',
   },
 } satisfies TemplateEntry
 
