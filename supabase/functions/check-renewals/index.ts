@@ -33,10 +33,47 @@ Deno.serve(async (req) => {
     const todayStr = today.toISOString().split("T")[0];
     const in7Str = in7days.toISOString().split("T")[0];
 
+    const brl = (v: any) =>
+      v != null
+        ? new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(v))
+        : "—";
+    const brDate = (d: string) =>
+      new Date(d + "T00:00:00").toLocaleDateString("pt-BR");
+
+    // Fire a branded billing email for a specific client/milestone (idempotent)
+    const sendBillingEmail = async (
+      c: any,
+      status: "upcoming" | "today" | "overdue",
+      milestone: string,
+      extra: Record<string, any>
+    ) => {
+      if (!c.email) return;
+      try {
+        await supabase.functions.invoke("send-transactional-email", {
+          body: {
+            templateName: "billing-reminder",
+            recipientEmail: c.email,
+            idempotencyKey: `billing-${c.id}-${c.plan_renewal_date}-${milestone}`,
+            templateData: {
+              name: c.full_name,
+              company: c.company_name,
+              planName: c.plan_name || "Plano de Recorrência",
+              amount: brl(c.plan_value),
+              dueDate: brDate(c.plan_renewal_date),
+              status,
+              ...extra,
+            },
+          },
+        });
+      } catch (e) {
+        console.warn("billing email failed", c.id, e);
+      }
+    };
+
     // Clients with renewal date between today and 7 days from now
     const { data: clients } = await supabase
       .from("profiles")
-      .select("id, full_name, company_name, plan_renewal_date, plan_value")
+      .select("id, email, full_name, company_name, plan_name, plan_renewal_date, plan_value")
       .gte("plan_renewal_date", todayStr)
       .lte("plan_renewal_date", in7Str)
       .neq("plan_status", "inactive");
@@ -44,7 +81,7 @@ Deno.serve(async (req) => {
     // Clients already expired (past due)
     const { data: expired } = await supabase
       .from("profiles")
-      .select("id, full_name, company_name, plan_renewal_date, plan_value, overdue_since")
+      .select("id, email, full_name, company_name, plan_name, plan_renewal_date, plan_value, overdue_since")
       .lt("plan_renewal_date", todayStr)
       .neq("plan_status", "inactive");
 
