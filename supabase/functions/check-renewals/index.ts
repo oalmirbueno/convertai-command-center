@@ -120,6 +120,13 @@ Deno.serve(async (req) => {
           link: "/clientes",
         });
       }
+
+      // Client-facing billing email at key milestones (7/3/1 days, due day)
+      if (diffDays === 0) {
+        await sendBillingEmail(c, "today", "due-day", {});
+      } else if ([7, 3, 1].includes(diffDays)) {
+        await sendBillingEmail(c, "upcoming", `d-${diffDays}`, { daysUntil: diffDays });
+      }
     }
 
     for (const c of expired || []) {
@@ -192,6 +199,11 @@ Deno.serve(async (req) => {
           notification_type: "billing",
           link: "/clientes",
         });
+      }
+
+      // Client-facing overdue email at key milestones
+      if ([1, 3, 7, 15].includes(diffDays)) {
+        await sendBillingEmail(c, "overdue", `od-${diffDays}`, { daysOverdue: diffDays });
       }
     }
 
