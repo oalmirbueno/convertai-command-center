@@ -233,6 +233,12 @@ const credValue = {
   wordBreak: 'break-all' as const,
 }
 const credDivider = { borderColor: '#262626', margin: '16px 0' }
+const firstAccessNote = {
+  fontSize: '14px',
+  color: '#cfcfcf',
+  margin: '0',
+  lineHeight: '1.5',
+}
 const credPassword = {
   fontFamily: 'JetBrains Mono, Courier, monospace',
   fontSize: '20px',
