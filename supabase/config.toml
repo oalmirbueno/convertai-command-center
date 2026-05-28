@@ -47,3 +47,11 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.sync-to-ops]
     verify_jwt = false
+  [functions.send-transactional-email]
+    verify_jwt = true
+  [functions.preview-transactional-email]
+    verify_jwt = false
+  [functions.handle-email-unsubscribe]
+    verify_jwt = false
+  [functions.handle-email-suppression]
+    verify_jwt = false
