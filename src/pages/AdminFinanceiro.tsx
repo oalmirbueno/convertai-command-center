@@ -88,6 +88,8 @@ export default function AdminFinanceiro() {
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
   const [receivedCollapsed, setReceivedCollapsed] = useState(true);
+  const [indivCollapsed, setIndivCollapsed] = useState(true);
+  const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
@@ -926,62 +928,105 @@ export default function AdminFinanceiro() {
             )}
           </div>
 
-          {/* Projetos Individuais */}
-          {filteredPayments.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Briefcase className="w-3.5 h-3.5 text-primary" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Projetos Individuais
-                </span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {[
-                  { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
-                  { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
-                  { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
-                  { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
-                ].map((s) => (
-                  <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                    <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+          {/* Projetos Individuais (SiteBolt / Avulsos) */}
+          {filteredPayments.length > 0 && (() => {
+            const enriched = filteredPayments.map((pp: any) => {
+              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+              const remaining = Number(pp.total_value) - paid;
+              const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
+              return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
+            });
+            const quitados = enriched.filter((p: any) => p._group === "quitado");
+            const andamento = enriched.filter((p: any) => p._group === "andamento");
+            const atrasados = enriched.filter((p: any) => p._group === "atrasado");
+
+            const renderItem = (pp: any) => (
+              <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{pp.project?.name || "Projeto"}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {pp.client?.company_name || pp.client?.full_name}
+                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
+                  </p>
+                </div>
+                <div className="w-20 hidden sm:block">
+                  <Progress value={pp._pct} className="h-1.5" />
+                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pp._pct}%</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-mono text-success">{fmt(pp._paid)}</p>
+                  <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                </div>
+                {pp._remaining > 0.01 && (
+                  <div className="text-right hidden md:block">
+                    <p className="text-xs font-mono text-warning">{fmt(pp._remaining)}</p>
+                    <p className="text-[10px] text-muted-foreground">falta</p>
                   </div>
-                ))}
+                )}
+                {pp._hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
               </div>
-              {filteredPayments.map((pp: any) => {
-                const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
-                const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-                const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
-                const remaining = Number(pp.total_value) - paid;
-                return (
-                  <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pp.client?.company_name || pp.client?.full_name}
-                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
-                      </p>
+            );
+
+            return (
+              <div className="space-y-3">
+                <button
+                  onClick={() => setIndivCollapsed(v => !v)}
+                  className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
+                >
+                  <Briefcase className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                    Projetos Individuais ({enriched.length})
+                  </span>
+                  <span className="text-[10px] text-muted-foreground ml-auto flex items-center gap-2">
+                    <span className="text-success">●{quitados.length} quitados</span>
+                    {andamento.length > 0 && <span className="text-warning">●{andamento.length} em andamento</span>}
+                    {atrasados.length > 0 && <span className="text-destructive">●{atrasados.length} atrasados</span>}
+                    <span className="text-muted-foreground">{indivCollapsed ? "▸" : "▾"}</span>
+                  </span>
+                </button>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
+                    { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
+                    { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
+                    { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                      <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
                     </div>
-                    <div className="w-20 hidden sm:block">
-                      <Progress value={pct} className="h-1.5" />
-                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono text-success">{fmt(paid)}</p>
-                      <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
-                    </div>
-                    {remaining > 0 && (
-                      <div className="text-right hidden md:block">
-                        <p className="text-xs font-mono text-warning">{fmt(remaining)}</p>
-                        <p className="text-[10px] text-muted-foreground">falta</p>
+                  ))}
+                </div>
+
+                {!indivCollapsed && (
+                  <div className="space-y-4">
+                    {atrasados.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-destructive font-medium">Atrasados ({atrasados.length})</p>
+                        {atrasados.map(renderItem)}
                       </div>
                     )}
-                    {hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                    {andamento.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-warning font-medium">Em andamento ({andamento.length})</p>
+                        {andamento.map(renderItem)}
+                      </div>
+                    )}
+                    {quitados.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-success font-medium">Quitados ({quitados.length})</p>
+                        {quitados.map(renderItem)}
+                      </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
+
 
           {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
@@ -1068,50 +1113,185 @@ export default function AdminFinanceiro() {
           )}
         </TabsContent>
 
-        {/* Tab: Renewals */}
-        <TabsContent value="renewals" className="space-y-3">
-          {(clients || []).map((c: any) => {
-            const renewalDate = c.plan_renewal_date ? new Date(c.plan_renewal_date) : null;
-            const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)) : null;
-            const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
-            const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
-            const reminderCount = clientBilling?.reminder_count || 0;
+        {/* Tab: Renewals & Avulsos */}
+        <TabsContent value="renewals" className="space-y-4">
+          {/* Sub-toggle */}
+          <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5 w-fit">
+            {[
+              { value: "mensalistas" as const, label: "Mensalistas" },
+              { value: "avulsos" as const, label: "Avulsos / Histórico" },
+            ].map((f) => (
+              <button
+                key={f.value}
+                onClick={() => setRenewalsView(f.value)}
+                className={`text-[11px] px-3 py-1.5 rounded-md transition-colors cursor-pointer border-none ${
+                  renewalsView === f.value
+                    ? "bg-card text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground bg-transparent"
+                }`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+
+          {renewalsView === "mensalistas" && (() => {
+            const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0);
+            if (mensalistas.length === 0) {
+              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente mensalista. Edite um cliente e adicione o valor do plano para marcá-lo como mensalista.</p>;
+            }
+            // Group by plan_name
+            const groups: Record<string, any[]> = {};
+            mensalistas.forEach((c: any) => {
+              const key = c.plan_name || "Sem plano definido";
+              if (!groups[key]) groups[key] = [];
+              groups[key].push(c);
+            });
+            const planNames = Object.keys(groups).sort();
 
             return (
-              <div key={c.id} className="bg-card border border-border rounded-xl p-5 space-y-2">
-                <div className="flex items-center justify-between">
-                  <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                  {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">🟢 Ativo</span>}
-                  {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">🟡 Renovação em breve</span>}
-                  {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">🔴 Pendente</span>}
+              <div className="space-y-5">
+                {/* Summary */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: "Mensalistas", value: String(mensalistas.length), color: "text-foreground" },
+                    { label: "Planos distintos", value: String(planNames.length), color: "text-primary" },
+                    { label: "MRR Esperado", value: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), color: "text-success" },
+                    { label: "Renovações ≤15 dias", value: String(mensalistas.filter((c: any) => {
+                      if (!c.plan_renewal_date) return false;
+                      const d = Math.ceil((new Date(c.plan_renewal_date).getTime() - now.getTime()) / 86400000);
+                      return d >= 0 && d <= 15;
+                    }).length), color: "text-warning" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                      <p className={`text-base font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+                    </div>
+                  ))}
                 </div>
-                {clientBilling && (
-                  <p className="text-xs text-muted-foreground">{clientBilling.description || "Plano"} • {fmt(Number(clientBilling.amount))}/mês</p>
-                )}
-                {!clientBilling && (c as any).plan_value && (
-                  <p className="text-xs text-muted-foreground">Valor do plano: {fmt(Number((c as any).plan_value))}/mês</p>
-                )}
-                {renewalDate && (
-                  <p className="text-xs text-muted-foreground">Renovação: {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</p>
-                )}
-                <div className="flex gap-2 pt-1 flex-wrap">
-                  <button onClick={() => handleSendReminder(c, "notification")}
-                    className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                    <Bell className="w-3 h-3" /> {reminderCount > 0 ? `Lembrete enviado (${reminderCount}x)` : "📩 Notificação"}
-                  </button>
-                  <button onClick={() => handleSendReminder(c, "whatsapp")}
-                    className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                    <MessageCircle className="w-3 h-3" /> 💬 WhatsApp
-                  </button>
-                  <button onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : "", renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || "" }); }}
-                    className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
-                    <Edit3 className="w-3 h-3" /> Editar Plano
-                  </button>
-                </div>
+
+                {planNames.map((planName) => {
+                  const planClients = groups[planName];
+                  const planMRR = planClients.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0);
+                  return (
+                    <div key={planName} className="space-y-2">
+                      <div className="flex items-center gap-2 px-1">
+                        <span className="text-[11px] uppercase tracking-wider text-primary font-medium">{planName}</span>
+                        <span className="text-[10px] text-muted-foreground">({planClients.length} {planClients.length === 1 ? "cliente" : "clientes"})</span>
+                        <span className="text-[10px] font-mono text-success ml-auto">{fmt(planMRR)}/mês</span>
+                      </div>
+                      {planClients.map((c: any) => {
+                        const renewalDate = c.plan_renewal_date ? new Date(c.plan_renewal_date) : null;
+                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000) : null;
+                        const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
+                        const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
+                        const reminderCount = clientBilling?.reminder_count || 0;
+                        return (
+                          <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
+                            <div className="flex items-center justify-between flex-wrap gap-2">
+                              <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
+                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">🟢 Ativo</span>}
+                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">🟡 Renovação em breve</span>}
+                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">🔴 Pendente</span>}
+                              {planStatus === "unknown" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Sem data</span>}
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                              {fmt(Number(c.plan_value))}/mês
+                              {renewalDate && <> • Renova {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
+                            </p>
+                            <div className="flex gap-2 pt-1 flex-wrap">
+                              <button onClick={() => handleSendReminder(c, "notification")}
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
+                                <Bell className="w-3 h-3" /> {reminderCount > 0 ? `Lembrete (${reminderCount}x)` : "Notificar"}
+                              </button>
+                              <button onClick={() => handleSendReminder(c, "whatsapp")}
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
+                                <MessageCircle className="w-3 h-3" /> WhatsApp
+                              </button>
+                              <button onClick={() => { setEditPlanModal(c); setPlanForm({ amount: clientBilling ? String(clientBilling.amount) : String(c.plan_value || ""), renewal_date: c.plan_renewal_date || "", description: clientBilling?.description || c.plan_name || "" }); }}
+                                className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border flex items-center gap-1.5">
+                                <Edit3 className="w-3 h-3" /> Editar Plano
+                              </button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })}
               </div>
             );
-          })}
+          })()}
+
+          {renewalsView === "avulsos" && (() => {
+            // Avulsos = clients without plan_value (or =0) that have project_payments
+            const avulsoClientIds = new Set(
+              (projectPayments || [])
+                .map((pp: any) => pp.client_id)
+                .filter((id: string) => {
+                  const c = (clients || []).find((cl: any) => cl.id === id);
+                  return c && (!c.plan_value || Number(c.plan_value) === 0);
+                })
+            );
+            const avulsoClients = (clients || []).filter((c: any) => avulsoClientIds.has(c.id));
+
+            if (avulsoClients.length === 0) {
+              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente avulso com histórico de projetos.</p>;
+            }
+
+            return (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+                  {[
+                    { label: "Clientes Avulsos", value: String(avulsoClients.length), color: "text-foreground" },
+                    { label: "Total Faturado", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0)), color: "text-success" },
+                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status !== "paid").reduce((x: number, i: any) => x + Number(i.amount) - Number(i.paid_amount || 0), 0), 0)), color: "text-warning" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                      <p className={`text-base font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {avulsoClients.map((c: any) => {
+                  const clientProjects = (projectPayments || []).filter((pp: any) => pp.client_id === c.id);
+                  const totalFaturado = clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0);
+                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0);
+                  const aberto = totalFaturado - totalPago;
+                  return (
+                    <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
+                      <div className="flex items-center justify-between flex-wrap gap-2">
+                        <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{clientProjects.length} {clientProjects.length === 1 ? "projeto" : "projetos"}</span>
+                      </div>
+                      <div className="flex items-center gap-4 text-xs flex-wrap">
+                        <span className="text-muted-foreground">Faturado: <span className="font-mono text-foreground">{fmt(totalFaturado)}</span></span>
+                        <span className="text-muted-foreground">Pago: <span className="font-mono text-success">{fmt(totalPago)}</span></span>
+                        {aberto > 0.01 && <span className="text-muted-foreground">Aberto: <span className="font-mono text-warning">{fmt(aberto)}</span></span>}
+                      </div>
+                      <div className="space-y-1 pt-1">
+                        {clientProjects.map((pp: any) => {
+                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0);
+                          const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+                          return (
+                            <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
+                              <span className="flex-1 truncate">{pp.project?.name || "Projeto"}</span>
+                              <span className="text-[10px] font-mono">{pct}%</span>
+                              <span className="font-mono text-foreground">{fmt(Number(pp.total_value))}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
         </TabsContent>
+
+
 
         {/* Audit Log Tab */}
         {isAdmin && (
