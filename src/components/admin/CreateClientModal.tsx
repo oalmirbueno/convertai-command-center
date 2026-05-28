@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Loader2, Copy, Eye, EyeOff } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -43,8 +43,6 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
-  const [generatedPassword, setGeneratedPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
   if (!open) return null;
@@ -56,19 +54,12 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const reset = () => {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
     setServices({});
-    setGeneratedPassword("");
     setCreatedSuccess(false);
-    setShowPassword(false);
   };
 
   const handleClose = () => {
     reset();
     onClose();
-  };
-
-  const copyPassword = () => {
-    navigator.clipboard.writeText(generatedPassword);
-    toast.success("Senha copiada!");
   };
 
   const handleSave = async () => {
