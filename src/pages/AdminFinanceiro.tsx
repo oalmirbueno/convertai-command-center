@@ -84,7 +84,7 @@ export default function AdminFinanceiro() {
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [addWalletModal, setAddWalletModal] = useState(false);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
-  const [receivedFilter, setReceivedFilter] = useState<string>("all");
+  const [receivedFilter, setReceivedFilter] = useState<string>("month");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
