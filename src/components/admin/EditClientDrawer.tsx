@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Eye, EyeOff, Copy } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -47,6 +47,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [planValue, setPlanValue] = useState("");
   const [planStatus, setPlanStatus] = useState("active");
   const [clientPassword, setClientPassword] = useState("");
+  const [showStoredPw, setShowStoredPw] = useState(false);
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
