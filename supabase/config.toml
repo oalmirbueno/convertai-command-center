@@ -3,6 +3,8 @@ project_id = "gicbrgagstyvbaaumprj"
 [functions]
   [functions.api-gateway]
     verify_jwt = false
+  [functions.client-first-access]
+    verify_jwt = false
   [functions.auth-email-hook]
     verify_jwt = false
   [functions.backfill-clients-to-ops]
