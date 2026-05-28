@@ -15,7 +15,7 @@ import {
 } from 'npm:@react-email/components@0.0.22'
 
 const LOGO_URL =
-  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq.png'
+  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png'
 
 interface EmailLayoutProps {
   preview: string

@@ -18,7 +18,7 @@ import {
 import type { TemplateEntry } from './registry.ts'
 
 const LOGO_URL =
-  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq.png'
+  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png'
 const PORTAL_URL = 'https://aceleriq.online'
 const FINANCE_URL = 'https://aceleriq.online/financeiro'
 
