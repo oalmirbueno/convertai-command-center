@@ -487,6 +487,43 @@ export default function AdminFinanceiro() {
                 </button>
               ))}
             </div>
+            {periodFilter === "month" && (
+              <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+                <button
+                  onClick={() => {
+                    const d = new Date(selYear, selMonth - 1, 1);
+                    setSelMonth(d.getMonth());
+                    setSelYear(d.getFullYear());
+                  }}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
+                  aria-label="Mês anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[12px] font-medium text-foreground min-w-[110px] text-center tabular-nums">
+                  {MONTHS_FULL[selMonth]} {selYear}
+                </span>
+                <button
+                  disabled={isCurrentMonthSelected}
+                  onClick={() => {
+                    const d = new Date(selYear, selMonth + 1, 1);
+                    setSelMonth(d.getMonth());
+                    setSelYear(d.getFullYear());
+                  }}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Próximo mês"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                {!isCurrentMonthSelected && (
+                  <button
+                    onClick={() => { setSelMonth(thisMonth); setSelYear(thisYear); }}
+                    className="text-[10px] px-2 py-1 rounded-md text-primary hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
+                  >
+                    Hoje
+                  </button>
+                )}
+              </div>
             <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {BRAND_FILTERS.map((f) => (
                 <button
