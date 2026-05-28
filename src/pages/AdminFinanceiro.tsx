@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -18,6 +18,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
+
+const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
 const statusBadge = (status: string, dueDate?: string) => {
   const isOverdue = dueDate && new Date(dueDate) < new Date() && status === "pending";
@@ -81,15 +84,17 @@ export default function AdminFinanceiro() {
   const [rechargeModal, setRechargeModal] = useState<{ clientId: string; platform: string } | null>(null);
   const [addWalletModal, setAddWalletModal] = useState(false);
   const [editPlanModal, setEditPlanModal] = useState<any>(null);
-  const [receivedFilter, setReceivedFilter] = useState<string>("all");
+  const [receivedFilter, setReceivedFilter] = useState<string>("month");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
-  const [receivedCollapsed, setReceivedCollapsed] = useState(true);
+  const [receivedCollapsed, setReceivedCollapsed] = useState(false);
   const [indivCollapsed, setIndivCollapsed] = useState(true);
   const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
+  const [selMonth, setSelMonth] = useState<number>(new Date().getMonth());
+  const [selYear, setSelYear] = useState<number>(new Date().getFullYear());
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
@@ -147,10 +152,13 @@ export default function AdminFinanceiro() {
   }, [clients, billing, isAdmin]);
 
   // Computed totals — combine billing + client plan data for accurate stats
+  // "month" period is driven by the selected month/year (month picker)
   const isThisMonth = (d: string) => {
+    if (!d) return false;
     const date = new Date(d);
-    return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+    return date.getMonth() === selMonth && date.getFullYear() === selYear;
   };
+  const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
@@ -479,6 +487,44 @@ export default function AdminFinanceiro() {
                 </button>
               ))}
             </div>
+            {periodFilter === "month" && (
+              <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+                <button
+                  onClick={() => {
+                    const d = new Date(selYear, selMonth - 1, 1);
+                    setSelMonth(d.getMonth());
+                    setSelYear(d.getFullYear());
+                  }}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
+                  aria-label="Mês anterior"
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </button>
+                <span className="text-[12px] font-medium text-foreground min-w-[110px] text-center tabular-nums">
+                  {MONTHS_FULL[selMonth]} {selYear}
+                </span>
+                <button
+                  disabled={isCurrentMonthSelected}
+                  onClick={() => {
+                    const d = new Date(selYear, selMonth + 1, 1);
+                    setSelMonth(d.getMonth());
+                    setSelYear(d.getFullYear());
+                  }}
+                  className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-card transition-colors cursor-pointer border-none bg-transparent disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Próximo mês"
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+                {!isCurrentMonthSelected && (
+                  <button
+                    onClick={() => { setSelMonth(thisMonth); setSelYear(thisYear); }}
+                    className="text-[10px] px-2 py-1 rounded-md text-primary hover:bg-card transition-colors cursor-pointer border-none bg-transparent"
+                  >
+                    Hoje
+                  </button>
+                )}
+              </div>
+            )}
             <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {BRAND_FILTERS.map((f) => (
                 <button
@@ -508,9 +554,8 @@ export default function AdminFinanceiro() {
         const subLabel = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? pendingTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPending : 0)}` : undefined;
         const recSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? receivedTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivPaid : 0)}` : undefined;
         const ovSub = brandFilter === "all" ? `AcelerIQ ${fmt(showMonthly ? overdueTotal : 0)} · SiteBolt ${fmt(showIndiv ? indivOverdue : 0)}` : undefined;
-        const periodLabel = periodFilter === "month" ? "no Mês" : "Geral";
+        const periodLabel = periodFilter === "month" ? `· ${MONTHS_FULL[selMonth]} ${selYear}` : "Geral";
 
-        const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
         const nextMonthFull = MONTHS_FULL[nextMonth];
         const nextMonthSub = brandFilter === "all" ? `AcelerIQ ${fmt(nextMonthRecurring)} · SiteBolt ${fmt(nextMonthIndiv)}` : (brandFilter === "aceleriq" ? "Planos recorrentes" : "Parcelas de projetos");
 
@@ -914,9 +959,9 @@ export default function AdminFinanceiro() {
 
             const filtered = allReceived.filter((it) => {
               const d = new Date(it.date);
-              if (receivedFilter === "month") return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+              if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
               if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
-              if (receivedFilter === "year") return d.getFullYear() === thisYear;
+              if (receivedFilter === "year") return d.getFullYear() === selYear;
               return true;
             });
             const filteredTotal = filtered.reduce((s, it) => s + it.amount, 0);
@@ -940,9 +985,9 @@ export default function AdminFinanceiro() {
                     <div className="flex gap-1.5 flex-wrap">
                       {[
                         { value: "all", label: "Todos" },
-                        { value: "month", label: "Este mês" },
+                        { value: "month", label: `${MONTHS_SHORT[selMonth]}/${selYear}` },
                         { value: "last3", label: "Últimos 3 meses" },
-                        { value: "year", label: "Este ano" },
+                        { value: "year", label: `Ano ${selYear}` },
                       ].map((f) => (
                         <button key={f.value} onClick={() => setReceivedFilter(f.value)}
                           className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
