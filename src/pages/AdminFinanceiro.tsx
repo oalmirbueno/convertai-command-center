@@ -866,67 +866,109 @@ export default function AdminFinanceiro() {
             </div>
           )}
 
-          {/* Já Recebido */}
-          <div className="space-y-2">
-            <button
-              onClick={() => setReceivedCollapsed(v => !v)}
-              className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
-            >
-              <div className="w-2 h-2 rounded-full bg-success" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Histórico — Já Recebido ({paidBills.length})
-              </span>
-              <span className="text-xs font-mono text-success ml-auto">{fmt(receivedTotal)}</span>
-              <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
-            </button>
-            {!receivedCollapsed && (
-            <>
-            {/* Filter */}
-            <div className="flex gap-1.5 flex-wrap">
-              {[
-                { value: "all", label: "Todos" },
-                { value: "month", label: "Este mês" },
-                { value: "last3", label: "Últimos 3 meses" },
-                { value: "year", label: "Este ano" },
-              ].map((f) => (
-                <button key={f.value} onClick={() => setReceivedFilter(f.value)}
-                  className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
-                  {f.label}
+          {/* Já Recebido — histórico unificado (planos + projetos) */}
+          {(() => {
+            const showMonthlyR = brandFilter === "all" || brandFilter === "aceleriq";
+            const showIndivR = brandFilter === "all" || brandFilter === "sitebolt";
+
+            // 1) Recebimentos de planos/serviços (billing)
+            const billingItems = showMonthlyR
+              ? paidBills
+                  .filter((b: any) => b.type !== "ads_recharge")
+                  .map((b: any) => ({
+                    id: `bill-${b.id}`,
+                    label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
+                    client: b.client?.company_name || b.client?.full_name || "—",
+                    brand: "AcelerIQ",
+                    amount: Number(b.amount),
+                    date: b.paid_date || b.due_date,
+                    icon: typeIcon(b.type),
+                  }))
+              : [];
+
+            // 2) Recebimentos de projetos individuais (parcelas pagas)
+            const installmentItems = showIndivR
+              ? filteredPayments.flatMap((pp: any) =>
+                  (pp.installments || [])
+                    .filter((i: any) => i.status === "paid")
+                    .map((i: any) => ({
+                      id: `inst-${i.id}`,
+                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}`,
+                      client: pp.client?.company_name || pp.client?.full_name || "—",
+                      brand: getProjectBrand(pp.project?.project_type),
+                      amount: Number(i.paid_amount || i.amount),
+                      date: i.paid_date || i.due_date,
+                      icon: "💼",
+                    }))
+                )
+              : [];
+
+            const allReceived = [...billingItems, ...installmentItems].sort(
+              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+            );
+
+            const filtered = allReceived.filter((it) => {
+              const d = new Date(it.date);
+              if (receivedFilter === "month") return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+              if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
+              if (receivedFilter === "year") return d.getFullYear() === thisYear;
+              return true;
+            });
+            const filteredTotal = filtered.reduce((s, it) => s + it.amount, 0);
+            const grandTotal = allReceived.reduce((s, it) => s + it.amount, 0);
+
+            return (
+              <div className="space-y-2">
+                <button
+                  onClick={() => setReceivedCollapsed(v => !v)}
+                  className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
+                >
+                  <div className="w-2 h-2 rounded-full bg-success" />
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                    Histórico — Já Recebido ({allReceived.length})
+                  </span>
+                  <span className="text-xs font-mono text-success ml-auto">{fmt(grandTotal)}</span>
+                  <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
                 </button>
-              ))}
-            </div>
-            {(() => {
-              const filtered = paidBills.filter((b: any) => {
-                const paidDate = new Date(b.paid_date || b.due_date);
-                if (receivedFilter === "month") return paidDate.getMonth() === thisMonth && paidDate.getFullYear() === thisYear;
-                if (receivedFilter === "last3") { const d = new Date(); d.setMonth(d.getMonth() - 3); return paidDate >= d; }
-                if (receivedFilter === "year") return paidDate.getFullYear() === thisYear;
-                return true;
-              });
-              const filteredTotal = filtered.reduce((s: number, b: any) => s + Number(b.amount), 0);
-              return (
-                <>
-                  {receivedFilter !== "all" && (
-                    <p className="text-[11px] text-muted-foreground">Filtrado: <span className="font-mono text-success">{fmt(filteredTotal)}</span> ({filtered.length} pagamentos)</p>
-                  )}
-                  {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento neste período.</p>}
-                  {filtered.map((b: any) => (
-                    <div key={b.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                      <span className="text-lg">{typeIcon(b.type)}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                        <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Pago em {b.paid_date ? new Date(b.paid_date).toLocaleDateString("pt-BR") : "—"}</p>
-                      </div>
-                      <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
-                      {statusBadge(b.status)}
+                {!receivedCollapsed && (
+                  <>
+                    <div className="flex gap-1.5 flex-wrap">
+                      {[
+                        { value: "all", label: "Todos" },
+                        { value: "month", label: "Este mês" },
+                        { value: "last3", label: "Últimos 3 meses" },
+                        { value: "year", label: "Este ano" },
+                      ].map((f) => (
+                        <button key={f.value} onClick={() => setReceivedFilter(f.value)}
+                          className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
+                          {f.label}
+                        </button>
+                      ))}
                     </div>
-                  ))}
-                </>
-              );
-            })()}
-            </>
-            )}
-          </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {receivedFilter === "all" ? "Total recebido" : "Filtrado"}: <span className="font-mono text-success">{fmt(filteredTotal)}</span> ({filtered.length} {filtered.length === 1 ? "pagamento" : "pagamentos"})
+                    </p>
+                    {filtered.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">Nenhum pagamento neste período.</p>}
+                    {filtered.map((it) => (
+                      <div key={it.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                        <span className="text-lg">{it.icon}</span>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-foreground truncate">{it.label}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {it.client}
+                            <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
+                            {" • "}Pago em {it.date ? new Date(it.date).toLocaleDateString("pt-BR") : "—"}
+                          </p>
+                        </div>
+                        <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            );
+          })()}
+
 
           {/* Projetos Individuais (SiteBolt / Avulsos) */}
           {filteredPayments.length > 0 && (() => {
