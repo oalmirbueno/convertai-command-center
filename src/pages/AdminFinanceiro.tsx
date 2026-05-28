@@ -9,7 +9,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
-import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History } from "lucide-react";
+import { DollarSign, TrendingUp, Users, CreditCard, Plus, RefreshCw, Bell, Edit3, Zap, CheckCircle2, MessageCircle, Briefcase, AlertTriangle as AlertTriangleIcon, History, ChevronLeft, ChevronRight } from "lucide-react";
 import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from "@/lib/brandHelpers";
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
