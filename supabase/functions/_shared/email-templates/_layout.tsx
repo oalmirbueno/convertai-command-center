@@ -129,17 +129,22 @@ const body = {
 }
 const outer = { maxWidth: '600px', margin: '0 auto' }
 const header = {
-  padding: '8px 4px 20px',
+  backgroundColor: '#0D0D0D',
+  padding: '28px 32px',
+  borderRadius: '16px 16px 0 0',
   textAlign: 'left' as const,
+  borderBottom: '2px solid #00FF66',
 }
 const logo = { display: 'block', height: 'auto' }
 const card = {
   backgroundColor: '#ffffff',
-  borderRadius: '16px',
+  borderRadius: '0 0 16px 16px',
   padding: '40px 36px',
   border: '1px solid #ECECEC',
+  borderTop: 'none',
   boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
 }
+
 const footerSection = { padding: '24px 8px 8px', textAlign: 'left' as const }
 const hr = { borderColor: '#E5E5E5', margin: '0 0 20px' }
 const footerBrand = {
