@@ -152,10 +152,13 @@ export default function AdminFinanceiro() {
   }, [clients, billing, isAdmin]);
 
   // Computed totals — combine billing + client plan data for accurate stats
+  // "month" period is driven by the selected month/year (month picker)
   const isThisMonth = (d: string) => {
+    if (!d) return false;
     const date = new Date(d);
-    return date.getMonth() === thisMonth && date.getFullYear() === thisYear;
+    return date.getMonth() === selMonth && date.getFullYear() === selYear;
   };
+  const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
