@@ -525,7 +525,7 @@ export default function AdminFinanceiro() {
                 )}
               </div>
             )}
-            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">�
+            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {BRAND_FILTERS.map((f) => (
                 <button
                   key={f.value}
