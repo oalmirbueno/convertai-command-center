@@ -78,7 +78,9 @@ export default function CreateClientModal({ open, onClose }: Props) {
     }
     setSaving(true);
     try {
+      // Random unknown password — the client will set their own via first-access link.
       const password = generatePassword();
+      const firstAccessToken = generateToken();
 
       // Use edge function to create user server-side (avoids session swap)
       const { data: result, error: fnError } = await supabase.functions.invoke("manage-team", {
@@ -110,20 +112,23 @@ export default function CreateClientModal({ open, onClose }: Props) {
 
       const newUserId = result?.user_id;
 
-      // Update profile with extra fields
+      // Update profile with extra fields + first-access token
       if (newUserId) {
         await supabase.from("profiles").update({
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
+          first_access_token: firstAccessToken,
+          first_access_used_at: null,
+          portal_password: null,
         }).eq("id", newUserId);
       }
 
-      setGeneratedPassword(password);
       setCreatedSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
 
-      // Send welcome email with credentials (fire and forget)
+      // Send welcome email with first-access link (fire and forget)
+      const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
       supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "client-welcome",
@@ -133,7 +138,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
             name: fullName.trim(),
             company: company.trim(),
             email: email.trim(),
-            password,
+            firstAccessUrl,
           },
         },
       }).catch((e) => console.warn("welcome email failed", e));
