@@ -866,13 +866,19 @@ export default function AdminFinanceiro() {
 
           {/* Já Recebido */}
           <div className="space-y-2">
-            <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setReceivedCollapsed(v => !v)}
+              className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
+            >
               <div className="w-2 h-2 rounded-full bg-success" />
               <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Já Recebido
+                Histórico — Já Recebido ({paidBills.length})
               </span>
               <span className="text-xs font-mono text-success ml-auto">{fmt(receivedTotal)}</span>
-            </div>
+              <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
+            </button>
+            {!receivedCollapsed && (
+            <>
             {/* Filter */}
             <div className="flex gap-1.5 flex-wrap">
               {[
