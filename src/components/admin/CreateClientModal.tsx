@@ -186,35 +186,19 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 <p className="text-xs text-muted-foreground">{email}</p>
               </div>
 
-              <div className="bg-secondary border border-border rounded-xl p-4 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Credenciais de Acesso</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Email</span>
-                    <span className="text-sm font-mono text-foreground">{email}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">Senha</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-mono text-foreground">
-                        {showPassword ? generatedPassword : "••••••••••"}
-                      </span>
-                      <button onClick={() => setShowPassword(!showPassword)}
-                        className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
-                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-                      <button onClick={copyPassword}
-                        className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-secondary border border-border rounded-xl p-4 space-y-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</p>
+                <p className="text-[13px] text-foreground leading-relaxed">
+                  Enviamos um e-mail de boas-vindas com um botão de <strong>primeiro acesso</strong>.
+                  O cliente clica, cria a própria senha e já entra no portal.
+                </p>
               </div>
 
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                Envie essas credenciais ao cliente. A senha pode ser alterada depois pelo admin ou pelo próprio cliente.
+                Assim que o cliente criar a senha, ela fica disponível no cadastro dele
+                (aba do cliente → <strong>Senha de Acesso</strong>), onde você pode visualizar ou alterar.
               </p>
+
             </div>
 
             <div className="px-6 py-4 border-t border-border flex justify-end">
