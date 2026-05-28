@@ -93,6 +93,8 @@ export default function AdminFinanceiro() {
   const [receivedCollapsed, setReceivedCollapsed] = useState(true);
   const [indivCollapsed, setIndivCollapsed] = useState(true);
   const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
+  const [selMonth, setSelMonth] = useState<number>(new Date().getMonth());
+  const [selYear, setSelYear] = useState<number>(new Date().getFullYear());
 
   const [billForm, setBillForm] = useState({ client_id: "", type: "renewal", amount: "", due_date: "", description: "" });
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
