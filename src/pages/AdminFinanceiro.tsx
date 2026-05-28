@@ -922,6 +922,8 @@ export default function AdminFinanceiro() {
                 </>
               );
             })()}
+            </>
+            )}
           </div>
 
           {/* Projetos Individuais */}
