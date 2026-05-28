@@ -36,10 +36,10 @@ const EMAIL_TEMPLATES: Record<string, React.ComponentType<any>> = {
 }
 
 // Configuration
-const SITE_NAME = "orbital-command-hq"
-const SENDER_DOMAIN = "notify.aceleriq.com.br"
-const ROOT_DOMAIN = "aceleriq.com.br"
-const FROM_DOMAIN = "aceleriq.com.br" // Domain shown in From address (may be root or sender subdomain)
+const SITE_NAME = "AcelerIQ"
+const SENDER_DOMAIN = "aceleriq.online"
+const ROOT_DOMAIN = "aceleriq.online"
+const FROM_DOMAIN = "aceleriq.online" // Domain shown in From address (sent via Resend)
 
 // Sample data for preview mode ONLY (not used in actual email sending).
 // URLs are baked in at scaffold time from the project's real data.
