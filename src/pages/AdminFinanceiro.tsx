@@ -983,11 +983,10 @@ export default function AdminFinanceiro() {
                 {!receivedCollapsed && (
                   <>
                     <div className="flex gap-1.5 flex-wrap">
-                      {[
                         { value: "all", label: "Todos" },
-                        { value: "month", label: "Este mês" },
+                        { value: "month", label: `${MONTHS_SHORT[selMonth]}/${selYear}` },
                         { value: "last3", label: "Últimos 3 meses" },
-                        { value: "year", label: "Este ano" },
+                        { value: "year", label: `Ano ${selYear}` },
                       ].map((f) => (
                         <button key={f.value} onClick={() => setReceivedFilter(f.value)}
                           className={`text-[11px] px-2.5 py-1 rounded-full border cursor-pointer transition-colors ${receivedFilter === f.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent border-border text-muted-foreground hover:text-foreground"}`}>
