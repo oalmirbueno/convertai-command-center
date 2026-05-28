@@ -90,7 +90,7 @@ export default function AdminFinanceiro() {
   const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
-  const [receivedCollapsed, setReceivedCollapsed] = useState(true);
+  const [receivedCollapsed, setReceivedCollapsed] = useState(false);
   const [indivCollapsed, setIndivCollapsed] = useState(true);
   const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
   const [selMonth, setSelMonth] = useState<number>(new Date().getMonth());
