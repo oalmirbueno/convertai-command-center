@@ -265,6 +265,12 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         });
         if (res.error) throw new Error(res.error.message || "Erro ao alterar senha");
         if (res.data?.error) throw new Error(res.data.error);
+        // Store plaintext so admin can view it later + clear any pending first-access
+        await supabase.from("profiles").update({
+          portal_password: clientPassword,
+          first_access_token: null,
+          first_access_used_at: new Date().toISOString(),
+        }).eq("id", client.id);
         toast.success("Senha do cliente alterada!");
       }
 
