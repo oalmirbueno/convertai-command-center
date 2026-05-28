@@ -928,62 +928,105 @@ export default function AdminFinanceiro() {
             )}
           </div>
 
-          {/* Projetos Individuais */}
-          {filteredPayments.length > 0 && (
-            <div className="space-y-2">
-              <div className="flex items-center gap-2">
-                <Briefcase className="w-3.5 h-3.5 text-primary" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Projetos Individuais
-                </span>
-              </div>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {[
-                  { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
-                  { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
-                  { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
-                  { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
-                ].map((s) => (
-                  <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
-                    <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
-                    <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
+          {/* Projetos Individuais (SiteBolt / Avulsos) */}
+          {filteredPayments.length > 0 && (() => {
+            const enriched = filteredPayments.map((pp: any) => {
+              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
+              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+              const remaining = Number(pp.total_value) - paid;
+              const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
+              return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
+            });
+            const quitados = enriched.filter((p: any) => p._group === "quitado");
+            const andamento = enriched.filter((p: any) => p._group === "andamento");
+            const atrasados = enriched.filter((p: any) => p._group === "atrasado");
+
+            const renderItem = (pp: any) => (
+              <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-foreground truncate">{pp.project?.name || "Projeto"}</p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {pp.client?.company_name || pp.client?.full_name}
+                    <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
+                  </p>
+                </div>
+                <div className="w-20 hidden sm:block">
+                  <Progress value={pp._pct} className="h-1.5" />
+                  <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pp._pct}%</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-mono text-success">{fmt(pp._paid)}</p>
+                  <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
+                </div>
+                {pp._remaining > 0.01 && (
+                  <div className="text-right hidden md:block">
+                    <p className="text-xs font-mono text-warning">{fmt(pp._remaining)}</p>
+                    <p className="text-[10px] text-muted-foreground">falta</p>
                   </div>
-                ))}
+                )}
+                {pp._hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
               </div>
-              {filteredPayments.map((pp: any) => {
-                const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
-                const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-                const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
-                const remaining = Number(pp.total_value) - paid;
-                return (
-                  <div key={pp.id} className="bg-card border border-border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-foreground">{pp.project?.name || "Projeto"}</p>
-                      <p className="text-xs text-muted-foreground">
-                        {pp.client?.company_name || pp.client?.full_name}
-                        <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{getProjectBrand(pp.project?.project_type)}</span>
-                      </p>
+            );
+
+            return (
+              <div className="space-y-3">
+                <button
+                  onClick={() => setIndivCollapsed(v => !v)}
+                  className="w-full flex items-center gap-2 flex-wrap bg-transparent border-none cursor-pointer p-0 text-left"
+                >
+                  <Briefcase className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                    Projetos Individuais ({enriched.length})
+                  </span>
+                  <span className="text-[10px] text-muted-foreground ml-auto flex items-center gap-2">
+                    <span className="text-success">●{quitados.length} quitados</span>
+                    {andamento.length > 0 && <span className="text-warning">●{andamento.length} em andamento</span>}
+                    {atrasados.length > 0 && <span className="text-destructive">●{atrasados.length} atrasados</span>}
+                    <span className="text-muted-foreground">{indivCollapsed ? "▸" : "▾"}</span>
+                  </span>
+                </button>
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {[
+                    { label: "Total Contratado", value: fmt(indivTotal), color: "text-primary" },
+                    { label: "Recebido", value: fmt(indivPaid), color: "text-success" },
+                    { label: "Pendente", value: fmt(indivPending), color: "text-warning" },
+                    { label: "Atrasado", value: fmt(indivOverdue), color: "text-destructive" },
+                  ].map((s) => (
+                    <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
+                      <p className={`text-sm font-mono font-medium mt-1 ${s.color}`}>{s.value}</p>
                     </div>
-                    <div className="w-20 hidden sm:block">
-                      <Progress value={pct} className="h-1.5" />
-                      <p className="text-[10px] font-mono text-muted-foreground mt-0.5 text-right">{pct}%</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-xs font-mono text-success">{fmt(paid)}</p>
-                      <p className="text-[10px] text-muted-foreground">de {fmt(Number(pp.total_value))}</p>
-                    </div>
-                    {remaining > 0 && (
-                      <div className="text-right hidden md:block">
-                        <p className="text-xs font-mono text-warning">{fmt(remaining)}</p>
-                        <p className="text-[10px] text-muted-foreground">falta</p>
+                  ))}
+                </div>
+
+                {!indivCollapsed && (
+                  <div className="space-y-4">
+                    {atrasados.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-destructive font-medium">Atrasados ({atrasados.length})</p>
+                        {atrasados.map(renderItem)}
                       </div>
                     )}
-                    {hasOverdue && <AlertTriangleIcon className="w-3.5 h-3.5 text-destructive shrink-0" />}
+                    {andamento.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-warning font-medium">Em andamento ({andamento.length})</p>
+                        {andamento.map(renderItem)}
+                      </div>
+                    )}
+                    {quitados.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-[10px] uppercase tracking-wider text-success font-medium">Quitados ({quitados.length})</p>
+                        {quitados.map(renderItem)}
+                      </div>
+                    )}
                   </div>
-                );
-              })}
-            </div>
-          )}
+                )}
+              </div>
+            );
+          })()}
+
 
           {(!billing || billing.length === 0) && pendingBills.length === 0 && paidBills.length === 0 && (projectPayments || []).length === 0 && (
             <p className="text-sm text-muted-foreground text-center py-6">Nenhuma transação encontrada. Clique em "Sincronizar" para gerar cobranças dos clientes.</p>
