@@ -959,9 +959,9 @@ export default function AdminFinanceiro() {
 
             const filtered = allReceived.filter((it) => {
               const d = new Date(it.date);
-              if (receivedFilter === "month") return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+              if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
               if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
-              if (receivedFilter === "year") return d.getFullYear() === thisYear;
+              if (receivedFilter === "year") return d.getFullYear() === selYear;
               return true;
             });
             const filteredTotal = filtered.reduce((s, it) => s + it.amount, 0);
