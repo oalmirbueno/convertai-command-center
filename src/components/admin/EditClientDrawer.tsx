@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Eye, EyeOff, Copy } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -47,6 +47,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [planValue, setPlanValue] = useState("");
   const [planStatus, setPlanStatus] = useState("active");
   const [clientPassword, setClientPassword] = useState("");
+  const [showStoredPw, setShowStoredPw] = useState(false);
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -264,6 +265,12 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         });
         if (res.error) throw new Error(res.error.message || "Erro ao alterar senha");
         if (res.data?.error) throw new Error(res.data.error);
+        // Store plaintext so admin can view it later + clear any pending first-access
+        await supabase.from("profiles").update({
+          portal_password: clientPassword,
+          first_access_token: null,
+          first_access_used_at: new Date().toISOString(),
+        }).eq("id", client.id);
         toast.success("Senha do cliente alterada!");
       }
 
@@ -461,10 +468,35 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nova Senha</label>
-                  <input value={clientPassword} onChange={(e) => setClientPassword(e.target.value)} type="password" placeholder="Deixe vazio para manter atual"
-                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Senha de Acesso</label>
+                  {client.portal_password ? (
+                    <div className="flex items-center justify-between gap-2 bg-secondary border border-border rounded-[10px] px-3.5 py-2.5">
+                      <span className="text-sm font-mono text-foreground truncate">
+                        {showStoredPw ? client.portal_password : "••••••••••"}
+                      </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button type="button" onClick={() => setShowStoredPw(!showStoredPw)}
+                          className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
+                          {showStoredPw ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                        </button>
+                        <button type="button" onClick={() => { navigator.clipboard.writeText(client.portal_password); toast.success("Senha copiada!"); }}
+                          className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
+                          <Copy className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5">
+                      O cliente ainda não definiu a senha no primeiro acesso. Você pode definir uma abaixo.
+                    </p>
+                  )}
                 </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Definir / Alterar Senha</label>
+                  <input value={clientPassword} onChange={(e) => setClientPassword(e.target.value)} type="text" placeholder="Deixe vazio para manter atual"
+                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm font-mono text-foreground placeholder:text-muted-foreground/60 placeholder:font-sans focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+
               </>
             )}
 

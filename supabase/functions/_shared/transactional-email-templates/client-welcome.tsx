@@ -26,6 +26,7 @@ interface ClientWelcomeProps {
   email?: string
   password?: string
   company?: string
+  firstAccessUrl?: string
 }
 
 const ClientWelcomeEmail = ({
@@ -33,6 +34,7 @@ const ClientWelcomeEmail = ({
   email,
   password,
   company,
+  firstAccessUrl,
 }: ClientWelcomeProps) => {
   const firstName = name ? name.split(' ')[0] : 'seja muito bem-vindo'
   return (
@@ -62,26 +64,51 @@ const ClientWelcomeEmail = ({
               {company ? ` A partir de agora, ${company} acompanha entregas, projetos, aprovações e métricas em um só lugar.` : ' A partir de agora, você acompanha entregas, projetos, aprovações e métricas em um só lugar.'}
             </Text>
 
-            <Section style={credBox}>
-              <Text style={credLabel}>E-mail de acesso</Text>
-              <Text style={credValue}>{email ?? '—'}</Text>
+            {firstAccessUrl ? (
+              <>
+                <Section style={credBox}>
+                  <Text style={credLabel}>E-mail de acesso</Text>
+                  <Text style={credValue}>{email ?? '—'}</Text>
+                  <Hr style={credDivider} />
+                  <Text style={credLabel}>Primeiro acesso</Text>
+                  <Text style={firstAccessNote}>
+                    Clique no botão abaixo para criar a sua própria senha de acesso.
+                  </Text>
+                </Section>
 
-              <Hr style={credDivider} />
+                <Section style={ctaWrap}>
+                  <Button style={button} href={firstAccessUrl}>
+                    Criar minha senha
+                  </Button>
+                </Section>
 
-              <Text style={credLabel}>Senha temporária</Text>
-              <Text style={credPassword}>{password ?? '—'}</Text>
-            </Section>
+                <Text style={hint}>
+                  Você escolhe uma senha pessoal e já entra no portal. O link é de uso
+                  único — guarde sua senha em local seguro.
+                </Text>
+              </>
+            ) : (
+              <>
+                <Section style={credBox}>
+                  <Text style={credLabel}>E-mail de acesso</Text>
+                  <Text style={credValue}>{email ?? '—'}</Text>
+                  <Hr style={credDivider} />
+                  <Text style={credLabel}>Senha temporária</Text>
+                  <Text style={credPassword}>{password ?? '—'}</Text>
+                </Section>
 
-            <Section style={ctaWrap}>
-              <Button style={button} href={PORTAL_URL}>
-                Acessar o portal
-              </Button>
-            </Section>
+                <Section style={ctaWrap}>
+                  <Button style={button} href={PORTAL_URL}>
+                    Acessar o portal
+                  </Button>
+                </Section>
 
-            <Text style={hint}>
-              Por segurança, recomendamos alterar a senha no primeiro acesso em{' '}
-              <strong>Perfil → Segurança</strong>.
-            </Text>
+                <Text style={hint}>
+                  Por segurança, recomendamos alterar a senha no primeiro acesso em{' '}
+                  <strong>Perfil → Segurança</strong>.
+                </Text>
+              </>
+            )}
 
             <Hr style={sectionDivider} />
 
@@ -134,7 +161,7 @@ export const template = {
     name: 'André Weglandala',
     company: 'Stop Informática',
     email: 'andre@stopinformatica.com.br',
-    password: 'Acl-9k2P-q8XZ',
+    firstAccessUrl: 'https://aceleriq.online/primeiro-acesso?token=exemplo',
   },
 } satisfies TemplateEntry
 
@@ -206,6 +233,12 @@ const credValue = {
   wordBreak: 'break-all' as const,
 }
 const credDivider = { borderColor: '#262626', margin: '16px 0' }
+const firstAccessNote = {
+  fontSize: '14px',
+  color: '#cfcfcf',
+  margin: '0',
+  lineHeight: '1.5',
+}
 const credPassword = {
   fontFamily: 'JetBrains Mono, Courier, monospace',
   fontSize: '20px',

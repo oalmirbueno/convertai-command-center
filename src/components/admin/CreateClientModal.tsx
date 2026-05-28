@@ -1,17 +1,25 @@
 import { useState } from "react";
-import { X, Loader2, Copy, Eye, EyeOff } from "lucide-react";
+import { X, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 
-function generatePassword(len = 10) {
+function generatePassword(len = 16) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
   return Array.from(crypto.getRandomValues(new Uint8Array(len)))
     .map((b) => chars[b % chars.length])
     .join("");
 }
+
+function generateToken() {
+  return Array.from(crypto.getRandomValues(new Uint8Array(24)))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+const PORTAL_URL = "https://aceleriq.online";
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
@@ -35,8 +43,6 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
-  const [generatedPassword, setGeneratedPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
   if (!open) return null;
@@ -48,19 +54,12 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const reset = () => {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
     setServices({});
-    setGeneratedPassword("");
     setCreatedSuccess(false);
-    setShowPassword(false);
   };
 
   const handleClose = () => {
     reset();
     onClose();
-  };
-
-  const copyPassword = () => {
-    navigator.clipboard.writeText(generatedPassword);
-    toast.success("Senha copiada!");
   };
 
   const handleSave = async () => {
@@ -70,7 +69,9 @@ export default function CreateClientModal({ open, onClose }: Props) {
     }
     setSaving(true);
     try {
+      // Random unknown password — the client will set their own via first-access link.
       const password = generatePassword();
+      const firstAccessToken = generateToken();
 
       // Use edge function to create user server-side (avoids session swap)
       const { data: result, error: fnError } = await supabase.functions.invoke("manage-team", {
@@ -102,20 +103,23 @@ export default function CreateClientModal({ open, onClose }: Props) {
 
       const newUserId = result?.user_id;
 
-      // Update profile with extra fields
+      // Update profile with extra fields + first-access token
       if (newUserId) {
         await supabase.from("profiles").update({
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
+          first_access_token: firstAccessToken,
+          first_access_used_at: null,
+          portal_password: null,
         }).eq("id", newUserId);
       }
 
-      setGeneratedPassword(password);
       setCreatedSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
 
-      // Send welcome email with credentials (fire and forget)
+      // Send welcome email with first-access link (fire and forget)
+      const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
       supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "client-welcome",
@@ -125,7 +129,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
             name: fullName.trim(),
             company: company.trim(),
             email: email.trim(),
-            password,
+            firstAccessUrl,
           },
         },
       }).catch((e) => console.warn("welcome email failed", e));
@@ -173,35 +177,19 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 <p className="text-xs text-muted-foreground">{email}</p>
               </div>
 
-              <div className="bg-secondary border border-border rounded-xl p-4 space-y-3">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Credenciais de Acesso</p>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">Email</span>
-                    <span className="text-sm font-mono text-foreground">{email}</span>
-                  </div>
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-xs text-muted-foreground">Senha</span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-mono text-foreground">
-                        {showPassword ? generatedPassword : "••••••••••"}
-                      </span>
-                      <button onClick={() => setShowPassword(!showPassword)}
-                        className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
-                        {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                      </button>
-                      <button onClick={copyPassword}
-                        className="text-muted-foreground hover:text-foreground p-1 bg-transparent border-none cursor-pointer">
-                        <Copy className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
+              <div className="bg-secondary border border-border rounded-xl p-4 space-y-2">
+                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</p>
+                <p className="text-[13px] text-foreground leading-relaxed">
+                  Enviamos um e-mail de boas-vindas com um botão de <strong>primeiro acesso</strong>.
+                  O cliente clica, cria a própria senha e já entra no portal.
+                </p>
               </div>
 
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                Envie essas credenciais ao cliente. A senha pode ser alterada depois pelo admin ou pelo próprio cliente.
+                Assim que o cliente criar a senha, ela fica disponível no cadastro dele
+                (aba do cliente → <strong>Senha de Acesso</strong>), onde você pode visualizar ou alterar.
               </p>
+
             </div>
 
             <div className="px-6 py-4 border-t border-border flex justify-end">
