@@ -1,67 +1,49 @@
 project_id = "gicbrgagstyvbaaumprj"
 
-[functions.api-gateway]
-verify_jwt = false
-
-[functions.check-renewals]
-verify_jwt = false
-
-[functions.check-task-reminders]
-verify_jwt = false
-
-[functions.manage-team]
-verify_jwt = false
-
-[functions.process-meeting-notes]
-verify_jwt = false
-
-[functions.ops-webhook]
-verify_jwt = false
-
-[functions.ops-projects-list]
-verify_jwt = false
-
-[functions.ops-clients-list]
-verify_jwt = false
-
-[functions.submit-quiz]
-verify_jwt = false
-
-[functions.backfill-to-ops]
-verify_jwt = false
-
-[functions.describe-schema]
-verify_jwt = false
-
-[functions.backfill-clients-to-ops]
-verify_jwt = false
-
-[functions.sync-to-ops]
-verify_jwt = false
-
-[functions.ops-leads-list]
-verify_jwt = false
-
-[functions.notify-ops]
-verify_jwt = false
-
-[functions.portal-to-ops]
-verify_jwt = false
-
-[functions.backfill-tasks-to-ops]
-verify_jwt = false
-
-[functions.ops-full-export]
-verify_jwt = false
-
-[functions.ops-tasks-list]
-verify_jwt = false
-
-[functions.pull-ops-nodes]
-verify_jwt = false
-
-[functions.e2e-runner]
-verify_jwt = false
-
-[functions.process-email-queue]
-verify_jwt = true
+[functions]
+  [functions.api-gateway]
+    verify_jwt = false
+  [functions.auth-email-hook]
+    verify_jwt = false
+  [functions.backfill-clients-to-ops]
+    verify_jwt = false
+  [functions.backfill-tasks-to-ops]
+    verify_jwt = false
+  [functions.backfill-to-ops]
+    verify_jwt = false
+  [functions.check-renewals]
+    verify_jwt = false
+  [functions.check-task-reminders]
+    verify_jwt = false
+  [functions.describe-schema]
+    verify_jwt = false
+  [functions.e2e-runner]
+    verify_jwt = false
+  [functions.manage-team]
+    verify_jwt = false
+  [functions.notify-ops]
+    verify_jwt = false
+  [functions.ops-clients-list]
+    verify_jwt = false
+  [functions.ops-full-export]
+    verify_jwt = false
+  [functions.ops-leads-list]
+    verify_jwt = false
+  [functions.ops-projects-list]
+    verify_jwt = false
+  [functions.ops-tasks-list]
+    verify_jwt = false
+  [functions.ops-webhook]
+    verify_jwt = false
+  [functions.portal-to-ops]
+    verify_jwt = false
+  [functions.process-email-queue]
+    verify_jwt = true
+  [functions.process-meeting-notes]
+    verify_jwt = false
+  [functions.pull-ops-nodes]
+    verify_jwt = false
+  [functions.submit-quiz]
+    verify_jwt = false
+  [functions.sync-to-ops]
+    verify_jwt = false
