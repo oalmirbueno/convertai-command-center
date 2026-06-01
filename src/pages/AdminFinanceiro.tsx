@@ -223,8 +223,9 @@ export default function AdminFinanceiro() {
   const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
 
   const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "paid" && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
-      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+    sum + (pp.installments || [])
+      .filter((i: any) => (i.status === "paid" || i.status === "partial") && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.status === "partial" ? (i.paid_amount || 0) : i.amount), 0), 0);
 
   const indivPendingAll = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "pending")
