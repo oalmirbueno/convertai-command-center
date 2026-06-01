@@ -31,12 +31,10 @@ const parseAppDate = (value?: string | null) => {
   return new Date(value);
 };
 
-const toLocalDateKey = (date = new Date()) => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-};
+// Always returns YYYY-MM-DD in America/Sao_Paulo (GMT-3).
+import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
+const toLocalDateKey = (date?: Date) => (date ? _toBRDateKey(date) : _todayBR());
+
 
 const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
 
