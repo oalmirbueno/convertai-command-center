@@ -128,6 +128,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       } else if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
         setUser(session.user);
+        const isFreshSignIn = event === "SIGNED_IN";
         // Defer profile fetch to avoid Supabase SDK deadlock
         setTimeout(async () => {
           if (!mounted) return;
@@ -135,6 +136,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (mounted) {
             setProfile(p);
             setLoading(false);
+          }
+          // Notify admin on real sign-in (not token refresh / tab focus)
+          if (isFreshSignIn && p && p.role !== "admin") {
+            const key = `notified_login_${session.user.id}_${new Date().toDateString()}`;
+            if (!sessionStorage.getItem(key)) {
+              sessionStorage.setItem(key, "1");
+              const who = p.company_name || p.full_name || p.email;
+              const roleLabel = p.role === "client" ? "Cliente" : "Time";
+              notifyAdmin(`${roleLabel} acessou o portal: ${who}`, "system", "/clientes");
+            }
           }
         }, 100);
       }
