@@ -22,8 +22,29 @@ const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const parseAppDate = (value?: string | null) => {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 12);
+  }
+  return new Date(value);
+};
+
+const toLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
+
 const statusBadge = (status: string, dueDate?: string) => {
-  const isOverdue = dueDate && new Date(dueDate) < new Date() && status === "pending";
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const due = parseAppDate(dueDate);
+  const isOverdue = due && due < todayStart && status === "pending";
   if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">✅ Pago</span>;
   if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
   if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
@@ -104,6 +125,7 @@ export default function AdminFinanceiro() {
   const autoSyncDone = useRef(false);
 
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
 
@@ -154,15 +176,18 @@ export default function AdminFinanceiro() {
   // Computed totals — combine billing + client plan data for accurate stats
   // "month" period is driven by the selected month/year (month picker)
   const isThisMonth = (d: string) => {
-    if (!d) return false;
-    const date = new Date(d);
+    const date = parseAppDate(d);
+    if (!date) return false;
     return date.getMonth() === selMonth && date.getFullYear() === selYear;
   };
   const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
-  const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
+  const overdueBills = pendingBills.filter((b: any) => {
+    const due = parseAppDate(b.due_date);
+    return due ? due < todayStart : false;
+  });
 
   // "A Receber" — from billing pending + active clients with plan_value not yet in billing
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
@@ -200,7 +225,8 @@ export default function AdminFinanceiro() {
   const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
   const nextYear = thisMonth === 11 ? thisYear + 1 : thisYear;
   const isNextMonth = (d: string) => {
-    const date = new Date(d);
+    const date = parseAppDate(d);
+    if (!date) return false;
     return date.getMonth() === nextMonth && date.getFullYear() === nextYear;
   };
 
@@ -238,14 +264,18 @@ export default function AdminFinanceiro() {
   const indivPending = periodFilter === "month" ? indivPendingMonth : indivPendingAll;
 
   const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now && (periodFilter === "all" || isThisMonth(i.due_date)))
+    sum + (pp.installments || []).filter((i: any) => {
+      const due = parseAppDate(i.due_date);
+      return i.status === "pending" && !!due && due < todayStart && (periodFilter === "all" || isThisMonth(i.due_date));
+    })
       .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
 
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
-    await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
+    const today = toLocalDateKey();
+    await supabase.from("billing").update({ status: "paid", paid_date: today }).eq("id", id);
 
     // If it's a renewal, advance the renewal date by 1 month, clear overdue,
     // reactivate paused projects and AUTO-CREATE the next month's billing entry
@@ -254,7 +284,7 @@ export default function AdminFinanceiro() {
       if (client?.plan_renewal_date) {
         const currentDate = new Date(client.plan_renewal_date + "T00:00:00");
         currentDate.setMonth(currentDate.getMonth() + 1);
-        const newDate = currentDate.toISOString().split("T")[0];
+        const newDate = toLocalDateKey(currentDate);
         await supabase.from("profiles").update({
           plan_renewal_date: newDate,
           overdue_since: null,
@@ -423,7 +453,7 @@ export default function AdminFinanceiro() {
 
   const handlePayFromPanel = async () => {
     if (!payModal) return;
-    const today = new Date().toISOString().split("T")[0];
+    const today = toLocalDateKey();
     const paidAmount = payType === "full" ? payModal.amount : (parseFloat(payPartialAmount) || 0);
 
     if (payModal.type === "billing") {
