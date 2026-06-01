@@ -210,7 +210,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     setEditingInst(inst);
     setEditInstStatus(inst.status);
     setEditInstPaidAmount(String(inst.paid_amount || 0));
-    setEditInstPaidDate(inst.paid_date || new Date().toISOString().split("T")[0]);
+    setEditInstPaidDate(inst.paid_date || todayBR());
     setEditInstOpen(true);
   };
 
