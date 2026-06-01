@@ -942,13 +942,13 @@ export default function AdminFinanceiro() {
             const installmentItems = showIndivR
               ? filteredPayments.flatMap((pp: any) =>
                   (pp.installments || [])
-                    .filter((i: any) => i.status === "paid")
+                    .filter((i: any) => i.status === "paid" || i.status === "partial")
                     .map((i: any) => ({
                       id: `inst-${i.id}`,
-                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}`,
+                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
                       client: pp.client?.company_name || pp.client?.full_name || "—",
                       brand: getProjectBrand(pp.project?.project_type),
-                      amount: Number(i.paid_amount || i.amount),
+                      amount: Number(i.status === "partial" ? (i.paid_amount || 0) : (i.paid_amount || i.amount)),
                       date: i.paid_date || i.due_date,
                       icon: "💼",
                     }))
