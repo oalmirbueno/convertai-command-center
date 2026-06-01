@@ -184,7 +184,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: payment.id,
           installment_number: i,
           amount: perInstallment,
-          due_date: dueDate.toISOString().split("T")[0],
+          due_date: toBRDateKey(dueDate),
           status: "pending",
           description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
           paid_amount: 0,
