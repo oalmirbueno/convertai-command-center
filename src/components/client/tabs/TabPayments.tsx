@@ -126,6 +126,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       if (instError) throw instError;
 
       queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
       toast({ title: "Plano de pagamento criado!" });
       setCreateOpen(false);
