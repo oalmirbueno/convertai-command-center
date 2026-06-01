@@ -737,6 +737,7 @@ export default function AdminFinanceiro() {
                 const d = new Date(inst.paid_date || inst.due_date);
                 if (d.getMonth() === m && d.getFullYear() === currentYear) {
                   if (inst.status === "paid") received += Number(inst.amount);
+                  else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
                   else if (inst.status === "pending") pending += Number(inst.amount);
                 }
               });
