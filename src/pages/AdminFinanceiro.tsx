@@ -1010,11 +1010,12 @@ export default function AdminFinanceiro() {
               : [];
 
             const allReceived = [...billingItems, ...installmentItems].sort(
-              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+              (a, b) => (parseAppDate(b.date)?.getTime() || 0) - (parseAppDate(a.date)?.getTime() || 0)
             );
 
             const filtered = allReceived.filter((it) => {
-              const d = new Date(it.date);
+              const d = parseAppDate(it.date);
+              if (!d) return false;
               if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
               if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
               if (receivedFilter === "year") return d.getFullYear() === selYear;
@@ -1063,7 +1064,7 @@ export default function AdminFinanceiro() {
                           <p className="text-xs text-muted-foreground truncate">
                             {it.client}
                             <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
-                            {" • "}Pago em {it.date ? new Date(it.date).toLocaleDateString("pt-BR") : "—"}
+                            {" • "}Pago em {formatAppDate(it.date)}
                           </p>
                         </div>
                         <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
@@ -1081,7 +1082,10 @@ export default function AdminFinanceiro() {
             const enriched = filteredPayments.map((pp: any) => {
               const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+              const hasOverdue = (pp.installments || []).some((i: any) => {
+                const due = parseAppDate(i.due_date);
+                return i.status === "pending" && !!due && due < todayStart;
+              });
               const remaining = Number(pp.total_value) - paid;
               const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
               return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
