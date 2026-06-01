@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProjectPayments, usePaymentInstallments } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
+import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -101,7 +102,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: paymentData.id,
           installment_number: 0,
           amount: entryAmount,
-          due_date: new Date().toISOString().split("T")[0],
+          due_date: todayBR(),
           status: "pending",
           description: `Entrada (${entryPct}%)`,
           paid_amount: 0,
@@ -115,7 +116,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: paymentData.id,
           installment_number: i,
           amount: perInstallment,
-          due_date: dueDate.toISOString().split("T")[0],
+          due_date: toBRDateKey(dueDate),
           status: "pending",
           description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
           paid_amount: 0,
@@ -169,7 +170,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: payment.id,
           installment_number: 0,
           amount: entryAmount,
-          due_date: new Date().toISOString().split("T")[0],
+          due_date: todayBR(),
           status: "pending",
           description: `Entrada (${entryPct}%)`,
           paid_amount: 0,
@@ -183,7 +184,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: payment.id,
           installment_number: i,
           amount: perInstallment,
-          due_date: dueDate.toISOString().split("T")[0],
+          due_date: toBRDateKey(dueDate),
           status: "pending",
           description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}`,
           paid_amount: 0,
@@ -209,7 +210,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     setEditingInst(inst);
     setEditInstStatus(inst.status);
     setEditInstPaidAmount(String(inst.paid_amount || 0));
-    setEditInstPaidDate(inst.paid_date || new Date().toISOString().split("T")[0]);
+    setEditInstPaidDate(inst.paid_date || todayBR());
     setEditInstOpen(true);
   };
 
@@ -235,7 +236,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       };
 
       if (newStatus === "paid" || newStatus === "partial") {
-        updateData.paid_date = editInstPaidDate || new Date().toISOString().split("T")[0];
+        updateData.paid_date = editInstPaidDate || todayBR();
       } else {
         updateData.paid_date = null;
       }
