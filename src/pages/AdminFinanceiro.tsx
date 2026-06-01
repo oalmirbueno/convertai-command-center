@@ -398,7 +398,7 @@ export default function AdminFinanceiro() {
 
   const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
     const billingRecord = (billing || []).find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
-    const renewalDate = client.plan_renewal_date ? new Date(client.plan_renewal_date).toLocaleDateString("pt-BR") : "em breve";
+    const renewalDate = client.plan_renewal_date ? formatAppDate(client.plan_renewal_date) : "em breve";
 
     if (via === "whatsapp") {
       const phone = client.phone?.replace(/\D/g, "") || "";
@@ -439,7 +439,7 @@ export default function AdminFinanceiro() {
 
   const openWhatsAppReminder = (client: any, billingItem: any) => {
     const phone = client?.phone?.replace(/\D/g, "") || "";
-    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${new Date(billingItem.due_date).toLocaleDateString("pt-BR")}. Qualquer dúvida estamos à disposição! 😊`);
+    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição! 😊`);
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
@@ -718,7 +718,7 @@ export default function AdminFinanceiro() {
                           client_id: item.clientId,
                           type: "renewal",
                           amount: item.amount,
-                          due_date: item.due || new Date().toISOString().split("T")[0],
+                          due_date: item.due || toLocalDateKey(),
                           description: item.label,
                         }).select().single();
                         if (error || !newBill) { toast.error("Erro ao gerar cobrança"); return; }
