@@ -280,6 +280,23 @@ export default function AdminFinanceiro() {
     const today = toLocalDateKey();
     await supabase.from("billing").update({ status: "paid", paid_date: today }).eq("id", id);
 
+    // Registra no histórico de auditoria (caso o pagamento venha do botão direto, não do painel)
+    if (bill) {
+      await supabase.from("payment_audit_log").insert({
+        entity_type: "billing",
+        entity_id: id,
+        action: "paid_full",
+        old_status: bill.status || "pending",
+        new_status: "paid",
+        old_amount: Number(bill.amount),
+        new_amount: Number(bill.amount),
+        notes: bill.description || (bill.type === "renewal" ? "Renovação Mensal" : "Cobrança"),
+        performed_by: user?.id || null,
+      } as any);
+      queryClient.invalidateQueries({ queryKey: ["payment-audit-log"] });
+    }
+
+
     // If it's a renewal, advance the renewal date by 1 month, clear overdue,
     // reactivate paused projects and AUTO-CREATE the next month's billing entry
     if (bill?.client_id && bill?.type === "renewal") {
