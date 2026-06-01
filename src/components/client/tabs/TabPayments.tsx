@@ -102,7 +102,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
           payment_id: paymentData.id,
           installment_number: 0,
           amount: entryAmount,
-          due_date: new Date().toISOString().split("T")[0],
+          due_date: todayBR(),
           status: "pending",
           description: `Entrada (${entryPct}%)`,
           paid_amount: 0,
