@@ -33,8 +33,9 @@ const parseAppDate = (value?: string | null) => {
 };
 
 // Always returns YYYY-MM-DD in America/Sao_Paulo (GMT-3).
-import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 const toLocalDateKey = (date?: Date) => (date ? _toBRDateKey(date) : _todayBR());
+
+
 
 
 const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
