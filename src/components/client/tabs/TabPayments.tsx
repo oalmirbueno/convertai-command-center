@@ -236,7 +236,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       };
 
       if (newStatus === "paid" || newStatus === "partial") {
-        updateData.paid_date = editInstPaidDate || new Date().toISOString().split("T")[0];
+        updateData.paid_date = editInstPaidDate || todayBR();
       } else {
         updateData.paid_date = null;
       }
