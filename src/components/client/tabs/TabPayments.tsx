@@ -244,6 +244,9 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
         .eq("id", editingInst.id);
 
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
+      queryClient.invalidateQueries({ queryKey: ["project-payments"] });
+      queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+      queryClient.invalidateQueries({ queryKey: ["payment-audit-log"] });
       toast({ title: "Parcela atualizada!" });
       setEditInstOpen(false);
       setEditingInst(null);
