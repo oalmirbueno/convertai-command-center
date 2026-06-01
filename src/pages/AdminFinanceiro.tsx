@@ -664,14 +664,15 @@ export default function AdminFinanceiro() {
 
         const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+          const due = parseAppDate(b.due_date);
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
         }) : [];
 
         const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
           (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
             id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
             client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
-            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now, itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
+            brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
           }))
         ) : [];
 
@@ -681,11 +682,11 @@ export default function AdminFinanceiro() {
         ).map((c: any) => ({
           id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
-          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false, itemType: "extra" as const, clientId: c.id,
+          brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
         })) : [];
 
         const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
-          .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime());
+          .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
 
         if (allPending.length === 0) return null;
         return (
@@ -707,7 +708,7 @@ export default function AdminFinanceiro() {
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
                   <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
-                    {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
+                    {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
                   </span>
                   <button
                     onClick={async () => {
