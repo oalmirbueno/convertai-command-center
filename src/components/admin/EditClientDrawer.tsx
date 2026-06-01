@@ -319,11 +319,12 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         .insert({ project_id: projectId, client_id: client.id, total_value: total, entry_percentage: entryPct, entry_amount: entryAmount, installments_count: count, notes: payNotes.trim() || null, created_by: profile?.id })
         .select().single();
       if (paymentError) throw paymentError;
-      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: new Date().toISOString().split("T")[0], status: "pending", description: `Entrada (${entryPct}%)` }];
+      const rows: any[] = [{ payment_id: paymentData.id, installment_number: 0, amount: entryAmount, due_date: todayBR(), status: "pending", description: `Entrada (${entryPct}%)` }];
       for (let i = 1; i <= count; i++) {
         const d = new Date(); d.setMonth(d.getMonth() + i);
-        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: d.toISOString().split("T")[0], status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
+        rows.push({ payment_id: paymentData.id, installment_number: i, amount: perInstallment, due_date: toBRDateKey(d), status: "pending", description: count === 1 ? "Pagamento na entrega" : `Parcela ${i}/${count}` });
       }
+
       const { error: instErr } = await supabase.from("payment_installments").insert(rows);
       if (instErr) throw instErr;
       queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
