@@ -22,8 +22,29 @@ const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", c
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 const MONTHS_SHORT = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const parseAppDate = (value?: string | null) => {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 12);
+  }
+  return new Date(value);
+};
+
+const toLocalDateKey = (date = new Date()) => {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+};
+
+const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
+
 const statusBadge = (status: string, dueDate?: string) => {
-  const isOverdue = dueDate && new Date(dueDate) < new Date() && status === "pending";
+  const today = new Date();
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const due = parseAppDate(dueDate);
+  const isOverdue = due && due < todayStart && status === "pending";
   if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">✅ Pago</span>;
   if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
   if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
@@ -104,6 +125,7 @@ export default function AdminFinanceiro() {
   const autoSyncDone = useRef(false);
 
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
 
@@ -154,15 +176,18 @@ export default function AdminFinanceiro() {
   // Computed totals — combine billing + client plan data for accurate stats
   // "month" period is driven by the selected month/year (month picker)
   const isThisMonth = (d: string) => {
-    if (!d) return false;
-    const date = new Date(d);
+    const date = parseAppDate(d);
+    if (!date) return false;
     return date.getMonth() === selMonth && date.getFullYear() === selYear;
   };
   const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
   const paidBills = (billing || []).filter((b: any) => b.status === "paid");
-  const overdueBills = pendingBills.filter((b: any) => new Date(b.due_date) < now);
+  const overdueBills = pendingBills.filter((b: any) => {
+    const due = parseAppDate(b.due_date);
+    return due ? due < todayStart : false;
+  });
 
   // "A Receber" — from billing pending + active clients with plan_value not yet in billing
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
@@ -184,7 +209,10 @@ export default function AdminFinanceiro() {
     : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
 
   const overdueTotal = periodFilter === "month"
-    ? monthPendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0)
+    ? monthPendingBills.filter((b: any) => {
+      const due = parseAppDate(b.due_date);
+      return due ? due < todayStart : false;
+    }).reduce((s: number, b: any) => s + Number(b.amount), 0)
     : overdueBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const receivedTotal = periodFilter === "month"
@@ -200,7 +228,8 @@ export default function AdminFinanceiro() {
   const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
   const nextYear = thisMonth === 11 ? thisYear + 1 : thisYear;
   const isNextMonth = (d: string) => {
-    const date = new Date(d);
+    const date = parseAppDate(d);
+    if (!date) return false;
     return date.getMonth() === nextMonth && date.getFullYear() === nextYear;
   };
 
@@ -238,14 +267,18 @@ export default function AdminFinanceiro() {
   const indivPending = periodFilter === "month" ? indivPendingMonth : indivPendingAll;
 
   const indivOverdue = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "pending" && new Date(i.due_date) < now && (periodFilter === "all" || isThisMonth(i.due_date)))
+    sum + (pp.installments || []).filter((i: any) => {
+      const due = parseAppDate(i.due_date);
+      return i.status === "pending" && !!due && due < todayStart && (periodFilter === "all" || isThisMonth(i.due_date));
+    })
       .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
 
   const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
 
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
-    await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
+    const today = toLocalDateKey();
+    await supabase.from("billing").update({ status: "paid", paid_date: today }).eq("id", id);
 
     // If it's a renewal, advance the renewal date by 1 month, clear overdue,
     // reactivate paused projects and AUTO-CREATE the next month's billing entry
@@ -254,7 +287,7 @@ export default function AdminFinanceiro() {
       if (client?.plan_renewal_date) {
         const currentDate = new Date(client.plan_renewal_date + "T00:00:00");
         currentDate.setMonth(currentDate.getMonth() + 1);
-        const newDate = currentDate.toISOString().split("T")[0];
+        const newDate = toLocalDateKey(currentDate);
         await supabase.from("profiles").update({
           plan_renewal_date: newDate,
           overdue_since: null,
@@ -368,7 +401,7 @@ export default function AdminFinanceiro() {
 
   const handleSendReminder = async (client: any, via: "notification" | "whatsapp") => {
     const billingRecord = (billing || []).find((b: any) => b.client_id === client.id && b.type === "renewal" && b.status === "pending");
-    const renewalDate = client.plan_renewal_date ? new Date(client.plan_renewal_date).toLocaleDateString("pt-BR") : "em breve";
+    const renewalDate = client.plan_renewal_date ? formatAppDate(client.plan_renewal_date) : "em breve";
 
     if (via === "whatsapp") {
       const phone = client.phone?.replace(/\D/g, "") || "";
@@ -409,7 +442,7 @@ export default function AdminFinanceiro() {
 
   const openWhatsAppReminder = (client: any, billingItem: any) => {
     const phone = client?.phone?.replace(/\D/g, "") || "";
-    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${new Date(billingItem.due_date).toLocaleDateString("pt-BR")}. Qualquer dúvida estamos à disposição! 😊`);
+    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição! 😊`);
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
@@ -423,7 +456,7 @@ export default function AdminFinanceiro() {
 
   const handlePayFromPanel = async () => {
     if (!payModal) return;
-    const today = new Date().toISOString().split("T")[0];
+    const today = toLocalDateKey();
     const paidAmount = payType === "full" ? payModal.amount : (parseFloat(payPartialAmount) || 0);
 
     if (payModal.type === "billing") {
@@ -634,14 +667,15 @@ export default function AdminFinanceiro() {
 
         const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: new Date(b.due_date) < now, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+          const due = parseAppDate(b.due_date);
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
         }) : [];
 
         const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
           (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
             id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
             client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
-            brand: getProjectBrand(pp.project?.project_type), isOverdue: new Date(i.due_date) < now, itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
+            brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
           }))
         ) : [];
 
@@ -651,11 +685,11 @@ export default function AdminFinanceiro() {
         ).map((c: any) => ({
           id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
-          brand: "AcelerIQ", isOverdue: c.plan_renewal_date ? new Date(c.plan_renewal_date) < now : false, itemType: "extra" as const, clientId: c.id,
+          brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
         })) : [];
 
         const allPending = [...monthlyPendingItems, ...indivPendingItems, ...extraItems]
-          .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime());
+          .sort((a, b) => (parseAppDate(a.due)?.getTime() || 0) - (parseAppDate(b.due)?.getTime() || 0));
 
         if (allPending.length === 0) return null;
         return (
@@ -677,7 +711,7 @@ export default function AdminFinanceiro() {
                   <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
                   <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
-                    {item.isOverdue ? "Atrasado" : item.due ? new Date(item.due).toLocaleDateString("pt-BR") : "—"}
+                    {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
                   </span>
                   <button
                     onClick={async () => {
@@ -688,7 +722,7 @@ export default function AdminFinanceiro() {
                           client_id: item.clientId,
                           type: "renewal",
                           amount: item.amount,
-                          due_date: item.due || new Date().toISOString().split("T")[0],
+                          due_date: item.due || toLocalDateKey(),
                           description: item.label,
                         }).select().single();
                         if (error || !newBill) { toast.error("Erro ao gerar cobrança"); return; }
@@ -745,19 +779,19 @@ export default function AdminFinanceiro() {
           if (showMonthlyChart) {
             received += (billing || [])
               .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
-              .filter((b: any) => { const d = new Date(b.paid_date || b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + Number(b.amount), 0);
             pending += (billing || [])
               .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
-              .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + Number(b.amount), 0);
           }
 
           if (showIndivChart) {
             filteredPayments.forEach((pp: any) => {
               (pp.installments || []).forEach((inst: any) => {
-                const d = new Date(inst.paid_date || inst.due_date);
-                if (d.getMonth() === m && d.getFullYear() === currentYear) {
+                const d = parseAppDate(inst.paid_date || inst.due_date);
+                if (d && d.getMonth() === m && d.getFullYear() === currentYear) {
                   if (inst.status === "paid") received += Number(inst.amount);
                   else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
                   else if (inst.status === "pending") pending += Number(inst.amount);
@@ -914,13 +948,14 @@ export default function AdminFinanceiro() {
                 <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingTotal)}</span>
               </div>
               {pendingBills.map((b: any) => {
-                const isOverdue = new Date(b.due_date) < now;
+                const due = parseAppDate(b.due_date);
+                const isOverdue = due ? due < todayStart : false;
                 return (
                   <div key={b.id} className={`bg-card border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap ${isOverdue ? "border-destructive/30" : "border-border"}`}>
                     <span className="text-lg">{typeIcon(b.type)}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {new Date(b.due_date).toLocaleDateString("pt-BR")}</p>
+                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {formatAppDate(b.due_date)}</p>
                     </div>
                     <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
                     {statusBadge(b.status, b.due_date)}
@@ -978,11 +1013,12 @@ export default function AdminFinanceiro() {
               : [];
 
             const allReceived = [...billingItems, ...installmentItems].sort(
-              (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+              (a, b) => (parseAppDate(b.date)?.getTime() || 0) - (parseAppDate(a.date)?.getTime() || 0)
             );
 
             const filtered = allReceived.filter((it) => {
-              const d = new Date(it.date);
+              const d = parseAppDate(it.date);
+              if (!d) return false;
               if (receivedFilter === "month") return d.getMonth() === selMonth && d.getFullYear() === selYear;
               if (receivedFilter === "last3") { const lim = new Date(); lim.setMonth(lim.getMonth() - 3); return d >= lim; }
               if (receivedFilter === "year") return d.getFullYear() === selYear;
@@ -1031,7 +1067,7 @@ export default function AdminFinanceiro() {
                           <p className="text-xs text-muted-foreground truncate">
                             {it.client}
                             <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
-                            {" • "}Pago em {it.date ? new Date(it.date).toLocaleDateString("pt-BR") : "—"}
+                            {" • "}Pago em {formatAppDate(it.date)}
                           </p>
                         </div>
                         <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
@@ -1049,7 +1085,10 @@ export default function AdminFinanceiro() {
             const enriched = filteredPayments.map((pp: any) => {
               const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
-              const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
+              const hasOverdue = (pp.installments || []).some((i: any) => {
+                const due = parseAppDate(i.due_date);
+                return i.status === "pending" && !!due && due < todayStart;
+              });
               const remaining = Number(pp.total_value) - paid;
               const group = remaining <= 0.01 ? "quitado" : hasOverdue ? "atrasado" : "andamento";
               return { ...pp, _paid: paid, _pct: pct, _remaining: remaining, _hasOverdue: hasOverdue, _group: group };
@@ -1274,8 +1313,9 @@ export default function AdminFinanceiro() {
                     { label: "Planos distintos", value: String(planNames.length), color: "text-primary" },
                     { label: "MRR Esperado", value: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), color: "text-success" },
                     { label: "Renovações ≤15 dias", value: String(mensalistas.filter((c: any) => {
-                      if (!c.plan_renewal_date) return false;
-                      const d = Math.ceil((new Date(c.plan_renewal_date).getTime() - now.getTime()) / 86400000);
+                      const renewal = parseAppDate(c.plan_renewal_date);
+                      if (!renewal) return false;
+                      const d = Math.ceil((renewal.getTime() - todayStart.getTime()) / 86400000);
                       return d >= 0 && d <= 15;
                     }).length), color: "text-warning" },
                   ].map((s) => (
@@ -1297,8 +1337,8 @@ export default function AdminFinanceiro() {
                         <span className="text-[10px] font-mono text-success ml-auto">{fmt(planMRR)}/mês</span>
                       </div>
                       {planClients.map((c: any) => {
-                        const renewalDate = c.plan_renewal_date ? new Date(c.plan_renewal_date) : null;
-                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000) : null;
+                        const renewalDate = parseAppDate(c.plan_renewal_date);
+                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
                         const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
                         const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
                         const reminderCount = clientBilling?.reminder_count || 0;
@@ -1313,7 +1353,7 @@ export default function AdminFinanceiro() {
                             </div>
                             <p className="text-xs text-muted-foreground">
                               {fmt(Number(c.plan_value))}/mês
-                              {renewalDate && <> • Renova {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
+                              {renewalDate && <> • Renova {formatAppDate(c.plan_renewal_date)}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
                             </p>
                             <div className="flex gap-2 pt-1 flex-wrap">
                               <button onClick={() => handleSendReminder(c, "notification")}
