@@ -223,8 +223,9 @@ export default function AdminFinanceiro() {
   const filteredPayments = (projectPayments || []).filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter));
 
   const indivPaid = filteredPayments.reduce((sum: number, pp: any) =>
-    sum + (pp.installments || []).filter((i: any) => i.status === "paid" && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
-      .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+    sum + (pp.installments || [])
+      .filter((i: any) => (i.status === "paid" || i.status === "partial") && (periodFilter === "all" || isThisMonth(i.paid_date || i.due_date)))
+      .reduce((s: number, i: any) => s + Number(i.status === "partial" ? (i.paid_amount || 0) : i.amount), 0), 0);
 
   const indivPendingAll = filteredPayments.reduce((sum: number, pp: any) =>
     sum + (pp.installments || []).filter((i: any) => i.status === "pending")
@@ -736,6 +737,7 @@ export default function AdminFinanceiro() {
                 const d = new Date(inst.paid_date || inst.due_date);
                 if (d.getMonth() === m && d.getFullYear() === currentYear) {
                   if (inst.status === "paid") received += Number(inst.amount);
+                  else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
                   else if (inst.status === "pending") pending += Number(inst.amount);
                 }
               });
@@ -940,13 +942,13 @@ export default function AdminFinanceiro() {
             const installmentItems = showIndivR
               ? filteredPayments.flatMap((pp: any) =>
                   (pp.installments || [])
-                    .filter((i: any) => i.status === "paid")
+                    .filter((i: any) => i.status === "paid" || i.status === "partial")
                     .map((i: any) => ({
                       id: `inst-${i.id}`,
-                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}`,
+                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
                       client: pp.client?.company_name || pp.client?.full_name || "—",
                       brand: getProjectBrand(pp.project?.project_type),
-                      amount: Number(i.paid_amount || i.amount),
+                      amount: Number(i.status === "partial" ? (i.paid_amount || 0) : (i.paid_amount || i.amount)),
                       date: i.paid_date || i.due_date,
                       icon: "💼",
                     }))
