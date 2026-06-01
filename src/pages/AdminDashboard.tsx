@@ -43,6 +43,15 @@ const STATUS_OPTIONS = [
   { value: "done", label: "Concluído" },
 ];
 
+const parseAppDate = (value?: string | null) => {
+  if (!value) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    const [year, month, day] = value.split("-").map(Number);
+    return new Date(year, month - 1, day, 12);
+  }
+  return new Date(value);
+};
+
 export default function AdminDashboard() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
@@ -78,6 +87,7 @@ export default function AdminDashboard() {
 
   const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
   const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
 
@@ -115,9 +125,15 @@ export default function AdminDashboard() {
   const paidBills = (billing || []).filter((b: any) => b.status === "paid" && b.type !== "ads_recharge");
   const pendingTotal = pendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
   const receivedTotal = paidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
-  const overdueTotal = pendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const overdueTotal = pendingBills.filter((b: any) => {
+    const due = parseAppDate(b.due_date);
+    return due ? due < todayStart : false;
+  }).reduce((s: number, b: any) => s + Number(b.amount), 0);
   const monthlyRevenue = paidBills
-    .filter((b: any) => new Date(b.paid_date || b.due_date).getMonth() === thisMonth && new Date(b.paid_date || b.due_date).getFullYear() === thisYear)
+    .filter((b: any) => {
+      const paid = parseAppDate(b.paid_date || b.due_date);
+      return !!paid && paid.getMonth() === thisMonth && paid.getFullYear() === thisYear;
+    })
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
@@ -125,20 +141,20 @@ export default function AdminDashboard() {
   const individualPaidThisMonth = (projectPayments || []).reduce((sum: number, pp: any) => {
     const paidThisMonth = (pp.installments || []).filter((i: any) => {
       if (i.status !== "paid" || !i.paid_date) return false;
-      const d = new Date(i.paid_date);
-      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+      const d = parseAppDate(i.paid_date);
+      return !!d && d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     });
     return sum + paidThisMonth.reduce((s: number, i: any) => s + Number(i.amount), 0);
   }, 0);
 
   const pendingBillsThisMonth = pendingBills
-    .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
+    .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === thisMonth && d.getFullYear() === thisYear; })
     .reduce((s: number, b: any) => s + Number(b.amount), 0);
   const individualPendingThisMonth = (projectPayments || []).reduce((sum: number, pp: any) => {
     const pending = (pp.installments || []).filter((i: any) => {
       if (i.status !== "pending") return false;
-      const d = new Date(i.due_date);
-      return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
+      const d = parseAppDate(i.due_date);
+      return !!d && d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     });
     return sum + pending.reduce((s: number, i: any) => s + Number(i.amount), 0);
   }, 0);
