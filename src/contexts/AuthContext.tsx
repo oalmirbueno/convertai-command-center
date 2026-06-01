@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsProfile } from "@/lib/opsSync";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import type { User } from "@supabase/supabase-js";
 
 export type AppRole = "admin" | "client" | "design" | "traffic" | "manager";
