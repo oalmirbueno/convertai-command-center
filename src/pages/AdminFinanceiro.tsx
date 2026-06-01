@@ -776,19 +776,19 @@ export default function AdminFinanceiro() {
           if (showMonthlyChart) {
             received += (billing || [])
               .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
-              .filter((b: any) => { const d = new Date(b.paid_date || b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + Number(b.amount), 0);
             pending += (billing || [])
               .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
-              .filter((b: any) => { const d = new Date(b.due_date); return d.getMonth() === m && d.getFullYear() === currentYear; })
+              .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + Number(b.amount), 0);
           }
 
           if (showIndivChart) {
             filteredPayments.forEach((pp: any) => {
               (pp.installments || []).forEach((inst: any) => {
-                const d = new Date(inst.paid_date || inst.due_date);
-                if (d.getMonth() === m && d.getFullYear() === currentYear) {
+                const d = parseAppDate(inst.paid_date || inst.due_date);
+                if (d && d.getMonth() === m && d.getFullYear() === currentYear) {
                   if (inst.status === "paid") received += Number(inst.amount);
                   else if (inst.status === "partial") received += Number(inst.paid_amount || 0);
                   else if (inst.status === "pending") pending += Number(inst.amount);
@@ -945,13 +945,14 @@ export default function AdminFinanceiro() {
                 <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingTotal)}</span>
               </div>
               {pendingBills.map((b: any) => {
-                const isOverdue = new Date(b.due_date) < now;
+                const due = parseAppDate(b.due_date);
+                const isOverdue = due ? due < todayStart : false;
                 return (
                   <div key={b.id} className={`bg-card border rounded-xl px-4 sm:px-5 py-3 sm:py-4 flex items-center gap-3 sm:gap-4 flex-wrap ${isOverdue ? "border-destructive/30" : "border-border"}`}>
                     <span className="text-lg">{typeIcon(b.type)}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-foreground">{b.description || (b.type === "renewal" ? "Renovação Mensal" : b.type === "ads_recharge" ? "Recarga Ads" : "Serviço Extra")}</p>
-                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {new Date(b.due_date).toLocaleDateString("pt-BR")}</p>
+                      <p className="text-xs text-muted-foreground">{b.client?.company_name || b.client?.full_name} • Vence {formatAppDate(b.due_date)}</p>
                     </div>
                     <p className="text-sm font-mono font-medium text-foreground">{fmt(Number(b.amount))}</p>
                     {statusBadge(b.status, b.due_date)}
