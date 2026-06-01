@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProjectPayments, usePaymentInstallments } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
+import { todayBR, toBRDateKey } from "@/lib/dateBR";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
