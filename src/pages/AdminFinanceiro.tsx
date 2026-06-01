@@ -209,7 +209,10 @@ export default function AdminFinanceiro() {
     : pendingBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0) + extraPending;
 
   const overdueTotal = periodFilter === "month"
-    ? monthPendingBills.filter((b: any) => new Date(b.due_date) < now).reduce((s: number, b: any) => s + Number(b.amount), 0)
+    ? monthPendingBills.filter((b: any) => {
+      const due = parseAppDate(b.due_date);
+      return due ? due < todayStart : false;
+    }).reduce((s: number, b: any) => s + Number(b.amount), 0)
     : overdueBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
 
   const receivedTotal = periodFilter === "month"
@@ -1310,8 +1313,9 @@ export default function AdminFinanceiro() {
                     { label: "Planos distintos", value: String(planNames.length), color: "text-primary" },
                     { label: "MRR Esperado", value: fmt(mensalistas.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0)), color: "text-success" },
                     { label: "Renovações ≤15 dias", value: String(mensalistas.filter((c: any) => {
-                      if (!c.plan_renewal_date) return false;
-                      const d = Math.ceil((new Date(c.plan_renewal_date).getTime() - now.getTime()) / 86400000);
+                      const renewal = parseAppDate(c.plan_renewal_date);
+                      if (!renewal) return false;
+                      const d = Math.ceil((renewal.getTime() - todayStart.getTime()) / 86400000);
                       return d >= 0 && d <= 15;
                     }).length), color: "text-warning" },
                   ].map((s) => (
@@ -1333,8 +1337,8 @@ export default function AdminFinanceiro() {
                         <span className="text-[10px] font-mono text-success ml-auto">{fmt(planMRR)}/mês</span>
                       </div>
                       {planClients.map((c: any) => {
-                        const renewalDate = c.plan_renewal_date ? new Date(c.plan_renewal_date) : null;
-                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - now.getTime()) / 86400000) : null;
+                        const renewalDate = parseAppDate(c.plan_renewal_date);
+                        const daysLeft = renewalDate ? Math.ceil((renewalDate.getTime() - todayStart.getTime()) / 86400000) : null;
                         const planStatus = !renewalDate || daysLeft === null ? "unknown" : daysLeft < 0 ? "overdue" : daysLeft <= 15 ? "soon" : "active";
                         const clientBilling = (billing || []).find((b: any) => b.client_id === c.id && b.type === "renewal");
                         const reminderCount = clientBilling?.reminder_count || 0;
@@ -1349,7 +1353,7 @@ export default function AdminFinanceiro() {
                             </div>
                             <p className="text-xs text-muted-foreground">
                               {fmt(Number(c.plan_value))}/mês
-                              {renewalDate && <> • Renova {renewalDate.toLocaleDateString("pt-BR")}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
+                              {renewalDate && <> • Renova {formatAppDate(c.plan_renewal_date)}{daysLeft !== null && daysLeft >= 0 && ` (${daysLeft} dias)`}</>}
                             </p>
                             <div className="flex gap-2 pt-1 flex-wrap">
                               <button onClick={() => handleSendReminder(c, "notification")}
