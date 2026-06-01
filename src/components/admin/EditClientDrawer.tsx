@@ -9,6 +9,8 @@ import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
+import { todayBR, toBRDateKey } from "@/lib/dateBR";
+
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
