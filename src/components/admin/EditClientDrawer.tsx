@@ -338,7 +338,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const handleMarkInstallmentPaid = async (installmentId: string) => {
     setPaySubmitting(true);
     try {
-      await supabase.from("payment_installments").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", installmentId);
+      await supabase.from("payment_installments").update({ status: "paid", paid_date: todayBR() }).eq("id", installmentId);
       queryClient.invalidateQueries({ queryKey: ["client-nonrecurring-projects"] });
       toast.success("Pagamento registrado!");
     } catch { toast.error("Erro ao registrar pagamento"); }
