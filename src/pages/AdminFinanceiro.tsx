@@ -247,7 +247,8 @@ export default function AdminFinanceiro() {
     const bill = (billing || []).find((b: any) => b.id === id);
     await supabase.from("billing").update({ status: "paid", paid_date: new Date().toISOString().split("T")[0] }).eq("id", id);
 
-    // If it's a renewal, advance the renewal date by 1 month and clear overdue
+    // If it's a renewal, advance the renewal date by 1 month, clear overdue,
+    // reactivate paused projects and AUTO-CREATE the next month's billing entry
     if (bill?.client_id && bill?.type === "renewal") {
       const client = (clients || []).find((c: any) => c.id === bill.client_id);
       if (client?.plan_renewal_date) {
@@ -272,7 +273,24 @@ export default function AdminFinanceiro() {
           }
         }
 
-        queryClient.invalidateQueries({ queryKey: ["clients"] });
+        // Create next month's renewal billing entry (if not already existing)
+        const { data: existingNext } = await supabase
+          .from("billing")
+          .select("id")
+          .eq("client_id", bill.client_id)
+          .eq("type", "renewal")
+          .eq("status", "pending")
+          .eq("due_date", newDate)
+          .maybeSingle();
+        if (!existingNext) {
+          await supabase.from("billing").insert({
+            client_id: bill.client_id,
+            type: "renewal",
+            amount: Number(client.plan_value || bill.amount),
+            due_date: newDate,
+            description: client.plan_name ? `Renovação — ${client.plan_name}` : "Renovação Mensal",
+          });
+        }
       }
     }
 
@@ -280,8 +298,12 @@ export default function AdminFinanceiro() {
     if (bill?.client_id) {
       await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado ✅`, "billing", "/financeiro");
     }
-    queryClient.invalidateQueries({ queryKey: ["billing"] });
-    toast.success("Pagamento registrado!");
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["billing"] }),
+      queryClient.invalidateQueries({ queryKey: ["clients"] }),
+      queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] }),
+    ]);
+    toast.success("Pagamento registrado! Próxima renovação gerada automaticamente.");
   };
 
   const handleCreateBilling = async () => {
