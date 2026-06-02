@@ -15,6 +15,12 @@ import { todayBR, toBRDateKey } from "@/lib/dateBR";
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
   { key: "social", label: "Social Media" },
+  { key: "videos_ia", label: "Vídeos com IA" },
+  { key: "edicao_video", label: "Edição de Vídeo" },
+  { key: "design", label: "Design / Branding" },
+  { key: "copywriting", label: "Copywriting" },
+  { key: "seo", label: "SEO" },
+  { key: "email_marketing", label: "E-mail Marketing" },
   { key: "automacao", label: "Automação" },
   { key: "site", label: "Site / Landing Page" },
   { key: "relatorios", label: "Relatórios" },
