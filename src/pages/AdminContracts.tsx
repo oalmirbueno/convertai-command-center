@@ -202,6 +202,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         clients={clients}
+        lockedClientId={lockedClientId}
         onCreated={() => qc.invalidateQueries({ queryKey: ["contracts"] })}
       />
 
