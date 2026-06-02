@@ -315,6 +315,75 @@ export type Database = {
         }
         Relationships: []
       }
+      contracts: {
+        Row: {
+          admin_signature_ip: string | null
+          admin_signature_name: string | null
+          admin_signed_at: string | null
+          client_id: string
+          client_signature_ip: string | null
+          client_signature_name: string | null
+          client_signed_at: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          file_id: string | null
+          id: string
+          original_file_name: string
+          original_file_url: string
+          project_id: string | null
+          sent_at: string | null
+          sign_token: string
+          status: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          admin_signature_ip?: string | null
+          admin_signature_name?: string | null
+          admin_signed_at?: string | null
+          client_id: string
+          client_signature_ip?: string | null
+          client_signature_name?: string | null
+          client_signed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          file_id?: string | null
+          id?: string
+          original_file_name: string
+          original_file_url: string
+          project_id?: string | null
+          sent_at?: string | null
+          sign_token?: string
+          status?: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          admin_signature_ip?: string | null
+          admin_signature_name?: string | null
+          admin_signed_at?: string | null
+          client_id?: string
+          client_signature_ip?: string | null
+          client_signature_name?: string | null
+          client_signed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          file_id?: string | null
+          id?: string
+          original_file_name?: string
+          original_file_url?: string
+          project_id?: string | null
+          sent_at?: string | null
+          sign_token?: string
+          status?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       email_send_log: {
         Row: {
           created_at: string

@@ -14,7 +14,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
-  Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound,
+  Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -42,6 +42,7 @@ const adminMoreNav: NavItem[] = [
   { title: "Timeline", url: "/timeline", icon: GitBranch },
   { title: "Financeiro", url: "/financeiro", icon: DollarSign },
   { title: "Arquivos", url: "/arquivos", icon: FileArchive },
+  { title: "Contratos", url: "/contratos", icon: FileSignature },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Config", url: "/config", icon: Settings },
   { title: "API", url: "/api-docs", icon: Zap },

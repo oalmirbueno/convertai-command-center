@@ -39,6 +39,8 @@ import AdminBackfillPage from "@/pages/AdminBackfillPage";
 import ClientVaultPage from "@/pages/ClientVaultPage";
 import UnsubscribePage from "@/pages/UnsubscribePage";
 import FirstAccess from "@/pages/FirstAccess";
+import AdminContracts from "@/pages/AdminContracts";
+import ContractPublic from "@/pages/ContractPublic";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -68,6 +70,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
+      <Route path="/contrato/:token" element={<ContractPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
@@ -95,6 +98,7 @@ function AppRoutes() {
       <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
       <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/contratos" element={<ProtectedRoute><AppLayout><AdminContracts /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
