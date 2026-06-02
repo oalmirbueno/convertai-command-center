@@ -236,11 +236,10 @@ export default function AdminContracts() {
 
       <ConfirmModal
         open={!!confirmDelete}
-        onOpenChange={(o) => !o && setConfirmDelete(null)}
+        onCancel={() => setConfirmDelete(null)}
         title="Excluir contrato?"
         description="Esta ação não pode ser desfeita."
         confirmLabel="Excluir"
-        variant="destructive"
         onConfirm={handleDelete}
       />
     </div>
