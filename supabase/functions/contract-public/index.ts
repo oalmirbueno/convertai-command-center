@@ -88,7 +88,7 @@ Deno.serve(async (req) => {
           file_name: contract.original_file_name,
           file_url: contract.original_file_url,
           file_type: "application/pdf",
-          folder: "Contratos",
+          folder: "contratos",
           description: `Contrato assinado por ${signature_name} em ${new Date(now).toLocaleString("pt-BR")}`,
           approval_status: "approved",
         })
