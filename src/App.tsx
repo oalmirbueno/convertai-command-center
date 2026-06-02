@@ -70,6 +70,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
+      <Route path="/contrato/:token" element={<ContractPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
