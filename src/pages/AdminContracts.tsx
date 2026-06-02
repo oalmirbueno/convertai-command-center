@@ -246,18 +246,18 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   );
 }
 
-function UploadContractDialog({ open, onOpenChange, clients, onCreated }: any) {
+function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedClientId }: any) {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(lockedClientId || "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const reset = () => {
-    setTitle(""); setDescription(""); setClientId(""); setFile(null);
+    setTitle(""); setDescription(""); setClientId(lockedClientId || ""); setFile(null);
   };
 
   const handleSubmit = async () => {
