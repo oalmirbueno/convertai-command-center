@@ -390,94 +390,102 @@ export default function AdminFiles() {
         ))}
       </div>
 
-      {/* Upload button */}
-      <div className="flex justify-end">
-        <Button
-          onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true); }}
-          className="rounded-xl gap-2"
-          disabled={selectedClient === "all"}
-        >
-          <Upload className="w-4 h-4" />
-          Upload
-        </Button>
-      </div>
-
-      {/* File list */}
-      {loadingFiles || loadingClients ? (
-        <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
-      ) : filteredFiles.length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
-          <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
-          Nenhum arquivo nesta pasta
+      {activeFolder === "contratos" ? (
+        <div className="-mx-4 md:-mx-6">
+          <AdminContracts />
         </div>
       ) : (
-        <div className="space-y-2 stagger-children">
-          {filteredFiles.map((f: any) => {
-            const Icon = fileIcon(f.file_name);
-            const badge = approvalBadge[f.approval_status] || approvalBadge.none;
-            const carouselChildren = childrenMap.get(f.id) || [];
-            const isCarousel = carouselChildren.length > 0;
-            return (
-              <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
-                onClick={() => setPreviewFile(f)}>
-                <div className="flex items-center gap-3">
-                  <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13px] font-medium text-foreground truncate">
-                        {f.file_name}
-                        {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
-                      </p>
-                      {isCarousel && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
-                          🎠 {carouselChildren.length + 1}
-                        </span>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">
-                      {f.project?.name || "—"} • {formatDate(f.created_at)}
-                    </p>
-                  </div>
-                  <div className="hidden md:flex items-center gap-2">
-                    <Avatar className="w-5 h-5">
-                      <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
-                        {f.uploader?.full_name?.charAt(0) || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
-                  </div>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
-                        <FolderInput className="w-4 h-4" />
+        <>
+          {/* Upload button */}
+          <div className="flex justify-end">
+            <Button
+              onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true); }}
+              className="rounded-xl gap-2"
+              disabled={selectedClient === "all"}
+            >
+              <Upload className="w-4 h-4" />
+              Upload
+            </Button>
+          </div>
+
+          {/* File list */}
+          {loadingFiles || loadingClients ? (
+            <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+          ) : filteredFiles.length === 0 ? (
+            <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
+              <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
+              Nenhum arquivo nesta pasta
+            </div>
+          ) : (
+            <div className="space-y-2 stagger-children">
+              {filteredFiles.map((f: any) => {
+                const Icon = fileIcon(f.file_name);
+                const badge = approvalBadge[f.approval_status] || approvalBadge.none;
+                const carouselChildren = childrenMap.get(f.id) || [];
+                const isCarousel = carouselChildren.length > 0;
+                return (
+                  <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                    onClick={() => setPreviewFile(f)}>
+                    <div className="flex items-center gap-3">
+                      <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[13px] font-medium text-foreground truncate">
+                            {f.file_name}
+                            {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
+                          </p>
+                          {isCarousel && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
+                              🎠 {carouselChildren.length + 1}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          {f.project?.name || "—"} • {formatDate(f.created_at)}
+                        </p>
+                      </div>
+                      <div className="hidden md:flex items-center gap-2">
+                        <Avatar className="w-5 h-5">
+                          <AvatarFallback className="text-[8px] bg-secondary text-secondary-foreground">
+                            {f.uploader?.full_name?.charAt(0) || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
+                      </div>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
+                            <FolderInput className="w-4 h-4" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {FOLDERS.filter(fo => fo.id !== (f.folder || "estrategicos")).map(fo => (
+                            <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); handleMoveFolder(f.id, fo.id); }}>
+                              {fo.label}
+                            </DropdownMenuItem>
+                          ))}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                      <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                        className="text-muted-foreground hover:text-foreground transition-colors"
+                        onClick={(e) => e.stopPropagation()}>
+                        <Download className="w-4 h-4" />
+                      </a>
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url }); }}
+                        className="text-muted-foreground hover:text-destructive transition-colors">
+                        <Trash2 className="w-4 h-4" />
                       </button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {FOLDERS.filter(fo => fo.id !== (f.folder || "estrategicos")).map(fo => (
-                        <DropdownMenuItem key={fo.id} onClick={(e) => { e.stopPropagation(); handleMoveFolder(f.id, fo.id); }}>
-                          {fo.label}
-                        </DropdownMenuItem>
-                      ))}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer"
-                    className="text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
-                    <Download className="w-4 h-4" />
-                  </a>
-                  <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url }); }}
-                    className="text-muted-foreground hover:text-destructive transition-colors">
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </div>
-                <div className="sm:hidden mt-2 ml-8">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+                    </div>
+                    <div className="sm:hidden mt-2 ml-8">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
 
       {/* Preview Modal */}
