@@ -43,7 +43,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   completed: { label: "Assinado", cls: "bg-success/15 text-success" },
 };
 
-export default function AdminContracts() {
+export default function AdminContracts({ clientId: lockedClientId }: { clientId?: string } = {}) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -56,12 +56,11 @@ export default function AdminContracts() {
   const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
 
   const { data: contracts = [], isLoading } = useQuery({
-    queryKey: ["contracts", user?.id],
+    queryKey: ["contracts", user?.id, lockedClientId || "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contracts")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let q = supabase.from("contracts").select("*").order("created_at", { ascending: false });
+      if (lockedClientId) q = q.eq("client_id", lockedClientId);
+      const { data, error } = await q;
       if (error) throw error;
       return data as Contract[];
     },
