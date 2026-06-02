@@ -30,7 +30,7 @@ export default function BriefingLinkModal({ open, onClose }: Props) {
         project_id: projectId || null,
       }).select("token").single();
       if (error) throw error;
-      const url = `${window.location.origin}/briefing/${data.token}`;
+      const url = `https://aceleriq.online/briefing/${data.token}`;
       setGeneratedUrl(url);
       toast.success("Link gerado! Envie para o cliente.");
     } catch (err: any) {
