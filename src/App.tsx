@@ -39,6 +39,8 @@ import AdminBackfillPage from "@/pages/AdminBackfillPage";
 import ClientVaultPage from "@/pages/ClientVaultPage";
 import UnsubscribePage from "@/pages/UnsubscribePage";
 import FirstAccess from "@/pages/FirstAccess";
+import AdminContracts from "@/pages/AdminContracts";
+import ContractPublic from "@/pages/ContractPublic";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
