@@ -27,24 +27,6 @@ export default function ContractPublic() {
       headers: { "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "" },
     })
       .then(r => r.json())
-      .then(({ contract, error }) => {
-        if (error || !contract) return setPhase("invalid");
-        setContract(contract);
-        setClient(arguments[0]?.client);
-        setSignName(arguments[0]?.client?.full_name || "");
-        if (contract.client_signed_at) setPhase("done");
-        else setPhase("ready");
-      })
-      .catch(() => setPhase("invalid"));
-  }, [token]);
-
-  // re-fetch with proper destructuring (the arguments[0] above is fragile)
-  useEffect(() => {
-    if (!token || phase !== "loading") return;
-    fetch(`${FN_URL}?token=${encodeURIComponent(token)}`, {
-      headers: { "apikey": import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "" },
-    })
-      .then(r => r.json())
       .then((res) => {
         if (res.error || !res.contract) return setPhase("invalid");
         setContract(res.contract);
@@ -54,7 +36,7 @@ export default function ContractPublic() {
         else setPhase("ready");
       })
       .catch(() => setPhase("invalid"));
-  }, [token, phase]);
+  }, [token]);
 
   const handleSign = async () => {
     if (!signName.trim() || !accept) {
