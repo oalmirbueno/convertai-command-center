@@ -7,40 +7,40 @@ export async function getAdminId(): Promise<string | null> {
 }
 
 /**
- * Dedup check: avoid sending nearly identical notifications within a short window.
- * Returns true if a similar notification exists in the last 5 minutes.
+ * Notify admin(s) via edge function (uses service role to bypass RLS
+ * when a non-staff user — e.g. a client — needs to create an admin notification).
+ * Dedup is handled server-side.
  */
-async function isDuplicate(userId: string, message: string, type: string): Promise<boolean> {
-  const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-  const { data } = await supabase
-    .from("notifications")
-    .select("id")
-    .eq("user_id", userId)
-    .eq("notification_type", type)
-    .eq("message", message)
-    .gte("created_at", fiveMinAgo)
-    .limit(1);
-  return (data || []).length > 0;
-}
-
 export async function notifyAdmin(message: string, type: string, link: string) {
-  const adminId = await getAdminId();
-  if (!adminId) return;
-  if (await isDuplicate(adminId, message, type)) return;
-  await supabase.from("notifications").insert({
-    user_id: adminId,
-    message,
-    notification_type: type,
-    link,
-  });
+  try {
+    await supabase.functions.invoke("notify-admin", {
+      body: { message, notification_type: type, link },
+    });
+  } catch (e) {
+    console.error("[notifyAdmin] failed:", e);
+  }
 }
 
+/**
+ * Notify a specific user. If the caller is the user themself or staff,
+ * direct insert works; otherwise we fall back to the edge function.
+ */
 export async function notifyUser(userId: string, message: string, type: string, link: string) {
-  if (await isDuplicate(userId, message, type)) return;
-  await supabase.from("notifications").insert({
+  // Try direct insert first (works for self-notifications and staff)
+  const { error } = await supabase.from("notifications").insert({
     user_id: userId,
     message,
     notification_type: type,
     link,
   });
+  if (!error) return;
+
+  // Fallback: edge function with service role
+  try {
+    await supabase.functions.invoke("notify-admin", {
+      body: { target_user_id: userId, message, notification_type: type, link },
+    });
+  } catch (e) {
+    console.error("[notifyUser] failed:", e);
+  }
 }
