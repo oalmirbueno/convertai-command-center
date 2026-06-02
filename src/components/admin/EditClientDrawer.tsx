@@ -259,7 +259,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         await notifyUser(client.id, `Seu plano foi atualizado para "${planName.trim()}"`, "project", "/dashboard");
       }
       if (servicesChanged) {
-        const LABELS: Record<string, string> = { trafego: "Tráfego Pago", social: "Social Media", automacao: "Automação", site: "Site / Landing Page", relatorios: "Relatórios", cobranca: "Cobrança" };
+        const LABELS: Record<string, string> = { trafego: "Tráfego Pago", social: "Social Media", videos_ia: "Vídeos com IA", edicao_video: "Edição de Vídeo", design: "Design / Branding", copywriting: "Copywriting", seo: "SEO", email_marketing: "E-mail Marketing", automacao: "Automação", site: "Site / Landing Page", relatorios: "Relatórios", cobranca: "Cobrança" };
         const added = Object.keys(services).filter(k => services[k] && !oldServices[k]).map(k => LABELS[k] || k);
         const removed = Object.keys(oldServices).filter(k => oldServices[k] && !services[k]).map(k => LABELS[k] || k);
         if (added.length) await notifyUser(client.id, `Serviços ativados: ${added.join(", ")}`, "project", "/dashboard");
