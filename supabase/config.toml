@@ -1,6 +1,8 @@
 project_id = "gicbrgagstyvbaaumprj"
 
 [functions]
+  [functions.contract-public]
+    verify_jwt = false
   [functions.api-gateway]
     verify_jwt = false
   [functions.client-first-access]
