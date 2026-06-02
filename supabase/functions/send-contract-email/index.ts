@@ -55,40 +55,63 @@ Deno.serve(async (req) => {
       return json({ error: "email service not configured" }, 500);
     }
 
-    const html = `
-<!DOCTYPE html>
-<html lang="pt-BR">
-<head><meta charset="utf-8"></head>
-<body style="margin:0;padding:0;background:#0d0d0d;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;color:#e5e5e5;">
-  <div style="max-width:560px;margin:0 auto;padding:48px 24px;">
-    <div style="text-align:center;margin-bottom:32px;">
-      <div style="display:inline-block;padding:8px 16px;background:#00FF66;color:#0d0d0d;font-weight:700;border-radius:6px;font-size:18px;letter-spacing:0.5px;">ACELERIQ</div>
+    const LOGO_URL = "https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png";
+    const year = new Date().getFullYear();
+
+    const html = `<!DOCTYPE html>
+<html lang="pt-BR" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="color-scheme" content="light only">
+  <meta name="supported-color-schemes" content="light only">
+  <title>Contrato para assinatura</title>
+</head>
+<body style="margin:0;padding:32px 16px;background-color:#F4F4F4;font-family:Outfit,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
+  <div style="max-width:600px;margin:0 auto;">
+    <div style="background-color:#0D0D0D;padding:28px 32px;border-radius:16px 16px 0 0;border-bottom:2px solid #00FF66;text-align:left;">
+      <img src="${LOGO_URL}" alt="AcelerIQ" width="140" style="display:block;height:auto;" />
     </div>
-    <div style="background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:40px 32px;">
-      <h1 style="margin:0 0 16px;font-size:24px;color:#fff;font-weight:600;">Olá, ${client.full_name || "cliente"} 👋</h1>
-      <p style="margin:0 0 8px;font-size:15px;line-height:1.6;color:#b5b5b5;">
-        Você recebeu um contrato para assinatura digital${contract.admin_signature_name ? ` — já assinado por <strong style="color:#fff;">${contract.admin_signature_name}</strong>` : ""}.
+    <div style="background-color:#ffffff;border-radius:0 0 16px 16px;padding:40px 36px;border:1px solid #ECECEC;border-top:none;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
+      <h1 style="font-size:26px;font-weight:700;color:#0D0D0D;margin:0 0 18px;line-height:1.25;letter-spacing:-0.01em;">
+        Olá, ${client.full_name || "cliente"} 👋
+      </h1>
+      <p style="font-size:15px;color:#3a3a3a;line-height:1.65;margin:0 0 22px;">
+        Você recebeu um contrato para assinatura digital${contract.admin_signature_name ? ` — já assinado por <strong style="color:#0D0D0D;">${contract.admin_signature_name}</strong>` : ""}.
       </p>
-      <div style="margin:24px 0;padding:16px;background:#0d0d0d;border-left:3px solid #00FF66;border-radius:4px;">
-        <div style="font-size:12px;color:#888;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">Contrato</div>
-        <div style="font-size:16px;color:#fff;font-weight:500;">${contract.title}</div>
+      <div style="margin:0 0 28px;padding:18px 20px;background-color:#F7F7F7;border-left:3px solid #00FF66;border-radius:8px;">
+        <div style="font-size:11px;color:#8a8a8a;text-transform:uppercase;letter-spacing:0.12em;margin-bottom:6px;font-weight:600;">Contrato</div>
+        <div style="font-size:16px;color:#0D0D0D;font-weight:600;">${contract.title}</div>
       </div>
-      <p style="margin:0 0 24px;font-size:14px;line-height:1.6;color:#888;">
-        Para assinar, basta clicar no botão abaixo. Você será direcionado ao portal Aceleriq, onde poderá ler o documento na íntegra e assiná-lo de forma segura.
+      <p style="font-size:15px;color:#3a3a3a;line-height:1.65;margin:0 0 28px;">
+        Para assinar, basta clicar no botão abaixo. Você será direcionado ao portal AcelerIQ, onde poderá ler o documento na íntegra e assiná-lo de forma segura.
       </p>
-      <div style="text-align:center;margin:32px 0;">
-        <a href="${signUrl}" style="display:inline-block;background:#00FF66;color:#0d0d0d;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;">
+      <div style="text-align:center;margin:0 0 28px;">
+        <a href="${signUrl}" style="background-color:#0D0D0D;color:#00FF66;font-size:14px;font-weight:700;border-radius:10px;padding:14px 28px;text-decoration:none;display:inline-block;letter-spacing:0.02em;">
           Assinar contrato →
         </a>
       </div>
-      <p style="margin:24px 0 0;font-size:12px;color:#555;text-align:center;">
+      <p style="font-size:13px;color:#8a8a8a;margin:28px 0 0;line-height:1.6;">
         Ou copie e cole este link no navegador:<br>
-        <span style="color:#888;word-break:break-all;">${signUrl}</span>
+        <span style="color:#3a3a3a;word-break:break-all;">${signUrl}</span>
       </p>
     </div>
-    <p style="text-align:center;margin:24px 0 0;font-size:11px;color:#555;">
-      Este é um e-mail transacional do portal Aceleriq.<br>aceleriq.online
-    </p>
+    <div style="padding:24px 8px 8px;text-align:left;">
+      <hr style="border:none;border-top:1px solid #E5E5E5;margin:0 0 20px;" />
+      <div style="font-size:12px;font-weight:700;letter-spacing:0.22em;color:#0D0D0D;margin:0 0 6px;">
+        ACELER<span style="color:#00B84A;">IQ</span>
+      </div>
+      <div style="font-size:12px;color:#6b6b6b;margin:0 0 10px;line-height:1.5;">
+        Performance OS para times que entregam.
+      </div>
+      <div style="font-size:12px;color:#6b6b6b;margin:0 0 8px;">
+        <a href="https://aceleriq.online" style="color:#0D0D0D;text-decoration:none;">aceleriq.online</a>
+        ·
+        <a href="mailto:contato@aceleriq.com.br" style="color:#0D0D0D;text-decoration:none;">contato@aceleriq.com.br</a>
+      </div>
+      <div style="font-size:11px;color:#9a9a9a;margin:8px 0 0;">
+        © ${year} AcelerIQ. Todos os direitos reservados.
+      </div>
+    </div>
   </div>
 </body>
 </html>`;
