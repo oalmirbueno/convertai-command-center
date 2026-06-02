@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import AdminContracts from "@/pages/AdminContracts";
 
 const FOLDERS = [
   { id: "estrategicos", label: "📁 Estratégicos" },
