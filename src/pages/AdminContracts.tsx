@@ -43,7 +43,7 @@ const STATUS_META: Record<string, { label: string; cls: string }> = {
   completed: { label: "Assinado", cls: "bg-success/15 text-success" },
 };
 
-export default function AdminContracts() {
+export default function AdminContracts({ clientId: lockedClientId }: { clientId?: string } = {}) {
   const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -56,12 +56,11 @@ export default function AdminContracts() {
   const [confirmDelete, setConfirmDelete] = useState<Contract | null>(null);
 
   const { data: contracts = [], isLoading } = useQuery({
-    queryKey: ["contracts", user?.id],
+    queryKey: ["contracts", user?.id, lockedClientId || "all"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("contracts")
-        .select("*")
-        .order("created_at", { ascending: false });
+      let q = supabase.from("contracts").select("*").order("created_at", { ascending: false });
+      if (lockedClientId) q = q.eq("client_id", lockedClientId);
+      const { data, error } = await q;
       if (error) throw error;
       return data as Contract[];
     },
@@ -203,6 +202,7 @@ export default function AdminContracts() {
         open={uploadOpen}
         onOpenChange={setUploadOpen}
         clients={clients}
+        lockedClientId={lockedClientId}
         onCreated={() => qc.invalidateQueries({ queryKey: ["contracts"] })}
       />
 
@@ -246,18 +246,18 @@ export default function AdminContracts() {
   );
 }
 
-function UploadContractDialog({ open, onOpenChange, clients, onCreated }: any) {
+function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedClientId }: any) {
   const { user } = useAuth();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [clientId, setClientId] = useState("");
+  const [clientId, setClientId] = useState(lockedClientId || "");
   const [file, setFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
 
   const reset = () => {
-    setTitle(""); setDescription(""); setClientId(""); setFile(null);
+    setTitle(""); setDescription(""); setClientId(lockedClientId || ""); setFile(null);
   };
 
   const handleSubmit = async () => {
@@ -309,19 +309,21 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated }: any) {
             <Label>Título</Label>
             <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex.: Contrato de prestação de serviços 2026" />
           </div>
-          <div className="space-y-1.5">
-            <Label>Cliente</Label>
-            <Select value={clientId} onValueChange={setClientId}>
-              <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
-              <SelectContent>
-                {clients.map((c: any) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {c.full_name} {c.company_name ? `· ${c.company_name}` : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+          {!lockedClientId && (
+            <div className="space-y-1.5">
+              <Label>Cliente</Label>
+              <Select value={clientId} onValueChange={setClientId}>
+                <SelectTrigger><SelectValue placeholder="Selecione o cliente" /></SelectTrigger>
+                <SelectContent>
+                  {clients.map((c: any) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.full_name} {c.company_name ? `· ${c.company_name}` : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label>Descrição (opcional)</Label>
             <Textarea rows={2} value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Resumo do escopo..." />

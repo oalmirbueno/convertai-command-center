@@ -391,9 +391,16 @@ export default function AdminFiles() {
       </div>
 
       {activeFolder === "contratos" ? (
-        <div className="-mx-4 md:-mx-6">
-          <AdminContracts />
-        </div>
+        selectedClient === "all" ? (
+          <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
+            <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
+            Selecione um cliente para ver e enviar contratos.
+          </div>
+        ) : (
+          <div className="-mx-4 md:-mx-6">
+            <AdminContracts clientId={selectedClient} />
+          </div>
+        )
       ) : (
         <>
           {/* Upload button */}
