@@ -88,7 +88,7 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
   const { data: contract } = useQuery({
     queryKey: ["client-onboarding-contract", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("contracts")
         .select("id, title, status, client_signed_at, admin_signed_at, sign_token, updated_at")
         .eq("client_id", clientId)
