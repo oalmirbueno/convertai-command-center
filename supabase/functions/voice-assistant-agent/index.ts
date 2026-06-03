@@ -185,12 +185,17 @@ Deno.serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const body = (await req.json()) as RequestBody;
+    let body: RequestBody;
+    try { body = (await req.json()) as RequestBody; }
+    catch { body = { text: "" } as RequestBody; }
     if (typeof body?.text !== "string") body.text = "";
     if (!body.text && !body.attachment?.text && !body.clientId) {
-      return new Response(JSON.stringify({ error: "informe texto, anexo ou clientId" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      // Nada pra processar — devolve 200 degradado pra UI não quebrar.
+      return new Response(JSON.stringify({
+        intent: { kind: "unknown", raw: "" },
+        suggestedClientIds: [], narrative: "Sem entrada — diga um comando ou anexe um documento.",
+        confidence: 0, plan: null, _degraded: true, _reason: "empty_input",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const clientsCondensed = (body.clients || []).slice(0, 200).map((c) => ({
