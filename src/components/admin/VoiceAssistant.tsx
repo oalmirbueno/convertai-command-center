@@ -358,8 +358,8 @@ export default function VoiceAssistant() {
   }, [finalText, interim, fileCtx]);
 
 
-  const appendLog = (entry: Omit<LogEntry, "id">) =>
-    setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12));
+
+
 
   // ------------ Conversational flow ------------
   const resolvedClient = useMemo(() => {
