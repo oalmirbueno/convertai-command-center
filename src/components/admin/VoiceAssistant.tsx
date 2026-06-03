@@ -124,9 +124,15 @@ export default function VoiceAssistant() {
   const [parsed, setParsed] = useState<ParsedIntent | null>(null);
   const [executing, setExecuting] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileCtx, setFileCtx] = useState<FileContext | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileCtxs, setFileCtxs] = useState<FileContext[]>([]);
   const [fileReading, setFileReading] = useState(false);
+  // Documentos carregados automaticamente do sistema quando um cliente é selecionado.
+  const [systemDocs, setSystemDocs] = useState<{ fileName: string; text: string; source: string }[]>([]);
+  const [systemDocsLoading, setSystemDocsLoading] = useState(false);
+  // Helpers compostos: facilita lógica downstream que antes olhava `file`/`fileCtx` único.
+  const hasAnyAttachment = fileCtxs.some((c) => c.text) || systemDocs.length > 0;
+  const primaryCtxName = fileCtxs[0]?.fileName || systemDocs[0]?.fileName || null;
   const recRef = useRef<AnyRec | null>(null);
   const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
   const lastSttRef = useRef(""); // last raw STT text for learning
@@ -260,7 +266,7 @@ export default function VoiceAssistant() {
   }, [supported, toast]);
 
   const reset = () => {
-    setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
+    setFinalText(""); setInterim(""); setParsed(null); setFiles([]); setFileCtxs([]); setSystemDocs([]);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
@@ -277,17 +283,26 @@ export default function VoiceAssistant() {
   // crédito; se tudo falhar, cai pro regex local sem quebrar.
   const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
     const text = (finalText + " " + interim).trim();
-    if (!text && !fileCtx?.text && !answers.client_id) return;
+    const validCtxs = fileCtxs.filter((c) => c.text);
+    const attachments = [
+      ...validCtxs.map((c) => ({ fileName: c.fileName, text: c.text })),
+      ...systemDocs.map((d) => ({ fileName: d.fileName, text: d.text })),
+    ];
+    if (!text && attachments.length === 0 && !answers.client_id) return;
     if (aiThinking) return;
     setAiThinking(true);
     try {
       const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
         body: {
           text,
-          attachment: fileCtx?.text
-            ? { fileName: fileCtx.fileName, text: fileCtx.text }
-            : null,
-          clientId: answers.client_id || null, // agente puxa o contrato do sistema
+          // Mantém `attachment` (compat) e adiciona `attachments` (lista) — o agente
+          // concatena tudo no prompt pra ler O CONTRATO INTEIRO + briefings + anexos
+          // do usuário, sem perder nada.
+          attachment: attachments[0] || null,
+          attachments,
+          clientId: answers.client_id || null,
+          // Se o componente já carregou docs do sistema, sinaliza pro edge skip recarregar.
+          skipSystemContractAutoLoad: systemDocs.length > 0,
           clients: clientList.map((c) => ({
             id: c.id, company_name: c.company_name, full_name: c.full_name, email: c.email,
           })),
@@ -308,47 +323,91 @@ export default function VoiceAssistant() {
       if (!opts?.silent) {
         const degraded = (data as any)._degraded;
         const auto = (data as any)._contractAutoLoaded;
-        const note = auto ? " · contrato lido do sistema" : "";
+        const docsCount = attachments.length;
+        const note = auto ? " · contratos lidos do sistema" : docsCount > 1 ? ` · ${docsCount} docs` : "";
         appendLog({
           kind: degraded ? "info" : "ok",
           text: `IA${note}: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}`,
         });
       }
     } catch (err: any) {
-      // Falha silenciosa: regex local continua cuidando do básico.
       appendLog({ kind: "info", text: `IA em modo local: ${err?.message || "indisponível"}` });
     } finally {
       setAiThinking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking]);
+  }, [finalText, interim, fileCtxs, systemDocs, clientList, answers.client_id, aiThinking]);
 
-  // Auto-trigger IA apenas UMA VEZ quando há contexto novo. Não fica em loop:
-  // se a IA falhou (degraded), o usuário precisa clicar "Reanalisar" pra tentar
-  // de novo — assim não trava nem queima tentativa.
+  // Auto-trigger IA quando há contexto novo (arquivo ou cliente).
   useEffect(() => {
     if (aiAttemptedRef.current) return;
     if (aiThinking) return;
-    if (!(fileCtx?.text || answers.client_id)) return;
+    if (!(fileCtxs.some((c) => c.text) || answers.client_id || systemDocs.length)) return;
     aiAttemptedRef.current = true;
     runAgent({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileCtx?.text, answers.client_id]);
+  }, [fileCtxs.length, answers.client_id, systemDocs.length]);
 
-  const handleAttach = useCallback(async (f: File | null) => {
-    setFile(f); setFileCtx(null);
-    if (!f) return;
+  // 📚 Quando admin escolhe um cliente, lê AUTOMATICAMENTE todos os documentos
+  // dele (contratos + briefings + arquivos da pasta "contratos") pra alimentar
+  // a IA com contexto completo. Faz só uma vez por cliente.
+  const lastClientDocsRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cid = answers.client_id;
+    if (!cid || lastClientDocsRef.current === cid) return;
+    lastClientDocsRef.current = cid;
+    setSystemDocs([]);
+    setSystemDocsLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
+          body: { text: "", clientId: cid, fetchOnly: true },
+        });
+        if (error) throw error;
+        const docs = Array.isArray((data as any)?.documents) ? (data as any).documents : [];
+        setSystemDocs(docs);
+        if (docs.length) {
+          appendLog({ kind: "ok", text: `📚 ${docs.length} documento(s) do cliente carregado(s) automaticamente.` });
+          aiAttemptedRef.current = false; // libera reanálise com os novos docs
+        }
+      } catch (err: any) {
+        appendLog({ kind: "info", text: `Não consegui carregar documentos do cliente: ${err?.message || ""}` });
+      } finally {
+        setSystemDocsLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers.client_id]);
+
+  const handleAttach = useCallback(async (input: File | File[] | FileList | null) => {
+    if (input === null) {
+      setFiles([]); setFileCtxs([]); return;
+    }
+    const arr: File[] = Array.isArray(input)
+      ? input
+      : input instanceof FileList
+        ? Array.from(input)
+        : [input];
+    if (!arr.length) return;
     setFileReading(true);
     try {
-      const ctx = await readFileContext(f);
-      setFileCtx(ctx);
-      if (ctx.warning) toast({ title: "Anexo", description: ctx.warning });
+      const ctxs = await Promise.all(arr.map((f) => readFileContext(f)));
+      setFiles((prev) => [...prev, ...arr]);
+      setFileCtxs((prev) => [...prev, ...ctxs]);
+      const warned = ctxs.find((c) => c.warning);
+      if (warned?.warning) toast({ title: "Anexo", description: warned.warning });
+      aiAttemptedRef.current = false; // permite reanálise com novos anexos
     } catch (err: any) {
       toast({ title: "Falha ao ler anexo", description: err?.message || "Erro", variant: "destructive" });
     } finally {
       setFileReading(false);
     }
   }, [toast]);
+
+  const removeAttachment = useCallback((idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+    setFileCtxs((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
 
   const handleTextEdit = (next: string) => {
     setFinalText(next);
@@ -368,11 +427,14 @@ export default function VoiceAssistant() {
   // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
     const spoken = (finalText + " " + interim).trim();
-    const ctxText = fileCtx?.text ? `\n\n[ANEXO ${fileCtx.fileName}]\n${fileCtx.text}` : "";
+    const ctxText = fileCtxs
+      .filter((c) => c.text)
+      .map((c) => `\n\n[ANEXO ${c.fileName}]\n${c.text}`)
+      .join("");
     const full = (spoken + ctxText).trim();
     if (full) setParsed(parseCommand(full));
     else setParsed(null);
-  }, [finalText, interim, fileCtx]);
+  }, [finalText, interim, fileCtxs]);
 
 
 
@@ -618,7 +680,7 @@ export default function VoiceAssistant() {
     end.setDate(end.getDate() + (answers.deadline || 30));
     const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name, {
       narrative: aiNarrative,
-      contractName: fileCtx?.fileName || null,
+      contractName: primaryCtxName,
       plan: aiPlan,
       rawHint: (finalText + " " + interim).trim(),
     });
@@ -807,19 +869,20 @@ export default function VoiceAssistant() {
   }
 
   async function execUploadFile(p: Extract<ParsedIntent, { kind: "upload_file" }>) {
-    if (!file) throw new Error("Anexe um arquivo (clipe ao lado do mic)");
+    const f = files[0];
+    if (!f) throw new Error("Anexe um arquivo (clipe ao lado do mic)");
     const client = p.clientHint ? bestMatch(clientList, p.clientHint, [(c: any) => c.company_name, (c: any) => c.full_name]) : null;
     if (!client) throw new Error("Cliente não identificado");
-    const path = `${client.id}/${Date.now()}-${file.name}`;
-    const { error: upErr } = await supabase.storage.from("files").upload(path, file);
+    const path = `${client.id}/${Date.now()}-${f.name}`;
+    const { error: upErr } = await supabase.storage.from("files").upload(path, f);
     if (upErr) throw upErr;
     const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
     const { error } = await supabase.from("files").insert({
-      client_id: client.id, file_name: file.name, file_url: pub.publicUrl,
-      file_type: file.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
+      client_id: client.id, file_name: f.name, file_url: pub.publicUrl,
+      file_type: f.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
     } as any);
     if (error) throw error;
-    appendLog({ kind: "ok", text: `Arquivo "${file.name}" enviado` });
+    appendLog({ kind: "ok", text: `Arquivo "${f.name}" enviado` });
   }
 
   if (!isAdmin) return null;
@@ -827,7 +890,7 @@ export default function VoiceAssistant() {
   const scopePreview = phase === "preview" && parsed?.kind === "create_project"
     ? formatScopePreview(answers, resolvedClient?.company_name || resolvedClient?.full_name, {
         narrative: aiNarrative,
-        contractName: fileCtx?.fileName || null,
+        contractName: primaryCtxName,
         plan: aiPlan,
         rawHint: (finalText + " " + interim).trim(),
       })
@@ -870,8 +933,8 @@ export default function VoiceAssistant() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) handleAttach(f);
+                const dropped = Array.from(e.dataTransfer.files || []);
+                if (dropped.length) handleAttach(dropped);
               }}
             >
               {/* Header */}
@@ -1026,7 +1089,7 @@ export default function VoiceAssistant() {
                     <div className="flex items-center justify-between gap-2">
                       <button
                         onClick={() => { aiAttemptedRef.current = true; runAgent(); }}
-                        disabled={aiThinking || (!finalText.trim() && !fileCtx?.text)}
+                        disabled={aiThinking || (!finalText.trim() && !hasAnyAttachment)}
                         className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
                       >
                         {aiThinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
@@ -1142,21 +1205,46 @@ export default function VoiceAssistant() {
                         </div>
                       );
                     })()}
-                    {(file || fileReading) && (
-                      <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
-                        <div className="flex items-center gap-2 text-foreground">
-                          {fileReading ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />}
-                          <span className="truncate flex-1">{fileCtx ? describeContext(fileCtx) : file?.name}</span>
-                          <button onClick={() => handleAttach(null)} className="text-destructive">remover</button>
-                        </div>
-                        {fileCtx?.text && (
-                          <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
-                            "{fileCtx.text.slice(0, 200).replace(/\s+/g, " ")}…"
-                          </p>
+                    {(files.length > 0 || fileReading || systemDocsLoading || systemDocs.length > 0) && (
+                      <div className="space-y-1.5">
+                        {systemDocsLoading && (
+                          <div className="rounded-xl border border-primary/30 bg-primary/5 p-2.5 text-xs flex items-center gap-2 text-primary">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                            <span>Lendo documentos do cliente…</span>
+                          </div>
                         )}
-                        {fileCtx?.warning && (
-                          <p className="mt-1.5 text-[10px] text-amber-500">{fileCtx.warning}</p>
+                        {systemDocs.map((d, i) => (
+                          <div key={`sys-${i}`} className="rounded-xl border border-primary/25 bg-primary/5 p-2.5 text-xs">
+                            <div className="flex items-center gap-2 text-foreground">
+                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
+                              <span className="truncate flex-1">📚 {d.fileName}</span>
+                              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{d.source}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {fileReading && (
+                          <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs flex items-center gap-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                            <span>Lendo anexos…</span>
+                          </div>
                         )}
+                        {fileCtxs.map((ctx, i) => (
+                          <div key={`att-${i}`} className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
+                            <div className="flex items-center gap-2 text-foreground">
+                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
+                              <span className="truncate flex-1">{describeContext(ctx)}</span>
+                              <button onClick={() => removeAttachment(i)} className="text-destructive">remover</button>
+                            </div>
+                            {ctx.text && (
+                              <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
+                                "{ctx.text.slice(0, 200).replace(/\s+/g, " ")}…"
+                              </p>
+                            )}
+                            {ctx.warning && (
+                              <p className="mt-1.5 text-[10px] text-amber-500">{ctx.warning}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                     {log.length > 0 && (
@@ -1552,7 +1640,7 @@ export default function VoiceAssistant() {
                     </button>
                     <label className="w-10 h-10 rounded-full bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer">
                       <Paperclip className="w-4 h-4" />
-                      <input type="file" className="hidden" onChange={(e) => handleAttach(e.target.files?.[0] || null)} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
+                      <input type="file" multiple className="hidden" onChange={(e) => { const arr = Array.from(e.target.files || []); if (arr.length) handleAttach(arr); e.target.value = ""; }} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
                     </label>
                     <button
                       onClick={advanceFromInput}

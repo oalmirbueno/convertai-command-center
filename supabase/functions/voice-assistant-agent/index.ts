@@ -103,8 +103,14 @@ const MODEL_CHAIN = [
 interface RequestBody {
   text: string;
   attachment?: { fileName: string; text: string } | null;
+  attachments?: { fileName: string; text: string }[];
   clientId?: string | null;
   clients?: { id: string; company_name?: string | null; full_name?: string | null; email?: string | null }[];
+  // Quando true, NÃO chama LLM — só devolve `documents[]` carregados do sistema
+  // pra UI mostrar e poder enviar de volta na próxima chamada.
+  fetchOnly?: boolean;
+  // Quando true, edge não tenta recarregar contratos do sistema (UI já passou).
+  skipSystemContractAutoLoad?: boolean;
 }
 
 // Extrai texto cru de PDF sem parser pesado: pega só strings ASCII dentro do
@@ -117,54 +123,95 @@ function quickPdfText(bytes: Uint8Array): string {
   return matches.join(" ").replace(/\s+/g, " ").slice(0, 18000);
 }
 
-async function loadClientContract(
+type LoadedDoc = { fileName: string; text: string; source: string };
+
+async function fetchOneAsText(url: string, name: string): Promise<string> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url) || /\.pdf$/i.test(name)) {
+      const buf = new Uint8Array(await resp.arrayBuffer());
+      return quickPdfText(buf);
+    }
+    if (ct.startsWith("text/") || /\.(txt|md|csv|tsv|json|yaml|yml|log|xml|html?)$/i.test(name)) {
+      const text = await resp.text();
+      return text.slice(0, 18000);
+    }
+    return "";
+  } catch { return ""; }
+}
+
+// Carrega TODOS os documentos relevantes de um cliente: contratos, briefings,
+// e arquivos da pasta "contratos". A IA precisa ler tudo pra montar projeto
+// completo, sem faltar uma vírgula.
+async function loadAllClientDocs(
   supabase: ReturnType<typeof createClient>,
   clientId: string,
-): Promise<{ fileName: string; text: string } | null> {
+): Promise<LoadedDoc[]> {
+  const docs: LoadedDoc[] = [];
+  // Limite global pra não estourar prompt: ~6 documentos.
+  const MAX_DOCS = 6;
+
   try {
-    const { data: contract } = await supabase
+    // 1) Contratos
+    const { data: contracts } = await supabase
       .from("contracts")
-      .select("original_file_url, original_file_name, description, title")
+      .select("original_file_url, original_file_name, description, title, updated_at")
       .eq("client_id", clientId)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let url = contract?.original_file_url as string | undefined;
-    let name = (contract?.original_file_name || contract?.title || "contrato.pdf") as string;
-    let inlineText = (contract?.description || "") as string;
-
-    if (!url) {
-      // fallback: pasta de contratos em files
-      const { data: f } = await supabase
-        .from("files")
-        .select("file_url, file_name")
-        .eq("client_id", clientId)
-        .eq("folder", "contratos")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (f?.file_url) { url = f.file_url as string; name = (f.file_name || name) as string; }
+      .limit(MAX_DOCS);
+    for (const c of contracts || []) {
+      if (docs.length >= MAX_DOCS) break;
+      const name = (c.original_file_name || c.title || "contrato.pdf") as string;
+      const inline = ((c.description || "") as string).slice(0, 18000);
+      let text = inline;
+      if ((!text || text.length < 200) && c.original_file_url) {
+        const fetched = await fetchOneAsText(c.original_file_url as string, name);
+        if (fetched) text = fetched;
+      }
+      if (text) docs.push({ fileName: name, text: text.slice(0, 18000), source: "contrato" });
     }
+  } catch {}
 
-    if (inlineText && inlineText.length > 200) {
-      return { fileName: name, text: inlineText.slice(0, 18000) };
+  try {
+    // 2) Arquivos da pasta "contratos" (uploads avulsos)
+    const { data: files } = await supabase
+      .from("files")
+      .select("file_url, file_name, folder, file_type, created_at")
+      .eq("client_id", clientId)
+      .in("folder", ["contratos", "documentos", "operacionais"])
+      .order("created_at", { ascending: false })
+      .limit(MAX_DOCS);
+    for (const f of files || []) {
+      if (docs.length >= MAX_DOCS) break;
+      // evita duplicar pelo nome
+      if (docs.some((d) => d.fileName === f.file_name)) continue;
+      const url = f.file_url as string;
+      if (!url) continue;
+      const text = await fetchOneAsText(url, (f.file_name || "doc") as string);
+      if (text) docs.push({ fileName: (f.file_name || "doc") as string, text: text.slice(0, 18000), source: f.folder as string });
     }
-    if (!url) return null;
+  } catch {}
 
-    const resp = await fetch(url);
-    if (!resp.ok) return inlineText ? { fileName: name, text: inlineText } : null;
-    const ct = resp.headers.get("content-type") || "";
-    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url)) {
-      const buf = new Uint8Array(await resp.arrayBuffer());
-      const text = quickPdfText(buf);
-      return { fileName: name, text: text || inlineText || "" };
+  try {
+    // 3) Briefings (texto puro)
+    const { data: brs } = await supabase
+      .from("briefings")
+      .select("answers, status, created_at")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(2);
+    for (const b of brs || []) {
+      if (docs.length >= MAX_DOCS) break;
+      const text = typeof b.answers === "string" ? b.answers : JSON.stringify(b.answers || {}, null, 2);
+      if (text && text.length > 50) {
+        docs.push({ fileName: `briefing-${(b.created_at || "").slice(0, 10)}.json`, text: text.slice(0, 12000), source: "briefing" });
+      }
     }
-    const text = await resp.text();
-    return { fileName: name, text: (text || inlineText || "").slice(0, 18000) };
-  } catch {
-    return null;
-  }
+  } catch {}
+
+  return docs;
 }
 
 async function callModel(
@@ -207,8 +254,20 @@ Deno.serve(async (req) => {
     try { body = (await req.json()) as RequestBody; }
     catch { body = { text: "" } as RequestBody; }
     if (typeof body?.text !== "string") body.text = "";
-    if (!body.text && !body.attachment?.text && !body.clientId) {
-      // Nada pra processar — devolve 200 degradado pra UI não quebrar.
+    const incomingAttachments = [
+      ...(body.attachment?.text ? [body.attachment] : []),
+      ...((body.attachments || []).filter((a) => a?.text)),
+    ];
+
+    // Modo fetchOnly: UI quer só os documentos do cliente, sem rodar LLM.
+    if (body.fetchOnly) {
+      const documents = body.clientId ? await loadAllClientDocs(supabase, body.clientId) : [];
+      return new Response(JSON.stringify({ documents }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!body.text && incomingAttachments.length === 0 && !body.clientId) {
       return new Response(JSON.stringify({
         intent: { kind: "unknown", raw: "" },
         suggestedClientIds: [], narrative: "Sem entrada — diga um comando ou anexe um documento.",
@@ -221,19 +280,32 @@ Deno.serve(async (req) => {
       name: c.company_name || c.full_name || c.email || "",
     }));
 
-    // Se não veio anexo mas temos clientId → busca o contrato do sistema.
-    let attachment = body.attachment || null;
+    // Auto-load documentos do sistema se nenhum attachment veio E não foi pedido pra pular.
+    let systemLoaded: LoadedDoc[] = [];
     let contractAutoLoaded = false;
-    if (!attachment?.text && body.clientId) {
-      const loaded = await loadClientContract(supabase, body.clientId);
-      if (loaded?.text) {
-        attachment = loaded;
-        contractAutoLoaded = true;
-      }
+    if (incomingAttachments.length === 0 && body.clientId && !body.skipSystemContractAutoLoad) {
+      systemLoaded = await loadAllClientDocs(supabase, body.clientId);
+      contractAutoLoaded = systemLoaded.length > 0;
     }
 
-    const attachmentBlock = attachment?.text
-      ? `\n\n[CONTRATO/ANEXO: ${attachment.fileName}${contractAutoLoaded ? " — carregado do sistema" : ""}]\n${attachment.text.slice(0, 18000)}`
+    // Monta bloco com TODOS os documentos: anexos do usuário + carregados do sistema.
+    const allDocs: { fileName: string; text: string; source?: string }[] = [
+      ...incomingAttachments.map((a) => ({ fileName: a.fileName, text: a.text, source: "anexo" })),
+      ...systemLoaded,
+    ];
+    // Cap total ~60k chars pra não estourar contexto dos modelos free.
+    const PER_DOC_CAP = 12000;
+    const TOTAL_CAP = 60000;
+    let used = 0;
+    const docBlocks: string[] = [];
+    for (const d of allDocs) {
+      const slice = d.text.slice(0, PER_DOC_CAP);
+      if (used + slice.length > TOTAL_CAP) break;
+      used += slice.length;
+      docBlocks.push(`\n\n[DOCUMENTO: ${d.fileName}${d.source ? ` · ${d.source}` : ""}]\n${slice}`);
+    }
+    const attachmentBlock = docBlocks.length
+      ? `\n\n## ${docBlocks.length} DOCUMENTO(S) DO CLIENTE — leia INTEIRO, extraia números, prazos e formatos com precisão cirúrgica:${docBlocks.join("")}`
       : "";
 
     const userPrompt =
@@ -291,7 +363,8 @@ Deno.serve(async (req) => {
     if (typeof parsed.narrative !== "string") parsed.narrative = "";
     parsed._model = usedModel;
     parsed._contractAutoLoaded = contractAutoLoaded;
-    parsed._contractName = attachment?.fileName || null;
+    parsed._contractName = allDocs[0]?.fileName || null;
+    parsed._documentsCount = allDocs.length;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
