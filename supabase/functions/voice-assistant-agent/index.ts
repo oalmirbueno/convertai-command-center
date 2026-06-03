@@ -254,8 +254,20 @@ Deno.serve(async (req) => {
     try { body = (await req.json()) as RequestBody; }
     catch { body = { text: "" } as RequestBody; }
     if (typeof body?.text !== "string") body.text = "";
-    if (!body.text && !body.attachment?.text && !body.clientId) {
-      // Nada pra processar — devolve 200 degradado pra UI não quebrar.
+    const incomingAttachments = [
+      ...(body.attachment?.text ? [body.attachment] : []),
+      ...((body.attachments || []).filter((a) => a?.text)),
+    ];
+
+    // Modo fetchOnly: UI quer só os documentos do cliente, sem rodar LLM.
+    if (body.fetchOnly) {
+      const documents = body.clientId ? await loadAllClientDocs(supabase, body.clientId) : [];
+      return new Response(JSON.stringify({ documents }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (!body.text && incomingAttachments.length === 0 && !body.clientId) {
       return new Response(JSON.stringify({
         intent: { kind: "unknown", raw: "" },
         suggestedClientIds: [], narrative: "Sem entrada — diga um comando ou anexe um documento.",
@@ -268,19 +280,32 @@ Deno.serve(async (req) => {
       name: c.company_name || c.full_name || c.email || "",
     }));
 
-    // Se não veio anexo mas temos clientId → busca o contrato do sistema.
-    let attachment = body.attachment || null;
+    // Auto-load documentos do sistema se nenhum attachment veio E não foi pedido pra pular.
+    let systemLoaded: LoadedDoc[] = [];
     let contractAutoLoaded = false;
-    if (!attachment?.text && body.clientId) {
-      const loaded = await loadClientContract(supabase, body.clientId);
-      if (loaded?.text) {
-        attachment = loaded;
-        contractAutoLoaded = true;
-      }
+    if (incomingAttachments.length === 0 && body.clientId && !body.skipSystemContractAutoLoad) {
+      systemLoaded = await loadAllClientDocs(supabase, body.clientId);
+      contractAutoLoaded = systemLoaded.length > 0;
     }
 
-    const attachmentBlock = attachment?.text
-      ? `\n\n[CONTRATO/ANEXO: ${attachment.fileName}${contractAutoLoaded ? " — carregado do sistema" : ""}]\n${attachment.text.slice(0, 18000)}`
+    // Monta bloco com TODOS os documentos: anexos do usuário + carregados do sistema.
+    const allDocs: { fileName: string; text: string; source?: string }[] = [
+      ...incomingAttachments.map((a) => ({ fileName: a.fileName, text: a.text, source: "anexo" })),
+      ...systemLoaded,
+    ];
+    // Cap total ~60k chars pra não estourar contexto dos modelos free.
+    const PER_DOC_CAP = 12000;
+    const TOTAL_CAP = 60000;
+    let used = 0;
+    const docBlocks: string[] = [];
+    for (const d of allDocs) {
+      const slice = d.text.slice(0, PER_DOC_CAP);
+      if (used + slice.length > TOTAL_CAP) break;
+      used += slice.length;
+      docBlocks.push(`\n\n[DOCUMENTO: ${d.fileName}${d.source ? ` · ${d.source}` : ""}]\n${slice}`);
+    }
+    const attachmentBlock = docBlocks.length
+      ? `\n\n## ${docBlocks.length} DOCUMENTO(S) DO CLIENTE — leia INTEIRO, extraia números, prazos e formatos com precisão cirúrgica:${docBlocks.join("")}`
       : "";
 
     const userPrompt =
