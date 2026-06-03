@@ -1039,19 +1039,21 @@ export default function VoiceAssistant() {
                 {phase === "confirm" && (
                   <>
                     <button
-                      onClick={() => setPhase(parsed?.kind === "create_project" ? "preview" : "clarify")}
-                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
-                      disabled={executing}
+                      onClick={() => {
+                        if (stageIdx > 0) return; // can't edit mid-execution
+                        setPhase(parsed?.kind === "create_project" ? "preview" : "clarify");
+                      }}
+                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm disabled:opacity-40"
+                      disabled={executing || stageIdx > 0}
                     >
                       Voltar
                     </button>
                     <button
-                      onClick={executeWithAnswers}
-                      disabled={executing || !confirmAck}
+                      onClick={reset}
+                      disabled={executing}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Executar agora
+                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Cancelar fluxo"}
                     </button>
                   </>
                 )}
