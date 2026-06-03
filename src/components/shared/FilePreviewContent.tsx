@@ -40,7 +40,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
         <img
           src={fileUrl}
           alt={fileName}
-          className="max-w-full max-h-[55vh] object-contain rounded-lg cursor-zoom-in"
+          className="max-w-full max-h-[70vh] object-contain rounded-lg cursor-zoom-in"
           loading="lazy"
           onClick={() => openFile(fileUrl)}
         />
@@ -56,7 +56,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
         <object
           data={`${fileUrl}#toolbar=1&navpanes=0&view=FitH`}
           type="application/pdf"
-          className="w-full h-[55vh] bg-white"
+          className="w-full h-[70vh] bg-white"
         >
           <div className="flex flex-col items-center justify-center gap-3 py-10 px-6 text-center bg-secondary">
             <FileText className="w-10 h-10 text-muted-foreground" />
@@ -102,7 +102,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
           controls
           playsInline
           preload="metadata"
-          className="w-full max-h-[55vh] rounded-lg"
+          className="w-full max-h-[70vh] rounded-lg"
         />
       </div>
     );
