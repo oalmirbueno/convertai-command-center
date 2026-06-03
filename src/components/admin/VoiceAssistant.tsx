@@ -875,6 +875,49 @@ export default function VoiceAssistant() {
                       placeholder="Ou escreva o comando aqui..."
                       className="w-full text-sm bg-background border border-border rounded-lg p-2 min-h-[60px] focus:outline-none focus:border-primary"
                     />
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => runAgent()}
+                        disabled={aiThinking || (!finalText.trim() && !fileCtx?.text)}
+                        className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
+                      >
+                        {aiThinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
+                        {aiThinking ? "Analisando…" : aiPlan ? "Reanalisar com IA" : "Pensar com IA (lê contratos)"}
+                      </button>
+                      {aiConfidence !== null && (
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                          {Math.round(aiConfidence * 100)}% conf.
+                        </span>
+                      )}
+                    </div>
+                    {aiNarrative && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3 text-primary" />
+                          <p className="text-[10px] uppercase tracking-wider text-primary">Plano de ação do agente</p>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed">{aiNarrative}</p>
+                        {aiPlan?.milestones?.length ? (
+                          <details className="text-[11px] text-muted-foreground">
+                            <summary className="cursor-pointer hover:text-foreground">
+                              Ver {aiPlan.milestones.length} etapas / {aiPlan.milestones.reduce((s, m) => s + (m.tasks?.length || 0), 0)} tarefas
+                            </summary>
+                            <ul className="mt-2 space-y-1.5 pl-3 border-l border-border">
+                              {aiPlan.milestones.map((m, i) => (
+                                <li key={i}>
+                                  <p className="text-foreground font-medium">{m.title} <span className="text-muted-foreground font-normal">· +{m.offsetDays}d</span></p>
+                                  <ul className="pl-3 list-disc list-outside">
+                                    {(m.tasks || []).map((t, j) => (
+                                      <li key={j}>{t.title} <span className="text-[9px] uppercase">[{t.role}]</span></li>
+                                    ))}
+                                  </ul>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+                      </div>
+                    )}
                     {learnedCount > 0 && (
                       <div className="flex items-center gap-2 text-[11px] text-primary">
                         <Brain className="w-3.5 h-3.5" />
