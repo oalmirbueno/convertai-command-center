@@ -189,8 +189,8 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     if (!user || !catalog?.items?.length) return;
     (async () => {
       const tasks: Promise<any>[] = [];
-      for (const list of catalog.lists) {
-        for (const it of catalog.items.filter((x: any) => x.checklist_id === list.id)) {
+      for (const list of (catalog.lists as any[])) {
+        for (const it of (catalog.items as any[]).filter((x: any) => x.checklist_id === list.id)) {
           const src = autoSourceFor(it, list);
           if (!src) continue;
           const s = stateMap.get(it.id);
