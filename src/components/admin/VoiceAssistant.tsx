@@ -90,6 +90,9 @@ export default function VoiceAssistant() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [clientList, setClientList] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState("");
+  const [confirmAck, setConfirmAck] = useState(false);
+  const [lastAction, setLastAction] = useState<LastAction | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   const isAdmin = profile?.role === "admin";
 
