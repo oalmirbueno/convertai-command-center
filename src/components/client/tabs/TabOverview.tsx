@@ -6,6 +6,7 @@ import {
   Eye, Hourglass, CircleCheck, CircleDot, Circle,
 } from "lucide-react";
 import { relativeTime, formatDate, formatDateShort, daysUntil } from "../dashboardHelpers";
+import { parseClientProjectSections, sanitizeClientText, summarizeProjectText } from "@/lib/projectPresentation";
 
 const statusBadge: Record<string, string> = {
   active: "bg-success/10 text-success",
