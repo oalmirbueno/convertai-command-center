@@ -144,6 +144,7 @@ export default function VoiceAssistant() {
   }, [open]);
 
   const stopListening = useCallback(() => {
+    wantListenRef.current = false;
     try { recRef.current?.stop?.(); } catch {}
     recRef.current = null;
     setListening(false);
@@ -152,31 +153,101 @@ export default function VoiceAssistant() {
 
   const startListening = useCallback(() => {
     if (!supported) {
-      toast({ title: "Voz não suportada", description: "Use Chrome/Edge.", variant: "destructive" });
+      toast({
+        title: "Voz indisponível neste navegador",
+        description: isIOS
+          ? "No iPhone use Safari + iOS 14.5+. Ou digite o comando abaixo."
+          : "Use Chrome ou Edge — ou digite o comando.",
+        variant: "destructive",
+      });
       return;
     }
-    const rec = getRecognition();
-    if (!rec) return;
-    recRef.current = rec;
-    rec.onresult = (e: any) => {
-      let finals = ""; let interims = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) finals += r[0].transcript + " ";
-        else interims += r[0].transcript;
-      }
-      if (finals) setFinalText((prev) => (prev + " " + finals).trim());
-      setInterim(interims);
+    wantListenRef.current = true;
+    const launch = () => {
+      const rec = getRecognition();
+      if (!rec) return;
+      recRef.current = rec;
+      rec.onresult = (e: any) => {
+        let finals = ""; let interims = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) finals += r[0].transcript + " ";
+          else interims += r[0].transcript;
+        }
+        if (finals) {
+          const corrected = applyCorrections(finals, corrections.current);
+          setFinalText((prev) => {
+            const merged = (prev + " " + corrected).trim();
+            lastSttRef.current = merged;
+            return merged;
+          });
+        }
+        setInterim(applyCorrections(interims, corrections.current));
+      };
+      rec.onerror = (e: any) => {
+        const code = e?.error || "";
+        if (code === "not-allowed" || code === "service-not-allowed") {
+          toast({
+            title: "Microfone bloqueado",
+            description: "Permita o acesso ao microfone nas configurações do navegador.",
+            variant: "destructive",
+          });
+          wantListenRef.current = false;
+          setListening(false);
+          return;
+        }
+        if (code === "no-speech" || code === "aborted" || code === "network") {
+          // transient — onend will restart if user still wants it
+          return;
+        }
+        setListening(false);
+      };
+      rec.onend = () => {
+        // iOS Safari ends after every utterance; restart while user still wants it.
+        if (wantListenRef.current) {
+          setTimeout(() => { if (wantListenRef.current) launch(); }, 120);
+        } else {
+          setListening(false);
+        }
+      };
+      try { rec.start(); setListening(true); } catch {}
     };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    try { rec.start(); setListening(true); } catch {}
+    launch();
   }, [supported, toast]);
 
   const reset = () => {
-    setFinalText(""); setInterim(""); setParsed(null); setFile(null);
+    setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
+    lastSttRef.current = "";
+  };
+
+  const handleAttach = useCallback(async (f: File | null) => {
+    setFile(f); setFileCtx(null);
+    if (!f) return;
+    setFileReading(true);
+    try {
+      const ctx = await readFileContext(f);
+      setFileCtx(ctx);
+      if (ctx.warning) toast({ title: "Anexo", description: ctx.warning });
+    } catch (err: any) {
+      toast({ title: "Falha ao ler anexo", description: err?.message || "Erro", variant: "destructive" });
+    } finally {
+      setFileReading(false);
+    }
+  }, [toast]);
+
+  const handleTextEdit = (next: string) => {
+    setFinalText(next);
+    const before = lastSttRef.current;
+    if (before && before !== next) {
+      const learned = learnFromEdit(before, next);
+      if (learned > 0) {
+        corrections.current = loadCorrections();
+        setLearnedCount((c) => c + learned);
+      }
+      lastSttRef.current = next;
+    }
   };
 
   // Auto re-parse when text changes
