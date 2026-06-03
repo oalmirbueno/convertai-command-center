@@ -175,6 +175,11 @@ export default function VoiceAssistant() {
 
   const isAdmin = profile?.role === "admin";
 
+  const parsedRef = useRef<ParsedIntent | null>(null);
+  const phaseRef = useRef<Phase>("input");
+  useEffect(() => { parsedRef.current = parsed; }, [parsed]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
+
   // Load clients once when drawer opens
   useEffect(() => {
     if (!open || clientList.length) return;
