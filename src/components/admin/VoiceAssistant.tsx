@@ -345,7 +345,9 @@ export default function VoiceAssistant() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const intent = (data as any).intent || { kind: "unknown", raw: text };
-      setParsed(intent as ParsedIntent);
+      const currentParsed = parsedRef.current;
+      const protectedDraft = phaseRef.current !== "input" && currentParsed?.kind === "create_project";
+      setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
       setAiNarrative((data as any).narrative || null);
       setAiPlan((data as any).plan || null);
       setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
