@@ -886,54 +886,91 @@ export default function VoiceAssistant() {
                   </div>
                 )}
 
-                {/* ---------- CONFIRM PHASE ---------- */}
+                {/* ---------- CONFIRM PHASE (staged, one checkbox per phase) ---------- */}
                 {phase === "confirm" && parsed && (
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
                       <div className="flex items-start gap-2">
-                        <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                        <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-sm font-semibold text-foreground">Confirmação final</p>
+                          <p className="text-xs font-semibold text-foreground">Execução por fases</p>
                           <p className="text-[11px] text-muted-foreground">
-                            Esta ação grava no banco. Você pode reverter depois pelo botão "Desfazer", mas qualquer edição feita pela equipe será perdida no rollback.
+                            Cada fase precisa do seu próprio check antes de gravar. Você pode parar a qualquer momento — o que já foi criado fica reversível pelo "Desfazer".
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2 text-xs">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumo</p>
-                      {parsed.kind === "create_project" && (
-                        <>
-                          <p><span className="text-muted-foreground">Projeto:</span> <span className="font-medium text-foreground">{answers.project_name}</span></p>
-                          <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium text-foreground">{resolvedClient?.company_name || resolvedClient?.full_name}</span></p>
-                          <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium text-foreground">{answers.project_type}</span></p>
-                          {answers.apply_template && projectTemplate && (
-                            <p className="text-muted-foreground">
-                              + {projectTemplate.length} etapas, {previewTaskCount} tarefas e checklists
-                            </p>
-                          )}
-                        </>
-                      )}
-                      {parsed.kind === "create_task" && (
-                        <p><span className="text-muted-foreground">Tarefa:</span> <span className="font-medium text-foreground">{answers.task_title}</span></p>
-                      )}
-                      {parsed.kind === "create_milestone" && (
-                        <p><span className="text-muted-foreground">Etapa:</span> <span className="font-medium text-foreground">{answers.milestone_title}</span></p>
-                      )}
-                    </div>
+                    {stages.map((s, i) => {
+                      const isDone = i < stageIdx;
+                      const isActive = i === stageIdx;
+                      const isLocked = i > stageIdx;
+                      const counts =
+                        s.key === "project" ? stageRefs.projectIds.length :
+                        s.key === "milestones" ? stageRefs.milestoneIds.length :
+                        s.key === "tasks" ? stageRefs.taskIds.length :
+                        s.key === "checklists" ? stageRefs.checklistItemIds.length :
+                        (stageRefs.taskIds.length + stageRefs.milestoneIds.length);
+                      return (
+                        <div
+                          key={s.key}
+                          className={`rounded-xl border p-3 transition ${
+                            isDone ? "border-primary/40 bg-primary/5" :
+                            isActive ? "border-primary bg-secondary/40" :
+                            "border-border bg-secondary/20 opacity-50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 ${
+                              isDone ? "bg-primary text-primary-foreground" :
+                              isActive ? "border border-primary text-primary" :
+                              "border border-border text-muted-foreground"
+                            }`}>
+                              {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-foreground">{s.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{s.description}</p>
+                              {isDone && counts > 0 && (
+                                <p className="text-[10px] text-primary mt-1">✓ {counts} item(s) criado(s)</p>
+                              )}
+                            </div>
+                          </div>
 
-                    <label className="flex items-start gap-2 cursor-pointer text-xs text-foreground p-3 rounded-xl border border-border bg-background hover:border-primary transition">
-                      <input
-                        type="checkbox"
-                        checked={confirmAck}
-                        onChange={(e) => setConfirmAck(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 accent-primary"
-                      />
-                      <span>Li o resumo e confirmo a criação. Entendo que posso desfazer logo em seguida.</span>
-                    </label>
+                          {isActive && (
+                            <div className="mt-3 space-y-2">
+                              <label className="flex items-start gap-2 cursor-pointer text-[11px] text-foreground p-2 rounded-lg border border-border bg-background">
+                                <input
+                                  type="checkbox"
+                                  checked={stageAck}
+                                  onChange={(e) => setStageAck(e.target.checked)}
+                                  className="mt-0.5 w-3.5 h-3.5 accent-primary"
+                                />
+                                <span>Confirmo executar esta fase agora.</span>
+                              </label>
+                              <button
+                                onClick={() => runStage(i)}
+                                disabled={!stageAck || executing}
+                                className="w-full h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                              >
+                                {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                Executar fase {i + 1} de {stages.length}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {stageIdx >= stages.length && stages.length > 0 && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 text-xs text-foreground flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                        Todas as fases concluídas.
+                      </div>
+                    )}
                   </div>
                 )}
+
               </div>
 
 
