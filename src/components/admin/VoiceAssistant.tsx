@@ -427,11 +427,14 @@ export default function VoiceAssistant() {
   // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
     const spoken = (finalText + " " + interim).trim();
-    const ctxText = fileCtx?.text ? `\n\n[ANEXO ${fileCtx.fileName}]\n${fileCtx.text}` : "";
+    const ctxText = fileCtxs
+      .filter((c) => c.text)
+      .map((c) => `\n\n[ANEXO ${c.fileName}]\n${c.text}`)
+      .join("");
     const full = (spoken + ctxText).trim();
     if (full) setParsed(parseCommand(full));
     else setParsed(null);
-  }, [finalText, interim, fileCtx]);
+  }, [finalText, interim, fileCtxs]);
 
 
 
