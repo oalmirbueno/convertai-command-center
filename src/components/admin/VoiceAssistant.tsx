@@ -802,7 +802,57 @@ export default function VoiceAssistant() {
                     )}
                   </div>
                 )}
+
+                {/* ---------- CONFIRM PHASE ---------- */}
+                {phase === "confirm" && parsed && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Confirmação final</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Esta ação grava no banco. Você pode reverter depois pelo botão "Desfazer", mas qualquer edição feita pela equipe será perdida no rollback.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2 text-xs">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumo</p>
+                      {parsed.kind === "create_project" && (
+                        <>
+                          <p><span className="text-muted-foreground">Projeto:</span> <span className="font-medium text-foreground">{answers.project_name}</span></p>
+                          <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium text-foreground">{resolvedClient?.company_name || resolvedClient?.full_name}</span></p>
+                          <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium text-foreground">{answers.project_type}</span></p>
+                          {answers.apply_template && projectTemplate && (
+                            <p className="text-muted-foreground">
+                              + {projectTemplate.length} etapas, {previewTaskCount} tarefas e checklists
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {parsed.kind === "create_task" && (
+                        <p><span className="text-muted-foreground">Tarefa:</span> <span className="font-medium text-foreground">{answers.task_title}</span></p>
+                      )}
+                      {parsed.kind === "create_milestone" && (
+                        <p><span className="text-muted-foreground">Etapa:</span> <span className="font-medium text-foreground">{answers.milestone_title}</span></p>
+                      )}
+                    </div>
+
+                    <label className="flex items-start gap-2 cursor-pointer text-xs text-foreground p-3 rounded-xl border border-border bg-background hover:border-primary transition">
+                      <input
+                        type="checkbox"
+                        checked={confirmAck}
+                        onChange={(e) => setConfirmAck(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-primary"
+                      />
+                      <span>Li o resumo e confirmo a criação. Entendo que posso desfazer logo em seguida.</span>
+                    </label>
+                  </div>
+                )}
               </div>
+
 
               {/* Footer */}
               <div className="px-5 py-3 border-t border-border flex items-center gap-2">
