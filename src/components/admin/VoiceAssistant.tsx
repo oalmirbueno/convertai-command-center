@@ -466,23 +466,21 @@ export default function VoiceAssistant() {
     }
   };
 
-  // ---------------- Staged execution (1 checkbox per phase) ----------------
+  // ---------------- Execução unificada (uma confirmação só) ----------------
+  // Antes éramos 4 fases (project → milestones → tasks → checklists). Agora,
+  // após o usuário revisar o escopo no preview e bater "Confirmar", criamos
+  // tudo em sequência atomicamente. O cabeçalho mostra o projeto montado.
   const stages = useMemo(() => {
     if (parsed?.kind === "create_project") {
-      const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
-      if (answers.apply_template) {
-        const tpl = aiPlan?.milestones?.length
-          ? aiPlan.milestones
-          : (projectTemplates[answers.project_type] || []);
-        const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
-        const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
-        base.push(
-          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas${source}.` },
-          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas vinculadas.` },
-          { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
-        );
-      }
-      return base;
+      const tpl = aiPlan?.milestones?.length
+        ? aiPlan.milestones
+        : (projectTemplates[answers.project_type] || []);
+      const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
+      const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
+      const desc = answers.apply_template
+        ? `Projeto + ${tpl.length} milestones${source} + ${taskCount} tarefas + checklists, tudo encadeado.`
+        : "Apenas o registro do projeto (sem template).";
+      return [{ key: "project_full", label: "Criar projeto completo", description: desc }];
     }
     if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
     if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
