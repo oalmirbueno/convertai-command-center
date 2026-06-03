@@ -1343,7 +1343,7 @@ export default function VoiceAssistant() {
                                 className="w-full h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                               >
                                 {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                Executar fase {i + 1} de {stages.length}
+                                Criar agora
                               </button>
                             </div>
                           )}
@@ -1352,9 +1352,19 @@ export default function VoiceAssistant() {
                     })}
 
                     {stageIdx >= stages.length && stages.length > 0 && (
-                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 text-xs text-foreground flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                        Todas as fases concluídas.
+                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                          <CheckCircle2 className="w-4 h-4 text-primary" />
+                          Criado com sucesso
+                        </div>
+                        {parsed.kind === "create_project" && (
+                          <div className="text-[11px] text-muted-foreground space-y-0.5 pl-6">
+                            <p>📁 <span className="text-foreground font-medium">{answers.project_name}</span></p>
+                            <p>👤 {resolvedClient?.company_name || resolvedClient?.full_name}</p>
+                            <p>📊 {stageRefs.milestoneIds.length} milestones · {stageRefs.taskIds.length} tarefas · {stageRefs.checklistItemIds.length} itens de checklist</p>
+                            <p className="text-primary pt-1">→ Já disponível no Kanban e no drawer do projeto.</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
