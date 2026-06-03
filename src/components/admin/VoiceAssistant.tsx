@@ -266,7 +266,7 @@ export default function VoiceAssistant() {
   }, [supported, toast]);
 
   const reset = () => {
-    setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
+    setFinalText(""); setInterim(""); setParsed(null); setFiles([]); setFileCtxs([]); setSystemDocs([]);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
