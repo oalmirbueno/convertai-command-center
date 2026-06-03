@@ -528,22 +528,18 @@ export default function VoiceAssistant() {
       fileIds: [...stageRefs.fileIds],
     };
     try {
-      if (stage.key === "project") {
+      if (stage.key === "project_full") {
         const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
         if (!client) throw new Error("Cliente não selecionado");
         const project = await stageCreateProject(client, refs);
         setStageContext((c) => ({ ...c, client, project }));
-      } else if (stage.key === "milestones") {
-        if (!stageContext.project) throw new Error("Projeto não criado nesta sessão");
-        const ms = await stageCreateMilestones(stageContext.project, refs);
-        setStageContext((c) => ({ ...c, milestones: ms }));
-      } else if (stage.key === "tasks") {
-        if (!stageContext.project) throw new Error("Projeto não criado");
-        const ts = await stageCreateTasks(stageContext.project, stageContext.milestones || [], refs);
-        const chk = await fetchChkTemplates();
-        setStageContext((c) => ({ ...c, tasks: ts, chkTemplates: chk }));
-      } else if (stage.key === "checklists") {
-        await stageCreateChecklists(stageContext.tasks || [], stageContext.chkTemplates || [], refs);
+        if (answers.apply_template) {
+          const ms = await stageCreateMilestones(project, refs);
+          const ts = await stageCreateTasks(project, ms, refs);
+          const chk = await fetchChkTemplates();
+          await stageCreateChecklists(ts, chk, refs);
+          setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
+        }
       } else if (stage.key === "single") {
         if (parsed.kind === "create_task") await execCreateTaskFull(answers, refs);
         else if (parsed.kind === "create_milestone") await execCreateMilestoneFull(answers, refs);
