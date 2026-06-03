@@ -371,6 +371,7 @@ export default function VoiceAssistant() {
         }).select().single();
 
         if (!task) continue;
+        refs.taskIds.push(task.id);
 
         // Auto-attach matching checklist template
         const match = (chkTemplates || []).find((c: any) =>
