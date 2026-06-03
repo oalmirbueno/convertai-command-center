@@ -1,14 +1,20 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert } from "lucide-react";
+import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
 import { gapsForIntent, suggestProjectName, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
+import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
+import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
 
 type AnyRec = any;
+
+const isIOS = typeof navigator !== "undefined" &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+   (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1));
 
 function getRecognition(): AnyRec | null {
   const W = window as any;
@@ -16,10 +22,13 @@ function getRecognition(): AnyRec | null {
   if (!Ctor) return null;
   const rec = new Ctor();
   rec.lang = "pt-BR";
-  rec.continuous = true;
+  // iOS Safari truncates results when continuous=true; use single-shot + auto-restart.
+  rec.continuous = !isIOS;
   rec.interimResults = true;
+  rec.maxAlternatives = 1;
   return rec;
 }
+
 
 const norm = (s: string) =>
   (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
@@ -82,7 +91,12 @@ export default function VoiceAssistant() {
   const [executing, setExecuting] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [fileCtx, setFileCtx] = useState<FileContext | null>(null);
+  const [fileReading, setFileReading] = useState(false);
   const recRef = useRef<AnyRec | null>(null);
+  const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
+  const lastSttRef = useRef(""); // last raw STT text for learning
+  const corrections = useRef(loadCorrections());
   const supported = typeof window !== "undefined" && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   // Conversational state
@@ -93,6 +107,8 @@ export default function VoiceAssistant() {
   const [confirmAck, setConfirmAck] = useState(false);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [learnedCount, setLearnedCount] = useState(0);
+
 
   // Staged execution state (one checkbox per phase)
   const [stageIdx, setStageIdx] = useState(0);
@@ -128,6 +144,7 @@ export default function VoiceAssistant() {
   }, [open]);
 
   const stopListening = useCallback(() => {
+    wantListenRef.current = false;
     try { recRef.current?.stop?.(); } catch {}
     recRef.current = null;
     setListening(false);
@@ -136,39 +153,114 @@ export default function VoiceAssistant() {
 
   const startListening = useCallback(() => {
     if (!supported) {
-      toast({ title: "Voz não suportada", description: "Use Chrome/Edge.", variant: "destructive" });
+      toast({
+        title: "Voz indisponível neste navegador",
+        description: isIOS
+          ? "No iPhone use Safari + iOS 14.5+. Ou digite o comando abaixo."
+          : "Use Chrome ou Edge — ou digite o comando.",
+        variant: "destructive",
+      });
       return;
     }
-    const rec = getRecognition();
-    if (!rec) return;
-    recRef.current = rec;
-    rec.onresult = (e: any) => {
-      let finals = ""; let interims = "";
-      for (let i = e.resultIndex; i < e.results.length; i++) {
-        const r = e.results[i];
-        if (r.isFinal) finals += r[0].transcript + " ";
-        else interims += r[0].transcript;
-      }
-      if (finals) setFinalText((prev) => (prev + " " + finals).trim());
-      setInterim(interims);
+    wantListenRef.current = true;
+    const launch = () => {
+      const rec = getRecognition();
+      if (!rec) return;
+      recRef.current = rec;
+      rec.onresult = (e: any) => {
+        let finals = ""; let interims = "";
+        for (let i = e.resultIndex; i < e.results.length; i++) {
+          const r = e.results[i];
+          if (r.isFinal) finals += r[0].transcript + " ";
+          else interims += r[0].transcript;
+        }
+        if (finals) {
+          const corrected = applyCorrections(finals, corrections.current);
+          setFinalText((prev) => {
+            const merged = (prev + " " + corrected).trim();
+            lastSttRef.current = merged;
+            return merged;
+          });
+        }
+        setInterim(applyCorrections(interims, corrections.current));
+      };
+      rec.onerror = (e: any) => {
+        const code = e?.error || "";
+        if (code === "not-allowed" || code === "service-not-allowed") {
+          toast({
+            title: "Microfone bloqueado",
+            description: "Permita o acesso ao microfone nas configurações do navegador.",
+            variant: "destructive",
+          });
+          wantListenRef.current = false;
+          setListening(false);
+          return;
+        }
+        if (code === "no-speech" || code === "aborted" || code === "network") {
+          // transient — onend will restart if user still wants it
+          return;
+        }
+        setListening(false);
+      };
+      rec.onend = () => {
+        // iOS Safari ends after every utterance; restart while user still wants it.
+        if (wantListenRef.current) {
+          setTimeout(() => { if (wantListenRef.current) launch(); }, 120);
+        } else {
+          setListening(false);
+        }
+      };
+      try { rec.start(); setListening(true); } catch {}
     };
-    rec.onerror = () => setListening(false);
-    rec.onend = () => setListening(false);
-    try { rec.start(); setListening(true); } catch {}
+    launch();
   }, [supported, toast]);
 
   const reset = () => {
-    setFinalText(""); setInterim(""); setParsed(null); setFile(null);
+    setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
+    lastSttRef.current = "";
   };
 
-  // Auto re-parse when text changes
+  const handleAttach = useCallback(async (f: File | null) => {
+    setFile(f); setFileCtx(null);
+    if (!f) return;
+    setFileReading(true);
+    try {
+      const ctx = await readFileContext(f);
+      setFileCtx(ctx);
+      if (ctx.warning) toast({ title: "Anexo", description: ctx.warning });
+    } catch (err: any) {
+      toast({ title: "Falha ao ler anexo", description: err?.message || "Erro", variant: "destructive" });
+    } finally {
+      setFileReading(false);
+    }
+  }, [toast]);
+
+  const handleTextEdit = (next: string) => {
+    setFinalText(next);
+    const before = lastSttRef.current;
+    if (before && before !== next) {
+      const learned = learnFromEdit(before, next);
+      if (learned > 0) {
+        corrections.current = loadCorrections();
+        setLearnedCount((c) => c + learned);
+      }
+      lastSttRef.current = next;
+    }
+  };
+
+  // Auto re-parse when text or file context changes.
+  // The file's extracted text is fed into the parser so the command can
+  // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
-    const full = (finalText + " " + interim).trim();
+    const spoken = (finalText + " " + interim).trim();
+    const ctxText = fileCtx?.text ? `\n\n[ANEXO ${fileCtx.fileName}]\n${fileCtx.text}` : "";
+    const full = (spoken + ctxText).trim();
     if (full) setParsed(parseCommand(full));
     else setParsed(null);
-  }, [finalText, interim]);
+  }, [finalText, interim, fileCtx]);
+
 
   const appendLog = (entry: Omit<LogEntry, "id">) =>
     setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12));
@@ -668,21 +760,57 @@ export default function VoiceAssistant() {
                     </div>
                     <textarea
                       value={finalText}
-                      onChange={(e) => setFinalText(e.target.value)}
+                      onChange={(e) => handleTextEdit(e.target.value)}
                       placeholder="Ou escreva o comando aqui..."
                       className="w-full text-sm bg-background border border-border rounded-lg p-2 min-h-[60px] focus:outline-none focus:border-primary"
                     />
-                    {parsed && (
-                      <div className={`rounded-xl p-3 border ${parsed.kind === "unknown" ? "border-destructive/40 bg-destructive/5" : "border-primary/40 bg-primary/5"}`}>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Interpretação</p>
-                        <p className="text-sm font-medium text-foreground">{summarizeIntent(parsed)}</p>
+                    {learnedCount > 0 && (
+                      <div className="flex items-center gap-2 text-[11px] text-primary">
+                        <Brain className="w-3.5 h-3.5" />
+                        Memorizei {learnedCount} correção(ões). Não vou repetir o erro.
                       </div>
                     )}
-                    {file && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <FileText className="w-3.5 h-3.5" />
-                        {file.name}
-                        <button onClick={() => setFile(null)} className="text-destructive ml-1">remover</button>
+                    {parsed && (() => {
+                      const meaningful = (finalText + interim).trim().split(/\s+/).filter(Boolean).length >= 3;
+                      const isUnknown = parsed.kind === "unknown";
+                      if (isUnknown && (!meaningful || listening)) {
+                        return (
+                          <div className="rounded-xl p-3 border border-border bg-secondary/30">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Ouvindo…</p>
+                            <p className="text-xs text-muted-foreground">
+                              Continue falando. Ex.: "Criar projeto de tráfego para Mirante, 30 dias" ou "Mover tarefa X para concluído".
+                            </p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className={`rounded-xl p-3 border ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            {isUnknown ? "Preciso de mais detalhes" : "Interpretação"}
+                          </p>
+                          <p className="text-sm font-medium text-foreground">
+                            {isUnknown
+                              ? "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
+                              : summarizeIntent(parsed)}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                    {(file || fileReading) && (
+                      <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-foreground">
+                          {fileReading ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />}
+                          <span className="truncate flex-1">{fileCtx ? describeContext(fileCtx) : file?.name}</span>
+                          <button onClick={() => handleAttach(null)} className="text-destructive">remover</button>
+                        </div>
+                        {fileCtx?.text && (
+                          <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
+                            "{fileCtx.text.slice(0, 200).replace(/\s+/g, " ")}…"
+                          </p>
+                        )}
+                        {fileCtx?.warning && (
+                          <p className="mt-1.5 text-[10px] text-amber-500">{fileCtx.warning}</p>
+                        )}
                       </div>
                     )}
                     {log.length > 0 && (
@@ -986,7 +1114,7 @@ export default function VoiceAssistant() {
                     </button>
                     <label className="w-10 h-10 rounded-full bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer">
                       <Paperclip className="w-4 h-4" />
-                      <input type="file" className="hidden" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                      <input type="file" className="hidden" onChange={(e) => handleAttach(e.target.files?.[0] || null)} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
                     </label>
                     <button
                       onClick={advanceFromInput}
