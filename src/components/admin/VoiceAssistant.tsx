@@ -303,7 +303,7 @@ export default function VoiceAssistant() {
 
 
   // ---- Full project creation with milestones + tasks + checklists ----
-  async function execCreateProjectFull(client: any) {
+  async function execCreateProjectFull(client: any, refs: CreatedRefs) {
     const start = new Date();
     const end = new Date();
     end.setDate(end.getDate() + (answers.deadline || 30));
