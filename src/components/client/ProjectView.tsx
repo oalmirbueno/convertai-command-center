@@ -13,6 +13,7 @@ import TabOverview from "./tabs/TabOverview";
 import TabKanban from "./tabs/TabKanban";
 import TabTimeline from "./tabs/TabTimeline";
 import TabDeliveries from "./tabs/TabDeliveries";
+import { summarizeProjectText } from "@/lib/projectPresentation";
 import TabUpdates from "./tabs/TabUpdates";
 import TabPayments from "./tabs/TabPayments";
 import RequestButton from "./RequestButton";
