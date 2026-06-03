@@ -134,6 +134,7 @@ export default function VoiceAssistant() {
   const hasAnyAttachment = fileCtxs.some((c) => c.text) || systemDocs.length > 0;
   const primaryCtxName = fileCtxs[0]?.fileName || systemDocs[0]?.fileName || null;
   const recRef = useRef<AnyRec | null>(null);
+  const listeningModeRef = useRef<"command" | "refine">("command");
   const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
   const lastSttRef = useRef(""); // last raw STT text for learning
   const corrections = useRef(loadCorrections());
@@ -201,7 +202,7 @@ export default function VoiceAssistant() {
     setInterim("");
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((mode: "command" | "refine" = "command") => {
     if (!supported) {
       toast({
         title: "Voz indisponível neste navegador",
@@ -212,7 +213,9 @@ export default function VoiceAssistant() {
       });
       return;
     }
+    listeningModeRef.current = mode;
     wantListenRef.current = true;
+    setInterim("");
     const launch = () => {
       const rec = getRecognition();
       if (!rec) return;
@@ -226,11 +229,15 @@ export default function VoiceAssistant() {
         }
         if (finals) {
           const corrected = applyCorrections(finals, corrections.current);
-          setFinalText((prev) => {
-            const merged = (prev + " " + corrected).trim();
-            lastSttRef.current = merged;
-            return merged;
-          });
+          if (listeningModeRef.current === "refine") {
+            setRefineText((prev) => (prev + " " + corrected).trim());
+          } else {
+            setFinalText((prev) => {
+              const merged = (prev + " " + corrected).trim();
+              lastSttRef.current = merged;
+              return merged;
+            });
+          }
         }
         setInterim(applyCorrections(interims, corrections.current));
       };
