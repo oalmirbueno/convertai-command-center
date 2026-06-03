@@ -866,14 +866,12 @@ export default function VoiceAssistant() {
     const { data: projects } = await q;
     const project = bestMatch(projects || [], p.projectHint || "", [(x: any) => x.name]) || projects?.[0];
     if (!project) throw new Error("Projeto não encontrado");
-    const due = new Date();
-    due.setDate(due.getDate() + 7);
     const { data, error } = await supabase.from("tasks").insert({
       project_id: project.id,
       title: a.task_title || p.title,
       status: p.status || "backlog",
       priority: p.priority || "medium",
-      due_date: due.toISOString().slice(0, 10),
+      due_date: addDaysBR(7),
     }).select("id").single();
     if (error) throw error;
     if (data?.id) refs.taskIds.push(data.id);
@@ -887,12 +885,10 @@ export default function VoiceAssistant() {
     const { data: projects } = await q;
     const project = bestMatch(projects || [], p.projectHint || "", [(x: any) => x.name]) || projects?.[0];
     if (!project) throw new Error("Projeto não encontrado");
-    const target = new Date();
-    target.setDate(target.getDate() + (p.days || 14));
     const { data, error } = await supabase.from("milestones").insert({
       project_id: project.id,
       title: a.milestone_title || p.title,
-      target_date: target.toISOString().slice(0, 10),
+      target_date: addDaysBR(p.days || 14),
       status: "pending",
     }).select("id").single();
     if (error) throw error;
