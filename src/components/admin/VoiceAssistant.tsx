@@ -889,12 +889,12 @@ export default function VoiceAssistant() {
                     <button
                       onClick={() => {
                         if (parsed?.kind === "create_project") setPhase("preview");
-                        else executeWithAnswers();
+                        else { setConfirmAck(false); setPhase("confirm"); }
                       }}
                       disabled={parsed?.kind === "create_project" && !answers.client_id}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {parsed?.kind === "create_project" ? "Revisar escopo" : "Executar"}
+                      {parsed?.kind === "create_project" ? "Revisar escopo" : "Revisar"}
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </>
@@ -908,16 +908,35 @@ export default function VoiceAssistant() {
                       Editar
                     </button>
                     <button
-                      onClick={executeWithAnswers}
+                      onClick={() => { setConfirmAck(false); setPhase("confirm"); }}
+                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Confirmar
+                    </button>
+                  </>
+                )}
+                {phase === "confirm" && (
+                  <>
+                    <button
+                      onClick={() => setPhase(parsed?.kind === "create_project" ? "preview" : "clarify")}
+                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
                       disabled={executing}
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={executeWithAnswers}
+                      disabled={executing || !confirmAck}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Criar projeto completo
+                      Executar agora
                     </button>
                   </>
                 )}
               </div>
+
 
               {!supported && phase === "input" && (
                 <p className="px-5 pb-3 text-[10px] text-muted-foreground">
