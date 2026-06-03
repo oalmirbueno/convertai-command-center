@@ -56,7 +56,7 @@ function afterKeyword(text: string, keywords: string[]): string | undefined {
 }
 
 function extractClient(text: string): string | undefined {
-  const m = text.match(/(?:cliente|para o cliente|do cliente|para)\s+([^.,\n]+?)(?=\s+(?:no projeto|com|criar|status|prioridade|relat|tarefa|milestone|projeto|$|\.|,))/i);
+  const m = text.match(/(?:cliente|para o cliente|do cliente|para|pro|pra)\s+([^.,\n]+?)(?=\s+(?:no projeto|com|criar|crie|fazer|faz|status|prioridade|relat|tarefa|milestone|projeto|prazo|$|\.|,))/i);
   return m?.[1]?.trim();
 }
 
