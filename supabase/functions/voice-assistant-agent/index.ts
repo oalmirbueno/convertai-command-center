@@ -123,54 +123,95 @@ function quickPdfText(bytes: Uint8Array): string {
   return matches.join(" ").replace(/\s+/g, " ").slice(0, 18000);
 }
 
-async function loadClientContract(
+type LoadedDoc = { fileName: string; text: string; source: string };
+
+async function fetchOneAsText(url: string, name: string): Promise<string> {
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) return "";
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url) || /\.pdf$/i.test(name)) {
+      const buf = new Uint8Array(await resp.arrayBuffer());
+      return quickPdfText(buf);
+    }
+    if (ct.startsWith("text/") || /\.(txt|md|csv|tsv|json|yaml|yml|log|xml|html?)$/i.test(name)) {
+      const text = await resp.text();
+      return text.slice(0, 18000);
+    }
+    return "";
+  } catch { return ""; }
+}
+
+// Carrega TODOS os documentos relevantes de um cliente: contratos, briefings,
+// e arquivos da pasta "contratos". A IA precisa ler tudo pra montar projeto
+// completo, sem faltar uma vírgula.
+async function loadAllClientDocs(
   supabase: ReturnType<typeof createClient>,
   clientId: string,
-): Promise<{ fileName: string; text: string } | null> {
+): Promise<LoadedDoc[]> {
+  const docs: LoadedDoc[] = [];
+  // Limite global pra não estourar prompt: ~6 documentos.
+  const MAX_DOCS = 6;
+
   try {
-    const { data: contract } = await supabase
+    // 1) Contratos
+    const { data: contracts } = await supabase
       .from("contracts")
-      .select("original_file_url, original_file_name, description, title")
+      .select("original_file_url, original_file_name, description, title, updated_at")
       .eq("client_id", clientId)
       .order("updated_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-
-    let url = contract?.original_file_url as string | undefined;
-    let name = (contract?.original_file_name || contract?.title || "contrato.pdf") as string;
-    let inlineText = (contract?.description || "") as string;
-
-    if (!url) {
-      // fallback: pasta de contratos em files
-      const { data: f } = await supabase
-        .from("files")
-        .select("file_url, file_name")
-        .eq("client_id", clientId)
-        .eq("folder", "contratos")
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
-      if (f?.file_url) { url = f.file_url as string; name = (f.file_name || name) as string; }
+      .limit(MAX_DOCS);
+    for (const c of contracts || []) {
+      if (docs.length >= MAX_DOCS) break;
+      const name = (c.original_file_name || c.title || "contrato.pdf") as string;
+      const inline = ((c.description || "") as string).slice(0, 18000);
+      let text = inline;
+      if ((!text || text.length < 200) && c.original_file_url) {
+        const fetched = await fetchOneAsText(c.original_file_url as string, name);
+        if (fetched) text = fetched;
+      }
+      if (text) docs.push({ fileName: name, text: text.slice(0, 18000), source: "contrato" });
     }
+  } catch {}
 
-    if (inlineText && inlineText.length > 200) {
-      return { fileName: name, text: inlineText.slice(0, 18000) };
+  try {
+    // 2) Arquivos da pasta "contratos" (uploads avulsos)
+    const { data: files } = await supabase
+      .from("files")
+      .select("file_url, file_name, folder, file_type, created_at")
+      .eq("client_id", clientId)
+      .in("folder", ["contratos", "documentos", "operacionais"])
+      .order("created_at", { ascending: false })
+      .limit(MAX_DOCS);
+    for (const f of files || []) {
+      if (docs.length >= MAX_DOCS) break;
+      // evita duplicar pelo nome
+      if (docs.some((d) => d.fileName === f.file_name)) continue;
+      const url = f.file_url as string;
+      if (!url) continue;
+      const text = await fetchOneAsText(url, (f.file_name || "doc") as string);
+      if (text) docs.push({ fileName: (f.file_name || "doc") as string, text: text.slice(0, 18000), source: f.folder as string });
     }
-    if (!url) return null;
+  } catch {}
 
-    const resp = await fetch(url);
-    if (!resp.ok) return inlineText ? { fileName: name, text: inlineText } : null;
-    const ct = resp.headers.get("content-type") || "";
-    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url)) {
-      const buf = new Uint8Array(await resp.arrayBuffer());
-      const text = quickPdfText(buf);
-      return { fileName: name, text: text || inlineText || "" };
+  try {
+    // 3) Briefings (texto puro)
+    const { data: brs } = await supabase
+      .from("briefings")
+      .select("answers, status, created_at")
+      .eq("client_id", clientId)
+      .order("created_at", { ascending: false })
+      .limit(2);
+    for (const b of brs || []) {
+      if (docs.length >= MAX_DOCS) break;
+      const text = typeof b.answers === "string" ? b.answers : JSON.stringify(b.answers || {}, null, 2);
+      if (text && text.length > 50) {
+        docs.push({ fileName: `briefing-${(b.created_at || "").slice(0, 10)}.json`, text: text.slice(0, 12000), source: "briefing" });
+      }
     }
-    const text = await resp.text();
-    return { fileName: name, text: (text || inlineText || "").slice(0, 18000) };
-  } catch {
-    return null;
-  }
+  } catch {}
+
+  return docs;
 }
 
 async function callModel(
