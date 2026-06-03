@@ -293,7 +293,7 @@ export default function VoiceAssistant() {
     setFinalText(""); setInterim(""); setParsed(null); setFiles([]); setFileCtxs([]); setSystemDocs([]);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
-    setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
+    setAiNarrative(null); setAiPlan(null); setAiConfidence(null); setAiClientSummary(null);
     aiAttemptedRef.current = false;
     setRefineVoice(false); setRefineText(""); setRefineInterim("");
     lastSttRef.current = "";
@@ -354,6 +354,7 @@ export default function VoiceAssistant() {
       setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
       setAiNarrative((prev) => (data as any).narrative || (protectedDraft ? prev : null));
       setAiPlan((prev) => (data as any).plan || (protectedDraft ? prev : null));
+      setAiClientSummary((prev) => (data as any).clientSummary || (protectedDraft ? prev : null));
       setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
       const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
       if (sug.length && !answers.client_id) {
@@ -759,6 +760,7 @@ export default function VoiceAssistant() {
       type: answers.project_type,
       clientName: client.company_name || client.full_name,
       narrative: aiNarrative,
+      clientSummary: aiClientSummary,
       plan: aiPlan,
     });
     const payload = {
