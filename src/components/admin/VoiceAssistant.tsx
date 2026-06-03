@@ -1,14 +1,20 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert } from "lucide-react";
+import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
 import { gapsForIntent, suggestProjectName, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
+import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
+import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
 
 type AnyRec = any;
+
+const isIOS = typeof navigator !== "undefined" &&
+  (/iPad|iPhone|iPod/.test(navigator.userAgent) ||
+   (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1));
 
 function getRecognition(): AnyRec | null {
   const W = window as any;
@@ -16,10 +22,13 @@ function getRecognition(): AnyRec | null {
   if (!Ctor) return null;
   const rec = new Ctor();
   rec.lang = "pt-BR";
-  rec.continuous = true;
+  // iOS Safari truncates results when continuous=true; use single-shot + auto-restart.
+  rec.continuous = !isIOS;
   rec.interimResults = true;
+  rec.maxAlternatives = 1;
   return rec;
 }
+
 
 const norm = (s: string) =>
   (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
