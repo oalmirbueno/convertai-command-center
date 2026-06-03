@@ -283,7 +283,7 @@ export default function VoiceAssistant() {
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
     aiAttemptedRef.current = false;
-    setRefineVoice(false); setRefineText("");
+    setRefineVoice(false); setRefineText(""); setRefineInterim("");
     lastSttRef.current = "";
   };
 
@@ -1523,26 +1523,26 @@ export default function VoiceAssistant() {
                         </button>
                         <button
                           onClick={async () => {
-                            const extra = (refineText + " " + interim).trim();
+                            const extra = (refineText + " " + refineInterim).trim();
                             if (!extra) return;
                             // Junta o ajuste ao comando e roda IA de novo.
                             stopListening();
                             const nextText = finalText ? `${finalText}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`;
                             setFinalText(nextText);
                             setRefineText("");
-                            setInterim("");
+                            setRefineInterim("");
                             aiAttemptedRef.current = true;
                             await runAgent({ textOverride: nextText });
                           }}
-                          disabled={aiThinking || (!refineText.trim() && !interim.trim())}
+                          disabled={aiThinking || (!refineText.trim() && !refineInterim.trim())}
                           className="flex-1 h-8 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
                         >
                           {aiThinking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
                           Reanalisar com ajuste
                         </button>
                       </div>
-                      {interim && (
-                        <p className="text-[10px] italic text-muted-foreground">"{interim}"</p>
+                      {refineInterim && (
+                        <p className="text-[10px] italic text-muted-foreground">"{refineInterim}"</p>
                       )}
                     </div>
                   </div>
