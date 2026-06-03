@@ -213,6 +213,50 @@ export type Database = {
           },
         ]
       }
+      client_onboarding_items: {
+        Row: {
+          client_id: string
+          completed_at: string | null
+          completed_by: string | null
+          created_at: string
+          id: string
+          is_done: boolean
+          template_item_id: string
+          updated_at: string
+          value: string | null
+        }
+        Insert: {
+          client_id: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          template_item_id: string
+          updated_at?: string
+          value?: string | null
+        }
+        Update: {
+          client_id?: string
+          completed_at?: string | null
+          completed_by?: string | null
+          created_at?: string
+          id?: string
+          is_done?: boolean
+          template_item_id?: string
+          updated_at?: string
+          value?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_onboarding_items_template_item_id_fkey"
+            columns: ["template_item_id"]
+            isOneToOne: false
+            referencedRelation: "service_checklist_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_requests: {
         Row: {
           ai_draft: string | null
@@ -1250,6 +1294,77 @@ export type Database = {
           },
         ]
       }
+      service_checklist_items: {
+        Row: {
+          checklist_id: string
+          created_at: string
+          hint: string | null
+          id: string
+          is_required: boolean
+          label: string
+          order_index: number
+        }
+        Insert: {
+          checklist_id: string
+          created_at?: string
+          hint?: string | null
+          id?: string
+          is_required?: boolean
+          label: string
+          order_index?: number
+        }
+        Update: {
+          checklist_id?: string
+          created_at?: string
+          hint?: string | null
+          id?: string
+          is_required?: boolean
+          label?: string
+          order_index?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "service_checklist_items_checklist_id_fkey"
+            columns: ["checklist_id"]
+            isOneToOne: false
+            referencedRelation: "service_checklists"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      service_checklists: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          is_required: boolean
+          order_index: number
+          phase: string
+          service_type: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_required?: boolean
+          order_index?: number
+          phase: string
+          service_type: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_required?: boolean
+          order_index?: number
+          phase?: string
+          service_type?: string
+          title?: string
+        }
+        Relationships: []
+      }
       suppressed_emails: {
         Row: {
           created_at: string
@@ -1366,6 +1481,68 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      task_checklist_template_items: {
+        Row: {
+          created_at: string
+          id: string
+          is_required: boolean
+          label: string
+          order_index: number
+          template_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          label: string
+          order_index?: number
+          template_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_required?: boolean
+          label?: string
+          order_index?: number
+          template_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "task_checklist_template_items_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "task_checklist_templates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      task_checklist_templates: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          service_type: string | null
+          title: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          service_type?: string | null
+          title: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          service_type?: string | null
+          title?: string
+        }
+        Relationships: []
       }
       task_comments: {
         Row: {
@@ -1562,27 +1739,33 @@ export type Database = {
       }
       voice_command_log: {
         Row: {
+          clarifications: Json | null
           created_at: string
           id: string
           intent: Json | null
+          preview: Json | null
           result: string | null
           status: string
           transcript: string
           user_id: string
         }
         Insert: {
+          clarifications?: Json | null
           created_at?: string
           id?: string
           intent?: Json | null
+          preview?: Json | null
           result?: string | null
           status?: string
           transcript: string
           user_id: string
         }
         Update: {
+          clarifications?: Json | null
           created_at?: string
           id?: string
           intent?: Json | null
+          preview?: Json | null
           result?: string | null
           status?: string
           transcript?: string
