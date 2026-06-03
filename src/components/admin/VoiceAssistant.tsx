@@ -159,6 +159,7 @@ export default function VoiceAssistant() {
   const aiAttemptedRef = useRef(false);
   const [refineVoice, setRefineVoice] = useState(false);
   const [refineText, setRefineText] = useState("");
+  const [refineInterim, setRefineInterim] = useState("");
 
 
   // Staged execution state (one checkbox per phase)
@@ -200,6 +201,7 @@ export default function VoiceAssistant() {
     recRef.current = null;
     setListening(false);
     setInterim("");
+    setRefineInterim("");
   }, []);
 
   const startListening = useCallback((mode: "command" | "refine" = "command") => {
@@ -215,7 +217,8 @@ export default function VoiceAssistant() {
     }
     listeningModeRef.current = mode;
     wantListenRef.current = true;
-    setInterim("");
+    if (mode === "refine") setRefineInterim("");
+    else setInterim("");
     const launch = () => {
       const rec = getRecognition();
       if (!rec) return;
@@ -239,7 +242,9 @@ export default function VoiceAssistant() {
             });
           }
         }
-        setInterim(applyCorrections(interims, corrections.current));
+        const correctedInterim = applyCorrections(interims, corrections.current);
+        if (listeningModeRef.current === "refine") setRefineInterim(correctedInterim);
+        else setInterim(correctedInterim);
       };
       rec.onerror = (e: any) => {
         const code = e?.error || "";
