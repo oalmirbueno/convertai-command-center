@@ -415,7 +415,7 @@ export default function VoiceAssistant() {
     if (data?.id) refs.taskIds.push(data.id);
   }
 
-  async function execCreateMilestoneFull(a: Record<string, any>) {
+  async function execCreateMilestoneFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_milestone" }>;
     const client = clientList.find((c) => c.id === a.client_id);
     let q = supabase.from("projects").select("id, name, client_id").is("deleted_at", null);
@@ -425,13 +425,14 @@ export default function VoiceAssistant() {
     if (!project) throw new Error("Projeto não encontrado");
     const target = new Date();
     target.setDate(target.getDate() + (p.days || 14));
-    const { error } = await supabase.from("milestones").insert({
+    const { data, error } = await supabase.from("milestones").insert({
       project_id: project.id,
       title: a.milestone_title || p.title,
       target_date: target.toISOString().slice(0, 10),
       status: "pending",
-    });
+    }).select("id").single();
     if (error) throw error;
+    if (data?.id) refs.milestoneIds.push(data.id);
   }
 
   // ---- Legacy report/upload/update intents ----
