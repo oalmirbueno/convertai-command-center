@@ -886,6 +886,84 @@ export default function VoiceAssistant() {
                 {/* ---------- INPUT PHASE ---------- */}
                 {phase === "input" && (
                   <>
+                    {/* 🎯 Pré-seleção rápida: cliente + tipo ANTES de falar.
+                       Reduz ambiguidade e o agente já chega no problema certo. */}
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Pré-contexto (opcional, mas recomendado)
+                      </p>
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-muted-foreground">Cliente</p>
+                        <input
+                          value={clientSearch}
+                          onChange={(e) => setClientSearch(e.target.value)}
+                          placeholder={resolvedClient ? (resolvedClient.company_name || resolvedClient.full_name) : "Buscar cliente…"}
+                          className="w-full text-xs bg-background border border-border rounded p-1.5"
+                        />
+                        {clientSearch && (
+                          <div className="flex flex-wrap gap-1">
+                            {clientList
+                              .filter((c) => norm(`${c.company_name} ${c.full_name} ${c.email}`).includes(norm(clientSearch)))
+                              .slice(0, 5)
+                              .map((c) => (
+                                <button
+                                  key={c.id}
+                                  onClick={() => {
+                                    setAnswers((a) => ({ ...a, client_id: c.id }));
+                                    aiAttemptedRef.current = false;
+                                    setClientSearch("");
+                                  }}
+                                  className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                    answers.client_id === c.id
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "border-border text-muted-foreground hover:border-primary"
+                                  }`}
+                                >
+                                  {c.company_name || c.full_name}
+                                </button>
+                              ))}
+                          </div>
+                        )}
+                        {answers.client_id && !clientSearch && (
+                          <p className="text-[10px] text-primary">
+                            ✓ {clientList.find((c) => c.id === answers.client_id)?.company_name || clientList.find((c) => c.id === answers.client_id)?.full_name}
+                            <button onClick={() => setAnswers((a) => { const { client_id, ...rest } = a; return rest; })} className="ml-2 text-muted-foreground hover:text-destructive">trocar</button>
+                          </p>
+                        )}
+                      </div>
+                      <div className="space-y-1.5">
+                        <p className="text-[10px] text-muted-foreground">Tipo de serviço</p>
+                        <div className="flex flex-wrap gap-1">
+                          {[
+                            { v: "trafego", l: "Tráfego" },
+                            { v: "social_media", l: "Social Media" },
+                            { v: "video_ai", l: "Vídeo IA" },
+                            { v: "video", l: "Vídeo (captação)" },
+                            { v: "site", l: "Site" },
+                            { v: "landing_page", l: "Landing" },
+                            { v: "automation", l: "Automação" },
+                            { v: "event", l: "Evento" },
+                          ].map((o) => (
+                            <button
+                              key={o.v}
+                              onClick={() => setAnswers((a) => ({
+                                ...a,
+                                project_type: o.v,
+                                deadline: a.deadline ?? suggestDeadline(o.v),
+                              }))}
+                              className={`text-[10px] px-2 py-0.5 rounded-full border ${
+                                answers.project_type === o.v
+                                  ? "bg-primary text-primary-foreground border-primary"
+                                  : "border-border text-muted-foreground hover:border-primary"
+                              }`}
+                            >
+                              {o.l}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
                     {lastAction && (
                       <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
                         <div className="min-w-0">
