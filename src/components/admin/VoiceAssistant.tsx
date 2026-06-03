@@ -972,6 +972,8 @@ export default function VoiceAssistant() {
       ).slice(0, 6)
     : clientList.slice(0, 6);
 
+  const selectedExistingProject = clientProjects.find((p) => p.id === answers.project_id);
+
   const projectTemplate = answers.project_type ? projectTemplates[answers.project_type] : null;
   const previewTaskCount = (projectTemplate || []).reduce((s, m) => s + m.tasks.length, 0);
 
@@ -1427,6 +1429,38 @@ export default function VoiceAssistant() {
                           </div>
                         );
                       }
+                      if (g.id === "apply_template" && parsed.kind === "create_project") {
+                        return null;
+                      }
+                      return null;
+                    })}
+                    {parsed.kind === "create_project" && answers.client_id && (
+                      <div className="rounded-xl border border-border bg-secondary/40 p-3">
+                        <p className="text-xs font-medium text-foreground mb-2">Projeto do cliente</p>
+                        {clientProjectsLoading ? (
+                          <p className="text-[11px] text-muted-foreground">Carregando projetos…</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {clientProjects.map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() => setAnswers((a) => ({ ...a, project_id: p.id, project_name: p.name, project_type: p.project_type || a.project_type }))}
+                                className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === p.id ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                              >
+                                <span className="font-medium">Atualizar existente:</span> {p.name}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => setAnswers((a) => ({ ...a, project_id: "new" }))}
+                              className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === "new" ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                            >
+                              <span className="font-medium">Criar novo projeto</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {gaps.map((g) => {
                       if (g.id === "deadline") {
                         return (
                           <div key="dl" className="rounded-xl border border-border bg-secondary/40 p-3">
@@ -1489,7 +1523,7 @@ export default function VoiceAssistant() {
                 {phase === "preview" && parsed?.kind === "create_project" && scopePreview && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-primary">Escopo do projeto</p>
+                      <p className="text-[10px] uppercase tracking-wider text-primary">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
                       <h3 className="text-base font-semibold text-foreground">{answers.project_name}</h3>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div>
@@ -1501,6 +1535,10 @@ export default function VoiceAssistant() {
                         <div>
                           <span className="text-muted-foreground">Tipo:</span>{" "}
                           <span className="text-foreground font-medium">{answers.project_type}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground">Ação:</span>{" "}
+                          <span className="text-foreground font-medium">{selectedExistingProject ? "enriquecer projeto existente" : "criar novo projeto"}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Início:</span>{" "}
@@ -1738,7 +1776,7 @@ export default function VoiceAssistant() {
                         if (parsed?.kind === "create_project") setPhase("preview");
                         else { setConfirmAck(false); setPhase("confirm"); }
                       }}
-                      disabled={parsed?.kind === "create_project" && !answers.client_id}
+                      disabled={parsed?.kind === "create_project" && (!answers.client_id || !answers.project_id)}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       {parsed?.kind === "create_project" ? "Revisar escopo" : "Revisar"}
