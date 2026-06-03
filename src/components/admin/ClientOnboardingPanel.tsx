@@ -1,8 +1,12 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Check, ChevronRight, ChevronDown, Loader2, AlertTriangle, X, RotateCcw, EyeOff } from "lucide-react";
+import {
+  Check, ChevronRight, Loader2, AlertTriangle, RotateCcw, EyeOff,
+  FileSignature, ClipboardList, Sparkles, ExternalLink, Ban,
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
@@ -80,11 +84,68 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     enabled: !!clientId,
   });
 
+  // Latest signed contract for this client (auto-fill source)
+  const { data: contract } = useQuery({
+    queryKey: ["client-onboarding-contract", clientId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("contracts")
+        .select("id, title, status, client_signed_at, admin_signed_at, sign_token, updated_at")
+        .eq("client_id", clientId)
+        .order("updated_at", { ascending: false })
+        .limit(5);
+      const signed = (data || []).find(
+        (c: any) => !!c.client_signed_at && (c.status === "signed" || !!c.admin_signed_at),
+      );
+      return signed || null;
+    },
+    enabled: !!clientId,
+  });
+
+  // Latest submitted briefing for this client (auto-fill source)
+  const { data: briefing } = useQuery({
+    queryKey: ["client-onboarding-briefing", clientId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("briefings")
+        .select("id, token, submitted, project_id, created_at")
+        .eq("client_id", clientId)
+        .eq("submitted", true)
+        .order("created_at", { ascending: false })
+        .limit(1);
+      return data?.[0] || null;
+    },
+    enabled: !!clientId,
+  });
+
   const stateMap = useMemo(() => {
     const m = new Map<string, any>();
     (clientState || []).forEach((row: any) => m.set(row.template_item_id, row));
     return m;
   }, [clientState]);
+
+  /** Identifies the auto-fill source for a checklist item, if any */
+  const autoSourceFor = (item: any, list: any): null | {
+    kind: "contract" | "briefing";
+    label: string;
+    href: string;
+  } => {
+    if (list?.phase === "contrato" && list?.service_type === "geral" && contract) {
+      return {
+        kind: "contract",
+        label: "Abrir contrato assinado",
+        href: `/contratos?contract=${contract.id}`,
+      };
+    }
+    if (list?.phase === "briefing" && list?.service_type === "geral" && briefing) {
+      return {
+        kind: "briefing",
+        label: "Abrir briefing entregue",
+        href: briefing.project_id ? `/briefings?id=${briefing.id}` : `/briefings`,
+      };
+    }
+    return null;
+  };
 
   // Group by phase (excluding skipped unless showSkipped)
   const grouped = useMemo(() => {
@@ -100,7 +161,7 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     return out;
   }, [catalog, stateMap, showSkipped]);
 
-  // Aggregate counts ignore skipped items so progress reflects real scope
+  // Aggregate counts ignore skipped items
   const activeItems = useMemo(
     () => (catalog?.items || []).filter((i: any) => !stateMap.get(i.id)?.is_skipped),
     [catalog, stateMap],
@@ -120,6 +181,38 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
       });
     }
   };
+
+  // 🔮 Auto-fill: when a signed contract / submitted briefing is found
+  // and the corresponding checklist row is not yet marked done, mark it
+  // and store a direct link in `value`.
+  useEffect(() => {
+    if (!user || !catalog?.items?.length) return;
+    (async () => {
+      const tasks: Promise<any>[] = [];
+      for (const list of catalog.lists) {
+        for (const it of catalog.items.filter((x: any) => x.checklist_id === list.id)) {
+          const src = autoSourceFor(it, list);
+          if (!src) continue;
+          const s = stateMap.get(it.id);
+          if (s?.is_done || s?.is_skipped) continue;
+          tasks.push(
+            upsertItem(it.id, {
+              is_done: true,
+              value: src.href,
+              completed_by: user.id,
+              completed_at: new Date().toISOString(),
+            }),
+          );
+        }
+      }
+      if (tasks.length) {
+        await Promise.all(tasks);
+        await refetch();
+        queryClient.invalidateQueries({ queryKey: ["client-onboarding-summary"] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contract?.id, briefing?.id, catalog?.items?.length, clientState?.length]);
 
   const toggleItem = async (itemId: string, next: boolean, value?: string) => {
     if (!user) return;
@@ -144,12 +237,12 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
   const setSkipped = async (itemId: string, next: boolean) => {
     setSaving(itemId);
     try {
-      await upsertItem(itemId, { is_skipped: next });
+      await upsertItem(itemId, { is_skipped: next, is_done: false });
       await refetch();
       queryClient.invalidateQueries({ queryKey: ["client-onboarding-summary"] });
-      toast.success(next ? "Item removido deste cliente" : "Item restaurado");
+      toast.success(next ? "Marcado como não necessário" : "Item restaurado");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao remover");
+      toast.error(err.message || "Erro ao atualizar");
     } finally {
       setSaving(null);
     }
@@ -224,15 +317,23 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
               {totalCount - doneCount} item(ns) pendente(s)
             </p>
           ) : <span />}
-          {skippedCount > 0 && (
-            <button
-              onClick={() => setShowSkipped((s) => !s)}
-              className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
-            >
-              <EyeOff className="w-3 h-3" />
-              {showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}
-            </button>
-          )}
+          <div className="flex items-center gap-3">
+            {(contract || briefing) && (
+              <p className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-primary">
+                <Sparkles className="w-3 h-3" />
+                Auto-preenchido
+              </p>
+            )}
+            {skippedCount > 0 && (
+              <button
+                onClick={() => setShowSkipped((s) => !s)}
+                className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+              >
+                <EyeOff className="w-3 h-3" />
+                {showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}
+              </button>
+            )}
+          </div>
         </div>
       </div>
 
@@ -278,19 +379,19 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                         <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-2">
                           {g.list.title}
                           {g.list.service_type !== "geral" && (
-                            <span className="text-[10px] uppercase text-muted-foreground">
+                            <span className="text-[10px] uppercase text-muted-foreground bg-secondary/60 px-1.5 py-0.5 rounded">
                               {g.list.service_type}
                             </span>
                           )}
                           {g.hiddenCount > 0 && !showSkipped && (
                             <span className="text-[10px] text-muted-foreground italic">
-                              · {g.hiddenCount} removido(s)
+                              · {g.hiddenCount} N/A
                             </span>
                           )}
                         </p>
                         {g.items.length === 0 ? (
                           <p className="text-[11px] text-muted-foreground italic">
-                            Todos os itens foram removidos para este cliente.
+                            Nenhum item ativo para este cliente.
                           </p>
                         ) : (
                           <ul className="space-y-2">
@@ -298,11 +399,16 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                               const s = stateMap.get(it.id);
                               const checked = !!s?.is_done;
                               const skipped = !!s?.is_skipped;
+                              const auto = autoSourceFor(it, g.list);
                               return (
                                 <li
                                   key={it.id}
-                                  className={`group flex items-start gap-2 rounded-md -mx-2 px-2 py-1 transition-colors ${
-                                    skipped ? "opacity-50" : "hover:bg-secondary/30"
+                                  className={`group flex items-start gap-2 rounded-md -mx-2 px-2 py-1.5 transition-colors ${
+                                    skipped
+                                      ? "opacity-60 bg-secondary/20"
+                                      : auto && checked
+                                        ? "bg-primary/5 hover:bg-primary/10"
+                                        : "hover:bg-secondary/30"
                                   }`}
                                 >
                                   <button
@@ -318,21 +424,46 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                                   </button>
                                   <div className="flex-1 min-w-0">
                                     <p
-                                      className={`text-xs ${
+                                      className={`text-xs flex items-center gap-1.5 flex-wrap ${
                                         checked || skipped
                                           ? "line-through text-muted-foreground"
                                           : "text-foreground"
                                       }`}
                                     >
-                                      {it.label}
+                                      {auto?.kind === "contract" && (
+                                        <FileSignature className="w-3 h-3 text-primary shrink-0" />
+                                      )}
+                                      {auto?.kind === "briefing" && (
+                                        <ClipboardList className="w-3 h-3 text-primary shrink-0" />
+                                      )}
+                                      <span>{it.label}</span>
                                       {it.is_required && !skipped && (
-                                        <span className="text-destructive ml-1">*</span>
+                                        <span className="text-destructive">*</span>
+                                      )}
+                                      {auto && !skipped && (
+                                        <span className="text-[9px] uppercase tracking-wider text-primary bg-primary/10 px-1.5 py-0.5 rounded">
+                                          Auto
+                                        </span>
+                                      )}
+                                      {skipped && (
+                                        <span className="text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary px-1.5 py-0.5 rounded no-underline">
+                                          Não necessário
+                                        </span>
                                       )}
                                     </p>
                                     {it.hint && !skipped && (
                                       <p className="text-[10px] text-muted-foreground mt-0.5">
                                         {it.hint}
                                       </p>
+                                    )}
+                                    {auto && !skipped && (
+                                      <Link
+                                        to={auto.href}
+                                        className="inline-flex items-center gap-1 mt-1 text-[11px] text-primary hover:underline"
+                                      >
+                                        <ExternalLink className="w-3 h-3" />
+                                        {auto.label}
+                                      </Link>
                                     )}
                                     {!skipped && (
                                       <input
@@ -351,19 +482,25 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
                                   <button
                                     onClick={() => setSkipped(it.id, !skipped)}
                                     disabled={saving === it.id}
-                                    title={skipped ? "Restaurar item" : "Não se aplica a este cliente"}
-                                    className={`shrink-0 w-6 h-6 rounded flex items-center justify-center transition-all ${
+                                    title={skipped ? "Marcar como necessário" : "Marcar como não necessário"}
+                                    className={`shrink-0 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider px-2 py-1 rounded border transition-all ${
                                       skipped
-                                        ? "text-muted-foreground hover:text-primary opacity-100"
-                                        : "text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                                        ? "border-border text-muted-foreground hover:text-primary hover:border-primary opacity-100"
+                                        : "border-transparent text-muted-foreground hover:text-destructive hover:border-destructive/40 opacity-40 group-hover:opacity-100"
                                     }`}
                                   >
                                     {saving === it.id ? (
                                       <Loader2 className="w-3 h-3 animate-spin" />
                                     ) : skipped ? (
-                                      <RotateCcw className="w-3 h-3" />
+                                      <>
+                                        <RotateCcw className="w-3 h-3" />
+                                        Restaurar
+                                      </>
                                     ) : (
-                                      <X className="w-3.5 h-3.5" />
+                                      <>
+                                        <Ban className="w-3 h-3" />
+                                        N/A
+                                      </>
                                     )}
                                   </button>
                                 </li>
