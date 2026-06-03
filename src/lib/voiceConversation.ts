@@ -206,7 +206,11 @@ export function gapsForIntent(
   return gaps;
 }
 
-export function formatScopePreview(answers: Record<string, any>, clientName?: string) {
+export function formatScopePreview(
+  answers: Record<string, any>,
+  clientName?: string,
+  enrichment?: Parameters<typeof defaultProjectDescription>[2],
+) {
   const start = new Date();
   const end = new Date();
   end.setDate(end.getDate() + (answers.deadline || 30));
@@ -215,6 +219,6 @@ export function formatScopePreview(answers: Record<string, any>, clientName?: st
   return {
     startDate: fmt(start),
     endDate: fmt(end),
-    description: defaultProjectDescription(answers.project_type, clientName),
+    description: defaultProjectDescription(answers.project_type, clientName, enrichment),
   };
 }
