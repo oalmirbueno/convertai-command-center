@@ -9,7 +9,10 @@ import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
+import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
+
+
 
 
 const SERVICES = [
@@ -538,6 +541,14 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </div>
             )}
 
+            {/* Esteira de Onboarding */}
+            <div className="pt-2">
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
+                <ListChecks className="w-3 h-3" /> Esteira de Onboarding
+              </label>
+              <ClientOnboardingPanel clientId={client.id} servicesConfig={services} />
+            </div>
+
             {/* Cofre de Acessos */}
             <div className="pt-2">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 flex items-center gap-1.5">
@@ -545,6 +556,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </label>
               <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
             </div>
+
 
             {/* Pagamentos de projetos não recorrentes */}
             {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
