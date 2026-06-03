@@ -302,8 +302,8 @@ export default function VoiceAssistant() {
   // 🧠 Agente IA — interpreta voz + anexo (ou contrato do sistema) + base de
   // clientes. Roda em modelos GRATUITOS com fallback chain — nunca trava por
   // crédito; se tudo falhar, cai pro regex local sem quebrar.
-  const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
-    const text = (finalText + " " + interim).trim();
+  const runAgent = useCallback(async (opts?: { silent?: boolean; textOverride?: string }) => {
+    const text = (opts?.textOverride ?? (finalText + " " + interim)).trim();
     const validCtxs = fileCtxs.filter((c) => c.text);
     const attachments = [
       ...validCtxs.map((c) => ({ fileName: c.fileName, text: c.text })),
@@ -1521,10 +1521,13 @@ export default function VoiceAssistant() {
                             const extra = (refineText + " " + interim).trim();
                             if (!extra) return;
                             // Junta o ajuste ao comando e roda IA de novo.
-                            setFinalText((p) => (p ? `${p}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`));
+                            stopListening();
+                            const nextText = finalText ? `${finalText}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`;
+                            setFinalText(nextText);
                             setRefineText("");
+                            setInterim("");
                             aiAttemptedRef.current = true;
-                            await runAgent();
+                            await runAgent({ textOverride: nextText });
                           }}
                           disabled={aiThinking || (!refineText.trim() && !interim.trim())}
                           className="flex-1 h-8 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
