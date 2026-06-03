@@ -683,12 +683,24 @@ export default function VoiceAssistant() {
         if (!client) throw new Error("Cliente não selecionado");
         const project = await stageCreateProject(client, refs);
         setStageContext((c) => ({ ...c, client, project }));
-        if (answers.apply_template) {
+        if (answers.apply_template && !(project as any).__isUpdate) {
           const ms = await stageCreateMilestones(project, refs);
           const ts = await stageCreateTasks(project, ms, refs);
           const chk = await fetchChkTemplates();
           await stageCreateChecklists(ts, chk, refs);
           setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
+        } else if (answers.apply_template && (project as any).__isUpdate) {
+          // Existing project: avoid duplicating milestones/tasks. Only top up structure if empty.
+          const { data: existingMs } = await supabase.from("milestones").select("id").eq("project_id", project.id).is("deleted_at", null).limit(1);
+          if (!existingMs || existingMs.length === 0) {
+            const ms = await stageCreateMilestones(project, refs);
+            const ts = await stageCreateTasks(project, ms, refs);
+            const chk = await fetchChkTemplates();
+            await stageCreateChecklists(ts, chk, refs);
+            setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
+          } else {
+            appendLog({ kind: "info", text: "Projeto já possui etapas — preservadas sem duplicar." });
+          }
         }
       } else if (stage.key === "single") {
         if (parsed.kind === "create_task") await execCreateTaskFull(answers, refs);
@@ -759,7 +771,7 @@ export default function VoiceAssistant() {
     if (answers.project_id && answers.project_id !== "new") {
       const { data: project, error } = await supabase.from("projects").update(payload).eq("id", answers.project_id).select().single();
       if (error) throw error;
-      return project;
+      return { ...project, __isUpdate: true };
     }
     const { data: project, error } = await supabase.from("projects").insert({
       client_id: client.id,
