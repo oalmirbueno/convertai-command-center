@@ -134,6 +134,7 @@ export default function VoiceAssistant() {
   const hasAnyAttachment = fileCtxs.some((c) => c.text) || systemDocs.length > 0;
   const primaryCtxName = fileCtxs[0]?.fileName || systemDocs[0]?.fileName || null;
   const recRef = useRef<AnyRec | null>(null);
+  const listeningModeRef = useRef<"command" | "refine">("command");
   const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
   const lastSttRef = useRef(""); // last raw STT text for learning
   const corrections = useRef(loadCorrections());
@@ -158,6 +159,7 @@ export default function VoiceAssistant() {
   const aiAttemptedRef = useRef(false);
   const [refineVoice, setRefineVoice] = useState(false);
   const [refineText, setRefineText] = useState("");
+  const [refineInterim, setRefineInterim] = useState("");
 
 
   // Staged execution state (one checkbox per phase)
@@ -172,6 +174,11 @@ export default function VoiceAssistant() {
   }>({});
 
   const isAdmin = profile?.role === "admin";
+
+  const parsedRef = useRef<ParsedIntent | null>(null);
+  const phaseRef = useRef<Phase>("input");
+  useEffect(() => { parsedRef.current = parsed; }, [parsed]);
+  useEffect(() => { phaseRef.current = phase; }, [phase]);
 
   // Load clients once when drawer opens
   useEffect(() => {
@@ -199,9 +206,10 @@ export default function VoiceAssistant() {
     recRef.current = null;
     setListening(false);
     setInterim("");
+    setRefineInterim("");
   }, []);
 
-  const startListening = useCallback(() => {
+  const startListening = useCallback((mode: "command" | "refine" = "command") => {
     if (!supported) {
       toast({
         title: "Voz indisponível neste navegador",
@@ -212,7 +220,13 @@ export default function VoiceAssistant() {
       });
       return;
     }
+    wantListenRef.current = false;
+    try { recRef.current?.stop?.(); } catch {}
+    recRef.current = null;
+    listeningModeRef.current = mode;
     wantListenRef.current = true;
+    if (mode === "refine") setRefineInterim("");
+    else setInterim("");
     const launch = () => {
       const rec = getRecognition();
       if (!rec) return;
@@ -226,13 +240,19 @@ export default function VoiceAssistant() {
         }
         if (finals) {
           const corrected = applyCorrections(finals, corrections.current);
-          setFinalText((prev) => {
-            const merged = (prev + " " + corrected).trim();
-            lastSttRef.current = merged;
-            return merged;
-          });
+          if (listeningModeRef.current === "refine") {
+            setRefineText((prev) => (prev + " " + corrected).trim());
+          } else {
+            setFinalText((prev) => {
+              const merged = (prev + " " + corrected).trim();
+              lastSttRef.current = merged;
+              return merged;
+            });
+          }
         }
-        setInterim(applyCorrections(interims, corrections.current));
+        const correctedInterim = applyCorrections(interims, corrections.current);
+        if (listeningModeRef.current === "refine") setRefineInterim(correctedInterim);
+        else setInterim(correctedInterim);
       };
       rec.onerror = (e: any) => {
         const code = e?.error || "";
@@ -271,9 +291,23 @@ export default function VoiceAssistant() {
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
     aiAttemptedRef.current = false;
-    setRefineVoice(false); setRefineText("");
+    setRefineVoice(false); setRefineText(""); setRefineInterim("");
     lastSttRef.current = "";
   };
+
+  const returnToDraft = useCallback(() => {
+    stopListening();
+    setConfirmAck(false);
+    setStageIdx(0);
+    setStageAck(false);
+    setStageRefs(emptyRefs());
+    setStageContext({});
+    setPhase(parsed?.kind === "create_project" ? "preview" : parsed ? "clarify" : "input");
+  }, [parsed, stopListening]);
+
+  const finishFlow = useCallback(() => {
+    reset();
+  }, []);
 
   const appendLog = useCallback((entry: Omit<LogEntry, "id">) =>
     setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12)), []);
@@ -281,8 +315,8 @@ export default function VoiceAssistant() {
   // 🧠 Agente IA — interpreta voz + anexo (ou contrato do sistema) + base de
   // clientes. Roda em modelos GRATUITOS com fallback chain — nunca trava por
   // crédito; se tudo falhar, cai pro regex local sem quebrar.
-  const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
-    const text = (finalText + " " + interim).trim();
+  const runAgent = useCallback(async (opts?: { silent?: boolean; textOverride?: string }) => {
+    const text = (opts?.textOverride ?? (finalText + " " + interim)).trim();
     const validCtxs = fileCtxs.filter((c) => c.text);
     const attachments = [
       ...validCtxs.map((c) => ({ fileName: c.fileName, text: c.text })),
@@ -311,9 +345,11 @@ export default function VoiceAssistant() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const intent = (data as any).intent || { kind: "unknown", raw: text };
-      setParsed(intent as ParsedIntent);
-      setAiNarrative((data as any).narrative || null);
-      setAiPlan((data as any).plan || null);
+      const currentParsed = parsedRef.current;
+      const protectedDraft = phaseRef.current !== "input" && currentParsed?.kind === "create_project";
+      setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
+      setAiNarrative((prev) => (data as any).narrative || (protectedDraft ? prev : null));
+      setAiPlan((prev) => (data as any).plan || (protectedDraft ? prev : null));
       setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
       const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
       if (sug.length && !answers.client_id) {
@@ -426,6 +462,7 @@ export default function VoiceAssistant() {
   // The file's extracted text is fed into the parser so the command can
   // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
+    if (phaseRef.current !== "input") return;
     const spoken = (finalText + " " + interim).trim();
     const ctxText = fileCtxs
       .filter((c) => c.text)
@@ -457,6 +494,9 @@ export default function VoiceAssistant() {
   }, [parsed, resolvedClient]);
 
   const advanceFromInput = () => {
+    const pendingInterim = interim.trim();
+    if (pendingInterim) setFinalText((prev) => (prev ? `${prev} ${pendingInterim}` : pendingInterim).trim());
+    stopListening();
     // Se o admin já pré-selecionou cliente+tipo e tem anexo/comando, força
     // um intent "create_project" sintético — não trava por falta de gatilho verbal.
     let effective = parsed;
@@ -1489,7 +1529,7 @@ export default function VoiceAssistant() {
                       />
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={listening ? stopListening : startListening}
+                          onClick={() => listening ? stopListening() : startListening("refine")}
                           className={`w-8 h-8 rounded-full flex items-center justify-center ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-secondary text-foreground"}`}
                           title={listening ? "Parar mic" : "Falar ajuste"}
                         >
@@ -1497,23 +1537,26 @@ export default function VoiceAssistant() {
                         </button>
                         <button
                           onClick={async () => {
-                            const extra = (refineText + " " + interim).trim();
+                            const extra = (refineText + " " + refineInterim).trim();
                             if (!extra) return;
                             // Junta o ajuste ao comando e roda IA de novo.
-                            setFinalText((p) => (p ? `${p}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`));
+                            stopListening();
+                            const nextText = finalText ? `${finalText}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`;
+                            setFinalText(nextText);
                             setRefineText("");
+                            setRefineInterim("");
                             aiAttemptedRef.current = true;
-                            await runAgent();
+                            await runAgent({ textOverride: nextText });
                           }}
-                          disabled={aiThinking || (!refineText.trim() && !interim.trim())}
+                          disabled={aiThinking || (!refineText.trim() && !refineInterim.trim())}
                           className="flex-1 h-8 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
                         >
                           {aiThinking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
                           Reanalisar com ajuste
                         </button>
                       </div>
-                      {interim && (
-                        <p className="text-[10px] italic text-muted-foreground">"{interim}"</p>
+                      {refineInterim && (
+                        <p className="text-[10px] italic text-muted-foreground">"{refineInterim}"</p>
                       )}
                     </div>
                   </div>
@@ -1636,7 +1679,7 @@ export default function VoiceAssistant() {
                 {phase === "input" && (
                   <>
                     <button
-                      onClick={listening ? stopListening : startListening}
+                      onClick={() => listening ? stopListening() : startListening("command")}
                       className={`w-10 h-10 rounded-full flex items-center justify-center transition ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-primary text-primary-foreground"}`}
                     >
                       {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -1696,21 +1739,18 @@ export default function VoiceAssistant() {
                 {phase === "confirm" && (
                   <>
                     <button
-                      onClick={() => {
-                        if (stageIdx > 0) return; // can't edit mid-execution
-                        setPhase(parsed?.kind === "create_project" ? "preview" : "clarify");
-                      }}
+                      onClick={returnToDraft}
                       className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm disabled:opacity-40"
                       disabled={executing || stageIdx > 0}
                     >
                       Voltar
                     </button>
                     <button
-                      onClick={reset}
+                      onClick={stageIdx >= stages.length && stages.length > 0 ? finishFlow : returnToDraft}
                       disabled={executing}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Cancelar fluxo"}
+                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Manter rascunho"}
                     </button>
                   </>
                 )}
