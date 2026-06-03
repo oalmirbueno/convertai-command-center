@@ -890,7 +890,7 @@ export default function VoiceAssistant() {
   const scopePreview = phase === "preview" && parsed?.kind === "create_project"
     ? formatScopePreview(answers, resolvedClient?.company_name || resolvedClient?.full_name, {
         narrative: aiNarrative,
-        contractName: fileCtx?.fileName || null,
+        contractName: primaryCtxName,
         plan: aiPlan,
         rawHint: (finalText + " " + interim).trim(),
       })
