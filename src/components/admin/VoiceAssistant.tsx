@@ -250,12 +250,17 @@ export default function VoiceAssistant() {
     }
   };
 
-  // Auto re-parse when text changes
+  // Auto re-parse when text or file context changes.
+  // The file's extracted text is fed into the parser so the command can
+  // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
-    const full = (finalText + " " + interim).trim();
+    const spoken = (finalText + " " + interim).trim();
+    const ctxText = fileCtx?.text ? `\n\n[ANEXO ${fileCtx.fileName}]\n${fileCtx.text}` : "";
+    const full = (spoken + ctxText).trim();
     if (full) setParsed(parseCommand(full));
     else setParsed(null);
-  }, [finalText, interim]);
+  }, [finalText, interim, fileCtx]);
+
 
   const appendLog = (entry: Omit<LogEntry, "id">) =>
     setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12));
