@@ -2,8 +2,8 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { Check, ChevronRight, Loader2, AlertTriangle } from "lucide-react";
-import { motion } from "framer-motion";
+import { Check, ChevronRight, ChevronDown, Loader2, AlertTriangle, X, RotateCcw, EyeOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 import { toast } from "sonner";
 
 /** Maps service_config keys (from EditClientDrawer) → service_checklists.service_type */
@@ -34,6 +34,8 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState<string | null>(null);
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  const [showSkipped, setShowSkipped] = useState(false);
 
   // Derive relevant service_types from client's active services + always include "geral"
   const serviceTypes = useMemo(() => {
@@ -84,46 +86,52 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     return m;
   }, [clientState]);
 
-  // Group by phase
+  // Group by phase (excluding skipped unless showSkipped)
   const grouped = useMemo(() => {
-    const out: Record<string, { list: any; items: any[] }[]> = {};
+    const out: Record<string, { list: any; items: any[]; hiddenCount: number }[]> = {};
     (catalog?.lists || []).forEach((l: any) => {
-      const items = (catalog?.items || []).filter((i: any) => i.checklist_id === l.id);
-      (out[l.phase] = out[l.phase] || []).push({ list: l, items });
+      const allItems = (catalog?.items || []).filter((i: any) => i.checklist_id === l.id);
+      const visible = showSkipped
+        ? allItems
+        : allItems.filter((i: any) => !stateMap.get(i.id)?.is_skipped);
+      const hiddenCount = allItems.length - visible.length;
+      (out[l.phase] = out[l.phase] || []).push({ list: l, items: visible, hiddenCount });
     });
     return out;
-  }, [catalog]);
+  }, [catalog, stateMap, showSkipped]);
 
-  const allItems = catalog?.items || [];
-  const doneCount = allItems.filter((i: any) => stateMap.get(i.id)?.is_done).length;
-  const totalCount = allItems.length;
+  // Aggregate counts ignore skipped items so progress reflects real scope
+  const activeItems = useMemo(
+    () => (catalog?.items || []).filter((i: any) => !stateMap.get(i.id)?.is_skipped),
+    [catalog, stateMap],
+  );
+  const doneCount = activeItems.filter((i: any) => stateMap.get(i.id)?.is_done).length;
+  const totalCount = activeItems.length;
+  const skippedCount = (catalog?.items?.length || 0) - totalCount;
   const percent = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
+
+  const upsertItem = async (itemId: string, patch: Record<string, any>) => {
+    const existing = stateMap.get(itemId);
+    if (existing) {
+      await supabase.from("client_onboarding_items" as any).update(patch).eq("id", existing.id);
+    } else {
+      await supabase.from("client_onboarding_items" as any).insert({
+        client_id: clientId, template_item_id: itemId, is_done: false, ...patch,
+      });
+    }
+  };
 
   const toggleItem = async (itemId: string, next: boolean, value?: string) => {
     if (!user) return;
     setSaving(itemId);
     const existing = stateMap.get(itemId);
     try {
-      if (existing) {
-        await supabase
-          .from("client_onboarding_items" as any)
-          .update({
-            is_done: next,
-            value: value ?? existing.value ?? null,
-            completed_by: next ? user.id : null,
-            completed_at: next ? new Date().toISOString() : null,
-          })
-          .eq("id", existing.id);
-      } else {
-        await supabase.from("client_onboarding_items" as any).insert({
-          client_id: clientId,
-          template_item_id: itemId,
-          is_done: next,
-          value: value ?? null,
-          completed_by: next ? user.id : null,
-          completed_at: next ? new Date().toISOString() : null,
-        });
-      }
+      await upsertItem(itemId, {
+        is_done: next,
+        value: value ?? existing?.value ?? null,
+        completed_by: next ? user.id : null,
+        completed_at: next ? new Date().toISOString() : null,
+      });
       await refetch();
       queryClient.invalidateQueries({ queryKey: ["client-onboarding-summary"] });
     } catch (err: any) {
@@ -133,20 +141,27 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     }
   };
 
-  const updateValue = async (itemId: string, value: string) => {
-    const existing = stateMap.get(itemId);
-    if (!existing) {
-      await supabase.from("client_onboarding_items" as any).insert({
-        client_id: clientId, template_item_id: itemId, is_done: false, value,
-      });
-    } else {
-      await supabase
-        .from("client_onboarding_items" as any)
-        .update({ value })
-        .eq("id", existing.id);
+  const setSkipped = async (itemId: string, next: boolean) => {
+    setSaving(itemId);
+    try {
+      await upsertItem(itemId, { is_skipped: next });
+      await refetch();
+      queryClient.invalidateQueries({ queryKey: ["client-onboarding-summary"] });
+      toast.success(next ? "Item removido deste cliente" : "Item restaurado");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover");
+    } finally {
+      setSaving(null);
     }
+  };
+
+  const updateValue = async (itemId: string, value: string) => {
+    await upsertItem(itemId, { value });
     refetch();
   };
+
+  const togglePhase = (phase: string) =>
+    setCollapsed((c) => ({ ...c, [phase]: !c[phase] }));
 
   if (isLoading) {
     return (
@@ -156,7 +171,7 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     );
   }
 
-  if (!totalCount) {
+  if (!catalog?.items?.length) {
     return (
       <div className="text-sm text-muted-foreground py-6 text-center border border-dashed border-border rounded-xl">
         Nenhum checklist disponível para os serviços ativos.
@@ -164,17 +179,35 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
     );
   }
 
+  const allPhasesCollapsed = PHASE_ORDER.filter((p) => grouped[p]).every((p) => collapsed[p]);
+  const toggleAll = () => {
+    const next: Record<string, boolean> = {};
+    PHASE_ORDER.filter((p) => grouped[p]).forEach((p) => {
+      next[p] = !allPhasesCollapsed;
+    });
+    setCollapsed(next);
+  };
+
   return (
     <div className="space-y-4">
       {/* Progress banner */}
       <div className="rounded-xl border border-border bg-secondary/40 p-4">
-        <div className="flex items-center justify-between mb-2">
+        <div className="flex items-center justify-between mb-2 gap-3">
           <p className="text-xs uppercase tracking-wider text-muted-foreground">
             Esteira de Onboarding
           </p>
-          <p className="font-mono text-sm text-foreground">
-            {doneCount}/{totalCount} · {percent}%
-          </p>
+          <div className="flex items-center gap-2">
+            <p className="font-mono text-sm text-foreground shrink-0">
+              {doneCount}/{totalCount} · {percent}%
+            </p>
+            <button
+              onClick={toggleAll}
+              className="text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground border border-border rounded px-2 py-1 transition-colors"
+              title={allPhasesCollapsed ? "Expandir tudo" : "Recolher tudo"}
+            >
+              {allPhasesCollapsed ? "Expandir" : "Recolher"}
+            </button>
+          </div>
         </div>
         <div className="h-2 rounded-full bg-background overflow-hidden">
           <motion.div
@@ -184,12 +217,23 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
             transition={{ type: "spring", stiffness: 120, damping: 20 }}
           />
         </div>
-        {percent < 100 && (
-          <p className="mt-2 flex items-center gap-1.5 text-[11px] text-warning">
-            <AlertTriangle className="w-3 h-3" />
-            Onboarding incompleto — {totalCount - doneCount} item(ns) pendente(s)
-          </p>
-        )}
+        <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
+          {percent < 100 ? (
+            <p className="flex items-center gap-1.5 text-[11px] text-warning">
+              <AlertTriangle className="w-3 h-3" />
+              {totalCount - doneCount} item(ns) pendente(s)
+            </p>
+          ) : <span />}
+          {skippedCount > 0 && (
+            <button
+              onClick={() => setShowSkipped((s) => !s)}
+              className="flex items-center gap-1 text-[10px] uppercase tracking-wider text-muted-foreground hover:text-foreground"
+            >
+              <EyeOff className="w-3 h-3" />
+              {showSkipped ? "Ocultar removidos" : `Ver ${skippedCount} removido(s)`}
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Phases */}
@@ -199,80 +243,140 @@ export default function ClientOnboardingPanel({ clientId, servicesConfig }: Prop
         const phaseDone = phaseItems.filter((i) => stateMap.get(i.id)?.is_done).length;
         const phasePct =
           phaseItems.length > 0 ? Math.round((phaseDone / phaseItems.length) * 100) : 0;
+        const isCollapsed = !!collapsed[phase];
         return (
-          <div key={phase} className="rounded-xl border border-border bg-card">
-            <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+          <div key={phase} className="rounded-xl border border-border bg-card overflow-hidden">
+            <button
+              onClick={() => togglePhase(phase)}
+              className="w-full px-4 py-3 border-b border-border flex items-center justify-between hover:bg-secondary/40 transition-colors text-left"
+              aria-expanded={!isCollapsed}
+            >
               <div className="flex items-center gap-2">
-                <ChevronRight className="w-3.5 h-3.5 text-primary" />
+                <motion.div animate={{ rotate: isCollapsed ? 0 : 90 }} transition={{ duration: 0.2 }}>
+                  <ChevronRight className="w-3.5 h-3.5 text-primary" />
+                </motion.div>
                 <h4 className="text-sm font-semibold text-foreground">{PHASE_LABEL[phase]}</h4>
+                {phasePct === 100 && phaseItems.length > 0 && (
+                  <Check className="w-3.5 h-3.5 text-primary" />
+                )}
               </div>
               <span className="font-mono text-[11px] text-muted-foreground">
                 {phaseDone}/{phaseItems.length} · {phasePct}%
               </span>
-            </div>
-            <div className="divide-y divide-border">
-              {phaseLists.map((g) => (
-                <div key={g.list.id} className="px-4 py-3">
-                  <p className="text-xs font-medium text-foreground mb-2">
-                    {g.list.title}
-                    {g.list.service_type !== "geral" && (
-                      <span className="ml-2 text-[10px] uppercase text-muted-foreground">
-                        {g.list.service_type}
-                      </span>
-                    )}
-                  </p>
-                  <ul className="space-y-2">
-                    {g.items.map((it: any) => {
-                      const s = stateMap.get(it.id);
-                      const checked = !!s?.is_done;
-                      return (
-                        <li key={it.id} className="flex items-start gap-2">
-                          <button
-                            onClick={() => toggleItem(it.id, !checked)}
-                            disabled={saving === it.id}
-                            className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
-                              checked
-                                ? "bg-primary border-primary text-primary-foreground"
-                                : "border-border bg-background hover:border-primary"
-                            }`}
-                          >
-                            {checked && <Check className="w-3 h-3" />}
-                          </button>
-                          <div className="flex-1 min-w-0">
-                            <p
-                              className={`text-xs ${
-                                checked ? "line-through text-muted-foreground" : "text-foreground"
-                              }`}
-                            >
-                              {it.label}
-                              {it.is_required && (
-                                <span className="text-destructive ml-1">*</span>
-                              )}
-                            </p>
-                            {it.hint && (
-                              <p className="text-[10px] text-muted-foreground mt-0.5">
-                                {it.hint}
-                              </p>
-                            )}
-                            <input
-                              type="text"
-                              defaultValue={s?.value || ""}
-                              onBlur={(e) => {
-                                if (e.target.value !== (s?.value || "")) {
-                                  updateValue(it.id, e.target.value);
-                                }
-                              }}
-                              placeholder="Link / observação (opcional)"
-                              className="mt-1 w-full text-[11px] bg-background border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
-                            />
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                </div>
-              ))}
-            </div>
+            </button>
+            <AnimatePresence initial={false}>
+              {!isCollapsed && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.22, ease: "easeInOut" }}
+                >
+                  <div className="divide-y divide-border">
+                    {phaseLists.map((g) => (
+                      <div key={g.list.id} className="px-4 py-3">
+                        <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-2">
+                          {g.list.title}
+                          {g.list.service_type !== "geral" && (
+                            <span className="text-[10px] uppercase text-muted-foreground">
+                              {g.list.service_type}
+                            </span>
+                          )}
+                          {g.hiddenCount > 0 && !showSkipped && (
+                            <span className="text-[10px] text-muted-foreground italic">
+                              · {g.hiddenCount} removido(s)
+                            </span>
+                          )}
+                        </p>
+                        {g.items.length === 0 ? (
+                          <p className="text-[11px] text-muted-foreground italic">
+                            Todos os itens foram removidos para este cliente.
+                          </p>
+                        ) : (
+                          <ul className="space-y-2">
+                            {g.items.map((it: any) => {
+                              const s = stateMap.get(it.id);
+                              const checked = !!s?.is_done;
+                              const skipped = !!s?.is_skipped;
+                              return (
+                                <li
+                                  key={it.id}
+                                  className={`group flex items-start gap-2 rounded-md -mx-2 px-2 py-1 transition-colors ${
+                                    skipped ? "opacity-50" : "hover:bg-secondary/30"
+                                  }`}
+                                >
+                                  <button
+                                    onClick={() => toggleItem(it.id, !checked)}
+                                    disabled={saving === it.id || skipped}
+                                    className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center shrink-0 transition-colors ${
+                                      checked
+                                        ? "bg-primary border-primary text-primary-foreground"
+                                        : "border-border bg-background hover:border-primary"
+                                    } disabled:cursor-not-allowed`}
+                                  >
+                                    {checked && <Check className="w-3 h-3" />}
+                                  </button>
+                                  <div className="flex-1 min-w-0">
+                                    <p
+                                      className={`text-xs ${
+                                        checked || skipped
+                                          ? "line-through text-muted-foreground"
+                                          : "text-foreground"
+                                      }`}
+                                    >
+                                      {it.label}
+                                      {it.is_required && !skipped && (
+                                        <span className="text-destructive ml-1">*</span>
+                                      )}
+                                    </p>
+                                    {it.hint && !skipped && (
+                                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                                        {it.hint}
+                                      </p>
+                                    )}
+                                    {!skipped && (
+                                      <input
+                                        type="text"
+                                        defaultValue={s?.value || ""}
+                                        onBlur={(e) => {
+                                          if (e.target.value !== (s?.value || "")) {
+                                            updateValue(it.id, e.target.value);
+                                          }
+                                        }}
+                                        placeholder="Link / observação (opcional)"
+                                        className="mt-1 w-full text-[11px] bg-background border border-border rounded px-2 py-1 focus:outline-none focus:border-primary"
+                                      />
+                                    )}
+                                  </div>
+                                  <button
+                                    onClick={() => setSkipped(it.id, !skipped)}
+                                    disabled={saving === it.id}
+                                    title={skipped ? "Restaurar item" : "Não se aplica a este cliente"}
+                                    className={`shrink-0 w-6 h-6 rounded flex items-center justify-center transition-all ${
+                                      skipped
+                                        ? "text-muted-foreground hover:text-primary opacity-100"
+                                        : "text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100"
+                                    }`}
+                                  >
+                                    {saving === it.id ? (
+                                      <Loader2 className="w-3 h-3 animate-spin" />
+                                    ) : skipped ? (
+                                      <RotateCcw className="w-3 h-3" />
+                                    ) : (
+                                      <X className="w-3.5 h-3.5" />
+                                    )}
+                                  </button>
+                                </li>
+                              );
+                            })}
+                          </ul>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
         );
       })}

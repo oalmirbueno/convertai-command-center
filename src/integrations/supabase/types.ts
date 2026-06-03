@@ -221,6 +221,7 @@ export type Database = {
           created_at: string
           id: string
           is_done: boolean
+          is_skipped: boolean
           template_item_id: string
           updated_at: string
           value: string | null
@@ -232,6 +233,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_done?: boolean
+          is_skipped?: boolean
           template_item_id: string
           updated_at?: string
           value?: string | null
@@ -243,6 +245,7 @@ export type Database = {
           created_at?: string
           id?: string
           is_done?: boolean
+          is_skipped?: boolean
           template_item_id?: string
           updated_at?: string
           value?: string | null
