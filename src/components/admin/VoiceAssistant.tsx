@@ -601,12 +601,12 @@ export default function VoiceAssistant() {
       <AnimatePresence>
         {open && (
           <motion.div
-            className="fixed inset-0 z-50 flex items-end md:items-center md:justify-end"
+            className="fixed inset-0 z-50 flex items-end justify-center md:items-center"
             initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
           >
             <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
             <motion.div
-              className="relative w-full md:w-[460px] md:m-6 md:rounded-2xl bg-card border border-border max-h-[92vh] flex flex-col"
+              className="relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border border-border max-h-[92vh] flex flex-col shadow-2xl"
               initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 220, damping: 24 }}
             >
