@@ -1349,26 +1349,73 @@ export default function VoiceAssistant() {
                       </p>
                     </div>
 
-                    {answers.apply_template && projectTemplate && (
-                      <div className="rounded-xl border border-border bg-secondary/40 p-3">
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
-                          Vai criar · {projectTemplate.length} milestones · {previewTaskCount} tarefas · checklists
-                        </p>
-                        <ul className="space-y-1.5">
-                          {projectTemplate.map((m) => (
-                            <li key={m.title} className="text-xs">
-                              <p className="font-medium text-foreground">▸ {m.title}</p>
-                              <ul className="ml-4 mt-0.5 space-y-0.5 text-muted-foreground">
-                                {m.tasks.slice(0, 3).map((t) => (
-                                  <li key={t.title} className="text-[11px]">· {t.title}</li>
-                                ))}
-                                {m.tasks.length > 3 && <li className="text-[10px] italic">+ {m.tasks.length - 3} tarefas</li>}
-                              </ul>
-                            </li>
-                          ))}
-                        </ul>
+                    {(() => {
+                      const ms: any[] = (aiPlan?.milestones?.length ? aiPlan.milestones : (projectTemplate || [])) as any[];
+                      const total = ms.reduce((s, m) => s + (m.tasks?.length || 0), 0);
+                      if (!answers.apply_template || !ms.length) return null;
+                      return (
+                        <div className="rounded-xl border border-border bg-secondary/40 p-3">
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">
+                            Vai criar · {ms.length} milestones · {total} tarefas · checklists
+                            {aiPlan?.milestones?.length ? <span className="text-primary"> · derivado do contrato</span> : null}
+                          </p>
+                          <ul className="space-y-1.5">
+                            {ms.map((m: any) => (
+                              <li key={m.title} className="text-xs">
+                                <p className="font-medium text-foreground">▸ {m.title}{m.offsetDays != null ? <span className="text-muted-foreground font-normal"> · +{m.offsetDays}d</span> : null}</p>
+                                <ul className="ml-4 mt-0.5 space-y-0.5 text-muted-foreground">
+                                  {(m.tasks || []).slice(0, 5).map((t: any) => (
+                                    <li key={t.title} className="text-[11px]">· {t.title}</li>
+                                  ))}
+                                  {(m.tasks?.length || 0) > 5 && <li className="text-[10px] italic">+ {m.tasks.length - 5} tarefas</li>}
+                                </ul>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      );
+                    })()}
+
+                    {/* 🎙️ Ajustar o escopo com voz — re-roda a IA com instrução extra. */}
+                    <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                        Não ficou bom? Ajuste com voz ou texto
+                      </p>
+                      <textarea
+                        value={refineText}
+                        onChange={(e) => setRefineText(e.target.value)}
+                        placeholder='Ex.: "São 12 vídeos de 30 a 40 segundos, vídeo com IA, sem captação"'
+                        className="w-full text-xs bg-background border border-border rounded p-2 min-h-[50px]"
+                      />
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={listening ? stopListening : startListening}
+                          className={`w-8 h-8 rounded-full flex items-center justify-center ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-secondary text-foreground"}`}
+                          title={listening ? "Parar mic" : "Falar ajuste"}
+                        >
+                          {listening ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const extra = (refineText + " " + interim).trim();
+                            if (!extra) return;
+                            // Junta o ajuste ao comando e roda IA de novo.
+                            setFinalText((p) => (p ? `${p}\n\n[AJUSTE]: ${extra}` : `[AJUSTE]: ${extra}`));
+                            setRefineText("");
+                            aiAttemptedRef.current = true;
+                            await runAgent();
+                          }}
+                          disabled={aiThinking || (!refineText.trim() && !interim.trim())}
+                          className="flex-1 h-8 rounded-full bg-primary/15 border border-primary/30 text-primary text-[11px] font-medium disabled:opacity-40 flex items-center justify-center gap-1.5"
+                        >
+                          {aiThinking ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
+                          Reanalisar com ajuste
+                        </button>
                       </div>
-                    )}
+                      {interim && (
+                        <p className="text-[10px] italic text-muted-foreground">"{interim}"</p>
+                      )}
+                    </div>
                   </div>
                 )}
 
