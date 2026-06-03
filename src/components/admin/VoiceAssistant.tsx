@@ -94,6 +94,17 @@ export default function VoiceAssistant() {
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
 
+  // Staged execution state (one checkbox per phase)
+  const [stageIdx, setStageIdx] = useState(0);
+  const [stageAck, setStageAck] = useState(false);
+  const [stageRefs, setStageRefs] = useState<CreatedRefs>(emptyRefs());
+  const [stageContext, setStageContext] = useState<{
+    client?: any; project?: any;
+    milestones?: Array<{ milestone: any; tm: any }>;
+    tasks?: Array<{ task: any; t: any; milestone: any }>;
+    chkTemplates?: any[];
+  }>({});
+
   const isAdmin = profile?.role === "admin";
 
   // Load clients once when drawer opens
