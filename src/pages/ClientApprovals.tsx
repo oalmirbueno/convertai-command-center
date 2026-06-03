@@ -261,34 +261,35 @@ export default function ClientApprovals() {
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+        <DialogContent className="max-w-2xl p-0 gap-0 flex flex-col max-h-[90vh]">
+          <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
+            <DialogTitle className="flex items-center gap-2 truncate pr-6 text-base">
               {previewFile?.file_name}
               {previewFile && getCarouselImages(previewFile).length > 1 && (
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
-                  Carrossel • {getCarouselImages(previewFile).length} imagens
+                <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">
+                  Carrossel • {getCarouselImages(previewFile).length} itens
                 </span>
               )}
             </DialogTitle>
           </DialogHeader>
           {previewFile && (() => {
             const items = getCarouselImages(previewFile);
-            const [currentIdx, setIdx] = [previewIdx % items.length, setPreviewIdx];
+            const currentIdx = previewIdx % items.length;
+            const setIdx = setPreviewIdx;
             const current = items[currentIdx] || previewFile;
             return (
-            <div className="space-y-4">
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <div className="relative">
                 <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
                 {items.length > 1 && (
                   <>
                     <button type="button"
-                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-md"
                       onClick={() => setIdx((currentIdx - 1 + items.length) % items.length)}>
                       <ChevronLeft className="w-4 h-4" />
                     </button>
                     <button type="button"
-                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background shadow-md"
                       onClick={() => setIdx((currentIdx + 1) % items.length)}>
                       <ChevronRight className="w-4 h-4" />
                     </button>
@@ -298,6 +299,23 @@ export default function ClientApprovals() {
                   </>
                 )}
               </div>
+
+              {items.length > 1 && (
+                <div className="flex gap-2 overflow-x-auto pb-1">
+                  {items.map((cf: any, i: number) => (
+                    <button key={cf.id} onClick={() => setIdx(i)}
+                      className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === currentIdx ? "border-primary ring-1 ring-primary/30" : "border-border opacity-60 hover:opacity-100"}`}>
+                      {isImage(cf.file_name, cf.file_url) ? (
+                        <img src={cf.file_url} alt={cf.file_name} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full bg-secondary flex items-center justify-center">
+                          <FileText className="w-4 h-4 text-muted-foreground" />
+                        </div>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              )}
 
               <div className="flex items-center gap-2">
                 <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(current.file_url)}>
@@ -309,9 +327,9 @@ export default function ClientApprovals() {
               </div>
 
               <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
-              {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
-              {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
-              {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {previewFile.caption && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
+              {previewFile.carousel_text && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
+              {previewFile.description && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
@@ -322,7 +340,7 @@ export default function ClientApprovals() {
             );
           })()}
           {previewFile?.approval_status === "pending" && (
-            <DialogFooter>
+            <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
                 ❌ Solicitar Ajuste
