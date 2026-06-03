@@ -18,7 +18,8 @@ const MONTHS_PT = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set"
 const TYPE_LABELS: Record<string, string> = {
   trafego: "Tráfego Pago",
   social_media: "Social Media",
-  video: "Vídeo",
+  video: "Vídeo (captação)",
+  video_ai: "Vídeo IA",
   site: "Site",
   landing_page: "Landing Page",
   automation: "Automação",
@@ -29,7 +30,8 @@ const TYPE_LABELS: Record<string, string> = {
 const DEFAULT_DEADLINE: Record<string, number> = {
   trafego: 30,
   social_media: 30,
-  video: 14,
+  video: 30,
+  video_ai: 21,
   site: 45,
   landing_page: 14,
   automation: 21,
@@ -63,6 +65,7 @@ export function suggestProjectNames(opts: {
     trafego: ["Aceleração", "Performance", "Escala", "Captação"],
     social_media: ["Presença", "Conteúdo", "Engajamento", "Editorial"],
     video: ["Produção", "Cobertura", "Storytelling", "Branded Content"],
+    video_ai: ["Vídeo IA", "AI Reels", "Generativo", "AI Storytelling"],
     site: ["Plataforma", "Reposicionamento", "Redesign", "Institucional"],
     landing_page: ["Conversão", "Captura", "Lançamento", "Oferta"],
     automation: ["Automação", "Workflow", "Integração", "Operação"],
@@ -91,25 +94,55 @@ export function suggestDeadline(type?: string): number {
   return DEFAULT_DEADLINE[type || "other"] || 30;
 }
 
-export function defaultProjectDescription(type?: string, clientName?: string): string {
+export function defaultProjectDescription(
+  type?: string,
+  clientName?: string,
+  enrichment?: {
+    narrative?: string | null;
+    contractName?: string | null;
+    plan?: { milestones: { title: string; offsetDays: number; tasks: { title: string }[] }[] } | null;
+    rawHint?: string | null;
+  },
+): string {
   const base: Record<string, string> = {
     trafego:
-      "Gestão de tráfego pago com foco em performance: setup, lançamento, otimização e relatório mensal.",
+      "Gestão de tráfego pago com foco em performance: setup de pixel/conversões, estrutura de campanhas, criativos, lançamento, otimização semanal e relatório mensal de resultados.",
     social_media:
-      "Gestão de mídias sociais: planejamento editorial, produção de conteúdo, publicação e relatório.",
+      "Gestão de mídias sociais: linha editorial, identidade visual do feed, produção de criativos (artes/reels), copies, calendário de publicação, acompanhamento de engajamento e relatório.",
     video:
-      "Produção audiovisual: pré-produção, gravação, edição e entrega final.",
+      "Produção audiovisual: roteiro, storyboard, pré-produção, captação, edição, color, sound design, aprovação e entrega dos cortes finais nos formatos contratados.",
+    video_ai:
+      "Produção de vídeos 100% com IA generativa (sem captação): roteiro, prompts visuais e de narração, geração das cenas (Runway/Veo/Sora/Pika), voz IA, edição, sincronização, legendas dinâmicas, branding e entrega nos formatos contratados.",
     site:
-      "Desenvolvimento de site institucional: design, desenvolvimento responsivo, SEO técnico e deploy.",
+      "Desenvolvimento de site institucional: wireframe, design UI/UX, desenvolvimento responsivo, integrações de formulário/CTA, SEO técnico, performance e deploy.",
     landing_page:
-      "Landing page de conversão: copy, design, desenvolvimento e tracking de conversões.",
+      "Landing page de conversão: copy, design, desenvolvimento, tracking de conversões e testes A/B.",
     automation:
-      "Automação de processos: mapeamento, construção de fluxos, testes e deploy em produção.",
-    event: "Cobertura e divulgação de evento.",
+      "Automação de processos: mapeamento, desenho de fluxos, integrações via API/webhooks, testes e deploy em produção.",
+    event:
+      "Cobertura e divulgação de evento: pré-produção, identidade visual, landing, campanhas, cobertura em tempo real e recap.",
     other: "Projeto sob demanda.",
   };
   const scope = base[type || "other"] || base.other;
-  return clientName ? `${scope}\n\nCliente: ${clientName}` : scope;
+
+  const parts: string[] = [];
+  if (enrichment?.narrative && enrichment.narrative.trim().length > 20) {
+    parts.push(`**Contexto da IA (lido do contrato):**\n${enrichment.narrative.trim()}`);
+  }
+  parts.push(`**Escopo:**\n${scope}`);
+  if (clientName) parts.push(`**Cliente:** ${clientName}`);
+  if (enrichment?.contractName) parts.push(`**Base contratual:** ${enrichment.contractName}`);
+  if (enrichment?.rawHint && enrichment.rawHint.trim().length > 4) {
+    parts.push(`**Direcionamento do admin:**\n${enrichment.rawHint.trim()}`);
+  }
+  if (enrichment?.plan?.milestones?.length) {
+    const ms = enrichment.plan.milestones;
+    const taskTotal = ms.reduce((s, m) => s + (m.tasks?.length || 0), 0);
+    parts.push(
+      `**Estrutura planejada:** ${ms.length} milestones · ${taskTotal} tarefas, derivadas do contrato.`,
+    );
+  }
+  return parts.join("\n\n");
 }
 
 export function gapsForIntent(
