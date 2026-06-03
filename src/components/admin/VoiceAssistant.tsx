@@ -146,38 +146,46 @@ export default function VoiceAssistant() {
   const execute = async () => {
     if (!parsed || parsed.kind === "unknown" || !user) return;
     setExecuting(true);
+    const transcript = (finalText + " " + interim).trim();
+    let status: "success" | "error" = "success";
+    let resultMsg = "";
     try {
       switch (parsed.kind) {
         case "create_project":
-          await execCreateProject(parsed);
-          break;
+          await execCreateProject(parsed); break;
         case "create_task":
-          await execCreateTask(parsed);
-          break;
+          await execCreateTask(parsed); break;
         case "create_milestone":
-          await execCreateMilestone(parsed);
-          break;
+          await execCreateMilestone(parsed); break;
         case "update_task_status":
-          await execUpdateTaskStatus(parsed);
-          break;
+          await execUpdateTaskStatus(parsed); break;
         case "report_pending":
-          await execReportPending(parsed);
-          break;
+          await execReportPending(parsed); break;
         case "report_overview":
-          await execReportOverview(parsed);
-          break;
+          await execReportOverview(parsed); break;
         case "upload_file":
-          await execUploadFile(parsed);
-          break;
+          await execUploadFile(parsed); break;
       }
+      resultMsg = summarizeIntent(parsed);
       reset();
       stopListening();
     } catch (err: any) {
-      appendLog({ kind: "error", text: err?.message || "Falha na execução" });
+      status = "error";
+      resultMsg = err?.message || "Falha na execução";
+      appendLog({ kind: "error", text: resultMsg });
     } finally {
       setExecuting(false);
+      // Audit log (fire-and-forget)
+      supabase.from("voice_command_log" as any).insert({
+        user_id: user.id,
+        transcript,
+        intent: parsed as any,
+        status,
+        result: resultMsg,
+      }).then(({ error }) => { if (error) console.warn("voice log:", error.message); });
     }
   };
+
 
   // ---- Action implementations ----
 

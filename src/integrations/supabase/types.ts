@@ -1560,6 +1560,36 @@ export type Database = {
         }
         Relationships: []
       }
+      voice_command_log: {
+        Row: {
+          created_at: string
+          id: string
+          intent: Json | null
+          result: string | null
+          status: string
+          transcript: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          intent?: Json | null
+          result?: string | null
+          status?: string
+          transcript: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          intent?: Json | null
+          result?: string | null
+          status?: string
+          transcript?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
