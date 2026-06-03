@@ -265,11 +265,13 @@ export default function ClientDocuments() {
                     </p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    title="Baixar"
                     className="text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
+                    onClick={(e) => { e.stopPropagation(); downloadFile(f.file_url, f.file_name); }}>
                     <Download className="w-4 h-4" />
-                  </a>
+                  </button>
                 </div>
 
                 {f.approval_status === "rejected" && f.feedback && (
