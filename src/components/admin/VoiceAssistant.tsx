@@ -283,17 +283,26 @@ export default function VoiceAssistant() {
   // crédito; se tudo falhar, cai pro regex local sem quebrar.
   const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
     const text = (finalText + " " + interim).trim();
-    if (!text && !fileCtx?.text && !answers.client_id) return;
+    const validCtxs = fileCtxs.filter((c) => c.text);
+    const attachments = [
+      ...validCtxs.map((c) => ({ fileName: c.fileName, text: c.text })),
+      ...systemDocs.map((d) => ({ fileName: d.fileName, text: d.text })),
+    ];
+    if (!text && attachments.length === 0 && !answers.client_id) return;
     if (aiThinking) return;
     setAiThinking(true);
     try {
       const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
         body: {
           text,
-          attachment: fileCtx?.text
-            ? { fileName: fileCtx.fileName, text: fileCtx.text }
-            : null,
-          clientId: answers.client_id || null, // agente puxa o contrato do sistema
+          // Mantém `attachment` (compat) e adiciona `attachments` (lista) — o agente
+          // concatena tudo no prompt pra ler O CONTRATO INTEIRO + briefings + anexos
+          // do usuário, sem perder nada.
+          attachment: attachments[0] || null,
+          attachments,
+          clientId: answers.client_id || null,
+          // Se o componente já carregou docs do sistema, sinaliza pro edge skip recarregar.
+          skipSystemContractAutoLoad: systemDocs.length > 0,
           clients: clientList.map((c) => ({
             id: c.id, company_name: c.company_name, full_name: c.full_name, email: c.email,
           })),
@@ -314,47 +323,91 @@ export default function VoiceAssistant() {
       if (!opts?.silent) {
         const degraded = (data as any)._degraded;
         const auto = (data as any)._contractAutoLoaded;
-        const note = auto ? " · contrato lido do sistema" : "";
+        const docsCount = attachments.length;
+        const note = auto ? " · contratos lidos do sistema" : docsCount > 1 ? ` · ${docsCount} docs` : "";
         appendLog({
           kind: degraded ? "info" : "ok",
           text: `IA${note}: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}`,
         });
       }
     } catch (err: any) {
-      // Falha silenciosa: regex local continua cuidando do básico.
       appendLog({ kind: "info", text: `IA em modo local: ${err?.message || "indisponível"}` });
     } finally {
       setAiThinking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking]);
+  }, [finalText, interim, fileCtxs, systemDocs, clientList, answers.client_id, aiThinking]);
 
-  // Auto-trigger IA apenas UMA VEZ quando há contexto novo. Não fica em loop:
-  // se a IA falhou (degraded), o usuário precisa clicar "Reanalisar" pra tentar
-  // de novo — assim não trava nem queima tentativa.
+  // Auto-trigger IA quando há contexto novo (arquivo ou cliente).
   useEffect(() => {
     if (aiAttemptedRef.current) return;
     if (aiThinking) return;
-    if (!(fileCtx?.text || answers.client_id)) return;
+    if (!(fileCtxs.some((c) => c.text) || answers.client_id || systemDocs.length)) return;
     aiAttemptedRef.current = true;
     runAgent({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileCtx?.text, answers.client_id]);
+  }, [fileCtxs.length, answers.client_id, systemDocs.length]);
 
-  const handleAttach = useCallback(async (f: File | null) => {
-    setFile(f); setFileCtx(null);
-    if (!f) return;
+  // 📚 Quando admin escolhe um cliente, lê AUTOMATICAMENTE todos os documentos
+  // dele (contratos + briefings + arquivos da pasta "contratos") pra alimentar
+  // a IA com contexto completo. Faz só uma vez por cliente.
+  const lastClientDocsRef = useRef<string | null>(null);
+  useEffect(() => {
+    const cid = answers.client_id;
+    if (!cid || lastClientDocsRef.current === cid) return;
+    lastClientDocsRef.current = cid;
+    setSystemDocs([]);
+    setSystemDocsLoading(true);
+    (async () => {
+      try {
+        const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
+          body: { text: "", clientId: cid, fetchOnly: true },
+        });
+        if (error) throw error;
+        const docs = Array.isArray((data as any)?.documents) ? (data as any).documents : [];
+        setSystemDocs(docs);
+        if (docs.length) {
+          appendLog({ kind: "ok", text: `📚 ${docs.length} documento(s) do cliente carregado(s) automaticamente.` });
+          aiAttemptedRef.current = false; // libera reanálise com os novos docs
+        }
+      } catch (err: any) {
+        appendLog({ kind: "info", text: `Não consegui carregar documentos do cliente: ${err?.message || ""}` });
+      } finally {
+        setSystemDocsLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers.client_id]);
+
+  const handleAttach = useCallback(async (input: File | File[] | FileList | null) => {
+    if (input === null) {
+      setFiles([]); setFileCtxs([]); return;
+    }
+    const arr: File[] = Array.isArray(input)
+      ? input
+      : input instanceof FileList
+        ? Array.from(input)
+        : [input];
+    if (!arr.length) return;
     setFileReading(true);
     try {
-      const ctx = await readFileContext(f);
-      setFileCtx(ctx);
-      if (ctx.warning) toast({ title: "Anexo", description: ctx.warning });
+      const ctxs = await Promise.all(arr.map((f) => readFileContext(f)));
+      setFiles((prev) => [...prev, ...arr]);
+      setFileCtxs((prev) => [...prev, ...ctxs]);
+      const warned = ctxs.find((c) => c.warning);
+      if (warned?.warning) toast({ title: "Anexo", description: warned.warning });
+      aiAttemptedRef.current = false; // permite reanálise com novos anexos
     } catch (err: any) {
       toast({ title: "Falha ao ler anexo", description: err?.message || "Erro", variant: "destructive" });
     } finally {
       setFileReading(false);
     }
   }, [toast]);
+
+  const removeAttachment = useCallback((idx: number) => {
+    setFiles((prev) => prev.filter((_, i) => i !== idx));
+    setFileCtxs((prev) => prev.filter((_, i) => i !== idx));
+  }, []);
 
   const handleTextEdit = (next: string) => {
     setFinalText(next);
