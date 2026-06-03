@@ -270,11 +270,42 @@ export default function ClientApprovals() {
               )}
             </DialogTitle>
           </DialogHeader>
-          {previewFile && (
+          {previewFile && (() => {
+            const items = getCarouselImages(previewFile);
+            const [currentIdx, setIdx] = [previewIdx % items.length, setPreviewIdx];
+            const current = items[currentIdx] || previewFile;
+            return (
             <div className="space-y-4">
-              <div className="bg-secondary rounded-xl overflow-hidden">
-                <CarouselPreview images={getCarouselImages(previewFile)} />
+              <div className="relative">
+                <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+                {items.length > 1 && (
+                  <>
+                    <button type="button"
+                      className="absolute left-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background"
+                      onClick={() => setIdx((currentIdx - 1 + items.length) % items.length)}>
+                      <ChevronLeft className="w-4 h-4" />
+                    </button>
+                    <button type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 bg-background/80 border border-border rounded-full p-2 hover:bg-background"
+                      onClick={() => setIdx((currentIdx + 1) % items.length)}>
+                      <ChevronRight className="w-4 h-4" />
+                    </button>
+                    <span className="absolute top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
+                      {currentIdx + 1}/{items.length}
+                    </span>
+                  </>
+                )}
               </div>
+
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(current.file_url)}>
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                </Button>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => downloadFile(current.file_url, current.file_name)}>
+                  <Download className="w-3.5 h-3.5" /> Baixar
+                </Button>
+              </div>
+
               <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
@@ -286,7 +317,8 @@ export default function ClientApprovals() {
                 </div>
               )}
             </div>
-          )}
+            );
+          })()}
           {previewFile?.approval_status === "pending" && (
             <DialogFooter>
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
