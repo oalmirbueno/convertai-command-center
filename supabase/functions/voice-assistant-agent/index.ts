@@ -89,7 +89,17 @@ Você é 100% autônomo DENTRO do escopo operacional: projetos, milestones, tare
 ## Schema
 { "intent": { "kind": "...", "name"?, "title"?, "taskHint"?, "status"?, "priority"?, "type"?, "deadlineDays"?, "days"?, "clientHint"?, "projectHint"?, "folder"?, "raw"? },
   "suggestedClientIds": string[], "narrative": string, "confidence": number,
-  "plan"?: { "milestones": [ { "title": string, "offsetDays": number, "tasks": [ { "title": string, "description"?: string, "priority": "high"|"medium"|"low", "role": "admin"|"design"|"traffic"|"manager" } ] } ] } | null }`;
+  "clientSummary"?: string,
+  "plan"?: { "milestones": [ { "title": string, "offsetDays": number, "tasks": [ { "title": string, "description"?: string, "priority": "high"|"medium"|"low", "role": "admin"|"design"|"traffic"|"manager" } ] } ] } | null }
+
+## clientSummary — campo separado, voltado ao CLIENTE FINAL
+Gere SEMPRE que houver projeto/plan. Regras absolutas:
+- 3 a 5 frases em pt-BR, tom profissional, estratégico e premium.
+- Resume o projeto a partir do contrato/anexos E das milestones/tarefas geradas — não copia o que o admin falou.
+- Nunca mencionar IA, agente, prompt, admin, "você pediu", "conforme solicitado", "com base no contrato", "contexto", "este projeto será", "estamos organizando".
+- Linguagem como se fosse escrita por um gestor de contas humano: clara, segura, focada no valor entregue.
+- Não cita ferramentas internas, modelos de IA, nem datas técnicas (offsetDays).
+- Não usa markdown nem asteriscos nem cabeçalhos.`;
 
 // Ordem de fallback: modelos gratuitos primeiro. Se TODOS falharem (402/429),
 // devolve unknown sem quebrar a UI — o regex local cuida do básico.
