@@ -59,6 +59,40 @@ function bestMatch<T extends { id: string }>(
   return best && best.score >= 30 ? best.item : undefined;
 }
 
+/** Proactive search: scan the whole text for fuzzy client mentions, return top N. */
+function findClientsMentioned<T extends { id: string }>(
+  items: T[],
+  text: string,
+  fields: ((x: T) => string | null | undefined)[],
+  limit = 3,
+): T[] {
+  if (!text || !items?.length) return [];
+  const n = norm(text);
+  const tokens = n.split(/\s+/).filter((t) => t.length >= 3);
+  if (!tokens.length) return [];
+  const scored: { item: T; score: number }[] = [];
+  for (const it of items) {
+    let best = 0;
+    for (const f of fields) {
+      const v = norm(f(it) || "");
+      if (!v) continue;
+      const vTokens = v.split(/\s+/).filter(Boolean);
+      // exact substring of any client-name token in the spoken text → strong signal
+      for (const vt of vTokens) {
+        if (vt.length < 3) continue;
+        if (tokens.includes(vt)) best = Math.max(best, 80);
+        else if (tokens.some((t) => t.length >= 4 && (t.includes(vt) || vt.includes(t)))) {
+          best = Math.max(best, 55);
+        }
+      }
+      if (n.includes(v) && v.length >= 4) best = Math.max(best, 90);
+    }
+    if (best >= 55) scored.push({ item: it, score: best });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => s.item);
+}
+
 interface LogEntry { id: string; kind: "ok" | "error" | "info"; text: string; }
 
 type Phase = "input" | "clarify" | "preview" | "confirm" | "done";
@@ -783,16 +817,60 @@ export default function VoiceAssistant() {
                           </div>
                         );
                       }
+                      const spokenText = (finalText + " " + interim).trim();
+                      const proactiveMatches = isUnknown
+                        ? findClientsMentioned(clientList, spokenText, [
+                            (c: any) => c.company_name,
+                            (c: any) => c.full_name,
+                          ])
+                        : [];
+                      const guessIntent = /projeto/i.test(spokenText)
+                        ? "Criar projeto"
+                        : /tarefa/i.test(spokenText)
+                          ? "Criar tarefa"
+                          : /v[ií]deo|reels/i.test(spokenText)
+                            ? "Criar projeto (vídeo)"
+                            : null;
                       return (
                         <div className={`rounded-xl p-3 border ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                            {isUnknown ? "Preciso de mais detalhes" : "Interpretação"}
+                            {isUnknown ? "Posso confirmar antes de fazer?" : "Interpretação"}
                           </p>
                           <p className="text-sm font-medium text-foreground">
                             {isUnknown
-                              ? "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
+                              ? guessIntent
+                                ? `Achei que você quer: ${guessIntent}. Confirme o cliente:`
+                                : "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
                               : summarizeIntent(parsed)}
                           </p>
+                          {isUnknown && proactiveMatches.length > 0 && (
+                            <div className="mt-2 space-y-1.5">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                Encontrei na sua base
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {proactiveMatches.map((c: any) => {
+                                  const label = c.company_name || c.full_name || c.email;
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      onClick={() => {
+                                        const verb = guessIntent?.includes("tarefa") ? "Criar tarefa para" : "Criar projeto para";
+                                        const rewritten = `${verb} ${label}${spokenText ? ` — ${spokenText}` : ""}`;
+                                        handleTextEdit(rewritten);
+                                      }}
+                                      className="text-[11px] px-2.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-colors"
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                Toque para confirmar e eu sigo daqui.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
