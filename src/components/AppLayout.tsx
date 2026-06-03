@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import VoiceAssistant from "@/components/admin/VoiceAssistant";
 
 interface NavItem {
   title: string;
@@ -333,6 +334,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           pageTourLabel={pageTourConfig?.label}
         />
       )}
+
+      <VoiceAssistant />
     </div>
   );
 }
