@@ -869,19 +869,20 @@ export default function VoiceAssistant() {
   }
 
   async function execUploadFile(p: Extract<ParsedIntent, { kind: "upload_file" }>) {
-    if (!file) throw new Error("Anexe um arquivo (clipe ao lado do mic)");
+    const f = files[0];
+    if (!f) throw new Error("Anexe um arquivo (clipe ao lado do mic)");
     const client = p.clientHint ? bestMatch(clientList, p.clientHint, [(c: any) => c.company_name, (c: any) => c.full_name]) : null;
     if (!client) throw new Error("Cliente não identificado");
-    const path = `${client.id}/${Date.now()}-${file.name}`;
-    const { error: upErr } = await supabase.storage.from("files").upload(path, file);
+    const path = `${client.id}/${Date.now()}-${f.name}`;
+    const { error: upErr } = await supabase.storage.from("files").upload(path, f);
     if (upErr) throw upErr;
     const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
     const { error } = await supabase.from("files").insert({
-      client_id: client.id, file_name: file.name, file_url: pub.publicUrl,
-      file_type: file.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
+      client_id: client.id, file_name: f.name, file_url: pub.publicUrl,
+      file_type: f.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
     } as any);
     if (error) throw error;
-    appendLog({ kind: "ok", text: `Arquivo "${file.name}" enviado` });
+    appendLog({ kind: "ok", text: `Arquivo "${f.name}" enviado` });
   }
 
   if (!isAdmin) return null;
