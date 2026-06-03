@@ -52,7 +52,24 @@ function bestMatch<T extends { id: string }>(
 
 interface LogEntry { id: string; kind: "ok" | "error" | "info"; text: string; }
 
-type Phase = "input" | "clarify" | "preview" | "done";
+type Phase = "input" | "clarify" | "preview" | "confirm" | "done";
+
+interface CreatedRefs {
+  projectIds: string[];
+  milestoneIds: string[];
+  taskIds: string[];
+  checklistItemIds: string[];
+  fileIds: string[];
+}
+
+interface LastAction {
+  id: string;
+  label: string;
+  createdAt: number;
+  refs: CreatedRefs;
+}
+
+const emptyRefs = (): CreatedRefs => ({ projectIds: [], milestoneIds: [], taskIds: [], checklistItemIds: [], fileIds: [] });
 
 export default function VoiceAssistant() {
   const { user, profile } = useAuth();
