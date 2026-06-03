@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import { openFile, downloadFile } from "@/lib/fileActions";
 
 function CarouselSlider({ files }: { files: any[] }) {
   const [idx, setIdx] = useState(0);
@@ -264,11 +265,13 @@ export default function ClientDocuments() {
                     </p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
-                  <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                  <button
+                    type="button"
+                    title="Baixar"
                     className="text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={(e) => e.stopPropagation()}>
+                    onClick={(e) => { e.stopPropagation(); downloadFile(f.file_url, f.file_name); }}>
                     <Download className="w-4 h-4" />
-                  </a>
+                  </button>
                 </div>
 
                 {f.approval_status === "rejected" && f.feedback && (
@@ -295,15 +298,11 @@ export default function ClientDocuments() {
               
               {/* Action buttons */}
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
-                  </a>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(previewFile.file_url)}>
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewFile.file_url} download className="gap-1.5">
-                    <Download className="w-3.5 h-3.5" /> Baixar
-                  </a>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => downloadFile(previewFile.file_url, previewFile.file_name)}>
+                  <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
               </div>
 
