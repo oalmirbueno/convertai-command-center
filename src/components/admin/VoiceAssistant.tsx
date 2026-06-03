@@ -280,9 +280,17 @@ export default function VoiceAssistant() {
     if (!template) return;
 
     // Fetch task checklist templates for this service type
-    const { data: chkTemplates } = await supabase
-      .from("task_checklist_templates" as any).select("*, items:task_checklist_template_items(*)")
+    const { data: chkTpls } = await supabase
+      .from("task_checklist_templates" as any).select("*")
       .or(`service_type.eq.${answers.project_type},service_type.is.null`);
+    const tplIds = (chkTpls || []).map((t: any) => t.id);
+    const { data: chkItems } = tplIds.length
+      ? await supabase.from("task_checklist_template_items" as any).select("*").in("template_id", tplIds)
+      : { data: [] as any[] };
+    const chkTemplates = (chkTpls || []).map((t: any) => ({
+      ...t,
+      items: (chkItems || []).filter((i: any) => i.template_id === t.id),
+    }));
 
     for (const tm of template) {
       const targetDate = new Date(start);
