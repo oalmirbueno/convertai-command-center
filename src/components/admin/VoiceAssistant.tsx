@@ -389,6 +389,7 @@ export default function VoiceAssistant() {
             }));
           const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
           (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
+        }
       }
     }
   }
