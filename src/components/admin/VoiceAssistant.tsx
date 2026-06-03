@@ -94,6 +94,17 @@ export default function VoiceAssistant() {
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
 
+  // Staged execution state (one checkbox per phase)
+  const [stageIdx, setStageIdx] = useState(0);
+  const [stageAck, setStageAck] = useState(false);
+  const [stageRefs, setStageRefs] = useState<CreatedRefs>(emptyRefs());
+  const [stageContext, setStageContext] = useState<{
+    client?: any; project?: any;
+    milestones?: Array<{ milestone: any; tm: any }>;
+    tasks?: Array<{ task: any; t: any; milestone: any }>;
+    chkTemplates?: any[];
+  }>({});
+
   const isAdmin = profile?.role === "admin";
 
   // Load clients once when drawer opens
@@ -149,6 +160,7 @@ export default function VoiceAssistant() {
   const reset = () => {
     setFinalText(""); setInterim(""); setParsed(null); setFile(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
+    setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
   };
 
   // Auto re-parse when text changes
@@ -238,42 +250,97 @@ export default function VoiceAssistant() {
     }
   };
 
-  const executeWithAnswers = async () => {
-    if (!parsed || !user) return;
-    setExecuting(true);
-    const transcript = (finalText + " " + interim).trim();
-    let status: "success" | "error" = "success";
-    let resultMsg = "";
-    const refs: CreatedRefs = emptyRefs();
-    try {
-      if (parsed.kind === "create_project") {
-        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
-        if (!client) throw new Error("Cliente não selecionado");
-        await execCreateProjectFull(client, refs);
-        resultMsg = `Projeto "${answers.project_name}" criado para ${client.company_name || client.full_name}`;
-      } else if (parsed.kind === "create_task") {
-        await execCreateTaskFull(answers, refs);
-        resultMsg = `Tarefa "${answers.task_title}" criada`;
-      } else if (parsed.kind === "create_milestone") {
-        await execCreateMilestoneFull(answers, refs);
-        resultMsg = `Etapa "${answers.milestone_title}" criada`;
+  // ---------------- Staged execution (1 checkbox per phase) ----------------
+  const stages = useMemo(() => {
+    if (parsed?.kind === "create_project") {
+      const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
+      if (answers.apply_template) {
+        const tpl = projectTemplates[answers.project_type] || [];
+        const taskCount = tpl.reduce((s, m) => s + m.tasks.length, 0);
+        base.push(
+          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas serão criadas a partir do template.` },
+          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas, vinculadas a cada milestone.` },
+          { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
+        );
       }
-      appendLog({ kind: "ok", text: resultMsg });
-      toast({ title: "Executado", description: `${resultMsg} · Você pode desfazer no painel.` });
-      setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs });
-      reset();
-    } catch (err: any) {
-      status = "error";
-      resultMsg = err?.message || "Falha";
-      appendLog({ kind: "error", text: resultMsg });
-    } finally {
-      setExecuting(false);
+      return base;
+    }
+    if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
+    if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
+    return [];
+  }, [parsed, answers]);
+
+  const stagedFinalize = async (finalRefs: CreatedRefs) => {
+    const transcript = (finalText + " " + interim).trim();
+    const client = stageContext.client || resolvedClient;
+    const resultMsg =
+      parsed?.kind === "create_project"
+        ? `Projeto "${answers.project_name}" criado${client ? ` para ${client.company_name || client.full_name}` : ""}`
+        : parsed?.kind === "create_task"
+          ? `Tarefa "${answers.task_title}" criada`
+          : parsed?.kind === "create_milestone"
+            ? `Etapa "${answers.milestone_title}" criada`
+            : "Executado";
+    setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs: finalRefs });
+    appendLog({ kind: "ok", text: resultMsg });
+    toast({ title: "Concluído", description: `${resultMsg} · Disponível para desfazer.` });
+    if (user) {
       supabase.from("voice_command_log" as any).insert({
-        user_id: user.id, transcript, intent: parsed as any, status, result: resultMsg,
-        clarifications: answers, preview: formatScopePreview(answers, resolvedClient?.company_name),
+        user_id: user.id, transcript, intent: parsed as any, status: "success", result: resultMsg,
+        clarifications: answers, preview: formatScopePreview(answers, client?.company_name),
       }).then(() => {});
     }
   };
+
+  const runStage = async (idx: number) => {
+    if (!parsed || !user || executing) return;
+    const stage = stages[idx];
+    if (!stage) return;
+    setExecuting(true);
+    const refs: CreatedRefs = {
+      projectIds: [...stageRefs.projectIds],
+      milestoneIds: [...stageRefs.milestoneIds],
+      taskIds: [...stageRefs.taskIds],
+      checklistItemIds: [...stageRefs.checklistItemIds],
+      fileIds: [...stageRefs.fileIds],
+    };
+    try {
+      if (stage.key === "project") {
+        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
+        if (!client) throw new Error("Cliente não selecionado");
+        const project = await stageCreateProject(client, refs);
+        setStageContext((c) => ({ ...c, client, project }));
+      } else if (stage.key === "milestones") {
+        if (!stageContext.project) throw new Error("Projeto não criado nesta sessão");
+        const ms = await stageCreateMilestones(stageContext.project, refs);
+        setStageContext((c) => ({ ...c, milestones: ms }));
+      } else if (stage.key === "tasks") {
+        if (!stageContext.project) throw new Error("Projeto não criado");
+        const ts = await stageCreateTasks(stageContext.project, stageContext.milestones || [], refs);
+        const chk = await fetchChkTemplates();
+        setStageContext((c) => ({ ...c, tasks: ts, chkTemplates: chk }));
+      } else if (stage.key === "checklists") {
+        await stageCreateChecklists(stageContext.tasks || [], stageContext.chkTemplates || [], refs);
+      } else if (stage.key === "single") {
+        if (parsed.kind === "create_task") await execCreateTaskFull(answers, refs);
+        else if (parsed.kind === "create_milestone") await execCreateMilestoneFull(answers, refs);
+        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
+        setStageContext((c) => ({ ...c, client }));
+      }
+      setStageRefs(refs);
+      setStageAck(false);
+      const next = idx + 1;
+      setStageIdx(next);
+      if (next >= stages.length) await stagedFinalize(refs);
+    } catch (err: any) {
+      const msg = err?.message || "Falha";
+      appendLog({ kind: "error", text: `Fase "${stage.label}": ${msg}` });
+      toast({ title: "Falha na fase", description: msg, variant: "destructive" });
+    } finally {
+      setExecuting(false);
+    }
+  };
+
 
   const undoLastAction = async () => {
     if (!lastAction || undoing) return;
@@ -302,13 +369,12 @@ export default function VoiceAssistant() {
   };
 
 
-  // ---- Full project creation with milestones + tasks + checklists ----
-  async function execCreateProjectFull(client: any, refs: CreatedRefs) {
+  // ---- Staged project creation helpers (per-phase execution) ----
+  async function stageCreateProject(client: any, refs: CreatedRefs) {
     const start = new Date();
     const end = new Date();
     end.setDate(end.getDate() + (answers.deadline || 30));
     const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name);
-
     const { data: project, error } = await supabase.from("projects").insert({
       client_id: client.id,
       name: answers.project_name,
@@ -322,14 +388,57 @@ export default function VoiceAssistant() {
     }).select().single();
     if (error) throw error;
     refs.projectIds.push(project.id);
+    return project;
+  }
 
-    if (!answers.apply_template) return;
-
-    // Apply template milestones + tasks + their checklists from library
+  async function stageCreateMilestones(project: any, refs: CreatedRefs) {
     const template = projectTemplates[answers.project_type] || projectTemplates.other;
-    if (!template) return;
+    if (!template) return [];
+    const start = new Date(project.start_date);
+    const out: Array<{ milestone: any; tm: any }> = [];
+    for (const tm of template) {
+      const targetDate = new Date(start);
+      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
+      const { data: milestone, error } = await supabase.from("milestones").insert({
+        project_id: project.id,
+        title: tm.title,
+        target_date: targetDate.toISOString().slice(0, 10),
+        status: "pending",
+      }).select().single();
+      if (error) throw error;
+      if (milestone?.id) refs.milestoneIds.push(milestone.id);
+      out.push({ milestone, tm });
+    }
+    return out;
+  }
 
-    // Fetch task checklist templates for this service type
+  async function stageCreateTasks(project: any, milestones: Array<{ milestone: any; tm: any }>, refs: CreatedRefs) {
+    const out: Array<{ task: any; t: any; milestone: any }> = [];
+    for (const { milestone, tm } of milestones) {
+      const targetDate = new Date(milestone.target_date);
+      for (const t of tm.tasks) {
+        const taskDescription = [
+          t.description ? `**Escopo:** ${t.description}` : null,
+          `**Critério de aceite:** entrega validada e aprovada.`,
+        ].filter(Boolean).join("\n\n");
+        const { data: task, error } = await supabase.from("tasks").insert({
+          project_id: project.id,
+          milestone_id: milestone?.id,
+          title: t.title,
+          description: taskDescription,
+          priority: t.priority,
+          status: "backlog",
+          due_date: targetDate.toISOString().slice(0, 10),
+        }).select().single();
+        if (error) throw error;
+        if (task?.id) refs.taskIds.push(task.id);
+        out.push({ task, t, milestone });
+      }
+    }
+    return out;
+  }
+
+  async function fetchChkTemplates() {
     const { data: chkTpls } = await supabase
       .from("task_checklist_templates" as any).select("*")
       .or(`service_type.eq.${answers.project_type},service_type.is.null`);
@@ -337,62 +446,36 @@ export default function VoiceAssistant() {
     const { data: chkItems } = tplIds.length
       ? await supabase.from("task_checklist_template_items" as any).select("*").in("template_id", tplIds)
       : { data: [] as any[] };
-    const chkTemplates = (chkTpls || []).map((t: any) => ({
-      ...t,
-      items: (chkItems || []).filter((i: any) => i.template_id === t.id),
+    return (chkTpls || []).map((t: any) => ({
+      ...t, items: (chkItems || []).filter((i: any) => i.template_id === t.id),
     }));
+  }
 
-    for (const tm of template) {
-      const targetDate = new Date(start);
-      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
-      const { data: milestone } = await supabase.from("milestones").insert({
-        project_id: project.id,
-        title: tm.title,
-        target_date: targetDate.toISOString().slice(0, 10),
-        status: "pending",
-      }).select().single();
-      if (milestone?.id) refs.milestoneIds.push(milestone.id);
-
-      for (const t of tm.tasks) {
-        const taskDescription = [
-          t.description ? `**Escopo:** ${t.description}` : null,
-          `**Critério de aceite:** entrega validada e aprovada.`,
-        ].filter(Boolean).join("\n\n");
-
-        const dueDate = new Date(targetDate);
-        const { data: task } = await supabase.from("tasks").insert({
-          project_id: project.id,
-          milestone_id: milestone?.id,
-          title: t.title,
-          description: taskDescription,
-          priority: t.priority,
-          status: "backlog",
-          due_date: dueDate.toISOString().slice(0, 10),
-        }).select().single();
-
-        if (!task) continue;
-        refs.taskIds.push(task.id);
-
-        // Auto-attach matching checklist template
-        const match = (chkTemplates || []).find((c: any) =>
-          norm(c.title).includes(norm(t.title).split(" ")[0]) ||
-          (c.service_type === answers.project_type)
-        );
-        if (match?.items?.length) {
-          const rows = match.items
-            .sort((a: any, b: any) => a.order_index - b.order_index)
-            .map((it: any, idx: number) => ({
-              task_id: task.id,
-              title: it.label,
-              item_order: idx,
-              created_by: user!.id,
-            }));
-          const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
-          (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
-        }
+  async function stageCreateChecklists(
+    tasks: Array<{ task: any; t: any }>,
+    chkTemplates: any[],
+    refs: CreatedRefs,
+  ) {
+    for (const { task, t } of tasks) {
+      const match = chkTemplates.find((c: any) =>
+        norm(c.title).includes(norm(t.title).split(" ")[0]) ||
+        (c.service_type === answers.project_type)
+      );
+      if (match?.items?.length) {
+        const rows = match.items
+          .sort((a: any, b: any) => a.order_index - b.order_index)
+          .map((it: any, idx: number) => ({
+            task_id: task.id,
+            title: it.label,
+            item_order: idx,
+            created_by: user!.id,
+          }));
+        const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
+        (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
       }
     }
   }
+
 
   async function execCreateTaskFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_task" }>;
@@ -803,54 +886,91 @@ export default function VoiceAssistant() {
                   </div>
                 )}
 
-                {/* ---------- CONFIRM PHASE ---------- */}
+                {/* ---------- CONFIRM PHASE (staged, one checkbox per phase) ---------- */}
                 {phase === "confirm" && parsed && (
                   <div className="space-y-3">
-                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
                       <div className="flex items-start gap-2">
-                        <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                        <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-sm font-semibold text-foreground">Confirmação final</p>
+                          <p className="text-xs font-semibold text-foreground">Execução por fases</p>
                           <p className="text-[11px] text-muted-foreground">
-                            Esta ação grava no banco. Você pode reverter depois pelo botão "Desfazer", mas qualquer edição feita pela equipe será perdida no rollback.
+                            Cada fase precisa do seu próprio check antes de gravar. Você pode parar a qualquer momento — o que já foi criado fica reversível pelo "Desfazer".
                           </p>
                         </div>
                       </div>
                     </div>
 
-                    <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2 text-xs">
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumo</p>
-                      {parsed.kind === "create_project" && (
-                        <>
-                          <p><span className="text-muted-foreground">Projeto:</span> <span className="font-medium text-foreground">{answers.project_name}</span></p>
-                          <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium text-foreground">{resolvedClient?.company_name || resolvedClient?.full_name}</span></p>
-                          <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium text-foreground">{answers.project_type}</span></p>
-                          {answers.apply_template && projectTemplate && (
-                            <p className="text-muted-foreground">
-                              + {projectTemplate.length} etapas, {previewTaskCount} tarefas e checklists
-                            </p>
-                          )}
-                        </>
-                      )}
-                      {parsed.kind === "create_task" && (
-                        <p><span className="text-muted-foreground">Tarefa:</span> <span className="font-medium text-foreground">{answers.task_title}</span></p>
-                      )}
-                      {parsed.kind === "create_milestone" && (
-                        <p><span className="text-muted-foreground">Etapa:</span> <span className="font-medium text-foreground">{answers.milestone_title}</span></p>
-                      )}
-                    </div>
+                    {stages.map((s, i) => {
+                      const isDone = i < stageIdx;
+                      const isActive = i === stageIdx;
+                      const isLocked = i > stageIdx;
+                      const counts =
+                        s.key === "project" ? stageRefs.projectIds.length :
+                        s.key === "milestones" ? stageRefs.milestoneIds.length :
+                        s.key === "tasks" ? stageRefs.taskIds.length :
+                        s.key === "checklists" ? stageRefs.checklistItemIds.length :
+                        (stageRefs.taskIds.length + stageRefs.milestoneIds.length);
+                      return (
+                        <div
+                          key={s.key}
+                          className={`rounded-xl border p-3 transition ${
+                            isDone ? "border-primary/40 bg-primary/5" :
+                            isActive ? "border-primary bg-secondary/40" :
+                            "border-border bg-secondary/20 opacity-50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            <div className={`mt-0.5 w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-semibold shrink-0 ${
+                              isDone ? "bg-primary text-primary-foreground" :
+                              isActive ? "border border-primary text-primary" :
+                              "border border-border text-muted-foreground"
+                            }`}>
+                              {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-xs font-semibold text-foreground">{s.label}</p>
+                              <p className="text-[11px] text-muted-foreground">{s.description}</p>
+                              {isDone && counts > 0 && (
+                                <p className="text-[10px] text-primary mt-1">✓ {counts} item(s) criado(s)</p>
+                              )}
+                            </div>
+                          </div>
 
-                    <label className="flex items-start gap-2 cursor-pointer text-xs text-foreground p-3 rounded-xl border border-border bg-background hover:border-primary transition">
-                      <input
-                        type="checkbox"
-                        checked={confirmAck}
-                        onChange={(e) => setConfirmAck(e.target.checked)}
-                        className="mt-0.5 w-4 h-4 accent-primary"
-                      />
-                      <span>Li o resumo e confirmo a criação. Entendo que posso desfazer logo em seguida.</span>
-                    </label>
+                          {isActive && (
+                            <div className="mt-3 space-y-2">
+                              <label className="flex items-start gap-2 cursor-pointer text-[11px] text-foreground p-2 rounded-lg border border-border bg-background">
+                                <input
+                                  type="checkbox"
+                                  checked={stageAck}
+                                  onChange={(e) => setStageAck(e.target.checked)}
+                                  className="mt-0.5 w-3.5 h-3.5 accent-primary"
+                                />
+                                <span>Confirmo executar esta fase agora.</span>
+                              </label>
+                              <button
+                                onClick={() => runStage(i)}
+                                disabled={!stageAck || executing}
+                                className="w-full h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-2"
+                              >
+                                {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+                                Executar fase {i + 1} de {stages.length}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                    {stageIdx >= stages.length && stages.length > 0 && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 text-xs text-foreground flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-primary" />
+                        Todas as fases concluídas.
+                      </div>
+                    )}
                   </div>
                 )}
+
               </div>
 
 
@@ -919,19 +1039,21 @@ export default function VoiceAssistant() {
                 {phase === "confirm" && (
                   <>
                     <button
-                      onClick={() => setPhase(parsed?.kind === "create_project" ? "preview" : "clarify")}
-                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
-                      disabled={executing}
+                      onClick={() => {
+                        if (stageIdx > 0) return; // can't edit mid-execution
+                        setPhase(parsed?.kind === "create_project" ? "preview" : "clarify");
+                      }}
+                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm disabled:opacity-40"
+                      disabled={executing || stageIdx > 0}
                     >
                       Voltar
                     </button>
                     <button
-                      onClick={executeWithAnswers}
-                      disabled={executing || !confirmAck}
+                      onClick={reset}
+                      disabled={executing}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Executar agora
+                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Cancelar fluxo"}
                     </button>
                   </>
                 )}
