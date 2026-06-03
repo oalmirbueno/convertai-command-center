@@ -244,21 +244,23 @@ export default function VoiceAssistant() {
     const transcript = (finalText + " " + interim).trim();
     let status: "success" | "error" = "success";
     let resultMsg = "";
+    const refs: CreatedRefs = emptyRefs();
     try {
       if (parsed.kind === "create_project") {
         const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
         if (!client) throw new Error("Cliente não selecionado");
-        await execCreateProjectFull(client);
+        await execCreateProjectFull(client, refs);
         resultMsg = `Projeto "${answers.project_name}" criado para ${client.company_name || client.full_name}`;
       } else if (parsed.kind === "create_task") {
-        await execCreateTaskFull(answers);
+        await execCreateTaskFull(answers, refs);
         resultMsg = `Tarefa "${answers.task_title}" criada`;
       } else if (parsed.kind === "create_milestone") {
-        await execCreateMilestoneFull(answers);
+        await execCreateMilestoneFull(answers, refs);
         resultMsg = `Etapa "${answers.milestone_title}" criada`;
       }
       appendLog({ kind: "ok", text: resultMsg });
-      toast({ title: "Executado", description: resultMsg });
+      toast({ title: "Executado", description: `${resultMsg} · Você pode desfazer no painel.` });
+      setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs });
       reset();
     } catch (err: any) {
       status = "error";
@@ -272,6 +274,33 @@ export default function VoiceAssistant() {
       }).then(() => {});
     }
   };
+
+  const undoLastAction = async () => {
+    if (!lastAction || undoing) return;
+    setUndoing(true);
+    const { refs, label } = lastAction;
+    try {
+      // Delete in reverse dependency order
+      if (refs.checklistItemIds.length)
+        await supabase.from("task_checklist_items").delete().in("id", refs.checklistItemIds);
+      if (refs.taskIds.length)
+        await supabase.from("tasks").delete().in("id", refs.taskIds);
+      if (refs.milestoneIds.length)
+        await supabase.from("milestones").delete().in("id", refs.milestoneIds);
+      if (refs.projectIds.length)
+        await supabase.from("projects").delete().in("id", refs.projectIds);
+      if (refs.fileIds.length)
+        await supabase.from("files").delete().in("id", refs.fileIds);
+      appendLog({ kind: "info", text: `↶ Desfeito: ${label}` });
+      toast({ title: "Ação revertida", description: label });
+      setLastAction(null);
+    } catch (err: any) {
+      toast({ title: "Falha ao desfazer", description: err?.message || "Erro", variant: "destructive" });
+    } finally {
+      setUndoing(false);
+    }
+  };
+
 
   // ---- Full project creation with milestones + tasks + checklists ----
   async function execCreateProjectFull(client: any) {
