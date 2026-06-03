@@ -262,6 +262,9 @@ export default function VoiceAssistant() {
     lastSttRef.current = "";
   };
 
+  const appendLog = useCallback((entry: Omit<LogEntry, "id">) =>
+    setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12)), []);
+
   // 🧠 Agente IA — interpreta voz + anexo + base de clientes e devolve
   // intent estruturado + plano de ação (milestones/tasks) derivado do contrato.
   const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
