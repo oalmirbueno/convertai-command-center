@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
-import { gapsForIntent, suggestProjectName, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
+import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
 import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
 import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
@@ -1121,14 +1121,35 @@ export default function VoiceAssistant() {
                         );
                       }
                       if (g.id === "project_name") {
+                        const nameSuggestions = suggestProjectNames({
+                          type: answers.project_type || (parsed as any).type,
+                          clientName: resolvedClient?.company_name || resolvedClient?.full_name,
+                          rawHint: (parsed as any).name,
+                        });
                         return (
                           <div key="pname" className="rounded-xl border border-border bg-secondary/40 p-3">
                             <p className="text-xs font-medium text-foreground mb-2 flex items-center gap-1">
                               <Edit3 className="w-3 h-3" /> Nome do projeto
                             </p>
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                              {nameSuggestions.map((s) => (
+                                <button
+                                  key={s}
+                                  onClick={() => setAnswers((a) => ({ ...a, project_name: s }))}
+                                  className={`text-[11px] px-2.5 py-1 rounded-full border transition ${
+                                    answers.project_name === s
+                                      ? "bg-primary text-primary-foreground border-primary"
+                                      : "border-border text-muted-foreground hover:border-primary"
+                                  }`}
+                                >
+                                  {s}
+                                </button>
+                              ))}
+                            </div>
                             <input
                               value={answers.project_name || ""}
                               onChange={(e) => setAnswers((a) => ({ ...a, project_name: e.target.value }))}
+                              placeholder="Ou digite um nome personalizado"
                               className="w-full text-sm bg-background border border-border rounded p-2"
                             />
                           </div>

@@ -42,15 +42,49 @@ export function suggestProjectName(opts: {
   clientName?: string;
   rawHint?: string;
 }): string {
+  return suggestProjectNames(opts)[0];
+}
+
+// Múltiplas sugestões criativas — viram chips clicáveis no clarify.
+export function suggestProjectNames(opts: {
+  type?: string;
+  clientName?: string;
+  rawHint?: string;
+}): string[] {
   const { type, clientName, rawHint } = opts;
   const now = new Date();
   const monthYear = `${MONTHS_PT[now.getMonth()]}/${String(now.getFullYear()).slice(-2)}`;
-  // If user already gave a meaningful name (not "Novo projeto"), refine with client
-  if (rawHint && rawHint.length > 3 && !/novo projeto/i.test(rawHint)) {
-    return clientName ? `${rawHint} — ${clientName}` : rawHint;
-  }
+  const quarter = `Q${Math.floor(now.getMonth() / 3) + 1}/${now.getFullYear()}`;
   const label = TYPE_LABELS[type || "other"] || "Projeto";
-  return clientName ? `${label} — ${clientName} — ${monthYear}` : `${label} — ${monthYear}`;
+  const cli = clientName?.trim();
+  const hint = rawHint && rawHint.length > 2 && !/novo projeto/i.test(rawHint) ? rawHint.trim() : "";
+
+  const cycleByType: Record<string, string[]> = {
+    trafego: ["Aceleração", "Performance", "Escala", "Captação"],
+    social_media: ["Presença", "Conteúdo", "Engajamento", "Editorial"],
+    video: ["Produção", "Cobertura", "Storytelling", "Branded Content"],
+    site: ["Plataforma", "Reposicionamento", "Redesign", "Institucional"],
+    landing_page: ["Conversão", "Captura", "Lançamento", "Oferta"],
+    automation: ["Automação", "Workflow", "Integração", "Operação"],
+    event: ["Evento", "Ativação", "Cobertura", "Lançamento"],
+    other: ["Projeto", "Iniciativa", "Operação", "Sprint"],
+  };
+  const cycle = cycleByType[type || "other"] || cycleByType.other;
+
+  const out = new Set<string>();
+  if (hint && cli) out.add(`${hint} — ${cli}`);
+  if (hint) out.add(hint);
+  if (cli) {
+    out.add(`${label} — ${cli} — ${monthYear}`);
+    out.add(`${cycle[0]} ${cli} — ${monthYear}`);
+    out.add(`${cli} ${cycle[1]} ${quarter}`);
+    out.add(`${cycle[2]} ${cli}`);
+  } else {
+    out.add(`${label} — ${monthYear}`);
+    out.add(`${cycle[0]} ${monthYear}`);
+    out.add(`${cycle[1]} ${quarter}`);
+  }
+  return Array.from(out).slice(0, 5);
 }
 
 export function suggestDeadline(type?: string): number {
