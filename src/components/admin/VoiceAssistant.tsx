@@ -395,27 +395,40 @@ export default function VoiceAssistant() {
   }, [parsed, resolvedClient]);
 
   const advanceFromInput = () => {
-    if (!parsed || parsed.kind === "unknown") return;
-    // Pre-fill answers from parsed intent
-    const init: Record<string, any> = {};
-    if (parsed.kind === "create_project") {
-      init.project_type = parsed.type || "other";
-      init.deadline = parsed.deadlineDays ?? suggestDeadline(init.project_type);
-      init.project_name = suggestProjectName({
+    // Se o admin já pré-selecionou cliente+tipo e tem anexo/comando, força
+    // um intent "create_project" sintético — não trava por falta de gatilho verbal.
+    let effective = parsed;
+    if ((!effective || effective.kind === "unknown") && answers.client_id && answers.project_type) {
+      effective = {
+        kind: "create_project",
+        name: (finalText + " " + interim).trim() || "Novo projeto",
+        type: answers.project_type,
+        deadlineDays: answers.deadline ?? suggestDeadline(answers.project_type),
+        clientHint: undefined,
+      } as any;
+      setParsed(effective);
+    }
+    if (!effective || effective.kind === "unknown") return;
+    // Pre-fill answers from parsed intent — mantendo o que o admin já escolheu.
+    const init: Record<string, any> = { ...answers };
+    if (effective.kind === "create_project") {
+      init.project_type = init.project_type || effective.type || "other";
+      init.deadline = init.deadline ?? effective.deadlineDays ?? suggestDeadline(init.project_type);
+      init.project_name = init.project_name || suggestProjectName({
         type: init.project_type,
         clientName: resolvedClient?.company_name || resolvedClient?.full_name,
-        rawHint: parsed.name,
+        rawHint: effective.name,
       });
-      init.apply_template = true;
-      if (resolvedClient) init.client_id = resolvedClient.id;
+      if (init.apply_template === undefined) init.apply_template = true;
+      if (!init.client_id && resolvedClient) init.client_id = resolvedClient.id;
     }
-    if (parsed.kind === "create_task") {
-      init.task_title = parsed.title;
-      if (resolvedClient) init.client_id = resolvedClient.id;
+    if (effective.kind === "create_task") {
+      init.task_title = init.task_title || effective.title;
+      if (!init.client_id && resolvedClient) init.client_id = resolvedClient.id;
     }
-    if (parsed.kind === "create_milestone") {
-      init.milestone_title = parsed.title;
-      if (resolvedClient) init.client_id = resolvedClient.id;
+    if (effective.kind === "create_milestone") {
+      init.milestone_title = init.milestone_title || effective.title;
+      if (!init.client_id && resolvedClient) init.client_id = resolvedClient.id;
     }
     setAnswers(init);
     if (gaps.length === 0 || (parsed.kind !== "create_project" && parsed.kind !== "create_task" && parsed.kind !== "create_milestone")) {
