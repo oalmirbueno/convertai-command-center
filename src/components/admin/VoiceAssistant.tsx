@@ -59,6 +59,40 @@ function bestMatch<T extends { id: string }>(
   return best && best.score >= 30 ? best.item : undefined;
 }
 
+/** Proactive search: scan the whole text for fuzzy client mentions, return top N. */
+function findClientsMentioned<T extends { id: string }>(
+  items: T[],
+  text: string,
+  fields: ((x: T) => string | null | undefined)[],
+  limit = 3,
+): T[] {
+  if (!text || !items?.length) return [];
+  const n = norm(text);
+  const tokens = n.split(/\s+/).filter((t) => t.length >= 3);
+  if (!tokens.length) return [];
+  const scored: { item: T; score: number }[] = [];
+  for (const it of items) {
+    let best = 0;
+    for (const f of fields) {
+      const v = norm(f(it) || "");
+      if (!v) continue;
+      const vTokens = v.split(/\s+/).filter(Boolean);
+      // exact substring of any client-name token in the spoken text → strong signal
+      for (const vt of vTokens) {
+        if (vt.length < 3) continue;
+        if (tokens.includes(vt)) best = Math.max(best, 80);
+        else if (tokens.some((t) => t.length >= 4 && (t.includes(vt) || vt.includes(t)))) {
+          best = Math.max(best, 55);
+        }
+      }
+      if (n.includes(v) && v.length >= 4) best = Math.max(best, 90);
+    }
+    if (best >= 55) scored.push({ item: it, score: best });
+  }
+  scored.sort((a, b) => b.score - a.score);
+  return scored.slice(0, limit).map((s) => s.item);
+}
+
 interface LogEntry { id: string; kind: "ok" | "error" | "info"; text: string; }
 
 type Phase = "input" | "clarify" | "preview" | "confirm" | "done";
