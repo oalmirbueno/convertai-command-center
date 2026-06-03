@@ -799,9 +799,19 @@ export default function VoiceAssistant() {
           >
             <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
             <motion.div
-              className="relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border border-border max-h-[92vh] flex flex-col shadow-2xl"
+              className={`relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border max-h-[92vh] flex flex-col shadow-2xl transition-colors ${
+                dragOver ? "border-primary ring-2 ring-primary/40" : "border-border"
+              }`}
               initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 220, damping: 24 }}
+              onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleAttach(f);
+              }}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
