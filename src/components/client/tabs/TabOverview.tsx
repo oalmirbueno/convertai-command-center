@@ -6,6 +6,7 @@ import {
   Eye, Hourglass, CircleCheck, CircleDot, Circle,
 } from "lucide-react";
 import { relativeTime, formatDate, formatDateShort, daysUntil } from "../dashboardHelpers";
+import { parseClientProjectSections, sanitizeClientText, summarizeProjectText } from "@/lib/projectPresentation";
 
 const statusBadge: Record<string, string> = {
   active: "bg-success/10 text-success",
@@ -81,24 +82,35 @@ export default function TabOverview({ project }: { project: any }) {
     return Array.from(memberMap.values());
   })();
 
-  const objectives = project.objectives
-    ? project.objectives.split("\n").filter((o: string) => o.trim())
-    : [];
+  const sections = parseClientProjectSections(project.description);
+  const objectives = sanitizeClientText(project.objectives)
+    .split("\n")
+    .filter((o: string) => o.trim());
+  const cleanScope = sanitizeClientText(project.scope);
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
       {/* Left col 60% */}
       <div className="lg:col-span-3 space-y-6">
         {/* About */}
-        <div>
-          <p className="label-sm mb-3">Sobre o Projeto</p>
-          <p className="text-sm text-foreground/80 leading-relaxed">
-            {project.description || "Sem descrição disponível."}
-          </p>
-          {project.scope && (
-            <div className="mt-4">
-              <p className="label-sm mb-2">Escopo</p>
-              <p className="text-[13px] text-foreground/70 leading-relaxed">{project.scope}</p>
+        <div className="space-y-5">
+          <p className="label-sm">Sobre o Projeto</p>
+          {sections.length > 0 ? (
+            sections.map((s, i) => (
+              <div key={i} className="space-y-1.5">
+                <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-mono">{s.title}</p>
+                {s.body.map((line, j) => (
+                  <p key={j} className="text-sm text-foreground/80 leading-relaxed">{line}</p>
+                ))}
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-foreground/80 leading-relaxed">Sem descrição disponível.</p>
+          )}
+          {cleanScope && !sections.some((s) => /escopo/i.test(s.title)) && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground font-mono">Escopo</p>
+              <p className="text-[13px] text-foreground/70 leading-relaxed">{cleanScope}</p>
             </div>
           )}
         </div>
