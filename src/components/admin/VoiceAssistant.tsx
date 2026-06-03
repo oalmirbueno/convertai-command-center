@@ -1261,16 +1261,30 @@ export default function VoiceAssistant() {
                   </div>
                 )}
 
-                {/* ---------- CONFIRM PHASE (staged, one checkbox per phase) ---------- */}
+                {/* ---------- CONFIRM PHASE (unified single confirmation) ---------- */}
                 {phase === "confirm" && parsed && (
                   <div className="space-y-3">
+                    {parsed.kind === "create_project" && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2 sticky top-0">
+                        <p className="text-[10px] uppercase tracking-wider text-primary">Vai criar</p>
+                        <h3 className="text-base font-semibold text-foreground leading-tight">
+                          {answers.project_name}
+                        </h3>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                          <div><span className="text-muted-foreground">Cliente:</span> <span className="text-foreground font-medium">{resolvedClient?.company_name || resolvedClient?.full_name}</span></div>
+                          <div><span className="text-muted-foreground">Tipo:</span> <span className="text-foreground font-medium">{answers.project_type}</span></div>
+                          <div><span className="text-muted-foreground">Prazo:</span> <span className="text-foreground font-mono">{answers.deadline}d</span></div>
+                          <div><span className="text-muted-foreground">Estrutura:</span> <span className="text-foreground font-mono">{(aiPlan?.milestones?.length || projectTemplate?.length || 0)}m · {previewTaskCount}t</span></div>
+                        </div>
+                      </div>
+                    )}
                     <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
                       <div className="flex items-start gap-2">
                         <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-xs font-semibold text-foreground">Execução por fases</p>
+                          <p className="text-xs font-semibold text-foreground">Confirmação final</p>
                           <p className="text-[11px] text-muted-foreground">
-                            Cada fase precisa do seu próprio check antes de gravar. Você pode parar a qualquer momento — o que já foi criado fica reversível pelo "Desfazer".
+                            Tudo será criado em sequência — projeto, milestones, tarefas e checklists. Reversível pelo "Desfazer".
                           </p>
                         </div>
                       </div>
