@@ -152,20 +152,21 @@ export default function VoiceAssistant() {
     try {
       switch (parsed.kind) {
         case "create_project":
-          resultMsg = await execCreateProject(parsed); break;
+          await execCreateProject(parsed); break;
         case "create_task":
-          resultMsg = await execCreateTask(parsed); break;
+          await execCreateTask(parsed); break;
         case "create_milestone":
-          resultMsg = await execCreateMilestone(parsed); break;
+          await execCreateMilestone(parsed); break;
         case "update_task_status":
-          resultMsg = await execUpdateTaskStatus(parsed); break;
+          await execUpdateTaskStatus(parsed); break;
         case "report_pending":
-          resultMsg = await execReportPending(parsed); break;
+          await execReportPending(parsed); break;
         case "report_overview":
-          resultMsg = await execReportOverview(parsed); break;
+          await execReportOverview(parsed); break;
         case "upload_file":
-          resultMsg = await execUploadFile(parsed); break;
+          await execUploadFile(parsed); break;
       }
+      resultMsg = summarizeIntent(parsed);
       reset();
       stopListening();
     } catch (err: any) {
