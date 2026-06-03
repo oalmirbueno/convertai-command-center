@@ -14,7 +14,9 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import { openFile, downloadFile } from "@/lib/fileActions";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
