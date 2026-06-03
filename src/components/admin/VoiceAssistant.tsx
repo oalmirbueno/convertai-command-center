@@ -91,7 +91,12 @@ export default function VoiceAssistant() {
   const [executing, setExecuting] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
   const [file, setFile] = useState<File | null>(null);
+  const [fileCtx, setFileCtx] = useState<FileContext | null>(null);
+  const [fileReading, setFileReading] = useState(false);
   const recRef = useRef<AnyRec | null>(null);
+  const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
+  const lastSttRef = useRef(""); // last raw STT text for learning
+  const corrections = useRef(loadCorrections());
   const supported = typeof window !== "undefined" && !!((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
 
   // Conversational state
@@ -102,6 +107,8 @@ export default function VoiceAssistant() {
   const [confirmAck, setConfirmAck] = useState(false);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
+  const [learnedCount, setLearnedCount] = useState(0);
+
 
   // Staged execution state (one checkbox per phase)
   const [stageIdx, setStageIdx] = useState(0);
