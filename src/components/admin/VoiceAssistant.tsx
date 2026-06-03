@@ -160,6 +160,7 @@ export default function VoiceAssistant() {
   const reset = () => {
     setFinalText(""); setInterim(""); setParsed(null); setFile(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
+    setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
   };
 
   // Auto re-parse when text changes
