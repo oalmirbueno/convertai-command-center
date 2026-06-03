@@ -258,8 +258,62 @@ export default function VoiceAssistant() {
     setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
+    setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
     lastSttRef.current = "";
   };
+
+  // 🧠 Agente IA — interpreta voz + anexo + base de clientes e devolve
+  // intent estruturado + plano de ação (milestones/tasks) derivado do contrato.
+  const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
+    const text = (finalText + " " + interim).trim();
+    if (!text && !fileCtx?.text) return;
+    if (aiThinking) return;
+    setAiThinking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
+        body: {
+          text,
+          attachment: fileCtx?.text
+            ? { fileName: fileCtx.fileName, text: fileCtx.text }
+            : null,
+          clients: clientList.map((c) => ({
+            id: c.id, company_name: c.company_name, full_name: c.full_name, email: c.email,
+          })),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const intent = (data as any).intent || { kind: "unknown", raw: text };
+      // Map AI intent to local ParsedIntent shape (same keys).
+      setParsed(intent as ParsedIntent);
+      setAiNarrative((data as any).narrative || null);
+      setAiPlan((data as any).plan || null);
+      setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
+      // Auto-resolve client if AI surfaced one and there's a strong match.
+      const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
+      if (sug.length && !answers.client_id) {
+        const found = clientList.find((c) => c.id === sug[0]);
+        if (found) setAnswers((a) => ({ ...a, client_id: found.id }));
+      }
+      if (!opts?.silent) {
+        appendLog({ kind: "ok", text: `IA: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}` });
+      }
+    } catch (err: any) {
+      appendLog({ kind: "error", text: `IA falhou: ${err?.message || "erro"}` });
+      if (!opts?.silent) toast({ title: "IA indisponível", description: err?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setAiThinking(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking, toast]);
+
+  // Auto-trigger IA quando há anexo carregado (contratos/briefings → plano)
+  useEffect(() => {
+    if (fileCtx?.text && !aiThinking && !aiPlan) {
+      runAgent({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileCtx?.text]);
 
   const handleAttach = useCallback(async (f: File | null) => {
     setFile(f); setFileCtx(null);
