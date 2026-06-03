@@ -142,6 +142,11 @@ export default function VoiceAssistant() {
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [learnedCount, setLearnedCount] = useState(0);
+  const [aiThinking, setAiThinking] = useState(false);
+  const [aiNarrative, setAiNarrative] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<{ milestones: { title: string; offsetDays: number; tasks: { title: string; description?: string; priority: string; role: "admin"|"design"|"traffic"|"manager" }[] }[] } | null>(null);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
 
   // Staged execution state (one checkbox per phase)
@@ -253,8 +258,65 @@ export default function VoiceAssistant() {
     setFinalText(""); setInterim(""); setParsed(null); setFile(null); setFileCtx(null);
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
+    setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
     lastSttRef.current = "";
   };
+
+  const appendLog = useCallback((entry: Omit<LogEntry, "id">) =>
+    setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12)), []);
+
+  // 🧠 Agente IA — interpreta voz + anexo + base de clientes e devolve
+  // intent estruturado + plano de ação (milestones/tasks) derivado do contrato.
+  const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
+    const text = (finalText + " " + interim).trim();
+    if (!text && !fileCtx?.text) return;
+    if (aiThinking) return;
+    setAiThinking(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("voice-assistant-agent", {
+        body: {
+          text,
+          attachment: fileCtx?.text
+            ? { fileName: fileCtx.fileName, text: fileCtx.text }
+            : null,
+          clients: clientList.map((c) => ({
+            id: c.id, company_name: c.company_name, full_name: c.full_name, email: c.email,
+          })),
+        },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
+      const intent = (data as any).intent || { kind: "unknown", raw: text };
+      // Map AI intent to local ParsedIntent shape (same keys).
+      setParsed(intent as ParsedIntent);
+      setAiNarrative((data as any).narrative || null);
+      setAiPlan((data as any).plan || null);
+      setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
+      // Auto-resolve client if AI surfaced one and there's a strong match.
+      const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
+      if (sug.length && !answers.client_id) {
+        const found = clientList.find((c) => c.id === sug[0]);
+        if (found) setAnswers((a) => ({ ...a, client_id: found.id }));
+      }
+      if (!opts?.silent) {
+        appendLog({ kind: "ok", text: `IA: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}` });
+      }
+    } catch (err: any) {
+      appendLog({ kind: "error", text: `IA falhou: ${err?.message || "erro"}` });
+      if (!opts?.silent) toast({ title: "IA indisponível", description: err?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setAiThinking(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking, toast]);
+
+  // Auto-trigger IA quando há anexo carregado (contratos/briefings → plano)
+  useEffect(() => {
+    if (fileCtx?.text && !aiThinking && !aiPlan) {
+      runAgent({ silent: true });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileCtx?.text]);
 
   const handleAttach = useCallback(async (f: File | null) => {
     setFile(f); setFileCtx(null);
@@ -296,8 +358,8 @@ export default function VoiceAssistant() {
   }, [finalText, interim, fileCtx]);
 
 
-  const appendLog = (entry: Omit<LogEntry, "id">) =>
-    setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12));
+
+
 
   // ------------ Conversational flow ------------
   const resolvedClient = useMemo(() => {
@@ -381,11 +443,14 @@ export default function VoiceAssistant() {
     if (parsed?.kind === "create_project") {
       const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
       if (answers.apply_template) {
-        const tpl = projectTemplates[answers.project_type] || [];
-        const taskCount = tpl.reduce((s, m) => s + m.tasks.length, 0);
+        const tpl = aiPlan?.milestones?.length
+          ? aiPlan.milestones
+          : (projectTemplates[answers.project_type] || []);
+        const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
+        const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
         base.push(
-          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas serão criadas a partir do template.` },
-          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas, vinculadas a cada milestone.` },
+          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas${source}.` },
+          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas vinculadas.` },
           { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
         );
       }
@@ -394,7 +459,7 @@ export default function VoiceAssistant() {
     if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
     if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
     return [];
-  }, [parsed, answers]);
+  }, [parsed, answers, aiPlan]);
 
   const stagedFinalize = async (finalRefs: CreatedRefs) => {
     const transcript = (finalText + " " + interim).trim();
@@ -518,7 +583,9 @@ export default function VoiceAssistant() {
   }
 
   async function stageCreateMilestones(project: any, refs: CreatedRefs) {
-    const template = projectTemplates[answers.project_type] || projectTemplates.other;
+    const template: any[] = aiPlan?.milestones?.length
+      ? aiPlan.milestones
+      : (projectTemplates[answers.project_type] || projectTemplates.other);
     if (!template) return [];
     const start = new Date(project.start_date);
     const out: Array<{ milestone: any; tm: any }> = [];
@@ -732,9 +799,19 @@ export default function VoiceAssistant() {
           >
             <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
             <motion.div
-              className="relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border border-border max-h-[92vh] flex flex-col shadow-2xl"
+              className={`relative w-full md:w-[460px] md:rounded-2xl rounded-t-2xl bg-card border max-h-[92vh] flex flex-col shadow-2xl transition-colors ${
+                dragOver ? "border-primary ring-2 ring-primary/40" : "border-border"
+              }`}
               initial={{ y: 40, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 40, opacity: 0 }}
               transition={{ type: "spring", stiffness: 220, damping: 24 }}
+              onDragOver={(e) => { e.preventDefault(); if (!dragOver) setDragOver(true); }}
+              onDragLeave={(e) => { e.preventDefault(); setDragOver(false); }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                const f = e.dataTransfer.files?.[0];
+                if (f) handleAttach(f);
+              }}
             >
               {/* Header */}
               <div className="flex items-center justify-between px-5 py-4 border-b border-border">
@@ -743,9 +820,9 @@ export default function VoiceAssistant() {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Assistente Operacional</p>
+                    <p className="text-sm font-semibold text-foreground">Aceleriq OS · Agente</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {phase === "input" && "Voz · sem IA externa"}
+                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
                       {phase === "confirm" && "Confirmação final"}
@@ -798,6 +875,49 @@ export default function VoiceAssistant() {
                       placeholder="Ou escreva o comando aqui..."
                       className="w-full text-sm bg-background border border-border rounded-lg p-2 min-h-[60px] focus:outline-none focus:border-primary"
                     />
+                    <div className="flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => runAgent()}
+                        disabled={aiThinking || (!finalText.trim() && !fileCtx?.text)}
+                        className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
+                      >
+                        {aiThinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
+                        {aiThinking ? "Analisando…" : aiPlan ? "Reanalisar com IA" : "Pensar com IA (lê contratos)"}
+                      </button>
+                      {aiConfidence !== null && (
+                        <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-mono">
+                          {Math.round(aiConfidence * 100)}% conf.
+                        </span>
+                      )}
+                    </div>
+                    {aiNarrative && (
+                      <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <Sparkles className="w-3 h-3 text-primary" />
+                          <p className="text-[10px] uppercase tracking-wider text-primary">Plano de ação do agente</p>
+                        </div>
+                        <p className="text-xs text-foreground leading-relaxed">{aiNarrative}</p>
+                        {aiPlan?.milestones?.length ? (
+                          <details className="text-[11px] text-muted-foreground">
+                            <summary className="cursor-pointer hover:text-foreground">
+                              Ver {aiPlan.milestones.length} etapas / {aiPlan.milestones.reduce((s, m) => s + (m.tasks?.length || 0), 0)} tarefas
+                            </summary>
+                            <ul className="mt-2 space-y-1.5 pl-3 border-l border-border">
+                              {aiPlan.milestones.map((m, i) => (
+                                <li key={i}>
+                                  <p className="text-foreground font-medium">{m.title} <span className="text-muted-foreground font-normal">· +{m.offsetDays}d</span></p>
+                                  <ul className="pl-3 list-disc list-outside">
+                                    {(m.tasks || []).map((t, j) => (
+                                      <li key={j}>{t.title} <span className="text-[9px] uppercase">[{t.role}]</span></li>
+                                    ))}
+                                  </ul>
+                                </li>
+                              ))}
+                            </ul>
+                          </details>
+                        ) : null}
+                      </div>
+                    )}
                     {learnedCount > 0 && (
                       <div className="flex items-center gap-2 text-[11px] text-primary">
                         <Brain className="w-3.5 h-3.5" />
