@@ -680,7 +680,7 @@ export default function VoiceAssistant() {
     end.setDate(end.getDate() + (answers.deadline || 30));
     const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name, {
       narrative: aiNarrative,
-      contractName: fileCtx?.fileName || null,
+      contractName: primaryCtxName,
       plan: aiPlan,
       rawHint: (finalText + " " + interim).trim(),
     });
