@@ -1205,21 +1205,46 @@ export default function VoiceAssistant() {
                         </div>
                       );
                     })()}
-                    {(file || fileReading) && (
-                      <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
-                        <div className="flex items-center gap-2 text-foreground">
-                          {fileReading ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />}
-                          <span className="truncate flex-1">{fileCtx ? describeContext(fileCtx) : file?.name}</span>
-                          <button onClick={() => handleAttach(null)} className="text-destructive">remover</button>
-                        </div>
-                        {fileCtx?.text && (
-                          <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
-                            "{fileCtx.text.slice(0, 200).replace(/\s+/g, " ")}…"
-                          </p>
+                    {(files.length > 0 || fileReading || systemDocsLoading || systemDocs.length > 0) && (
+                      <div className="space-y-1.5">
+                        {systemDocsLoading && (
+                          <div className="rounded-xl border border-primary/30 bg-primary/5 p-2.5 text-xs flex items-center gap-2 text-primary">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                            <span>Lendo documentos do cliente…</span>
+                          </div>
                         )}
-                        {fileCtx?.warning && (
-                          <p className="mt-1.5 text-[10px] text-amber-500">{fileCtx.warning}</p>
+                        {systemDocs.map((d, i) => (
+                          <div key={`sys-${i}`} className="rounded-xl border border-primary/25 bg-primary/5 p-2.5 text-xs">
+                            <div className="flex items-center gap-2 text-foreground">
+                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
+                              <span className="truncate flex-1">📚 {d.fileName}</span>
+                              <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{d.source}</span>
+                            </div>
+                          </div>
+                        ))}
+                        {fileReading && (
+                          <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs flex items-center gap-2">
+                            <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+                            <span>Lendo anexos…</span>
+                          </div>
                         )}
+                        {fileCtxs.map((ctx, i) => (
+                          <div key={`att-${i}`} className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
+                            <div className="flex items-center gap-2 text-foreground">
+                              <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
+                              <span className="truncate flex-1">{describeContext(ctx)}</span>
+                              <button onClick={() => removeAttachment(i)} className="text-destructive">remover</button>
+                            </div>
+                            {ctx.text && (
+                              <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
+                                "{ctx.text.slice(0, 200).replace(/\s+/g, " ")}…"
+                              </p>
+                            )}
+                            {ctx.warning && (
+                              <p className="mt-1.5 text-[10px] text-amber-500">{ctx.warning}</p>
+                            )}
+                          </div>
+                        ))}
                       </div>
                     )}
                     {log.length > 0 && (
