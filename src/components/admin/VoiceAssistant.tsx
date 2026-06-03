@@ -1640,7 +1640,7 @@ export default function VoiceAssistant() {
                     </button>
                     <label className="w-10 h-10 rounded-full bg-secondary text-muted-foreground hover:text-foreground flex items-center justify-center cursor-pointer">
                       <Paperclip className="w-4 h-4" />
-                      <input type="file" className="hidden" onChange={(e) => handleAttach(e.target.files?.[0] || null)} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
+                      <input type="file" multiple className="hidden" onChange={(e) => { const arr = Array.from(e.target.files || []); if (arr.length) handleAttach(arr); e.target.value = ""; }} accept=".txt,.md,.csv,.tsv,.json,.yaml,.yml,.log,.xml,.html,.pdf,image/*" />
                     </label>
                     <button
                       onClick={advanceFromInput}
