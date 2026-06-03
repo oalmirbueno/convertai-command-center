@@ -418,6 +418,25 @@ export default function VoiceAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [answers.client_id]);
 
+  useEffect(() => {
+    const cid = answers.client_id;
+    setClientProjects([]);
+    if (!cid) return;
+    setClientProjectsLoading(true);
+    supabase
+      .from("projects")
+      .select("id, name, project_type, status, progress, deadline, created_at")
+      .eq("client_id", cid)
+      .is("deleted_at", null)
+      .order("created_at", { ascending: false })
+      .then(({ data }) => {
+        const list = data || [];
+        setClientProjects(list);
+        setAnswers((a) => (a.client_id === cid && !a.project_id && list.length === 0 ? { ...a, project_id: "new" } : a));
+      })
+      .finally(() => setClientProjectsLoading(false));
+  }, [answers.client_id]);
+
   const handleAttach = useCallback(async (input: File | File[] | FileList | null) => {
     if (input === null) {
       setFiles([]); setFileCtxs([]); return;
@@ -721,24 +740,33 @@ export default function VoiceAssistant() {
 
   // ---- Staged project creation helpers (per-phase execution) ----
   async function stageCreateProject(client: any, refs: CreatedRefs) {
-    const start = new Date();
-    const end = new Date();
-    end.setDate(end.getDate() + (answers.deadline || 30));
-    const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name, {
+    const startKey = addDaysBR(0);
+    const endKey = addDaysBR(answers.deadline || 30, startKey);
+    const clientFields = buildClientProjectFields({
+      type: answers.project_type,
+      clientName: client.company_name || client.full_name,
       narrative: aiNarrative,
-      contractName: primaryCtxName,
       plan: aiPlan,
-      rawHint: (finalText + " " + interim).trim(),
     });
-    const { data: project, error } = await supabase.from("projects").insert({
-      client_id: client.id,
+    const payload = {
       name: answers.project_name,
       project_type: answers.project_type,
-      description,
+      description: clientFields.description,
+      scope: clientFields.scope,
+      objectives: clientFields.objectives,
+      deadline: endKey,
+    };
+    if (answers.project_id && answers.project_id !== "new") {
+      const { data: project, error } = await supabase.from("projects").update(payload).eq("id", answers.project_id).select().single();
+      if (error) throw error;
+      return project;
+    }
+    const { data: project, error } = await supabase.from("projects").insert({
+      client_id: client.id,
+      ...payload,
       status: "planning",
       progress: 0,
-      start_date: start.toISOString().slice(0, 10),
-      deadline: end.toISOString().slice(0, 10),
+      start_date: startKey,
       created_by: user!.id,
     }).select().single();
     if (error) throw error;
