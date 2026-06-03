@@ -394,7 +394,7 @@ export default function VoiceAssistant() {
     }
   }
 
-  async function execCreateTaskFull(a: Record<string, any>) {
+  async function execCreateTaskFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_task" }>;
     const client = clientList.find((c) => c.id === a.client_id);
     let q = supabase.from("projects").select("id, name, project_type, client_id").is("deleted_at", null);
@@ -404,14 +404,15 @@ export default function VoiceAssistant() {
     if (!project) throw new Error("Projeto não encontrado");
     const due = new Date();
     due.setDate(due.getDate() + 7);
-    const { error } = await supabase.from("tasks").insert({
+    const { data, error } = await supabase.from("tasks").insert({
       project_id: project.id,
       title: a.task_title || p.title,
       status: p.status || "backlog",
       priority: p.priority || "medium",
       due_date: due.toISOString().slice(0, 10),
-    });
+    }).select("id").single();
     if (error) throw error;
+    if (data?.id) refs.taskIds.push(data.id);
   }
 
   async function execCreateMilestoneFull(a: Record<string, any>) {
