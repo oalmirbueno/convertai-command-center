@@ -101,7 +101,9 @@ export default function ClientApprovals() {
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [previewFile, setPreviewFile] = useState<any>(null);
+  const [previewFile, setPreviewFileRaw] = useState<any>(null);
+  const [previewIdx, setPreviewIdx] = useState(0);
+  const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
 
   const allFilesList = files || [];
 
