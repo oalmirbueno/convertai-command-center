@@ -683,13 +683,13 @@ export default function VoiceAssistant() {
         if (!client) throw new Error("Cliente não selecionado");
         const project = await stageCreateProject(client, refs);
         setStageContext((c) => ({ ...c, client, project }));
-        if (answers.apply_template && !project.__isUpdate) {
+        if (answers.apply_template && !(project as any).__isUpdate) {
           const ms = await stageCreateMilestones(project, refs);
           const ts = await stageCreateTasks(project, ms, refs);
           const chk = await fetchChkTemplates();
           await stageCreateChecklists(ts, chk, refs);
           setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
-        } else if (answers.apply_template && project.__isUpdate) {
+        } else if (answers.apply_template && (project as any).__isUpdate) {
           // Existing project: avoid duplicating milestones/tasks. Only top up structure if empty.
           const { data: existingMs } = await supabase.from("milestones").select("id").eq("project_id", project.id).is("deleted_at", null).limit(1);
           if (!existingMs || existingMs.length === 0) {
