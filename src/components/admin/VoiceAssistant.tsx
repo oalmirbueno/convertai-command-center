@@ -142,6 +142,11 @@ export default function VoiceAssistant() {
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
   const [undoing, setUndoing] = useState(false);
   const [learnedCount, setLearnedCount] = useState(0);
+  const [aiThinking, setAiThinking] = useState(false);
+  const [aiNarrative, setAiNarrative] = useState<string | null>(null);
+  const [aiPlan, setAiPlan] = useState<{ milestones: { title: string; offsetDays: number; tasks: { title: string; description?: string; priority: string; role: "admin"|"design"|"traffic"|"manager" }[] }[] } | null>(null);
+  const [aiConfidence, setAiConfidence] = useState<number | null>(null);
+  const [dragOver, setDragOver] = useState(false);
 
 
   // Staged execution state (one checkbox per phase)
