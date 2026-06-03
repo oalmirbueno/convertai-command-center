@@ -466,23 +466,21 @@ export default function VoiceAssistant() {
     }
   };
 
-  // ---------------- Staged execution (1 checkbox per phase) ----------------
+  // ---------------- Execução unificada (uma confirmação só) ----------------
+  // Antes éramos 4 fases (project → milestones → tasks → checklists). Agora,
+  // após o usuário revisar o escopo no preview e bater "Confirmar", criamos
+  // tudo em sequência atomicamente. O cabeçalho mostra o projeto montado.
   const stages = useMemo(() => {
     if (parsed?.kind === "create_project") {
-      const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
-      if (answers.apply_template) {
-        const tpl = aiPlan?.milestones?.length
-          ? aiPlan.milestones
-          : (projectTemplates[answers.project_type] || []);
-        const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
-        const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
-        base.push(
-          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas${source}.` },
-          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas vinculadas.` },
-          { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
-        );
-      }
-      return base;
+      const tpl = aiPlan?.milestones?.length
+        ? aiPlan.milestones
+        : (projectTemplates[answers.project_type] || []);
+      const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
+      const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
+      const desc = answers.apply_template
+        ? `Projeto + ${tpl.length} milestones${source} + ${taskCount} tarefas + checklists, tudo encadeado.`
+        : "Apenas o registro do projeto (sem template).";
+      return [{ key: "project_full", label: "Criar projeto completo", description: desc }];
     }
     if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
     if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
@@ -530,22 +528,18 @@ export default function VoiceAssistant() {
       fileIds: [...stageRefs.fileIds],
     };
     try {
-      if (stage.key === "project") {
+      if (stage.key === "project_full") {
         const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
         if (!client) throw new Error("Cliente não selecionado");
         const project = await stageCreateProject(client, refs);
         setStageContext((c) => ({ ...c, client, project }));
-      } else if (stage.key === "milestones") {
-        if (!stageContext.project) throw new Error("Projeto não criado nesta sessão");
-        const ms = await stageCreateMilestones(stageContext.project, refs);
-        setStageContext((c) => ({ ...c, milestones: ms }));
-      } else if (stage.key === "tasks") {
-        if (!stageContext.project) throw new Error("Projeto não criado");
-        const ts = await stageCreateTasks(stageContext.project, stageContext.milestones || [], refs);
-        const chk = await fetchChkTemplates();
-        setStageContext((c) => ({ ...c, tasks: ts, chkTemplates: chk }));
-      } else if (stage.key === "checklists") {
-        await stageCreateChecklists(stageContext.tasks || [], stageContext.chkTemplates || [], refs);
+        if (answers.apply_template) {
+          const ms = await stageCreateMilestones(project, refs);
+          const ts = await stageCreateTasks(project, ms, refs);
+          const chk = await fetchChkTemplates();
+          await stageCreateChecklists(ts, chk, refs);
+          setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
+        }
       } else if (stage.key === "single") {
         if (parsed.kind === "create_task") await execCreateTaskFull(answers, refs);
         else if (parsed.kind === "create_milestone") await execCreateMilestoneFull(answers, refs);
@@ -1267,16 +1261,30 @@ export default function VoiceAssistant() {
                   </div>
                 )}
 
-                {/* ---------- CONFIRM PHASE (staged, one checkbox per phase) ---------- */}
+                {/* ---------- CONFIRM PHASE (unified single confirmation) ---------- */}
                 {phase === "confirm" && parsed && (
                   <div className="space-y-3">
+                    {parsed.kind === "create_project" && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2 sticky top-0">
+                        <p className="text-[10px] uppercase tracking-wider text-primary">Vai criar</p>
+                        <h3 className="text-base font-semibold text-foreground leading-tight">
+                          {answers.project_name}
+                        </h3>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-[11px]">
+                          <div><span className="text-muted-foreground">Cliente:</span> <span className="text-foreground font-medium">{resolvedClient?.company_name || resolvedClient?.full_name}</span></div>
+                          <div><span className="text-muted-foreground">Tipo:</span> <span className="text-foreground font-medium">{answers.project_type}</span></div>
+                          <div><span className="text-muted-foreground">Prazo:</span> <span className="text-foreground font-mono">{answers.deadline}d</span></div>
+                          <div><span className="text-muted-foreground">Estrutura:</span> <span className="text-foreground font-mono">{(aiPlan?.milestones?.length || projectTemplate?.length || 0)}m · {previewTaskCount}t</span></div>
+                        </div>
+                      </div>
+                    )}
                     <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-3">
                       <div className="flex items-start gap-2">
                         <ShieldAlert className="w-4 h-4 text-destructive shrink-0 mt-0.5" />
                         <div>
-                          <p className="text-xs font-semibold text-foreground">Execução por fases</p>
+                          <p className="text-xs font-semibold text-foreground">Confirmação final</p>
                           <p className="text-[11px] text-muted-foreground">
-                            Cada fase precisa do seu próprio check antes de gravar. Você pode parar a qualquer momento — o que já foi criado fica reversível pelo "Desfazer".
+                            Tudo será criado em sequência — projeto, milestones, tarefas e checklists. Reversível pelo "Desfazer".
                           </p>
                         </div>
                       </div>
@@ -1327,7 +1335,7 @@ export default function VoiceAssistant() {
                                   onChange={(e) => setStageAck(e.target.checked)}
                                   className="mt-0.5 w-3.5 h-3.5 accent-primary"
                                 />
-                                <span>Confirmo executar esta fase agora.</span>
+                                <span>Confirmo criar tudo agora.</span>
                               </label>
                               <button
                                 onClick={() => runStage(i)}
@@ -1335,7 +1343,7 @@ export default function VoiceAssistant() {
                                 className="w-full h-9 rounded-full bg-primary text-primary-foreground text-xs font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                               >
                                 {executing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-                                Executar fase {i + 1} de {stages.length}
+                                Criar agora
                               </button>
                             </div>
                           )}
@@ -1344,9 +1352,19 @@ export default function VoiceAssistant() {
                     })}
 
                     {stageIdx >= stages.length && stages.length > 0 && (
-                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 text-xs text-foreground flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-primary" />
-                        Todas as fases concluídas.
+                      <div className="rounded-xl border border-primary/40 bg-primary/10 p-3 space-y-1.5">
+                        <div className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                          <CheckCircle2 className="w-4 h-4 text-primary" />
+                          Criado com sucesso
+                        </div>
+                        {parsed.kind === "create_project" && (
+                          <div className="text-[11px] text-muted-foreground space-y-0.5 pl-6">
+                            <p>📁 <span className="text-foreground font-medium">{answers.project_name}</span></p>
+                            <p>👤 {resolvedClient?.company_name || resolvedClient?.full_name}</p>
+                            <p>📊 {stageRefs.milestoneIds.length} milestones · {stageRefs.taskIds.length} tarefas · {stageRefs.checklistItemIds.length} itens de checklist</p>
+                            <p className="text-primary pt-1">→ Já disponível no Kanban e no drawer do projeto.</p>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>

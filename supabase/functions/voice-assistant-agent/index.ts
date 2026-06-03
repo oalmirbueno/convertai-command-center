@@ -30,7 +30,7 @@ trafego, video, site, social_media, conteudo, automation, outro.
 1. Use o trecho como fonte de verdade.
 2. Extraia: cliente, escopo, prazos, entregáveis, exclusões.
 3. Monte \`plan\` com milestones e tarefas DERIVADAS — nunca fora do escopo contratado.
-4. Inclua "Kickoff e alinhamento" no início e "Entrega e validação" no fim.
+4. NÃO crie milestones genéricos de "Kickoff" ou "Alinhamento inicial" — o projeto já está em execução, parta direto das fases produtivas do contrato. Idem para "Entrega final" boilerplate: só inclua se o contrato citar marco de entrega/validação real.
 5. \`narrative\`: 2-4 frases (pt-BR) citando o que do contrato embasou cada decisão.
 
 ## Sem anexo
