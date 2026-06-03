@@ -56,17 +56,30 @@ export function buildClientProjectFields(opts: {
 }) {
   const plan = opts.plan?.milestones || [];
   const taskTotal = plan.reduce((sum, m) => sum + (m.tasks?.length || 0), 0);
-  const scope = TYPE_SCOPE[opts.type || "other"] || TYPE_SCOPE.other;
   const intro = TYPE_INTRO[opts.type || "other"] || TYPE_INTRO.other;
-  const structure = plan.length
-    ? `A entrega está organizada em ${plan.length} etapa${plan.length > 1 ? "s" : ""} e ${taskTotal} tarefa${taskTotal > 1 ? "s" : ""}, cada uma com prazo e validação antes do avanço.`
-    : "A entrega será conduzida por etapas sequenciais com validação antes de cada avanço.";
 
-  const objectives = [
-    "Manter o escopo organizado em etapas claras e acompanháveis.",
-    "Dar visibilidade contínua sobre prazos, produção e entregas.",
-    "Garantir qualidade e revisão antes de cada entrega ir ao ar.",
-  ];
+  // Scope is derived from the real milestone titles when available — that's what the client will track.
+  const milestoneTitles = plan.map((m) => (m.title || "").trim()).filter(Boolean);
+  const scope = milestoneTitles.length
+    ? milestoneTitles.join(" · ")
+    : (TYPE_SCOPE[opts.type || "other"] || TYPE_SCOPE.other);
+
+  // Structure: list each milestone with its task count — so the description matches what's actually in the kanban/timeline.
+  const structureLines = plan.length
+    ? plan.map((m, i) => `${i + 1}. ${m.title} — ${m.tasks?.length || 0} ${m.tasks?.length === 1 ? "entrega" : "entregas"}`)
+    : [];
+  const structure = structureLines.length
+    ? `${plan.length} etapa${plan.length > 1 ? "s" : ""} · ${taskTotal} ${taskTotal === 1 ? "entrega" : "entregas"} totais\n${structureLines.join("\n")}`
+    : "Etapas e entregas serão organizadas conforme o plano de execução, com validação antes de cada avanço.";
+
+  // Objectives are derived from milestone titles, so the client reads what's actually going to be delivered.
+  const objectives = milestoneTitles.length
+    ? milestoneTitles.slice(0, 5).map((t) => `Concluir: ${t}`)
+    : [
+        "Manter o escopo organizado em etapas claras e acompanháveis.",
+        "Dar visibilidade contínua sobre prazos, produção e entregas.",
+        "Garantir qualidade e revisão antes de cada entrega ir ao ar.",
+      ];
 
   return {
     description: sanitizeClientText(`Visão geral\n${intro}\n\nEscopo contratado\n${scope}\n\nEstrutura de trabalho\n${structure}`),
@@ -74,6 +87,7 @@ export function buildClientProjectFields(opts: {
     objectives: objectives.join("\n"),
   };
 }
+
 
 
 export function summarizeProjectText(text?: string | null) {
