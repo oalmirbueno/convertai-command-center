@@ -462,6 +462,7 @@ export default function VoiceAssistant() {
   // The file's extracted text is fed into the parser so the command can
   // reference "este documento" / "esse anexo" naturally.
   useEffect(() => {
+    if (phaseRef.current !== "input") return;
     const spoken = (finalText + " " + interim).trim();
     const ctxText = fileCtxs
       .filter((c) => c.text)
