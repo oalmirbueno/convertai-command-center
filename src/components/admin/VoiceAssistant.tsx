@@ -147,6 +147,11 @@ export default function VoiceAssistant() {
   const [aiPlan, setAiPlan] = useState<{ milestones: { title: string; offsetDays: number; tasks: { title: string; description?: string; priority: string; role: "admin"|"design"|"traffic"|"manager" }[] }[] } | null>(null);
   const [aiConfidence, setAiConfidence] = useState<number | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  // 🔒 Trava o auto-trigger pra não ficar reanalisando em loop quando a IA falha
+  // ou quando o usuário não pediu reanálise. Reseta a cada reset().
+  const aiAttemptedRef = useRef(false);
+  const [refineVoice, setRefineVoice] = useState(false);
+  const [refineText, setRefineText] = useState("");
 
 
   // Staged execution state (one checkbox per phase)
@@ -259,6 +264,8 @@ export default function VoiceAssistant() {
     setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
     setStageIdx(0); setStageAck(false); setStageRefs(emptyRefs()); setStageContext({});
     setAiNarrative(null); setAiPlan(null); setAiConfidence(null);
+    aiAttemptedRef.current = false;
+    setRefineVoice(false); setRefineText("");
     lastSttRef.current = "";
   };
 
@@ -316,12 +323,15 @@ export default function VoiceAssistant() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking]);
 
-  // Auto-trigger IA quando há anexo OU quando o cliente é resolvido
-  // (pro agente buscar o contrato do sistema sem o usuário arrastar nada).
+  // Auto-trigger IA apenas UMA VEZ quando há contexto novo. Não fica em loop:
+  // se a IA falhou (degraded), o usuário precisa clicar "Reanalisar" pra tentar
+  // de novo — assim não trava nem queima tentativa.
   useEffect(() => {
-    if ((fileCtx?.text || answers.client_id) && !aiThinking && !aiPlan) {
-      runAgent({ silent: true });
-    }
+    if (aiAttemptedRef.current) return;
+    if (aiThinking) return;
+    if (!(fileCtx?.text || answers.client_id)) return;
+    aiAttemptedRef.current = true;
+    runAgent({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fileCtx?.text, answers.client_id]);
 
