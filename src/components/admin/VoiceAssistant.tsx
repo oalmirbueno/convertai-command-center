@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3 } from "lucide-react";
+import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
