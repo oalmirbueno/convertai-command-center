@@ -348,8 +348,8 @@ export default function VoiceAssistant() {
       const currentParsed = parsedRef.current;
       const protectedDraft = phaseRef.current !== "input" && currentParsed?.kind === "create_project";
       setParsed(protectedDraft && intent.kind === "unknown" ? currentParsed : intent as ParsedIntent);
-      setAiNarrative((data as any).narrative || null);
-      setAiPlan((data as any).plan || null);
+      setAiNarrative((prev) => (data as any).narrative || (protectedDraft ? prev : null));
+      setAiPlan((prev) => (data as any).plan || (protectedDraft ? prev : null));
       setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
       const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
       if (sug.length && !answers.client_id) {
