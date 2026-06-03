@@ -759,7 +759,7 @@ export default function VoiceAssistant() {
     if (answers.project_id && answers.project_id !== "new") {
       const { data: project, error } = await supabase.from("projects").update(payload).eq("id", answers.project_id).select().single();
       if (error) throw error;
-      return project;
+      return { ...project, __isUpdate: true };
     }
     const { data: project, error } = await supabase.from("projects").insert({
       client_id: client.id,
