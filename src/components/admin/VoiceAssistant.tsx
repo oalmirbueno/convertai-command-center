@@ -215,6 +215,9 @@ export default function VoiceAssistant() {
       });
       return;
     }
+    wantListenRef.current = false;
+    try { recRef.current?.stop?.(); } catch {}
+    recRef.current = null;
     listeningModeRef.current = mode;
     wantListenRef.current = true;
     if (mode === "refine") setRefineInterim("");
@@ -483,6 +486,9 @@ export default function VoiceAssistant() {
   }, [parsed, resolvedClient]);
 
   const advanceFromInput = () => {
+    const pendingInterim = interim.trim();
+    if (pendingInterim) setFinalText((prev) => (prev ? `${prev} ${pendingInterim}` : pendingInterim).trim());
+    stopListening();
     // Se o admin já pré-selecionou cliente+tipo e tem anexo/comando, força
     // um intent "create_project" sintético — não trava por falta de gatilho verbal.
     let effective = parsed;
