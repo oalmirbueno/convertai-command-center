@@ -915,7 +915,7 @@ export default function VoiceAssistant() {
                     />
                     <div className="flex items-center justify-between gap-2">
                       <button
-                        onClick={() => runAgent()}
+                        onClick={() => { aiAttemptedRef.current = true; runAgent(); }}
                         disabled={aiThinking || (!finalText.trim() && !fileCtx?.text)}
                         className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
                       >
