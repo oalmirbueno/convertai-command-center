@@ -443,11 +443,14 @@ export default function VoiceAssistant() {
     if (parsed?.kind === "create_project") {
       const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
       if (answers.apply_template) {
-        const tpl = projectTemplates[answers.project_type] || [];
-        const taskCount = tpl.reduce((s, m) => s + m.tasks.length, 0);
+        const tpl = aiPlan?.milestones?.length
+          ? aiPlan.milestones
+          : (projectTemplates[answers.project_type] || []);
+        const taskCount = tpl.reduce((s: number, m: any) => s + (m.tasks?.length || 0), 0);
+        const source = aiPlan?.milestones?.length ? " (do contrato)" : "";
         base.push(
-          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas serão criadas a partir do template.` },
-          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas, vinculadas a cada milestone.` },
+          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas${source}.` },
+          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas vinculadas.` },
           { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
         );
       }
@@ -456,7 +459,7 @@ export default function VoiceAssistant() {
     if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
     if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
     return [];
-  }, [parsed, answers]);
+  }, [parsed, answers, aiPlan]);
 
   const stagedFinalize = async (finalRefs: CreatedRefs) => {
     const transcript = (finalText + " " + interim).trim();
