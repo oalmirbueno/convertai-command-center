@@ -103,8 +103,14 @@ const MODEL_CHAIN = [
 interface RequestBody {
   text: string;
   attachment?: { fileName: string; text: string } | null;
+  attachments?: { fileName: string; text: string }[];
   clientId?: string | null;
   clients?: { id: string; company_name?: string | null; full_name?: string | null; email?: string | null }[];
+  // Quando true, NÃO chama LLM — só devolve `documents[]` carregados do sistema
+  // pra UI mostrar e poder enviar de volta na próxima chamada.
+  fetchOnly?: boolean;
+  // Quando true, edge não tenta recarregar contratos do sistema (UI já passou).
+  skipSystemContractAutoLoad?: boolean;
 }
 
 // Extrai texto cru de PDF sem parser pesado: pega só strings ASCII dentro do
