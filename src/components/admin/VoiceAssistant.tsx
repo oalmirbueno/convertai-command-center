@@ -423,18 +423,18 @@ export default function VoiceAssistant() {
     setClientProjects([]);
     if (!cid) return;
     setClientProjectsLoading(true);
-    supabase
-      .from("projects")
-      .select("id, name, project_type, status, progress, deadline, created_at")
-      .eq("client_id", cid)
-      .is("deleted_at", null)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        const list = data || [];
-        setClientProjects(list);
-        setAnswers((a) => (a.client_id === cid && !a.project_id && list.length === 0 ? { ...a, project_id: "new" } : a));
-      })
-      .finally(() => setClientProjectsLoading(false));
+    (async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, project_type, status, progress, deadline, created_at")
+        .eq("client_id", cid)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      const list = data || [];
+      setClientProjects(list);
+      setAnswers((a) => (a.client_id === cid && !a.project_id && list.length === 0 ? { ...a, project_id: "new" } : a));
+      setClientProjectsLoading(false);
+    })();
   }, [answers.client_id]);
 
   const handleAttach = useCallback(async (input: File | File[] | FileList | null) => {
@@ -779,15 +779,12 @@ export default function VoiceAssistant() {
       ? aiPlan.milestones
       : (projectTemplates[answers.project_type] || projectTemplates.other);
     if (!template) return [];
-    const start = new Date(project.start_date);
     const out: Array<{ milestone: any; tm: any }> = [];
     for (const tm of template) {
-      const targetDate = new Date(start);
-      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
       const { data: milestone, error } = await supabase.from("milestones").insert({
         project_id: project.id,
         title: tm.title,
-        target_date: targetDate.toISOString().slice(0, 10),
+        target_date: addDaysBR(tm.offsetDays || 0, project.start_date),
         status: "pending",
       }).select().single();
       if (error) throw error;
@@ -800,11 +797,10 @@ export default function VoiceAssistant() {
   async function stageCreateTasks(project: any, milestones: Array<{ milestone: any; tm: any }>, refs: CreatedRefs) {
     const out: Array<{ task: any; t: any; milestone: any }> = [];
     for (const { milestone, tm } of milestones) {
-      const targetDate = new Date(milestone.target_date);
       for (const t of tm.tasks) {
         const taskDescription = [
-          t.description ? `**Escopo:** ${t.description}` : null,
-          `**Critério de aceite:** entrega validada e aprovada.`,
+          t.description ? `Escopo: ${t.description}` : null,
+          `Critério de aceite: entrega validada e aprovada.`,
         ].filter(Boolean).join("\n\n");
         const { data: task, error } = await supabase.from("tasks").insert({
           project_id: project.id,
@@ -813,7 +809,7 @@ export default function VoiceAssistant() {
           description: taskDescription,
           priority: t.priority,
           status: "backlog",
-          due_date: targetDate.toISOString().slice(0, 10),
+          due_date: milestone.target_date,
         }).select().single();
         if (error) throw error;
         if (task?.id) refs.taskIds.push(task.id);
