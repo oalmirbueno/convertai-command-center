@@ -203,6 +203,86 @@ export const projectTemplates: Record<string, TemplateMilestone[]> = {
     },
   ],
 
+  video: [
+    {
+      title: "Pré-produção",
+      offsetDays: 7,
+      tasks: [
+        { title: "Roteiro e storyboard", priority: "high", role: "manager", description: "Roteiro, storyboard e definição de locações." },
+        { title: "Definir elenco, equipamento e locação", priority: "high", role: "admin" },
+        { title: "Cronograma de captação", priority: "medium", role: "admin" },
+      ],
+    },
+    {
+      title: "Captação",
+      offsetDays: 14,
+      tasks: [
+        { title: "Gravação principal", priority: "high", role: "design", description: "Captação de imagens conforme decupagem." },
+        { title: "Captação de B-rolls e cobertura", priority: "medium", role: "design" },
+        { title: "Backup e organização do material", priority: "high", role: "admin" },
+      ],
+    },
+    {
+      title: "Pós-produção",
+      offsetDays: 24,
+      tasks: [
+        { title: "Edição V1", priority: "high", role: "design" },
+        { title: "Color grading + sound design", priority: "high", role: "design" },
+        { title: "Revisão e aprovação cliente", priority: "high", role: "manager" },
+      ],
+    },
+    {
+      title: "Entrega",
+      offsetDays: 30,
+      tasks: [
+        { title: "Render final + adaptações de formato", priority: "high", role: "design", description: "Master + cortes 9:16 / 1:1 / 16:9." },
+        { title: "Entrega dos arquivos finais", priority: "high", role: "admin" },
+      ],
+    },
+  ],
+
+  // Vídeo gerado 100% com IA — sem captação, sem set, sem equipamento.
+  // Pipeline: roteiro → prompts/visual → geração IA → edição → entrega.
+  video_ai: [
+    {
+      title: "Roteiro e prompts",
+      offsetDays: 4,
+      tasks: [
+        { title: "Roteiros dos vídeos", priority: "high", role: "manager", description: "Cada peça com hook, desenvolvimento e CTA. Adaptado ao formato/duração definidos no contrato." },
+        { title: "Definir estilo visual e referências", priority: "high", role: "design", description: "Mood, paleta, estética, ratio (9:16 / 1:1 / 16:9)." },
+        { title: "Prompts de geração (vídeo + voz)", priority: "high", role: "design", description: "Prompts estruturados por cena para Runway/Veo/Sora + voz IA (ElevenLabs/Heygen) conforme o modelo definido." },
+      ],
+    },
+    {
+      title: "Geração com IA",
+      offsetDays: 10,
+      tasks: [
+        { title: "Geração das cenas no modelo de vídeo IA", priority: "urgent", role: "design", description: "Iterar prompts até bater com a referência. Selecionar takes." },
+        { title: "Geração de narração / voz IA", priority: "high", role: "design" },
+        { title: "Geração de assets complementares (música, SFX, lower thirds)", priority: "medium", role: "design" },
+      ],
+    },
+    {
+      title: "Edição e finalização",
+      offsetDays: 18,
+      tasks: [
+        { title: "Montagem e sincronização (vídeo + voz + trilha)", priority: "high", role: "design" },
+        { title: "Color + correções de continuidade IA", priority: "high", role: "design", description: "Suavizar inconsistências típicas de geração IA entre cortes." },
+        { title: "Legendas dinâmicas e branding", priority: "medium", role: "design" },
+      ],
+    },
+    {
+      title: "Aprovação e entrega",
+      offsetDays: 24,
+      tasks: [
+        { title: "Envio para aprovação do cliente", priority: "high", role: "manager" },
+        { title: "Ajustes da rodada de revisão", priority: "high", role: "design" },
+        { title: "Renders finais nos formatos contratados", priority: "high", role: "design", description: "Exportar todos os cortes nos ratios entregues no contrato." },
+        { title: "Entrega final + organização na pasta do cliente", priority: "high", role: "admin" },
+      ],
+    },
+  ],
+
   other: [
     {
       title: "Planejamento",

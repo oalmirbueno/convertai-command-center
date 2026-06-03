@@ -143,10 +143,13 @@ export function parseCommand(input: string): ParsedIntent {
   if (projectExplicit || projectImplicit) {
     const name =
       afterKeyword(text, ["projeto ", "chamado ", "chamada ", "com nome "]) || "Novo projeto";
-    const type = /tr[aá]fego|ads/i.test(text) ? "trafego"
+    // Detecta vídeo IA antes de vídeo normal (IA / inteligência artificial / Runway / Sora / Veo / Heygen).
+    const isVideoAI = /\b(v[ií]deo[s]?\s+(com\s+|de\s+|por\s+)?(ia|i\.a\.|inteligencia\s+artificial)|ia\s+video|ai\s+video|runway|sora|veo|heygen|pika|kling|generat[ei]va?\s+de\s+v[ií]deo)\b/i.test(text);
+    const type = isVideoAI ? "video_ai"
+      : /tr[aá]fego|ads/i.test(text) ? "trafego"
       : /v[ií]deo|edi[cç][aã]o|reels|youtube|youtub|tiktok/i.test(text) ? "video"
       : /site|landing|web/i.test(text) ? "site"
-      : /social|conte[uú]do/i.test(text) ? "conteudo" : "outro";
+      : /social|conte[uú]do/i.test(text) ? "social_media" : "other";
     return {
       kind: "create_project",
       name: name.replace(/^(de\s+|para\s+|do\s+|da\s+)/i, ""),
