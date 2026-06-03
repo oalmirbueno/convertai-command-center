@@ -820,9 +820,9 @@ export default function VoiceAssistant() {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Assistente Operacional</p>
+                    <p className="text-sm font-semibold text-foreground">Aceleriq OS · Agente</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {phase === "input" && "Voz · sem IA externa"}
+                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
                       {phase === "confirm" && "Confirmação final"}
