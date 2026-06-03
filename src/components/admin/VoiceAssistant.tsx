@@ -418,8 +418,29 @@ export default function VoiceAssistant() {
 
   // ------------ Execute ------------
 
+  // 🔒 Guardrails do agente: financeiro, cofre e exclusão de cliente são
+  // jurisdições proibidas — mesmo que a IA tente roteá-las, bloqueamos aqui.
+  const FORBIDDEN_KEYWORDS = /\b(financeiro|faturamento|mensalidade|parcela|recebível|reembolso|ads ?wallet|recarga|pagamento|cofre|senha|credencial|excluir cliente|deletar cliente|apagar cliente|remover cliente)\b/i;
+  const isForbiddenRequest = (text: string): string | null => {
+    if (FORBIDDEN_KEYWORDS.test(text)) {
+      if (/\b(financeiro|faturamento|mensalidade|parcela|recebível|reembolso|ads ?wallet|recarga|pagamento)\b/i.test(text))
+        return "Financeiro está fora da jurisdição do agente.";
+      if (/\b(cofre|senha|credencial)\b/i.test(text))
+        return "Cofre de senhas é área protegida — o agente não acessa.";
+      if (/cliente\b/i.test(text))
+        return "Excluir cliente requer ação manual do admin.";
+    }
+    return null;
+  };
+
   const directExecute = async () => {
     if (!parsed || parsed.kind === "unknown" || !user) return;
+    const blocked = isForbiddenRequest((finalText + " " + interim).trim());
+    if (blocked) {
+      appendLog({ kind: "error", text: `🔒 Bloqueado: ${blocked}` });
+      toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
+      return;
+    }
     setExecuting(true);
     const transcript = (finalText + " " + interim).trim();
     let status: "success" | "error" = "success";
