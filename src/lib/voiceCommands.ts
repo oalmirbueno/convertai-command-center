@@ -74,13 +74,19 @@ function extractDays(text: string): number | undefined {
   return undefined;
 }
 
+// Loose verb regex – matches conjugations: criar/crie/cria/criou,
+// fazer/faz/faça/faca, montar/monta/monte, gerar/gera/gere, abrir/abre,
+// cadastrar/cadastra, adicionar/adiciona, novo/nova, bota/coloca/põe.
+const VERB_CREATE = /(cri[ae]r?|crio[u]?|fa[czç]a?|fazer|montar?|mont[ea]|gerar?|ger[ea]|abr[ie]r?|cadastr[ae]r?|adicion[ae]r?|nova?|novo|bota|coloca|p[oõ]e)/i;
+const VERB_MOVE = /(avan[cç]ar|conclu[ií]r?|marca?r?|mover?|mov[ae]|finaliz[ae]r?|termin[ae]r?|passa)/i;
+
 export function parseCommand(input: string): ParsedIntent {
   const text = input.trim();
   if (!text) return { kind: "unknown", raw: text };
   const n = norm(text);
 
   // Reports
-  if (/\b(relat[oó]rio|pendente|pendencias|o que falta|status)\b/i.test(text)) {
+  if (/\b(relat[oó]rio|pendente|pendencias|o que falta|status\b|resumo)\b/i.test(text)) {
     const clientHint = extractClient(text);
     if (/pendente|pendencias|falta|aberta/i.test(text)) {
       return { kind: "report_pending", clientHint };
@@ -89,7 +95,7 @@ export function parseCommand(input: string): ParsedIntent {
   }
 
   // Update task status
-  if (/(avan[cç]ar|concluir|marcar|mover|finalizar|terminar)\s+(a\s+)?tarefa/i.test(text) ||
+  if ((new RegExp(`${VERB_MOVE.source}\\s+(a\\s+)?tarefa`, "i")).test(text) ||
       /tarefa\s+.*\b(foi feita|conclu[ií]da|pronto|feita|feito|done)\b/i.test(text)) {
     const status = extractStatus(text) || "done";
     const m = text.match(/tarefa\s+([^.,\n]+?)(?=\s+(?:no projeto|do cliente|para|foi|esta|com|status|$|\.|,))/i);
@@ -103,11 +109,10 @@ export function parseCommand(input: string): ParsedIntent {
   }
 
   // Create milestone
-  if (/(criar|nova?|cadastrar|adicionar)\s+(uma?\s+)?(milestone|marco|etapa)/i.test(text)) {
+  if ((new RegExp(`${VERB_CREATE.source}\\s+(uma?\\s+)?(milestone|marco|etapa)`, "i")).test(text)) {
     const title =
       afterKeyword(text, ["milestone ", "marco ", "etapa "]) ||
-      afterKeyword(text, ["chamada ", "chamado ", "com nome "]) ||
-      "";
+      afterKeyword(text, ["chamada ", "chamado ", "com nome "]) || "";
     return {
       kind: "create_milestone",
       title: title || "Nova etapa",
@@ -118,7 +123,7 @@ export function parseCommand(input: string): ParsedIntent {
   }
 
   // Create task
-  if (/(criar|nova?|cadastrar|adicionar|abrir)\s+(uma?\s+)?tarefa/i.test(text)) {
+  if ((new RegExp(`${VERB_CREATE.source}\\s+(uma?\\s+)?tarefa`, "i")).test(text)) {
     const title =
       afterKeyword(text, ["tarefa ", "chamada ", "chamado ", "com nome ", "intitulada "]) || "";
     return {
@@ -131,14 +136,20 @@ export function parseCommand(input: string): ParsedIntent {
     };
   }
 
-  // Create project
-  if (/(criar|novo|cadastrar|abrir)\s+(um\s+)?projeto/i.test(text)) {
+  // Create project (explicit verb + projeto)
+  const projectExplicit = (new RegExp(`${VERB_CREATE.source}\\s+(o\\s+|um\\s+)?projeto`, "i")).test(text);
+  // Fallback: mentions "projeto" + a "pro/para CLIENTE" hint, even without verb
+  const projectImplicit = /\bprojeto\b/i.test(text) && /\b(pro|para|do|da)\s+\S+/i.test(text);
+  if (projectExplicit || projectImplicit) {
     const name =
       afterKeyword(text, ["projeto ", "chamado ", "chamada ", "com nome "]) || "Novo projeto";
-    const type = /tr[aá]fego|ads/i.test(text) ? "trafego" : /site|landing|web/i.test(text) ? "site" : /social|conte[uú]do/i.test(text) ? "conteudo" : "outro";
+    const type = /tr[aá]fego|ads/i.test(text) ? "trafego"
+      : /v[ií]deo|edi[cç][aã]o|reels|youtube|youtub|tiktok/i.test(text) ? "video"
+      : /site|landing|web/i.test(text) ? "site"
+      : /social|conte[uú]do/i.test(text) ? "conteudo" : "outro";
     return {
       kind: "create_project",
-      name: name.replace(/^(de\s+|para\s+)/i, ""),
+      name: name.replace(/^(de\s+|para\s+|do\s+|da\s+)/i, ""),
       clientHint: extractClient(text),
       type,
       deadlineDays: extractDays(text) ?? 30,
@@ -146,14 +157,9 @@ export function parseCommand(input: string): ParsedIntent {
   }
 
   // Upload file
-  if (/(enviar|subir|upload|anexar|carregar)\s+(o\s+)?(arquivo|documento|contrato|relat[oó]rio|material)/i.test(text)) {
+  if ((new RegExp(`(enviar|subir|upload|anexar|carregar|sob[ie]r?)\\s+(o\\s+)?(arquivo|documento|contrato|relat[oó]rio|material)`, "i")).test(text)) {
     const folder = /contrato/i.test(text) ? "contratos" : /relat[oó]rio/i.test(text) ? "relatorios" : /estrat[eé]gico/i.test(text) ? "estrategicos" : /grafico|criativo/i.test(text) ? "graficos" : "operacionais";
-    return {
-      kind: "upload_file",
-      clientHint: extractClient(text),
-      projectHint: extractProject(text),
-      folder,
-    };
+    return { kind: "upload_file", clientHint: extractClient(text), projectHint: extractProject(text), folder };
   }
 
   return { kind: "unknown", raw: text };
