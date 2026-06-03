@@ -593,19 +593,25 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
                 {/* Add checklist item */}
                 {!readOnly && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      value={newCheckItem}
-                      onChange={e => setNewCheckItem(e.target.value)}
-                      onKeyDown={e => e.key === "Enter" && handleAddCheckItem()}
-                      placeholder="Adicionar item..."
-                      className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+                  <>
+                    <div className="flex items-center gap-2">
+                      <input
+                        value={newCheckItem}
+                        onChange={e => setNewCheckItem(e.target.value)}
+                        onKeyDown={e => e.key === "Enter" && handleAddCheckItem()}
+                        placeholder="Adicionar item..."
+                        className="flex-1 bg-secondary border border-border rounded-lg px-3 py-2 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+                      />
+                      <button onClick={handleAddCheckItem} disabled={addingCheck || !newCheckItem.trim()}
+                        className="p-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
+                        {addingCheck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                    <TaskChecklistTemplatePicker
+                      taskId={task.id}
+                      currentCount={(checklistItems || []).length}
                     />
-                    <button onClick={handleAddCheckItem} disabled={addingCheck || !newCheckItem.trim()}
-                      className="p-2 rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50">
-                      {addingCheck ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
-                    </button>
-                  </div>
+                  </>
                 )}
               </div>
             )}
