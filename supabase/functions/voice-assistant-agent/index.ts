@@ -186,8 +186,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = (await req.json()) as RequestBody;
-    if (!body?.text || typeof body.text !== "string") {
-      return new Response(JSON.stringify({ error: "campo 'text' obrigatório" }), {
+    if (typeof body?.text !== "string") body.text = "";
+    if (!body.text && !body.attachment?.text && !body.clientId) {
+      return new Response(JSON.stringify({ error: "informe texto, anexo ou clientId" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
