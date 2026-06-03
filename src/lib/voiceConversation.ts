@@ -2,6 +2,8 @@
 // Detects gaps in a parsed intent and produces suggestions (project name, deadline, type).
 
 import type { ParsedIntent } from "./voiceCommands";
+import { buildClientProjectFields, addDaysBR } from "@/lib/projectPresentation";
+import { formatBRDate } from "@/lib/dateBR";
 
 export type Clarification =
   | { id: "client"; label: string; suggestion?: string }
@@ -104,45 +106,7 @@ export function defaultProjectDescription(
     rawHint?: string | null;
   },
 ): string {
-  const base: Record<string, string> = {
-    trafego:
-      "Gestão de tráfego pago com foco em performance: setup de pixel/conversões, estrutura de campanhas, criativos, lançamento, otimização semanal e relatório mensal de resultados.",
-    social_media:
-      "Gestão de mídias sociais: linha editorial, identidade visual do feed, produção de criativos (artes/reels), copies, calendário de publicação, acompanhamento de engajamento e relatório.",
-    video:
-      "Produção audiovisual: roteiro, storyboard, pré-produção, captação, edição, color, sound design, aprovação e entrega dos cortes finais nos formatos contratados.",
-    video_ai:
-      "Produção de vídeos 100% com IA generativa (sem captação): roteiro, prompts visuais e de narração, geração das cenas (Runway/Veo/Sora/Pika), voz IA, edição, sincronização, legendas dinâmicas, branding e entrega nos formatos contratados.",
-    site:
-      "Desenvolvimento de site institucional: wireframe, design UI/UX, desenvolvimento responsivo, integrações de formulário/CTA, SEO técnico, performance e deploy.",
-    landing_page:
-      "Landing page de conversão: copy, design, desenvolvimento, tracking de conversões e testes A/B.",
-    automation:
-      "Automação de processos: mapeamento, desenho de fluxos, integrações via API/webhooks, testes e deploy em produção.",
-    event:
-      "Cobertura e divulgação de evento: pré-produção, identidade visual, landing, campanhas, cobertura em tempo real e recap.",
-    other: "Projeto sob demanda.",
-  };
-  const scope = base[type || "other"] || base.other;
-
-  const parts: string[] = [];
-  if (enrichment?.narrative && enrichment.narrative.trim().length > 20) {
-    parts.push(`**Contexto da IA (lido do contrato):**\n${enrichment.narrative.trim()}`);
-  }
-  parts.push(`**Escopo:**\n${scope}`);
-  if (clientName) parts.push(`**Cliente:** ${clientName}`);
-  if (enrichment?.contractName) parts.push(`**Base contratual:** ${enrichment.contractName}`);
-  if (enrichment?.rawHint && enrichment.rawHint.trim().length > 4) {
-    parts.push(`**Direcionamento do admin:**\n${enrichment.rawHint.trim()}`);
-  }
-  if (enrichment?.plan?.milestones?.length) {
-    const ms = enrichment.plan.milestones;
-    const taskTotal = ms.reduce((s, m) => s + (m.tasks?.length || 0), 0);
-    parts.push(
-      `**Estrutura planejada:** ${ms.length} milestones · ${taskTotal} tarefas, derivadas do contrato.`,
-    );
-  }
-  return parts.join("\n\n");
+  return buildClientProjectFields({ type, clientName, narrative: enrichment?.narrative, plan: enrichment?.plan }).description;
 }
 
 export function gapsForIntent(
@@ -211,14 +175,10 @@ export function formatScopePreview(
   clientName?: string,
   enrichment?: Parameters<typeof defaultProjectDescription>[2],
 ) {
-  const start = new Date();
-  const end = new Date();
-  end.setDate(end.getDate() + (answers.deadline || 30));
-  const fmt = (d: Date) =>
-    `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
+  const endKey = addDaysBR(answers.deadline || 30);
   return {
-    startDate: fmt(start),
-    endDate: fmt(end),
+    startDate: formatBRDate(addDaysBR(0)),
+    endDate: formatBRDate(endKey),
     description: defaultProjectDescription(answers.project_type, clientName, enrichment),
   };
 }
