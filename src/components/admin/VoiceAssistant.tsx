@@ -318,10 +318,9 @@ export default function VoiceAssistant() {
     const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
     const { error } = await supabase.from("files").insert({
       client_id: client.id,
-      name: file.name,
+      file_name: file.name,
       file_url: pub.publicUrl,
       file_type: file.type,
-      file_size: file.size,
       folder: p.folder || "operacionais",
       uploaded_by: user!.id,
     } as any);
