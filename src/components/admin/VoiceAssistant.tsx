@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
-import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
+import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
 import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
 import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
+import { addDaysBR, buildClientProjectFields } from "@/lib/projectPresentation";
 
 type AnyRec = any;
 
@@ -144,6 +145,8 @@ export default function VoiceAssistant() {
   const [phase, setPhase] = useState<Phase>("input");
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [clientList, setClientList] = useState<any[]>([]);
+  const [clientProjects, setClientProjects] = useState<any[]>([]);
+  const [clientProjectsLoading, setClientProjectsLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [confirmAck, setConfirmAck] = useState(false);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
@@ -413,6 +416,25 @@ export default function VoiceAssistant() {
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers.client_id]);
+
+  useEffect(() => {
+    const cid = answers.client_id;
+    setClientProjects([]);
+    if (!cid) return;
+    setClientProjectsLoading(true);
+    (async () => {
+      const { data } = await supabase
+        .from("projects")
+        .select("id, name, project_type, status, progress, deadline, created_at")
+        .eq("client_id", cid)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
+      const list = data || [];
+      setClientProjects(list);
+      setAnswers((a) => (a.client_id === cid && !a.project_id && list.length === 0 ? { ...a, project_id: "new" } : a));
+      setClientProjectsLoading(false);
+    })();
   }, [answers.client_id]);
 
   const handleAttach = useCallback(async (input: File | File[] | FileList | null) => {
@@ -718,24 +740,33 @@ export default function VoiceAssistant() {
 
   // ---- Staged project creation helpers (per-phase execution) ----
   async function stageCreateProject(client: any, refs: CreatedRefs) {
-    const start = new Date();
-    const end = new Date();
-    end.setDate(end.getDate() + (answers.deadline || 30));
-    const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name, {
+    const startKey = addDaysBR(0);
+    const endKey = addDaysBR(answers.deadline || 30, startKey);
+    const clientFields = buildClientProjectFields({
+      type: answers.project_type,
+      clientName: client.company_name || client.full_name,
       narrative: aiNarrative,
-      contractName: primaryCtxName,
       plan: aiPlan,
-      rawHint: (finalText + " " + interim).trim(),
     });
-    const { data: project, error } = await supabase.from("projects").insert({
-      client_id: client.id,
+    const payload = {
       name: answers.project_name,
       project_type: answers.project_type,
-      description,
+      description: clientFields.description,
+      scope: clientFields.scope,
+      objectives: clientFields.objectives,
+      deadline: endKey,
+    };
+    if (answers.project_id && answers.project_id !== "new") {
+      const { data: project, error } = await supabase.from("projects").update(payload).eq("id", answers.project_id).select().single();
+      if (error) throw error;
+      return project;
+    }
+    const { data: project, error } = await supabase.from("projects").insert({
+      client_id: client.id,
+      ...payload,
       status: "planning",
       progress: 0,
-      start_date: start.toISOString().slice(0, 10),
-      deadline: end.toISOString().slice(0, 10),
+      start_date: startKey,
       created_by: user!.id,
     }).select().single();
     if (error) throw error;
@@ -748,15 +779,12 @@ export default function VoiceAssistant() {
       ? aiPlan.milestones
       : (projectTemplates[answers.project_type] || projectTemplates.other);
     if (!template) return [];
-    const start = new Date(project.start_date);
     const out: Array<{ milestone: any; tm: any }> = [];
     for (const tm of template) {
-      const targetDate = new Date(start);
-      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
       const { data: milestone, error } = await supabase.from("milestones").insert({
         project_id: project.id,
         title: tm.title,
-        target_date: targetDate.toISOString().slice(0, 10),
+        target_date: addDaysBR(tm.offsetDays || 0, project.start_date),
         status: "pending",
       }).select().single();
       if (error) throw error;
@@ -769,11 +797,10 @@ export default function VoiceAssistant() {
   async function stageCreateTasks(project: any, milestones: Array<{ milestone: any; tm: any }>, refs: CreatedRefs) {
     const out: Array<{ task: any; t: any; milestone: any }> = [];
     for (const { milestone, tm } of milestones) {
-      const targetDate = new Date(milestone.target_date);
       for (const t of tm.tasks) {
         const taskDescription = [
-          t.description ? `**Escopo:** ${t.description}` : null,
-          `**Critério de aceite:** entrega validada e aprovada.`,
+          t.description ? `Escopo: ${t.description}` : null,
+          `Critério de aceite: entrega validada e aprovada.`,
         ].filter(Boolean).join("\n\n");
         const { data: task, error } = await supabase.from("tasks").insert({
           project_id: project.id,
@@ -782,7 +809,7 @@ export default function VoiceAssistant() {
           description: taskDescription,
           priority: t.priority,
           status: "backlog",
-          due_date: targetDate.toISOString().slice(0, 10),
+          due_date: milestone.target_date,
         }).select().single();
         if (error) throw error;
         if (task?.id) refs.taskIds.push(task.id);
@@ -839,14 +866,12 @@ export default function VoiceAssistant() {
     const { data: projects } = await q;
     const project = bestMatch(projects || [], p.projectHint || "", [(x: any) => x.name]) || projects?.[0];
     if (!project) throw new Error("Projeto não encontrado");
-    const due = new Date();
-    due.setDate(due.getDate() + 7);
     const { data, error } = await supabase.from("tasks").insert({
       project_id: project.id,
       title: a.task_title || p.title,
       status: p.status || "backlog",
       priority: p.priority || "medium",
-      due_date: due.toISOString().slice(0, 10),
+      due_date: addDaysBR(7),
     }).select("id").single();
     if (error) throw error;
     if (data?.id) refs.taskIds.push(data.id);
@@ -860,12 +885,10 @@ export default function VoiceAssistant() {
     const { data: projects } = await q;
     const project = bestMatch(projects || [], p.projectHint || "", [(x: any) => x.name]) || projects?.[0];
     if (!project) throw new Error("Projeto não encontrado");
-    const target = new Date();
-    target.setDate(target.getDate() + (p.days || 14));
     const { data, error } = await supabase.from("milestones").insert({
       project_id: project.id,
       title: a.milestone_title || p.title,
-      target_date: target.toISOString().slice(0, 10),
+      target_date: addDaysBR(p.days || 14),
       status: "pending",
     }).select("id").single();
     if (error) throw error;
@@ -944,6 +967,8 @@ export default function VoiceAssistant() {
         norm(`${c.company_name} ${c.full_name} ${c.email}`).includes(norm(clientSearch)),
       ).slice(0, 6)
     : clientList.slice(0, 6);
+
+  const selectedExistingProject = clientProjects.find((p) => p.id === answers.project_id);
 
   const projectTemplate = answers.project_type ? projectTemplates[answers.project_type] : null;
   const previewTaskCount = (projectTemplate || []).reduce((s, m) => s + m.tasks.length, 0);
@@ -1400,6 +1425,38 @@ export default function VoiceAssistant() {
                           </div>
                         );
                       }
+                      if (g.id === "apply_template" && parsed.kind === "create_project") {
+                        return null;
+                      }
+                      return null;
+                    })}
+                    {parsed.kind === "create_project" && answers.client_id && (
+                      <div className="rounded-xl border border-border bg-secondary/40 p-3">
+                        <p className="text-xs font-medium text-foreground mb-2">Projeto do cliente</p>
+                        {clientProjectsLoading ? (
+                          <p className="text-[11px] text-muted-foreground">Carregando projetos…</p>
+                        ) : (
+                          <div className="space-y-1.5">
+                            {clientProjects.map((p) => (
+                              <button
+                                key={p.id}
+                                onClick={() => setAnswers((a) => ({ ...a, project_id: p.id, project_name: p.name, project_type: p.project_type || a.project_type }))}
+                                className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === p.id ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                              >
+                                <span className="font-medium">Atualizar existente:</span> {p.name}
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => setAnswers((a) => ({ ...a, project_id: "new" }))}
+                              className={`w-full text-left px-3 py-2 rounded-lg border text-xs transition ${answers.project_id === "new" ? "bg-primary/15 border-primary/40 text-foreground" : "border-border text-muted-foreground hover:text-foreground hover:border-primary/30"}`}
+                            >
+                              <span className="font-medium">Criar novo projeto</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {gaps.map((g) => {
                       if (g.id === "deadline") {
                         return (
                           <div key="dl" className="rounded-xl border border-border bg-secondary/40 p-3">
@@ -1462,7 +1519,7 @@ export default function VoiceAssistant() {
                 {phase === "preview" && parsed?.kind === "create_project" && scopePreview && (
                   <div className="space-y-3">
                     <div className="rounded-xl border border-primary/40 bg-primary/5 p-4 space-y-2">
-                      <p className="text-[10px] uppercase tracking-wider text-primary">Escopo do projeto</p>
+                      <p className="text-[10px] uppercase tracking-wider text-primary">{selectedExistingProject ? "Atualização do projeto" : "Escopo do projeto"}</p>
                       <h3 className="text-base font-semibold text-foreground">{answers.project_name}</h3>
                       <div className="grid grid-cols-2 gap-2 text-[11px]">
                         <div>
@@ -1474,6 +1531,10 @@ export default function VoiceAssistant() {
                         <div>
                           <span className="text-muted-foreground">Tipo:</span>{" "}
                           <span className="text-foreground font-medium">{answers.project_type}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-muted-foreground">Ação:</span>{" "}
+                          <span className="text-foreground font-medium">{selectedExistingProject ? "enriquecer projeto existente" : "criar novo projeto"}</span>
                         </div>
                         <div>
                           <span className="text-muted-foreground">Início:</span>{" "}
@@ -1711,7 +1772,7 @@ export default function VoiceAssistant() {
                         if (parsed?.kind === "create_project") setPhase("preview");
                         else { setConfirmAck(false); setPhase("confirm"); }
                       }}
-                      disabled={parsed?.kind === "create_project" && !answers.client_id}
+                      disabled={parsed?.kind === "create_project" && (!answers.client_id || !answers.project_id)}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       {parsed?.kind === "create_project" ? "Revisar escopo" : "Revisar"}

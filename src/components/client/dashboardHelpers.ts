@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMemo } from "react";
+import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 
 /* ───────── Types & helpers shared across sub-components ───────── */
 
@@ -48,17 +49,22 @@ export function relativeTime(dateStr: string): string {
 }
 
 export function daysUntil(dateStr: string): number {
-  return Math.ceil((new Date(dateStr).getTime() - Date.now()) / 86400000);
+  const target = parseAppDate(dateStr);
+  const today = parseAppDate(todayBR());
+  if (!target || !today) return 0;
+  return Math.round((target.getTime() - today.getTime()) / 86400000);
 }
 
 export function formatDate(d: string) {
   if (!d) return "";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatBRDate(d);
 }
 
 export function formatDateShort(d: string) {
   if (!d) return "";
-  return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+  const parsed = parseAppDate(d);
+  if (!parsed) return "";
+  return parsed.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
 }
 
 /* ───────── Hook: useClientDashboardData ───────── */
