@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3 } from "lucide-react";
+import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -52,7 +52,24 @@ function bestMatch<T extends { id: string }>(
 
 interface LogEntry { id: string; kind: "ok" | "error" | "info"; text: string; }
 
-type Phase = "input" | "clarify" | "preview" | "done";
+type Phase = "input" | "clarify" | "preview" | "confirm" | "done";
+
+interface CreatedRefs {
+  projectIds: string[];
+  milestoneIds: string[];
+  taskIds: string[];
+  checklistItemIds: string[];
+  fileIds: string[];
+}
+
+interface LastAction {
+  id: string;
+  label: string;
+  createdAt: number;
+  refs: CreatedRefs;
+}
+
+const emptyRefs = (): CreatedRefs => ({ projectIds: [], milestoneIds: [], taskIds: [], checklistItemIds: [], fileIds: [] });
 
 export default function VoiceAssistant() {
   const { user, profile } = useAuth();
@@ -73,6 +90,9 @@ export default function VoiceAssistant() {
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [clientList, setClientList] = useState<any[]>([]);
   const [clientSearch, setClientSearch] = useState("");
+  const [confirmAck, setConfirmAck] = useState(false);
+  const [lastAction, setLastAction] = useState<LastAction | null>(null);
+  const [undoing, setUndoing] = useState(false);
 
   const isAdmin = profile?.role === "admin";
 
@@ -128,7 +148,7 @@ export default function VoiceAssistant() {
 
   const reset = () => {
     setFinalText(""); setInterim(""); setParsed(null); setFile(null);
-    setPhase("input"); setAnswers({}); setClientSearch("");
+    setPhase("input"); setAnswers({}); setClientSearch(""); setConfirmAck(false);
   };
 
   // Auto re-parse when text changes
@@ -224,21 +244,23 @@ export default function VoiceAssistant() {
     const transcript = (finalText + " " + interim).trim();
     let status: "success" | "error" = "success";
     let resultMsg = "";
+    const refs: CreatedRefs = emptyRefs();
     try {
       if (parsed.kind === "create_project") {
         const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
         if (!client) throw new Error("Cliente não selecionado");
-        await execCreateProjectFull(client);
+        await execCreateProjectFull(client, refs);
         resultMsg = `Projeto "${answers.project_name}" criado para ${client.company_name || client.full_name}`;
       } else if (parsed.kind === "create_task") {
-        await execCreateTaskFull(answers);
+        await execCreateTaskFull(answers, refs);
         resultMsg = `Tarefa "${answers.task_title}" criada`;
       } else if (parsed.kind === "create_milestone") {
-        await execCreateMilestoneFull(answers);
+        await execCreateMilestoneFull(answers, refs);
         resultMsg = `Etapa "${answers.milestone_title}" criada`;
       }
       appendLog({ kind: "ok", text: resultMsg });
-      toast({ title: "Executado", description: resultMsg });
+      toast({ title: "Executado", description: `${resultMsg} · Você pode desfazer no painel.` });
+      setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs });
       reset();
     } catch (err: any) {
       status = "error";
@@ -253,8 +275,35 @@ export default function VoiceAssistant() {
     }
   };
 
+  const undoLastAction = async () => {
+    if (!lastAction || undoing) return;
+    setUndoing(true);
+    const { refs, label } = lastAction;
+    try {
+      // Delete in reverse dependency order
+      if (refs.checklistItemIds.length)
+        await supabase.from("task_checklist_items").delete().in("id", refs.checklistItemIds);
+      if (refs.taskIds.length)
+        await supabase.from("tasks").delete().in("id", refs.taskIds);
+      if (refs.milestoneIds.length)
+        await supabase.from("milestones").delete().in("id", refs.milestoneIds);
+      if (refs.projectIds.length)
+        await supabase.from("projects").delete().in("id", refs.projectIds);
+      if (refs.fileIds.length)
+        await supabase.from("files").delete().in("id", refs.fileIds);
+      appendLog({ kind: "info", text: `↶ Desfeito: ${label}` });
+      toast({ title: "Ação revertida", description: label });
+      setLastAction(null);
+    } catch (err: any) {
+      toast({ title: "Falha ao desfazer", description: err?.message || "Erro", variant: "destructive" });
+    } finally {
+      setUndoing(false);
+    }
+  };
+
+
   // ---- Full project creation with milestones + tasks + checklists ----
-  async function execCreateProjectFull(client: any) {
+  async function execCreateProjectFull(client: any, refs: CreatedRefs) {
     const start = new Date();
     const end = new Date();
     end.setDate(end.getDate() + (answers.deadline || 30));
@@ -272,6 +321,7 @@ export default function VoiceAssistant() {
       created_by: user!.id,
     }).select().single();
     if (error) throw error;
+    refs.projectIds.push(project.id);
 
     if (!answers.apply_template) return;
 
@@ -301,6 +351,7 @@ export default function VoiceAssistant() {
         target_date: targetDate.toISOString().slice(0, 10),
         status: "pending",
       }).select().single();
+      if (milestone?.id) refs.milestoneIds.push(milestone.id);
 
       for (const t of tm.tasks) {
         const taskDescription = [
@@ -320,6 +371,7 @@ export default function VoiceAssistant() {
         }).select().single();
 
         if (!task) continue;
+        refs.taskIds.push(task.id);
 
         // Auto-attach matching checklist template
         const match = (chkTemplates || []).find((c: any) =>
@@ -335,13 +387,14 @@ export default function VoiceAssistant() {
               item_order: idx,
               created_by: user!.id,
             }));
-          await supabase.from("task_checklist_items").insert(rows);
+          const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
+          (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
         }
       }
     }
   }
 
-  async function execCreateTaskFull(a: Record<string, any>) {
+  async function execCreateTaskFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_task" }>;
     const client = clientList.find((c) => c.id === a.client_id);
     let q = supabase.from("projects").select("id, name, project_type, client_id").is("deleted_at", null);
@@ -351,17 +404,18 @@ export default function VoiceAssistant() {
     if (!project) throw new Error("Projeto não encontrado");
     const due = new Date();
     due.setDate(due.getDate() + 7);
-    const { error } = await supabase.from("tasks").insert({
+    const { data, error } = await supabase.from("tasks").insert({
       project_id: project.id,
       title: a.task_title || p.title,
       status: p.status || "backlog",
       priority: p.priority || "medium",
       due_date: due.toISOString().slice(0, 10),
-    });
+    }).select("id").single();
     if (error) throw error;
+    if (data?.id) refs.taskIds.push(data.id);
   }
 
-  async function execCreateMilestoneFull(a: Record<string, any>) {
+  async function execCreateMilestoneFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_milestone" }>;
     const client = clientList.find((c) => c.id === a.client_id);
     let q = supabase.from("projects").select("id, name, client_id").is("deleted_at", null);
@@ -371,13 +425,14 @@ export default function VoiceAssistant() {
     if (!project) throw new Error("Projeto não encontrado");
     const target = new Date();
     target.setDate(target.getDate() + (p.days || 14));
-    const { error } = await supabase.from("milestones").insert({
+    const { data, error } = await supabase.from("milestones").insert({
       project_id: project.id,
       title: a.milestone_title || p.title,
       target_date: target.toISOString().slice(0, 10),
       status: "pending",
-    });
+    }).select("id").single();
     if (error) throw error;
+    if (data?.id) refs.milestoneIds.push(data.id);
   }
 
   // ---- Legacy report/upload/update intents ----
@@ -484,6 +539,7 @@ export default function VoiceAssistant() {
                       {phase === "input" && "Voz · sem IA externa"}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
+                      {phase === "confirm" && "Confirmação final"}
                     </p>
                   </div>
                 </div>
@@ -496,6 +552,25 @@ export default function VoiceAssistant() {
                 {/* ---------- INPUT PHASE ---------- */}
                 {phase === "input" && (
                   <>
+                    {lastAction && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-wider text-primary">Última ação</p>
+                          <p className="text-xs text-foreground truncate">{lastAction.label}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {lastAction.refs.projectIds.length} projeto · {lastAction.refs.milestoneIds.length} etapas · {lastAction.refs.taskIds.length} tarefas · {lastAction.refs.checklistItemIds.length} checklists
+                          </p>
+                        </div>
+                        <button
+                          onClick={undoLastAction}
+                          disabled={undoing}
+                          className="shrink-0 text-xs px-3 h-8 rounded-full bg-destructive/15 text-destructive border border-destructive/30 flex items-center gap-1.5 hover:bg-destructive/25 disabled:opacity-50"
+                        >
+                          {undoing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                          Desfazer
+                        </button>
+                      </div>
+                    )}
                     <div className="min-h-[88px] rounded-xl bg-secondary/50 border border-border p-3 text-sm text-foreground">
                       {finalText || interim ? (
                         <>
@@ -727,7 +802,57 @@ export default function VoiceAssistant() {
                     )}
                   </div>
                 )}
+
+                {/* ---------- CONFIRM PHASE ---------- */}
+                {phase === "confirm" && parsed && (
+                  <div className="space-y-3">
+                    <div className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <ShieldAlert className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-sm font-semibold text-foreground">Confirmação final</p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Esta ação grava no banco. Você pode reverter depois pelo botão "Desfazer", mas qualquer edição feita pela equipe será perdida no rollback.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="rounded-xl border border-border bg-secondary/40 p-3 space-y-2 text-xs">
+                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Resumo</p>
+                      {parsed.kind === "create_project" && (
+                        <>
+                          <p><span className="text-muted-foreground">Projeto:</span> <span className="font-medium text-foreground">{answers.project_name}</span></p>
+                          <p><span className="text-muted-foreground">Cliente:</span> <span className="font-medium text-foreground">{resolvedClient?.company_name || resolvedClient?.full_name}</span></p>
+                          <p><span className="text-muted-foreground">Tipo:</span> <span className="font-medium text-foreground">{answers.project_type}</span></p>
+                          {answers.apply_template && projectTemplate && (
+                            <p className="text-muted-foreground">
+                              + {projectTemplate.length} etapas, {previewTaskCount} tarefas e checklists
+                            </p>
+                          )}
+                        </>
+                      )}
+                      {parsed.kind === "create_task" && (
+                        <p><span className="text-muted-foreground">Tarefa:</span> <span className="font-medium text-foreground">{answers.task_title}</span></p>
+                      )}
+                      {parsed.kind === "create_milestone" && (
+                        <p><span className="text-muted-foreground">Etapa:</span> <span className="font-medium text-foreground">{answers.milestone_title}</span></p>
+                      )}
+                    </div>
+
+                    <label className="flex items-start gap-2 cursor-pointer text-xs text-foreground p-3 rounded-xl border border-border bg-background hover:border-primary transition">
+                      <input
+                        type="checkbox"
+                        checked={confirmAck}
+                        onChange={(e) => setConfirmAck(e.target.checked)}
+                        className="mt-0.5 w-4 h-4 accent-primary"
+                      />
+                      <span>Li o resumo e confirmo a criação. Entendo que posso desfazer logo em seguida.</span>
+                    </label>
+                  </div>
+                )}
               </div>
+
 
               {/* Footer */}
               <div className="px-5 py-3 border-t border-border flex items-center gap-2">
@@ -764,12 +889,12 @@ export default function VoiceAssistant() {
                     <button
                       onClick={() => {
                         if (parsed?.kind === "create_project") setPhase("preview");
-                        else executeWithAnswers();
+                        else { setConfirmAck(false); setPhase("confirm"); }
                       }}
                       disabled={parsed?.kind === "create_project" && !answers.client_id}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {parsed?.kind === "create_project" ? "Revisar escopo" : "Executar"}
+                      {parsed?.kind === "create_project" ? "Revisar escopo" : "Revisar"}
                       <ArrowRight className="w-4 h-4" />
                     </button>
                   </>
@@ -783,16 +908,35 @@ export default function VoiceAssistant() {
                       Editar
                     </button>
                     <button
-                      onClick={executeWithAnswers}
+                      onClick={() => { setConfirmAck(false); setPhase("confirm"); }}
+                      className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium flex items-center justify-center gap-2"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Confirmar
+                    </button>
+                  </>
+                )}
+                {phase === "confirm" && (
+                  <>
+                    <button
+                      onClick={() => setPhase(parsed?.kind === "create_project" ? "preview" : "clarify")}
+                      className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm"
                       disabled={executing}
+                    >
+                      Voltar
+                    </button>
+                    <button
+                      onClick={executeWithAnswers}
+                      disabled={executing || !confirmAck}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
-                      Criar projeto completo
+                      Executar agora
                     </button>
                   </>
                 )}
               </div>
+
 
               {!supported && phase === "input" && (
                 <p className="px-5 pb-3 text-[10px] text-muted-foreground">
