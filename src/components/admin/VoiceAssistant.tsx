@@ -369,13 +369,12 @@ export default function VoiceAssistant() {
   };
 
 
-  // ---- Full project creation with milestones + tasks + checklists ----
-  async function execCreateProjectFull(client: any, refs: CreatedRefs) {
+  // ---- Staged project creation helpers (per-phase execution) ----
+  async function stageCreateProject(client: any, refs: CreatedRefs) {
     const start = new Date();
     const end = new Date();
     end.setDate(end.getDate() + (answers.deadline || 30));
     const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name);
-
     const { data: project, error } = await supabase.from("projects").insert({
       client_id: client.id,
       name: answers.project_name,
@@ -389,14 +388,57 @@ export default function VoiceAssistant() {
     }).select().single();
     if (error) throw error;
     refs.projectIds.push(project.id);
+    return project;
+  }
 
-    if (!answers.apply_template) return;
-
-    // Apply template milestones + tasks + their checklists from library
+  async function stageCreateMilestones(project: any, refs: CreatedRefs) {
     const template = projectTemplates[answers.project_type] || projectTemplates.other;
-    if (!template) return;
+    if (!template) return [];
+    const start = new Date(project.start_date);
+    const out: Array<{ milestone: any; tm: any }> = [];
+    for (const tm of template) {
+      const targetDate = new Date(start);
+      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
+      const { data: milestone, error } = await supabase.from("milestones").insert({
+        project_id: project.id,
+        title: tm.title,
+        target_date: targetDate.toISOString().slice(0, 10),
+        status: "pending",
+      }).select().single();
+      if (error) throw error;
+      if (milestone?.id) refs.milestoneIds.push(milestone.id);
+      out.push({ milestone, tm });
+    }
+    return out;
+  }
 
-    // Fetch task checklist templates for this service type
+  async function stageCreateTasks(project: any, milestones: Array<{ milestone: any; tm: any }>, refs: CreatedRefs) {
+    const out: Array<{ task: any; t: any; milestone: any }> = [];
+    for (const { milestone, tm } of milestones) {
+      const targetDate = new Date(milestone.target_date);
+      for (const t of tm.tasks) {
+        const taskDescription = [
+          t.description ? `**Escopo:** ${t.description}` : null,
+          `**Critério de aceite:** entrega validada e aprovada.`,
+        ].filter(Boolean).join("\n\n");
+        const { data: task, error } = await supabase.from("tasks").insert({
+          project_id: project.id,
+          milestone_id: milestone?.id,
+          title: t.title,
+          description: taskDescription,
+          priority: t.priority,
+          status: "backlog",
+          due_date: targetDate.toISOString().slice(0, 10),
+        }).select().single();
+        if (error) throw error;
+        if (task?.id) refs.taskIds.push(task.id);
+        out.push({ task, t, milestone });
+      }
+    }
+    return out;
+  }
+
+  async function fetchChkTemplates() {
     const { data: chkTpls } = await supabase
       .from("task_checklist_templates" as any).select("*")
       .or(`service_type.eq.${answers.project_type},service_type.is.null`);
@@ -404,62 +446,36 @@ export default function VoiceAssistant() {
     const { data: chkItems } = tplIds.length
       ? await supabase.from("task_checklist_template_items" as any).select("*").in("template_id", tplIds)
       : { data: [] as any[] };
-    const chkTemplates = (chkTpls || []).map((t: any) => ({
-      ...t,
-      items: (chkItems || []).filter((i: any) => i.template_id === t.id),
+    return (chkTpls || []).map((t: any) => ({
+      ...t, items: (chkItems || []).filter((i: any) => i.template_id === t.id),
     }));
+  }
 
-    for (const tm of template) {
-      const targetDate = new Date(start);
-      targetDate.setDate(targetDate.getDate() + tm.offsetDays);
-      const { data: milestone } = await supabase.from("milestones").insert({
-        project_id: project.id,
-        title: tm.title,
-        target_date: targetDate.toISOString().slice(0, 10),
-        status: "pending",
-      }).select().single();
-      if (milestone?.id) refs.milestoneIds.push(milestone.id);
-
-      for (const t of tm.tasks) {
-        const taskDescription = [
-          t.description ? `**Escopo:** ${t.description}` : null,
-          `**Critério de aceite:** entrega validada e aprovada.`,
-        ].filter(Boolean).join("\n\n");
-
-        const dueDate = new Date(targetDate);
-        const { data: task } = await supabase.from("tasks").insert({
-          project_id: project.id,
-          milestone_id: milestone?.id,
-          title: t.title,
-          description: taskDescription,
-          priority: t.priority,
-          status: "backlog",
-          due_date: dueDate.toISOString().slice(0, 10),
-        }).select().single();
-
-        if (!task) continue;
-        refs.taskIds.push(task.id);
-
-        // Auto-attach matching checklist template
-        const match = (chkTemplates || []).find((c: any) =>
-          norm(c.title).includes(norm(t.title).split(" ")[0]) ||
-          (c.service_type === answers.project_type)
-        );
-        if (match?.items?.length) {
-          const rows = match.items
-            .sort((a: any, b: any) => a.order_index - b.order_index)
-            .map((it: any, idx: number) => ({
-              task_id: task.id,
-              title: it.label,
-              item_order: idx,
-              created_by: user!.id,
-            }));
-          const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
-          (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
-        }
+  async function stageCreateChecklists(
+    tasks: Array<{ task: any; t: any }>,
+    chkTemplates: any[],
+    refs: CreatedRefs,
+  ) {
+    for (const { task, t } of tasks) {
+      const match = chkTemplates.find((c: any) =>
+        norm(c.title).includes(norm(t.title).split(" ")[0]) ||
+        (c.service_type === answers.project_type)
+      );
+      if (match?.items?.length) {
+        const rows = match.items
+          .sort((a: any, b: any) => a.order_index - b.order_index)
+          .map((it: any, idx: number) => ({
+            task_id: task.id,
+            title: it.label,
+            item_order: idx,
+            created_by: user!.id,
+          }));
+        const { data: inserted } = await supabase.from("task_checklist_items").insert(rows).select("id");
+        (inserted || []).forEach((r: any) => refs.checklistItemIds.push(r.id));
       }
     }
   }
+
 
   async function execCreateTaskFull(a: Record<string, any>, refs: CreatedRefs) {
     const p = parsed as Extract<ParsedIntent, { kind: "create_task" }>;
