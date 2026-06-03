@@ -363,7 +363,8 @@ Deno.serve(async (req) => {
     if (typeof parsed.narrative !== "string") parsed.narrative = "";
     parsed._model = usedModel;
     parsed._contractAutoLoaded = contractAutoLoaded;
-    parsed._contractName = attachment?.fileName || null;
+    parsed._contractName = allDocs[0]?.fileName || null;
+    parsed._documentsCount = allDocs.length;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
