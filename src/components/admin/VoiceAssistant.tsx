@@ -817,16 +817,60 @@ export default function VoiceAssistant() {
                           </div>
                         );
                       }
+                      const spokenText = (finalText + " " + interim).trim();
+                      const proactiveMatches = isUnknown
+                        ? findClientsMentioned(clientList, spokenText, [
+                            (c: any) => c.company_name,
+                            (c: any) => c.full_name,
+                          ])
+                        : [];
+                      const guessIntent = /projeto/i.test(spokenText)
+                        ? "Criar projeto"
+                        : /tarefa/i.test(spokenText)
+                          ? "Criar tarefa"
+                          : /v[ií]deo|reels/i.test(spokenText)
+                            ? "Criar projeto (vídeo)"
+                            : null;
                       return (
                         <div className={`rounded-xl p-3 border ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
                           <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
-                            {isUnknown ? "Preciso de mais detalhes" : "Interpretação"}
+                            {isUnknown ? "Posso confirmar antes de fazer?" : "Interpretação"}
                           </p>
                           <p className="text-sm font-medium text-foreground">
                             {isUnknown
-                              ? "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
+                              ? guessIntent
+                                ? `Achei que você quer: ${guessIntent}. Confirme o cliente:`
+                                : "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
                               : summarizeIntent(parsed)}
                           </p>
+                          {isUnknown && proactiveMatches.length > 0 && (
+                            <div className="mt-2 space-y-1.5">
+                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                                Encontrei na sua base
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {proactiveMatches.map((c: any) => {
+                                  const label = c.company_name || c.full_name || c.email;
+                                  return (
+                                    <button
+                                      key={c.id}
+                                      onClick={() => {
+                                        const verb = guessIntent?.includes("tarefa") ? "Criar tarefa para" : "Criar projeto para";
+                                        const rewritten = `${verb} ${label}${spokenText ? ` — ${spokenText}` : ""}`;
+                                        handleTextEdit(rewritten);
+                                      }}
+                                      className="text-[11px] px-2.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-colors"
+                                    >
+                                      {label}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <p className="text-[10px] text-muted-foreground">
+                                Toque para confirmar e eu sigo daqui.
+                              </p>
+                            </div>
+                          )}
                         </div>
                       );
                     })()}
