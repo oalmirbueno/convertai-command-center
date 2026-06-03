@@ -539,6 +539,7 @@ export default function VoiceAssistant() {
                       {phase === "input" && "Voz · sem IA externa"}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
+                      {phase === "confirm" && "Confirmação final"}
                     </p>
                   </div>
                 </div>
