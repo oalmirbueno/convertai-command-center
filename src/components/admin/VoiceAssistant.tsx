@@ -1335,7 +1335,7 @@ export default function VoiceAssistant() {
                                   onChange={(e) => setStageAck(e.target.checked)}
                                   className="mt-0.5 w-3.5 h-3.5 accent-primary"
                                 />
-                                <span>Confirmo executar esta fase agora.</span>
+                                <span>Confirmo criar tudo agora.</span>
                               </label>
                               <button
                                 onClick={() => runStage(i)}
