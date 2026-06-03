@@ -250,42 +250,97 @@ export default function VoiceAssistant() {
     }
   };
 
-  const executeWithAnswers = async () => {
-    if (!parsed || !user) return;
-    setExecuting(true);
-    const transcript = (finalText + " " + interim).trim();
-    let status: "success" | "error" = "success";
-    let resultMsg = "";
-    const refs: CreatedRefs = emptyRefs();
-    try {
-      if (parsed.kind === "create_project") {
-        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
-        if (!client) throw new Error("Cliente não selecionado");
-        await execCreateProjectFull(client, refs);
-        resultMsg = `Projeto "${answers.project_name}" criado para ${client.company_name || client.full_name}`;
-      } else if (parsed.kind === "create_task") {
-        await execCreateTaskFull(answers, refs);
-        resultMsg = `Tarefa "${answers.task_title}" criada`;
-      } else if (parsed.kind === "create_milestone") {
-        await execCreateMilestoneFull(answers, refs);
-        resultMsg = `Etapa "${answers.milestone_title}" criada`;
+  // ---------------- Staged execution (1 checkbox per phase) ----------------
+  const stages = useMemo(() => {
+    if (parsed?.kind === "create_project") {
+      const base = [{ key: "project", label: "Criar projeto", description: "Grava o registro do projeto no banco." }];
+      if (answers.apply_template) {
+        const tpl = projectTemplates[answers.project_type] || [];
+        const taskCount = tpl.reduce((s, m) => s + m.tasks.length, 0);
+        base.push(
+          { key: "milestones", label: "Gerar milestones", description: `${tpl.length} etapas serão criadas a partir do template.` },
+          { key: "tasks", label: "Distribuir tarefas", description: `${taskCount} tarefas, vinculadas a cada milestone.` },
+          { key: "checklists", label: "Aplicar checklists", description: "Itens de checklist anexados às tarefas." },
+        );
       }
-      appendLog({ kind: "ok", text: resultMsg });
-      toast({ title: "Executado", description: `${resultMsg} · Você pode desfazer no painel.` });
-      setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs });
-      reset();
-    } catch (err: any) {
-      status = "error";
-      resultMsg = err?.message || "Falha";
-      appendLog({ kind: "error", text: resultMsg });
-    } finally {
-      setExecuting(false);
+      return base;
+    }
+    if (parsed?.kind === "create_task") return [{ key: "single", label: "Criar tarefa", description: `"${answers.task_title || ""}"` }];
+    if (parsed?.kind === "create_milestone") return [{ key: "single", label: "Criar etapa", description: `"${answers.milestone_title || ""}"` }];
+    return [];
+  }, [parsed, answers]);
+
+  const stagedFinalize = async (finalRefs: CreatedRefs) => {
+    const transcript = (finalText + " " + interim).trim();
+    const client = stageContext.client || resolvedClient;
+    const resultMsg =
+      parsed?.kind === "create_project"
+        ? `Projeto "${answers.project_name}" criado${client ? ` para ${client.company_name || client.full_name}` : ""}`
+        : parsed?.kind === "create_task"
+          ? `Tarefa "${answers.task_title}" criada`
+          : parsed?.kind === "create_milestone"
+            ? `Etapa "${answers.milestone_title}" criada`
+            : "Executado";
+    setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs: finalRefs });
+    appendLog({ kind: "ok", text: resultMsg });
+    toast({ title: "Concluído", description: `${resultMsg} · Disponível para desfazer.` });
+    if (user) {
       supabase.from("voice_command_log" as any).insert({
-        user_id: user.id, transcript, intent: parsed as any, status, result: resultMsg,
-        clarifications: answers, preview: formatScopePreview(answers, resolvedClient?.company_name),
+        user_id: user.id, transcript, intent: parsed as any, status: "success", result: resultMsg,
+        clarifications: answers, preview: formatScopePreview(answers, client?.company_name),
       }).then(() => {});
     }
   };
+
+  const runStage = async (idx: number) => {
+    if (!parsed || !user || executing) return;
+    const stage = stages[idx];
+    if (!stage) return;
+    setExecuting(true);
+    const refs: CreatedRefs = {
+      projectIds: [...stageRefs.projectIds],
+      milestoneIds: [...stageRefs.milestoneIds],
+      taskIds: [...stageRefs.taskIds],
+      checklistItemIds: [...stageRefs.checklistItemIds],
+      fileIds: [...stageRefs.fileIds],
+    };
+    try {
+      if (stage.key === "project") {
+        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
+        if (!client) throw new Error("Cliente não selecionado");
+        const project = await stageCreateProject(client, refs);
+        setStageContext((c) => ({ ...c, client, project }));
+      } else if (stage.key === "milestones") {
+        if (!stageContext.project) throw new Error("Projeto não criado nesta sessão");
+        const ms = await stageCreateMilestones(stageContext.project, refs);
+        setStageContext((c) => ({ ...c, milestones: ms }));
+      } else if (stage.key === "tasks") {
+        if (!stageContext.project) throw new Error("Projeto não criado");
+        const ts = await stageCreateTasks(stageContext.project, stageContext.milestones || [], refs);
+        const chk = await fetchChkTemplates();
+        setStageContext((c) => ({ ...c, tasks: ts, chkTemplates: chk }));
+      } else if (stage.key === "checklists") {
+        await stageCreateChecklists(stageContext.tasks || [], stageContext.chkTemplates || [], refs);
+      } else if (stage.key === "single") {
+        if (parsed.kind === "create_task") await execCreateTaskFull(answers, refs);
+        else if (parsed.kind === "create_milestone") await execCreateMilestoneFull(answers, refs);
+        const client = clientList.find((c) => c.id === answers.client_id) || resolvedClient;
+        setStageContext((c) => ({ ...c, client }));
+      }
+      setStageRefs(refs);
+      setStageAck(false);
+      const next = idx + 1;
+      setStageIdx(next);
+      if (next >= stages.length) await stagedFinalize(refs);
+    } catch (err: any) {
+      const msg = err?.message || "Falha";
+      appendLog({ kind: "error", text: `Fase "${stage.label}": ${msg}` });
+      toast({ title: "Falha na fase", description: msg, variant: "destructive" });
+    } finally {
+      setExecuting(false);
+    }
+  };
+
 
   const undoLastAction = async () => {
     if (!lastAction || undoing) return;
