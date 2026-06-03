@@ -298,15 +298,11 @@ export default function ClientDocuments() {
               
               {/* Action buttons */}
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewFile.file_url} target="_blank" rel="noopener noreferrer" className="gap-1.5">
-                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
-                  </a>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(previewFile.file_url)}>
+                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button variant="outline" size="sm" asChild>
-                  <a href={previewFile.file_url} download className="gap-1.5">
-                    <Download className="w-3.5 h-3.5" /> Baixar
-                  </a>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => downloadFile(previewFile.file_url, previewFile.file_name)}>
+                  <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
               </div>
 
