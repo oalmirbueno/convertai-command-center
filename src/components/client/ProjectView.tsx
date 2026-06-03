@@ -169,7 +169,8 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             <div className="flex-1 min-w-0">
               <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-2">{project.name}</h1>
               {project.description && (
-                <p className="text-sm text-muted-foreground/80 leading-relaxed max-w-2xl line-clamp-2">{project.description}</p>
+                <p className="text-sm text-muted-foreground/80 leading-relaxed max-w-2xl line-clamp-2">{summarizeProjectText(project.description)}</p>
+
               )}
             </div>
             <div className="hidden sm:flex items-end gap-4 shrink-0">
