@@ -321,6 +321,7 @@ export default function VoiceAssistant() {
       created_by: user!.id,
     }).select().single();
     if (error) throw error;
+    refs.projectIds.push(project.id);
 
     if (!answers.apply_template) return;
 
