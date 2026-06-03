@@ -265,11 +265,12 @@ export default function VoiceAssistant() {
   const appendLog = useCallback((entry: Omit<LogEntry, "id">) =>
     setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12)), []);
 
-  // 🧠 Agente IA — interpreta voz + anexo + base de clientes e devolve
-  // intent estruturado + plano de ação (milestones/tasks) derivado do contrato.
+  // 🧠 Agente IA — interpreta voz + anexo (ou contrato do sistema) + base de
+  // clientes. Roda em modelos GRATUITOS com fallback chain — nunca trava por
+  // crédito; se tudo falhar, cai pro regex local sem quebrar.
   const runAgent = useCallback(async (opts?: { silent?: boolean }) => {
     const text = (finalText + " " + interim).trim();
-    if (!text && !fileCtx?.text) return;
+    if (!text && !fileCtx?.text && !answers.client_id) return;
     if (aiThinking) return;
     setAiThinking(true);
     try {
@@ -279,6 +280,7 @@ export default function VoiceAssistant() {
           attachment: fileCtx?.text
             ? { fileName: fileCtx.fileName, text: fileCtx.text }
             : null,
+          clientId: answers.client_id || null, // agente puxa o contrato do sistema
           clients: clientList.map((c) => ({
             id: c.id, company_name: c.company_name, full_name: c.full_name, email: c.email,
           })),
@@ -287,36 +289,41 @@ export default function VoiceAssistant() {
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
       const intent = (data as any).intent || { kind: "unknown", raw: text };
-      // Map AI intent to local ParsedIntent shape (same keys).
       setParsed(intent as ParsedIntent);
       setAiNarrative((data as any).narrative || null);
       setAiPlan((data as any).plan || null);
       setAiConfidence(typeof (data as any).confidence === "number" ? (data as any).confidence : null);
-      // Auto-resolve client if AI surfaced one and there's a strong match.
       const sug: string[] = Array.isArray((data as any).suggestedClientIds) ? (data as any).suggestedClientIds : [];
       if (sug.length && !answers.client_id) {
         const found = clientList.find((c) => c.id === sug[0]);
         if (found) setAnswers((a) => ({ ...a, client_id: found.id }));
       }
       if (!opts?.silent) {
-        appendLog({ kind: "ok", text: `IA: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}` });
+        const degraded = (data as any)._degraded;
+        const auto = (data as any)._contractAutoLoaded;
+        const note = auto ? " · contrato lido do sistema" : "";
+        appendLog({
+          kind: degraded ? "info" : "ok",
+          text: `IA${note}: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}`,
+        });
       }
     } catch (err: any) {
-      appendLog({ kind: "error", text: `IA falhou: ${err?.message || "erro"}` });
-      if (!opts?.silent) toast({ title: "IA indisponível", description: err?.message || "Tente novamente.", variant: "destructive" });
+      // Falha silenciosa: regex local continua cuidando do básico.
+      appendLog({ kind: "info", text: `IA em modo local: ${err?.message || "indisponível"}` });
     } finally {
       setAiThinking(false);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking, toast]);
+  }, [finalText, interim, fileCtx, clientList, answers.client_id, aiThinking]);
 
-  // Auto-trigger IA quando há anexo carregado (contratos/briefings → plano)
+  // Auto-trigger IA quando há anexo OU quando o cliente é resolvido
+  // (pro agente buscar o contrato do sistema sem o usuário arrastar nada).
   useEffect(() => {
-    if (fileCtx?.text && !aiThinking && !aiPlan) {
+    if ((fileCtx?.text || answers.client_id) && !aiThinking && !aiPlan) {
       runAgent({ silent: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fileCtx?.text]);
+  }, [fileCtx?.text, answers.client_id]);
 
   const handleAttach = useCallback(async (f: File | null) => {
     setFile(f); setFileCtx(null);

@@ -1,91 +1,157 @@
 // Aceleriq OS — Voice Assistant Agent
-// Senior operations agent that interprets voice/text + attachments (contracts,
-// briefings, documents) and returns a structured intent + a contract-aware
-// action plan (milestones, tasks) to drive the staged execution UI.
+// Senior operations agent. Interprets voice/text + attachments OR auto-fetches
+// the client's contract from the portal storage, and returns a structured
+// intent + a contract-aware action plan.
+//
+// Goals:
+//  • Funcionar 100% no plano gratuito do Lovable AI (fallback chain de modelos
+//    free; graceful-degrade pra "unknown" se TODOS falharem — nunca trava).
+//  • Ler contrato direto do sistema: dado um clientId, busca o último contrato
+//    em `contracts` e baixa o PDF pra extrair texto, sem o usuário precisar
+//    arrastar nada.
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
+import { createClient } from "npm:@supabase/supabase-js@2";
 
-const SYSTEM_PROMPT = `Você é o ACELERIQ OS — um agente operacional sênior da agência AcelerIQ, executando dentro do Performance OS.
+const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
 ## Identidade & Missão
-- Você é um diretor de operações virtual: pensa como gestor de tráfego, líder de design e PM ao mesmo tempo.
-- Sua missão é traduzir a fala/texto do administrador em ações executáveis no Performance OS, sem inventar dados.
-- Você nunca executa nada por conta própria — devolve um plano ESTRUTURADO em JSON. O sistema (com confirmação do humano) é quem cria/atualiza registros.
+- Diretor de operações virtual: pensa como gestor de tráfego, líder de design e PM.
+- Traduz fala/texto do administrador em ações executáveis. Nunca inventa dados.
+- Devolve um plano ESTRUTURADO em JSON. O sistema (com confirmação humana) é quem cria registros.
 
-## Capacidades (intents)
-- create_project: criar projeto pra um cliente, com plano de milestones e tarefas.
-- create_task: criar uma única tarefa em projeto existente.
-- create_milestone: criar uma etapa em projeto existente.
-- update_task_status: avançar/mover/concluir tarefa.
-- report_pending: listar pendências do cliente.
-- report_overview: visão geral.
-- upload_file: anexar arquivo em pasta correta (contratos, relatorios, estrategicos, graficos, operacionais).
-- unknown: quando não houver dados mínimos.
+## Intents
+create_project | create_task | create_milestone | update_task_status | report_pending | report_overview | upload_file | unknown.
 
-## Tipos de projeto suportados
+## Tipos de projeto
 trafego, video, site, social_media, conteudo, automation, outro.
 
-## Quando houver ANEXO (contrato, briefing, documento)
-1. LEIA o trecho do anexo como fonte de verdade.
-2. Extraia: cliente (nome/empresa), escopo contratado, prazos, entregáveis, exclusões, valores se relevantes.
-3. Construa um \`plan\` com milestones e tarefas DERIVADAS do contrato — nunca fora do escopo.
-4. Inclua sempre uma tarefa inicial "Kickoff e alinhamento" e uma final "Entrega e validação".
-5. Use linguagem profissional, técnica e direta. Sem floreios.
-6. Em \`narrative\`: resuma o plano em 2-4 frases (pt-BR), citando os pontos do contrato que embasaram as decisões.
+## Quando houver ANEXO ou CONTRATO DO SISTEMA
+1. Use o trecho como fonte de verdade.
+2. Extraia: cliente, escopo, prazos, entregáveis, exclusões.
+3. Monte \`plan\` com milestones e tarefas DERIVADAS — nunca fora do escopo contratado.
+4. Inclua "Kickoff e alinhamento" no início e "Entrega e validação" no fim.
+5. \`narrative\`: 2-4 frases (pt-BR) citando o que do contrato embasou cada decisão.
 
-## Quando NÃO houver anexo
-- Use os templates padrão (deixe \`plan\` como null) e apenas devolva o intent estruturado.
+## Sem anexo
+- \`plan\` = null. Use intent estruturado, deixa o sistema usar templates.
 
 ## Resolução de cliente
-- Você recebe \`clients\` (lista resumida). Quando o usuário mencionar um nome:
-  - Encontre o ID por correspondência por nome, empresa ou email (fuzzy, tolere typos e nomes parciais).
-  - Devolva o \`clientId\` em \`suggestedClientIds\` (até 3 candidatos, mais prováveis primeiro).
-  - NÃO chute clientes sem evidência no texto.
+- Recebe \`clients\` resumido. Devolve até 3 \`suggestedClientIds\` por probabilidade.
+- Não chuta clientes sem evidência no texto.
 
-## Distribuição de tarefas por role
-- design: criativos, identidade, layouts, edição de vídeo, motion.
-- traffic: campanhas, públicos, otimização, lances, ads management.
-- manager: estratégia, planejamento, briefing, reuniões, reports.
-- admin: contratos, acessos, configurações de conta, financeiro.
+## Distribuição por role
+design (criativos/edição), traffic (campanhas/otimização), manager (estratégia/briefing), admin (contratos/financeiro).
 
-## Restrições absolutas
-- Nunca prometa entregas fora do que está no contrato/briefing fornecido.
-- Nunca invente datas — calcule offsetDays a partir do início do projeto.
-- Sempre devolva JSON válido conforme schema. Sem texto fora do JSON.
+## Restrições
+- Nunca prometa fora do contrato. Nunca invente datas — use offsetDays.
+- JSON puro, sem markdown.
 
-## Schema de saída (obrigatório)
-{
-  "intent": {
-    "kind": "create_project" | "create_task" | "create_milestone" | "update_task_status" | "report_pending" | "report_overview" | "upload_file" | "unknown",
-    "name"?: string,           // create_project
-    "title"?: string,          // create_task / create_milestone
-    "taskHint"?: string,       // update_task_status
-    "status"?: string,         // backlog|doing|review|done
-    "priority"?: "high"|"medium"|"low",
-    "type"?: "trafego"|"video"|"site"|"social_media"|"conteudo"|"automation"|"outro",
-    "deadlineDays"?: number,
-    "days"?: number,
-    "clientHint"?: string,
-    "projectHint"?: string,
-    "folder"?: "contratos"|"relatorios"|"estrategicos"|"graficos"|"operacionais",
-    "raw"?: string             // somente para unknown
-  },
-  "suggestedClientIds": string[],   // até 3, ordem de probabilidade
-  "narrative": string,              // 2-4 frases em pt-BR
-  "confidence": number,             // 0..1
-  "plan"?: {
-    "milestones": [
-      { "title": string, "offsetDays": number, "tasks": [
-        { "title": string, "description"?: string, "priority": "high"|"medium"|"low", "role": "admin"|"design"|"traffic"|"manager" }
-      ]}
-    ]
-  } | null
-}`;
+## Schema
+{ "intent": { "kind": "...", "name"?, "title"?, "taskHint"?, "status"?, "priority"?, "type"?, "deadlineDays"?, "days"?, "clientHint"?, "projectHint"?, "folder"?, "raw"? },
+  "suggestedClientIds": string[], "narrative": string, "confidence": number,
+  "plan"?: { "milestones": [ { "title": string, "offsetDays": number, "tasks": [ { "title": string, "description"?: string, "priority": "high"|"medium"|"low", "role": "admin"|"design"|"traffic"|"manager" } ] } ] } | null }`;
+
+// Ordem de fallback: modelos gratuitos primeiro. Se TODOS falharem (402/429),
+// devolve unknown sem quebrar a UI — o regex local cuida do básico.
+const MODEL_CHAIN = [
+  "google/gemini-2.5-flash-lite",   // mais barato / free-friendly
+  "google/gemini-2.5-flash",        // free-friendly
+  "google/gemini-3-flash-preview",  // preview default
+];
 
 interface RequestBody {
   text: string;
   attachment?: { fileName: string; text: string } | null;
+  clientId?: string | null;
   clients?: { id: string; company_name?: string | null; full_name?: string | null; email?: string | null }[];
+}
+
+// Extrai texto cru de PDF sem parser pesado: pega só strings ASCII dentro do
+// stream — suficiente pra contratos digitais (texto, não scan). Limita 18k chars.
+function quickPdfText(bytes: Uint8Array): string {
+  const decoder = new TextDecoder("latin1");
+  const raw = decoder.decode(bytes);
+  // junta runs de caracteres imprimíveis + acentos comuns
+  const matches = raw.match(/[\x20-\x7E\u00C0-\u017F]{6,}/g) || [];
+  return matches.join(" ").replace(/\s+/g, " ").slice(0, 18000);
+}
+
+async function loadClientContract(
+  supabase: ReturnType<typeof createClient>,
+  clientId: string,
+): Promise<{ fileName: string; text: string } | null> {
+  try {
+    const { data: contract } = await supabase
+      .from("contracts")
+      .select("original_file_url, original_file_name, description, title")
+      .eq("client_id", clientId)
+      .order("updated_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    let url = contract?.original_file_url as string | undefined;
+    let name = (contract?.original_file_name || contract?.title || "contrato.pdf") as string;
+    let inlineText = (contract?.description || "") as string;
+
+    if (!url) {
+      // fallback: pasta de contratos em files
+      const { data: f } = await supabase
+        .from("files")
+        .select("file_url, file_name")
+        .eq("client_id", clientId)
+        .eq("folder", "contratos")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (f?.file_url) { url = f.file_url as string; name = (f.file_name || name) as string; }
+    }
+
+    if (inlineText && inlineText.length > 200) {
+      return { fileName: name, text: inlineText.slice(0, 18000) };
+    }
+    if (!url) return null;
+
+    const resp = await fetch(url);
+    if (!resp.ok) return inlineText ? { fileName: name, text: inlineText } : null;
+    const ct = resp.headers.get("content-type") || "";
+    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url)) {
+      const buf = new Uint8Array(await resp.arrayBuffer());
+      const text = quickPdfText(buf);
+      return { fileName: name, text: text || inlineText || "" };
+    }
+    const text = await resp.text();
+    return { fileName: name, text: (text || inlineText || "").slice(0, 18000) };
+  } catch {
+    return null;
+  }
+}
+
+async function callModel(
+  apiKey: string,
+  model: string,
+  system: string,
+  user: string,
+): Promise<{ ok: true; content: string } | { ok: false; status: number; body: string }> {
+  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+      response_format: { type: "json_object" },
+      temperature: 0.2,
+    }),
+  });
+  if (!resp.ok) {
+    const body = await resp.text();
+    return { ok: false, status: resp.status, body };
+  }
+  const data = await resp.json();
+  return { ok: true, content: data?.choices?.[0]?.message?.content || "{}" };
 }
 
 Deno.serve(async (req) => {
@@ -93,18 +159,14 @@ Deno.serve(async (req) => {
 
   try {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
-    if (!apiKey) {
-      return new Response(JSON.stringify({ error: "LOVABLE_API_KEY ausente" }), {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabase = createClient(supabaseUrl, serviceKey);
 
     const body = (await req.json()) as RequestBody;
     if (!body?.text || typeof body.text !== "string") {
       return new Response(JSON.stringify({ error: "campo 'text' obrigatório" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -113,16 +175,20 @@ Deno.serve(async (req) => {
       name: c.company_name || c.full_name || c.email || "",
     }));
 
-    const attachmentBlock = body.attachment?.text
-      ? `\n\n[ANEXO: ${body.attachment.fileName}]\n${body.attachment.text.slice(0, 18000)}`
-      : "";
+    // Se não veio anexo mas temos clientId → busca o contrato do sistema.
+    let attachment = body.attachment || null;
+    let contractAutoLoaded = false;
+    if (!attachment?.text && body.clientId) {
+      const loaded = await loadClientContract(supabase, body.clientId);
+      if (loaded?.text) {
+        attachment = loaded;
+        contractAutoLoaded = true;
+      }
+    }
 
-    const userPayload = {
-      command: body.text.slice(0, 4000),
-      clients: clientsCondensed,
-      attachment_present: !!body.attachment?.text,
-      attachment_filename: body.attachment?.fileName || null,
-    };
+    const attachmentBlock = attachment?.text
+      ? `\n\n[CONTRATO/ANEXO: ${attachment.fileName}${contractAutoLoaded ? " — carregado do sistema" : ""}]\n${attachment.text.slice(0, 18000)}`
+      : "";
 
     const userPrompt =
       `Comando do administrador:\n"""${body.text.slice(0, 4000)}"""\n\n` +
@@ -130,52 +196,46 @@ Deno.serve(async (req) => {
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
 
-    const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "Lovable-API-Key": apiKey,
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
-        ],
-        response_format: { type: "json_object" },
-        temperature: 0.2,
-      }),
-    });
-
-    if (!resp.ok) {
-      const errText = await resp.text();
-      const status = resp.status;
-      if (status === 429) {
-        return new Response(JSON.stringify({ error: "Limite atingido. Tente em alguns segundos." }), {
-          status: 429,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      if (status === 402) {
-        return new Response(JSON.stringify({ error: "Créditos esgotados. Recarregue na área de billing." }), {
-          status: 402,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-      return new Response(JSON.stringify({ error: `Gateway falhou (${status}): ${errText.slice(0, 200)}` }), {
-        status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // Fallback degradado se não há API key.
+    if (!apiKey) {
+      return new Response(JSON.stringify({
+        intent: { kind: "unknown", raw: body.text },
+        suggestedClientIds: [], narrative: "IA indisponível (sem API key). Usando interpretação local.",
+        confidence: 0, plan: null, _degraded: true, _reason: "no_api_key",
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    const data = await resp.json();
-    const raw = data?.choices?.[0]?.message?.content || "{}";
-    let parsed;
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      const match = raw.match(/\{[\s\S]*\}/);
-      parsed = match ? JSON.parse(match[0]) : { intent: { kind: "unknown", raw: body.text }, narrative: "Falha ao interpretar.", confidence: 0, suggestedClientIds: [], plan: null };
+    // Tenta cadeia de modelos free → preview. 402/429 = pula. 5xx = pula.
+    let parsed: any = null;
+    let usedModel: string | null = null;
+    const errors: string[] = [];
+    for (const model of MODEL_CHAIN) {
+      const r = await callModel(apiKey, model, SYSTEM_PROMPT, userPrompt);
+      if (r.ok) {
+        try { parsed = JSON.parse(r.content); }
+        catch {
+          const m = r.content.match(/\{[\s\S]*\}/);
+          parsed = m ? JSON.parse(m[0]) : null;
+        }
+        if (parsed) { usedModel = model; break; }
+        errors.push(`${model}: parse_failed`);
+        continue;
+      }
+      errors.push(`${model}: ${r.status}`);
+      // só pula automaticamente em rate-limit / credits / server-side
+      if (![402, 429, 500, 502, 503, 504].includes(r.status)) break;
+    }
+
+    // Se TODOS falharem, degrada elegante — não trava o usuário.
+    if (!parsed) {
+      return new Response(JSON.stringify({
+        intent: { kind: "unknown", raw: body.text },
+        suggestedClientIds: [],
+        narrative: "Modelos de IA temporariamente indisponíveis. Interpretação local ativa — você pode confirmar manualmente.",
+        confidence: 0, plan: null,
+        _degraded: true, _reason: "all_models_failed", _errors: errors,
+        _contractAutoLoaded: contractAutoLoaded,
+      }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     // Normalize
@@ -183,15 +243,19 @@ Deno.serve(async (req) => {
     if (!Array.isArray(parsed.suggestedClientIds)) parsed.suggestedClientIds = [];
     if (typeof parsed.confidence !== "number") parsed.confidence = 0.5;
     if (typeof parsed.narrative !== "string") parsed.narrative = "";
-    parsed._debug = { payload: userPayload, model: "google/gemini-3-flash-preview" };
+    parsed._model = usedModel;
+    parsed._contractAutoLoaded = contractAutoLoaded;
+    parsed._contractName = attachment?.fileName || null;
 
     return new Response(JSON.stringify(parsed), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: (err as Error).message || "Erro inesperado" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
-    );
+    // Última linha de defesa: nunca quebra a UI.
+    return new Response(JSON.stringify({
+      intent: { kind: "unknown", raw: "" },
+      suggestedClientIds: [], narrative: "Erro interno do agente. Interpretação local ativa.",
+      confidence: 0, plan: null, _degraded: true, _reason: (err as Error).message,
+    }), { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
