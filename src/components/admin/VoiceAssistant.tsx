@@ -515,6 +515,12 @@ export default function VoiceAssistant() {
     if (!parsed || !user || executing) return;
     const stage = stages[idx];
     if (!stage) return;
+    const blocked = isForbiddenRequest((finalText + " " + interim).trim());
+    if (blocked) {
+      appendLog({ kind: "error", text: `🔒 Bloqueado: ${blocked}` });
+      toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
+      return;
+    }
     setExecuting(true);
     const refs: CreatedRefs = {
       projectIds: [...stageRefs.projectIds],
