@@ -1500,7 +1500,7 @@ export default function VoiceAssistant() {
                     </label>
                     <button
                       onClick={advanceFromInput}
-                      disabled={!parsed || parsed.kind === "unknown" || executing}
+                      disabled={executing || (!parsed || parsed.kind === "unknown") && !(answers.client_id && answers.project_type)}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
                       {executing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowRight className="w-4 h-4" />}
