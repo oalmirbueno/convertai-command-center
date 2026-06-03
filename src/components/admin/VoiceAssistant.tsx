@@ -1089,7 +1089,7 @@ export default function VoiceAssistant() {
                     <div className="flex items-center justify-between gap-2">
                       <button
                         onClick={() => { aiAttemptedRef.current = true; runAgent(); }}
-                        disabled={aiThinking || (!finalText.trim() && !fileCtx?.text)}
+                        disabled={aiThinking || (!finalText.trim() && !hasAnyAttachment)}
                         className="flex-1 h-9 rounded-lg bg-primary/15 border border-primary/30 text-primary text-xs font-medium flex items-center justify-center gap-2 hover:bg-primary/25 disabled:opacity-50 transition-colors"
                       >
                         {aiThinking ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
