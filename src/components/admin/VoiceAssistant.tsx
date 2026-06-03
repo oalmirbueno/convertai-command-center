@@ -552,6 +552,25 @@ export default function VoiceAssistant() {
                 {/* ---------- INPUT PHASE ---------- */}
                 {phase === "input" && (
                   <>
+                    {lastAction && (
+                      <div className="rounded-xl border border-primary/40 bg-primary/5 p-3 flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-wider text-primary">Última ação</p>
+                          <p className="text-xs text-foreground truncate">{lastAction.label}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            {lastAction.refs.projectIds.length} projeto · {lastAction.refs.milestoneIds.length} etapas · {lastAction.refs.taskIds.length} tarefas · {lastAction.refs.checklistItemIds.length} checklists
+                          </p>
+                        </div>
+                        <button
+                          onClick={undoLastAction}
+                          disabled={undoing}
+                          className="shrink-0 text-xs px-3 h-8 rounded-full bg-destructive/15 text-destructive border border-destructive/30 flex items-center gap-1.5 hover:bg-destructive/25 disabled:opacity-50"
+                        >
+                          {undoing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Undo2 className="w-3.5 h-3.5" />}
+                          Desfazer
+                        </button>
+                      </div>
+                    )}
                     <div className="min-h-[88px] rounded-xl bg-secondary/50 border border-border p-3 text-sm text-foreground">
                       {finalText || interim ? (
                         <>
