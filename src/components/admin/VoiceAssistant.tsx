@@ -282,6 +282,20 @@ export default function VoiceAssistant() {
     lastSttRef.current = "";
   };
 
+  const returnToDraft = useCallback(() => {
+    stopListening();
+    setConfirmAck(false);
+    setStageIdx(0);
+    setStageAck(false);
+    setStageRefs(emptyRefs());
+    setStageContext({});
+    setPhase(parsed?.kind === "create_project" ? "preview" : parsed ? "clarify" : "input");
+  }, [parsed, stopListening]);
+
+  const finishFlow = useCallback(() => {
+    reset();
+  }, []);
+
   const appendLog = useCallback((entry: Omit<LogEntry, "id">) =>
     setLog((l) => [{ id: crypto.randomUUID(), ...entry }, ...l].slice(0, 12)), []);
 
@@ -1496,7 +1510,7 @@ export default function VoiceAssistant() {
                       />
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={listening ? stopListening : startListening}
+                          onClick={() => listening ? stopListening() : startListening("refine")}
                           className={`w-8 h-8 rounded-full flex items-center justify-center ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-secondary text-foreground"}`}
                           title={listening ? "Parar mic" : "Falar ajuste"}
                         >
@@ -1643,7 +1657,7 @@ export default function VoiceAssistant() {
                 {phase === "input" && (
                   <>
                     <button
-                      onClick={listening ? stopListening : startListening}
+                      onClick={() => listening ? stopListening() : startListening("command")}
                       className={`w-10 h-10 rounded-full flex items-center justify-center transition ${listening ? "bg-destructive text-destructive-foreground animate-pulse" : "bg-primary text-primary-foreground"}`}
                     >
                       {listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
@@ -1703,21 +1717,18 @@ export default function VoiceAssistant() {
                 {phase === "confirm" && (
                   <>
                     <button
-                      onClick={() => {
-                        if (stageIdx > 0) return; // can't edit mid-execution
-                        setPhase(parsed?.kind === "create_project" ? "preview" : "clarify");
-                      }}
+                      onClick={returnToDraft}
                       className="px-3 h-10 rounded-full bg-secondary text-foreground text-sm disabled:opacity-40"
                       disabled={executing || stageIdx > 0}
                     >
                       Voltar
                     </button>
                     <button
-                      onClick={reset}
+                      onClick={stageIdx >= stages.length && stages.length > 0 ? finishFlow : returnToDraft}
                       disabled={executing}
                       className="flex-1 h-10 rounded-full bg-primary text-primary-foreground text-sm font-medium disabled:opacity-40 flex items-center justify-center gap-2"
                     >
-                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Cancelar fluxo"}
+                      {stageIdx >= stages.length && stages.length > 0 ? "Concluir" : "Manter rascunho"}
                     </button>
                   </>
                 )}
