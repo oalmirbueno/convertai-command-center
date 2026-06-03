@@ -5,10 +5,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
-import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
+import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
 import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
 import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
+import { addDaysBR, buildClientProjectFields } from "@/lib/projectPresentation";
 
 type AnyRec = any;
 
@@ -144,6 +145,8 @@ export default function VoiceAssistant() {
   const [phase, setPhase] = useState<Phase>("input");
   const [answers, setAnswers] = useState<Record<string, any>>({});
   const [clientList, setClientList] = useState<any[]>([]);
+  const [clientProjects, setClientProjects] = useState<any[]>([]);
+  const [clientProjectsLoading, setClientProjectsLoading] = useState(false);
   const [clientSearch, setClientSearch] = useState("");
   const [confirmAck, setConfirmAck] = useState(false);
   const [lastAction, setLastAction] = useState<LastAction | null>(null);
