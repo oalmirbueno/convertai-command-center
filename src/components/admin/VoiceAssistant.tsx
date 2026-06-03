@@ -493,8 +493,11 @@ export default function VoiceAssistant() {
       if (!init.client_id && resolvedClient) init.client_id = resolvedClient.id;
     }
     setAnswers(init);
-    if (gaps.length === 0 || (parsed.kind !== "create_project" && parsed.kind !== "create_task" && parsed.kind !== "create_milestone")) {
-      // Skip clarify for report/upload/update intents (legacy direct execute)
+    // Só pula clarify pra intents NÃO-criativas (update/report/upload).
+    // Pra create_project/task/milestone SEMPRE vai pro clarify → preview → confirm,
+    // mesmo sem gaps, senão directExecute() não tem case e dispara reset() apagando tudo.
+    const kind = effective.kind;
+    if (kind !== "create_project" && kind !== "create_task" && kind !== "create_milestone") {
       directExecute();
       return;
     }
