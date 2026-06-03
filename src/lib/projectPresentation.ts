@@ -35,25 +35,37 @@ export function sanitizeClientText(input?: string | null) {
     .trim();
 }
 
+const TYPE_INTRO: Record<string, string> = {
+  trafego: "Operação estratégica de tráfego pago organizada em ciclos de estruturação, leitura de performance e otimização contínua, com foco em previsibilidade de resultado.",
+  social_media: "Presença digital conduzida de forma estratégica, com planejamento editorial, produção consistente e leitura periódica do que gera mais conexão com a audiência.",
+  video: "Produção audiovisual estruturada por etapas claras de roteiro, captação, edição e entrega — garantindo consistência criativa e qualidade técnica em cada corte.",
+  video_ai: "Produção de vídeos com IA orientada por roteiro, direção visual e refinamento de consistência, entregando peças prontas para distribuição com identidade preservada.",
+  site: "Desenvolvimento do site organizado em fases de arquitetura, design, implementação e publicação, priorizando performance, clareza e experiência do visitante.",
+  landing_page: "Landing page construída em ciclos de copy, design e otimização orientados à conversão, com rastreamento e revisão antes da publicação.",
+  automation: "Automação implementada em etapas de mapeamento, integração e validação, reduzindo trabalho manual e dando previsibilidade ao fluxo operacional.",
+  event: "Operação do evento conduzida em frentes de planejamento, produção e ativação, mantendo cada entrega alinhada à data e ao objetivo da ação.",
+  other: "Projeto conduzido em etapas claras de planejamento, execução, revisão e entrega, com visibilidade contínua do andamento.",
+};
+
 export function buildClientProjectFields(opts: {
   type?: string;
   clientName?: string;
+  /** Internal admin/AI notes — NEVER shown to client. Kept for signature compatibility. */
   narrative?: string | null;
   plan?: PlanLike;
 }) {
   const plan = opts.plan?.milestones || [];
   const taskTotal = plan.reduce((sum, m) => sum + (m.tasks?.length || 0), 0);
-  const narrative = sanitizeClientText(opts.narrative);
   const scope = TYPE_SCOPE[opts.type || "other"] || TYPE_SCOPE.other;
-  const intro = narrative || `Projeto estruturado para ${opts.clientName || "o cliente"}, com escopo organizado em etapas acompanháveis e entregas revisadas antes da conclusão.`;
+  const intro = TYPE_INTRO[opts.type || "other"] || TYPE_INTRO.other;
   const structure = plan.length
-    ? `A operação está organizada em ${plan.length} etapa${plan.length > 1 ? "s" : ""} e ${taskTotal} tarefa${taskTotal > 1 ? "s" : ""}, com acompanhamento por status, prazo e validação de entrega.`
-    : "A operação será conduzida por etapas de planejamento, execução, revisão e entrega, mantendo visibilidade clara do andamento.";
+    ? `A entrega está organizada em ${plan.length} etapa${plan.length > 1 ? "s" : ""} e ${taskTotal} tarefa${taskTotal > 1 ? "s" : ""}, cada uma com prazo e validação antes do avanço.`
+    : "A entrega será conduzida por etapas sequenciais com validação antes de cada avanço.";
 
   const objectives = [
-    "Organizar o escopo em etapas claras e acompanháveis.",
-    "Dar visibilidade ao cliente sobre prazos, produção e entregas.",
-    "Manter qualidade, consistência e revisão antes de cada entrega.",
+    "Manter o escopo organizado em etapas claras e acompanháveis.",
+    "Dar visibilidade contínua sobre prazos, produção e entregas.",
+    "Garantir qualidade e revisão antes de cada entrega ir ao ar.",
   ];
 
   return {
@@ -62,6 +74,7 @@ export function buildClientProjectFields(opts: {
     objectives: objectives.join("\n"),
   };
 }
+
 
 export function summarizeProjectText(text?: string | null) {
   const cleaned = sanitizeClientText(text);
