@@ -760,21 +760,57 @@ export default function VoiceAssistant() {
                     </div>
                     <textarea
                       value={finalText}
-                      onChange={(e) => setFinalText(e.target.value)}
+                      onChange={(e) => handleTextEdit(e.target.value)}
                       placeholder="Ou escreva o comando aqui..."
                       className="w-full text-sm bg-background border border-border rounded-lg p-2 min-h-[60px] focus:outline-none focus:border-primary"
                     />
-                    {parsed && (
-                      <div className={`rounded-xl p-3 border ${parsed.kind === "unknown" ? "border-destructive/40 bg-destructive/5" : "border-primary/40 bg-primary/5"}`}>
-                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Interpretação</p>
-                        <p className="text-sm font-medium text-foreground">{summarizeIntent(parsed)}</p>
+                    {learnedCount > 0 && (
+                      <div className="flex items-center gap-2 text-[11px] text-primary">
+                        <Brain className="w-3.5 h-3.5" />
+                        Memorizei {learnedCount} correção(ões). Não vou repetir o erro.
                       </div>
                     )}
-                    {file && (
-                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                        <FileText className="w-3.5 h-3.5" />
-                        {file.name}
-                        <button onClick={() => setFile(null)} className="text-destructive ml-1">remover</button>
+                    {parsed && (() => {
+                      const meaningful = (finalText + interim).trim().split(/\s+/).filter(Boolean).length >= 3;
+                      const isUnknown = parsed.kind === "unknown";
+                      if (isUnknown && (!meaningful || listening)) {
+                        return (
+                          <div className="rounded-xl p-3 border border-border bg-secondary/30">
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">Ouvindo…</p>
+                            <p className="text-xs text-muted-foreground">
+                              Continue falando. Ex.: "Criar projeto de tráfego para Mirante, 30 dias" ou "Mover tarefa X para concluído".
+                            </p>
+                          </div>
+                        );
+                      }
+                      return (
+                        <div className={`rounded-xl p-3 border ${isUnknown ? "border-amber-500/40 bg-amber-500/5" : "border-primary/40 bg-primary/5"}`}>
+                          <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1">
+                            {isUnknown ? "Preciso de mais detalhes" : "Interpretação"}
+                          </p>
+                          <p className="text-sm font-medium text-foreground">
+                            {isUnknown
+                              ? "Não consegui identificar a ação. Tente: criar projeto / criar tarefa / mover tarefa / relatório."
+                              : summarizeIntent(parsed)}
+                          </p>
+                        </div>
+                      );
+                    })()}
+                    {(file || fileReading) && (
+                      <div className="rounded-xl border border-border bg-secondary/40 p-2.5 text-xs">
+                        <div className="flex items-center gap-2 text-foreground">
+                          {fileReading ? <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> : <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />}
+                          <span className="truncate flex-1">{fileCtx ? describeContext(fileCtx) : file?.name}</span>
+                          <button onClick={() => handleAttach(null)} className="text-destructive">remover</button>
+                        </div>
+                        {fileCtx?.text && (
+                          <p className="mt-1.5 text-[10px] text-muted-foreground line-clamp-2 italic">
+                            "{fileCtx.text.slice(0, 200).replace(/\s+/g, " ")}…"
+                          </p>
+                        )}
+                        {fileCtx?.warning && (
+                          <p className="mt-1.5 text-[10px] text-amber-500">{fileCtx.warning}</p>
+                        )}
                       </div>
                     )}
                     {log.length > 0 && (
