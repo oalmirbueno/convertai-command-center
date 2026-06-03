@@ -351,6 +351,7 @@ export default function VoiceAssistant() {
         target_date: targetDate.toISOString().slice(0, 10),
         status: "pending",
       }).select().single();
+      if (milestone?.id) refs.milestoneIds.push(milestone.id);
 
       for (const t of tm.tasks) {
         const taskDescription = [
