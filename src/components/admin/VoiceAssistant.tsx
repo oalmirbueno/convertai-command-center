@@ -124,9 +124,15 @@ export default function VoiceAssistant() {
   const [parsed, setParsed] = useState<ParsedIntent | null>(null);
   const [executing, setExecuting] = useState(false);
   const [log, setLog] = useState<LogEntry[]>([]);
-  const [file, setFile] = useState<File | null>(null);
-  const [fileCtx, setFileCtx] = useState<FileContext | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [fileCtxs, setFileCtxs] = useState<FileContext[]>([]);
   const [fileReading, setFileReading] = useState(false);
+  // Documentos carregados automaticamente do sistema quando um cliente é selecionado.
+  const [systemDocs, setSystemDocs] = useState<{ fileName: string; text: string; source: string }[]>([]);
+  const [systemDocsLoading, setSystemDocsLoading] = useState(false);
+  // Helpers compostos: facilita lógica downstream que antes olhava `file`/`fileCtx` único.
+  const hasAnyAttachment = fileCtxs.some((c) => c.text) || systemDocs.length > 0;
+  const primaryCtxName = fileCtxs[0]?.fileName || systemDocs[0]?.fileName || null;
   const recRef = useRef<AnyRec | null>(null);
   const wantListenRef = useRef(false); // user intent (for iOS auto-restart)
   const lastSttRef = useRef(""); // last raw STT text for learning
