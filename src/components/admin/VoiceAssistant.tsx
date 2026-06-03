@@ -583,7 +583,9 @@ export default function VoiceAssistant() {
   }
 
   async function stageCreateMilestones(project: any, refs: CreatedRefs) {
-    const template = projectTemplates[answers.project_type] || projectTemplates.other;
+    const template: any[] = aiPlan?.milestones?.length
+      ? aiPlan.milestones
+      : (projectTemplates[answers.project_type] || projectTemplates.other);
     if (!template) return [];
     const start = new Date(project.start_date);
     const out: Array<{ milestone: any; tm: any }> = [];
