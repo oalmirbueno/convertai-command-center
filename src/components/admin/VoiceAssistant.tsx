@@ -5,7 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
-import { gapsForIntent, suggestProjectName, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
+import { gapsForIntent, suggestProjectName, suggestProjectNames, suggestDeadline, defaultProjectDescription, formatScopePreview, Clarification } from "@/lib/voiceConversation";
 import { projectTemplates } from "@/lib/projectTemplates";
 import { applyCorrections, learnFromEdit, loadCorrections } from "@/lib/voiceCorrections";
 import { readFileContext, describeContext, FileContext } from "@/lib/fileContext";
