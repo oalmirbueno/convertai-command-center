@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import TaskChecklistTemplatePicker from "@/components/admin/TaskChecklistTemplatePicker";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
