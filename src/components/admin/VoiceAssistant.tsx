@@ -603,7 +603,12 @@ export default function VoiceAssistant() {
     const start = new Date();
     const end = new Date();
     end.setDate(end.getDate() + (answers.deadline || 30));
-    const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name);
+    const description = defaultProjectDescription(answers.project_type, client.company_name || client.full_name, {
+      narrative: aiNarrative,
+      contractName: fileCtx?.fileName || null,
+      plan: aiPlan,
+      rawHint: (finalText + " " + interim).trim(),
+    });
     const { data: project, error } = await supabase.from("projects").insert({
       client_id: client.id,
       name: answers.project_name,
@@ -807,7 +812,12 @@ export default function VoiceAssistant() {
   if (!isAdmin) return null;
 
   const scopePreview = phase === "preview" && parsed?.kind === "create_project"
-    ? formatScopePreview(answers, resolvedClient?.company_name || resolvedClient?.full_name)
+    ? formatScopePreview(answers, resolvedClient?.company_name || resolvedClient?.full_name, {
+        narrative: aiNarrative,
+        contractName: fileCtx?.fileName || null,
+        plan: aiPlan,
+        rawHint: (finalText + " " + interim).trim(),
+      })
     : null;
 
   const filteredClients = clientSearch
