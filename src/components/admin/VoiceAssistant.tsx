@@ -933,8 +933,8 @@ export default function VoiceAssistant() {
               onDrop={(e) => {
                 e.preventDefault();
                 setDragOver(false);
-                const f = e.dataTransfer.files?.[0];
-                if (f) handleAttach(f);
+                const dropped = Array.from(e.dataTransfer.files || []);
+                if (dropped.length) handleAttach(dropped);
               }}
             >
               {/* Header */}
