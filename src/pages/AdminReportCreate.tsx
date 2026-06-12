@@ -119,10 +119,19 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       setChartData(parsed.chartData as any);
       setChartColumns(parsed.chartColumns);
       setMetrics(prev => ({ ...prev, ...Object.fromEntries(Object.entries(parsed.metrics).map(([k, v]) => [k, Math.round(Number(v) * 100) / 100])) }));
+      if (parsed.customMetrics?.length) {
+        setCustomMetrics(prev => {
+          const existing = new Set(prev.map(m => m.label.toLowerCase()));
+          const additions = parsed.customMetrics.filter(m => !existing.has(m.label.toLowerCase()));
+          return [...prev, ...additions];
+        });
+      }
       if (parsed.periodStart && !periodStart) setPeriodStart(parsed.periodStart);
       if (parsed.periodEnd && !periodEnd) setPeriodEnd(parsed.periodEnd);
       setParsedSource({ source: parsed.source, label: parsed.sourceLabel, rows: parsed.rows, dimensionKey: parsed.dimensionKey });
-      toast.success(`${parsed.sourceLabel} detectado · ${parsed.rows.length} linhas, ${parsed.chartColumns.length} métricas`);
+      const mappedCount = Object.keys(parsed.metrics).length;
+      const customCount = parsed.customMetrics?.length || 0;
+      toast.success(`${parsed.sourceLabel} · ${parsed.rows.length} linhas · ${mappedCount} métricas mapeadas${customCount ? ` + ${customCount} personalizadas` : ""}`);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao processar arquivo: " + (err?.message || "desconhecido"));
