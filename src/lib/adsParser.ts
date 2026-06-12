@@ -42,33 +42,102 @@ const toNumber = (v: any): number => {
   return isFinite(n) ? n : 0;
 };
 
-/* Mapeamento de cabeçalhos comuns → métricas internas */
+/* Mapeamento de cabeçalhos comuns → métricas internas
+   IMPORTANTE: cada métrica é distinta. NÃO colapsar mensagens/visitas/seguidores no mesmo bucket. */
 const HEADER_MAP: Record<string, string> = {
-  // alcance/impressões
-  reach: "reach", alcance: "reach", impressions: "impressions", impressoes: "impressions",
-  // cliques
-  clicks: "clicks", cliques: "clicks", linkclicks: "clicks", clickslink: "clicks",
-  // ctr
-  ctr: "ctr", clickthroughrate: "ctr",
-  // gasto
+  // ── ALCANCE / IMPRESSÕES ──
+  reach: "reach", alcance: "reach", pessoasalcancadas: "reach", contasalcancadas: "reach",
+  impressions: "impressions", impressoes: "impressions", impr: "impressions",
+  frequency: "frequency", frequencia: "frequency",
+
+  // ── CLIQUES ──
+  clicks: "clicks", cliques: "clicks", clicksall: "clicks", cliquestodos: "clicks",
+  linkclicks: "link_clicks", clickslink: "link_clicks", cliquesnolink: "link_clicks", cliquesemlink: "link_clicks",
+  uniquelinkclicks: "unique_link_clicks", cliquesunicosnolink: "unique_link_clicks",
+  landingpageviews: "landing_page_views", visualizacoesdapaginadedestino: "landing_page_views",
+
+  // ── CTR / CPC / CPM ──
+  ctr: "ctr", clickthroughrate: "ctr", ctrall: "ctr", ctrtodos: "ctr",
+  linkctr: "link_ctr", ctrlink: "link_ctr",
+  cpc: "cpc", costperclick: "cpc", customedioporclique: "cpc",
+  cpm: "cpm", costpermille: "cpm", costper1000impressions: "cpm",
+
+  // ── INVESTIMENTO ──
   cost: "ad_spend", custo: "ad_spend", spend: "ad_spend", amountspent: "ad_spend",
-  investimento: "ad_spend", valorgasto: "ad_spend", investido: "ad_spend",
-  // conversões/leads/mensagens
-  conversions: "conversions", conversoes: "conversions", leads: "conversions",
-  messages: "conversions", mensagens: "conversions", resultados: "conversions",
-  // engajamento
-  engagement: "engagement", engajamento: "engagement", engagementrate: "engagement",
-  // seguidores
-  followers: "followers_gained", seguidores: "followers_gained", newfollowers: "followers_gained",
-  // cpc/cpm/cpa
-  cpc: "cpc", costperclick: "cpc",
-  cpm: "cpm", costpermille: "cpm",
-  cpa: "cpa", costperresult: "cpa", custoporresultado: "cpa",
-  // vendas
+  amountspentbrl: "ad_spend", valorusado: "ad_spend", valorgasto: "ad_spend",
+  investimento: "ad_spend", investido: "ad_spend", totalspent: "ad_spend",
+
+  // ── RESULTADOS / CONVERSÕES (genérico Meta) ──
+  results: "results", resultados: "results",
+  conversions: "conversions", conversoes: "conversions", allconversions: "conversions",
+  costperresult: "cost_per_result", custoporresultado: "cost_per_result",
+  costperconversion: "cpa", cpa: "cpa", costperaction: "cpa",
+
+  // ── MENSAGENS (distintas de leads/visitas!) ──
+  messagingconversationsstarted: "messages", conversasiniciadasnochat: "messages",
+  newmessagingconversations: "messages", novasconversaspormensagens: "messages",
+  messages: "messages", mensagens: "messages", mensagensiniciadas: "messages",
+  costpermessagingconversation: "cost_per_message", custoporconversadepormensagem: "cost_per_message",
+
+  // ── LEADS (distinto de mensagens) ──
+  leads: "leads", cadastros: "leads", costperlead: "cost_per_lead", custoporlead: "cost_per_lead",
+
+  // ── VISITAS DE PERFIL (Instagram/Facebook) ──
+  profilevisits: "profile_visits", visitasdeperfil: "profile_visits",
+  visitasaoperfil: "profile_visits", profileviews: "profile_visits",
+
+  // ── SEGUIDORES ──
+  followers: "followers_total", seguidores: "followers_total",
+  newfollowers: "followers_gained", novosseguidores: "followers_gained",
+  followsgained: "followers_gained", followersgained: "followers_gained",
+  followsfromads: "followers_gained",
+
+  // ── ENGAJAMENTO ──
+  engagement: "engagement", engajamento: "engagement",
+  engagementrate: "engagement_rate", taxadeengajamento: "engagement_rate",
+  postengagement: "post_engagement", interacoescompublicacao: "post_engagement",
+  likes: "likes", curtidas: "likes", reactions: "likes", reacoes: "likes",
+  comments: "comments", comentarios: "comments",
+  shares: "shares", compartilhamentos: "shares",
+  saves: "saves", salvamentos: "saves", saved: "saves",
+
+  // ── VÍDEO ──
+  videoplays: "video_plays", reproducoesdevideo: "video_plays",
+  videoviews: "video_views", visualizacoesdevideo: "video_views",
+  thruplays: "thru_plays", reproducoescompletas: "thru_plays",
+  videoaveragewatchtime: "video_avg_time", tempomediodereproducao: "video_avg_time",
+  costperthruplay: "cost_per_thruplay",
+
+  // ── E-COMMERCE / VENDAS ──
+  purchases: "purchases", compras: "purchases",
+  addtocart: "add_to_cart", adicoesaocarrinho: "add_to_cart",
+  initiatecheckout: "initiate_checkout", finalizacoesdecomprainiciadas: "initiate_checkout",
+  addpaymentinfo: "add_payment_info", adicoesdeinformacoesdepagamento: "add_payment_info",
   revenue: "revenue", receita: "revenue", vendas: "revenue", sales: "revenue",
-  orders: "orders", pedidos: "orders", purchases: "orders", compras: "orders",
-  roas: "roas",
+  purchasevalue: "revenue", valordeconversao: "revenue", valordascompras: "revenue",
+  orders: "orders", pedidos: "orders",
+  roas: "roas", retornosobreinvestimentopublicitario: "roas",
+  costperpurchase: "cost_per_purchase", custoporcompra: "cost_per_purchase",
+
+  // ── QUALIDADE / RANKING (Meta) ──
+  qualityranking: "quality_ranking", classificacaodequalidade: "quality_ranking",
+  engagementrateranking: "engagement_ranking",
+  conversionrateranking: "conversion_ranking",
+
+  // ── GOOGLE ADS extra ──
+  searchimpressionshare: "search_impression_share", parceladeimpressoesdarededepesquisa: "search_impression_share",
+  averageposition: "avg_position", posicaomedia: "avg_position",
+  qualityscore: "quality_score", indicedequalidade: "quality_score",
+  conversionrate: "conversion_rate", taxadeconversao: "conversion_rate",
 };
+
+/** Métricas que são taxas/médias (não somar — calcular média ponderada/simples) */
+const RATE_METRICS = new Set([
+  "ctr", "link_ctr", "cpc", "cpm", "cpa", "cost_per_result", "cost_per_message",
+  "cost_per_lead", "cost_per_purchase", "cost_per_thruplay",
+  "engagement_rate", "conversion_rate", "frequency", "avg_position",
+  "video_avg_time", "search_impression_share", "roas", "quality_score",
+]);
 
 const numericHeaderKeys = new Set(Object.keys(HEADER_MAP));
 
