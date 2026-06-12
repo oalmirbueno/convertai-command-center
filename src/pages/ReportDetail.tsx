@@ -754,9 +754,23 @@ export default function ReportDetail() {
                     )}
                   </div>
                 </div>
-                <p className="text-[11px] text-muted-foreground mb-5 relative">
+                <p className="text-[11px] text-muted-foreground mb-2 relative">
                   Como cada pessoa avançou da descoberta até a ação final no período analisado.
                 </p>
+                {(() => {
+                  const first = funnelData[0]?.name?.toLowerCase() || "audiência";
+                  const last = funnelData[funnelData.length - 1]?.name?.toLowerCase() || "ação";
+                  return (
+                    <div className="mb-5 inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-secondary/40 border border-border/60 text-muted-foreground">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <span>
+                        Conversão neste relatório = de <span className="text-foreground font-semibold">{first}</span> até <span className="text-foreground font-semibold">{last}</span>
+                        {" · "}taxa global {globalRate.toFixed(2)}%
+                      </span>
+                    </div>
+                  );
+                })()}
+
 
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
                   {/* Trapezoid funnel */}
