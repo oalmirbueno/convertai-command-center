@@ -28,11 +28,20 @@ interface Props {
 const fmtN = (v: number) => v >= 1000 ? (v / 1000).toFixed(1) + "K" : Math.round(v).toLocaleString("pt-BR");
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-function pickKey(rows: any[], candidates: string[]): string | null {
+/** Busca uma coluna preferindo termos mais específicos (ordem dos candidates importa)
+ *  e ignorando colunas que contenham qualquer dos termos de `exclude` (ex.: "custo por",
+ *  "cpc", "início", "únicos"). Isso evita pegar "Custo por resultados" quando o que
+ *  queremos é "Valor usado" (investimento), ou "Resultados" (conversões). */
+function pickKey(rows: any[], candidates: string[], exclude: string[] = []): string | null {
   if (!rows.length) return null;
   const keys = Object.keys(rows[0]);
+  const isBad = (lk: string) => exclude.some(e => lk.includes(e));
   for (const cand of candidates) {
-    const found = keys.find(k => k.toLowerCase().includes(cand));
+    const c = cand.toLowerCase();
+    const found = keys.find(k => {
+      const lk = k.toLowerCase();
+      return lk.includes(c) && !isBad(lk);
+    });
     if (found) return found;
   }
   return null;
@@ -47,14 +56,24 @@ const tooltipStyle = {
 export default function SourceDashboard({ source, sourceLabel, rows, dimensionKey }: Props) {
   if (!rows || rows.length === 0) return null;
 
-  const spendKey = pickKey(rows, ["spend", "cost", "custo", "investimento", "amount"]);
-  const clicksKey = pickKey(rows, ["click", "clique"]);
-  const impressKey = pickKey(rows, ["impress"]);
-  const reachKey = pickKey(rows, ["reach", "alcance"]);
-  const convKey = pickKey(rows, ["conver", "result", "lead", "messag"]);
-  const revenueKey = pickKey(rows, ["revenue", "receita", "vendas", "sales"]);
-  const ordersKey = pickKey(rows, ["order", "pedido", "purchase", "compra"]);
-  const engagementKey = pickKey(rows, ["engag"]);
+  // Excludes globais — colunas derivadas/qualificadas que NÃO representam volume bruto.
+  const NOT_SPEND   = ["custo por", "cost per", "cpc", "cpm", "cpa", "cpr"];
+  const NOT_CLICKS  = ["custo por", "cost per", "cpc", "ctr", "%", "unico", "único", "único"];
+  const NOT_IMPR    = ["cpm", "custo por", "cost per"];
+  const NOT_REACH   = ["custo por", "cost per", "cpm"];
+  const NOT_CONV    = ["custo por", "cost per", "início", "inicio", "encerramento", "cpa", "cpl"];
+  const NOT_REVENUE = ["custo", "cost", "cpa"];
+  const NOT_ORDERS  = ["custo", "cost", "valor"];
+  const NOT_ENGAG   = ["taxa", "rate", "%"];
+
+  const spendKey      = pickKey(rows, ["valor usado", "valor gasto", "amount spent", "amountspent", "investimento", "investido", "spend", "custo total", "valor"], NOT_SPEND);
+  const clicksKey     = pickKey(rows, ["cliques no link", "link clicks", "cliques (todos)", "cliques todos", "cliques", "clicks"], NOT_CLICKS);
+  const impressKey    = pickKey(rows, ["impressões", "impressoes", "impressions", "impr"], NOT_IMPR);
+  const reachKey      = pickKey(rows, ["alcance", "reach", "pessoas alcanç"], NOT_REACH);
+  const convKey       = pickKey(rows, ["resultados", "results", "conversões", "conversoes", "conversions", "mensagens", "messag", "leads"], NOT_CONV);
+  const revenueKey    = pickKey(rows, ["revenue", "receita", "vendas", "sales", "valor das compras", "valor de conversão"], NOT_REVENUE);
+  const ordersKey     = pickKey(rows, ["pedidos", "orders", "compras", "purchases"], NOT_ORDERS);
+  const engagementKey = pickKey(rows, ["engajamento", "engagement", "interações", "interacoes"], NOT_ENGAG);
 
   const isAds = source === "google_ads" || source === "meta_ads";
   const isSales = source === "sales";
