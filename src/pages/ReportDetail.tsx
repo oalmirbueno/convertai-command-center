@@ -112,10 +112,16 @@ export default function ReportDetail() {
     if (!report) return null;
 
     const m = (report.metrics || {}) as Record<string, any>;
-    const customMetrics = (m.custom || []) as Array<{ label: string; value: number }>;
+    const customMetrics = ((m.custom || []) as Array<{ label: string; value: number }>)
+      .filter(c => c && c.label && Number(c.value) !== 0 && c.value !== null && c.value !== undefined);
+
+    const RATE_KEYS = new Set(["ctr", "cpc", "cpm", "frequency", "engagement_rate", "roas", "cost_per_result", "cost_per_message", "cost_per_lead", "cpa"]);
+
     const standardMetrics = Object.entries(m)
-      .filter(([k]) => k !== "custom" && metricConfig[k] && m[k] !== undefined && m[k] !== null && m[k] !== 0)
+      .filter(([k]) => k !== "custom" && !k.startsWith("__") && metricConfig[k] && m[k] !== undefined && m[k] !== null && Number(m[k]) !== 0)
       .map(([k, v]) => ({ key: k, value: Number(v), ...metricConfig[k] }));
+
+    const volumeMetrics = standardMetrics.filter(sm => !RATE_KEYS.has(sm.key));
 
     const rawChartData = ((report as any).chart_data || []) as Array<Record<string, any>>;
     const chartType = ((report as any).chart_type || "area") as string;
@@ -126,41 +132,29 @@ export default function ReportDetail() {
 
     if (rawChartData.length > 0) {
       chartColumns = Object.keys(rawChartData[0]).filter(k => k !== "label");
-    } else if (standardMetrics.length >= 2 && report.period_start && report.period_end) {
-      // Generate date-based data points from actual report period
-      const numericMetrics = standardMetrics.filter(m => !["engagement", "ctr", "cpa"].includes(m.key));
+    } else if (volumeMetrics.length >= 2 && report.period_start && report.period_end) {
       const start = new Date(report.period_start);
       const end = new Date(report.period_end);
       const totalDays = Math.max(1, daysBetween(report.period_start, report.period_end));
 
-      // Determine granularity based on period length
       let intervals: Date[] = [];
       if (totalDays <= 7) {
-        // Daily
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
-          intervals.push(new Date(d));
-        }
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) intervals.push(new Date(d));
       } else if (totalDays <= 31) {
-        // Every ~3-4 days
         const step = Math.max(1, Math.floor(totalDays / 7));
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + step)) {
-          intervals.push(new Date(d));
-        }
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + step)) intervals.push(new Date(d));
         if (intervals[intervals.length - 1].getTime() < end.getTime()) intervals.push(new Date(end));
       } else {
-        // Weekly
-        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) {
-          intervals.push(new Date(d));
-        }
+        for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 7)) intervals.push(new Date(d));
         if (intervals[intervals.length - 1].getTime() < end.getTime()) intervals.push(new Date(end));
       }
 
+      const topVolume = volumeMetrics.slice(0, 4);
       const n = intervals.length;
       chartData = intervals.map((date, i) => {
         const label = date.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
         const row: Record<string, any> = { label };
-        numericMetrics.slice(0, 4).forEach(metric => {
-          // Distribute total proportionally with slight growth curve
+        topVolume.forEach(metric => {
           const weight = 0.6 + (i / (n - 1 || 1)) * 0.8;
           const base = (metric.value / n) * weight;
           row[metric.shortLabel] = Math.round(Math.max(0, base));
@@ -168,8 +162,7 @@ export default function ReportDetail() {
         return row;
       });
 
-      // Adjust last point so totals approximate the real value
-      numericMetrics.slice(0, 4).forEach(metric => {
+      topVolume.forEach(metric => {
         const currentTotal = chartData.reduce((s, r) => s + (Number(r[metric.shortLabel]) || 0), 0);
         const diff = metric.value - currentTotal;
         if (chartData.length > 0) {
@@ -177,7 +170,7 @@ export default function ReportDetail() {
         }
       });
 
-      chartColumns = numericMetrics.slice(0, 4).map(m => m.shortLabel);
+      chartColumns = topVolume.map(m => m.shortLabel);
     }
 
     // Column stats
@@ -194,131 +187,143 @@ export default function ReportDetail() {
     });
 
     // Pie data from volume metrics
-    const pieMetrics = standardMetrics.filter(m => !["engagement", "ctr", "ad_spend", "cpa"].includes(m.key) && m.value > 0);
-    const pieData = pieMetrics.map((m, i) => ({ name: m.shortLabel, value: m.value, fill: CHART_COLORS[i % CHART_COLORS.length] }));
+    const pieData = volumeMetrics.slice(0, 6).map((mm, i) => ({
+      name: mm.shortLabel, value: mm.value, fill: CHART_COLORS[i % CHART_COLORS.length],
+    }));
 
-    // Radar data: normalize each metric to 0-100 scale relative to benchmark
+    // Radar
     const radarData = standardMetrics
-      .filter(m => m.benchmark && m.benchmark > 0)
-      .map(m => ({
-        metric: m.shortLabel,
-        value: Math.min(Math.round((m.value / m.benchmark!) * 100), 150),
+      .filter(mm => mm.benchmark && mm.benchmark > 0)
+      .map(mm => ({
+        metric: mm.shortLabel,
+        value: Math.min(Math.round((mm.value / mm.benchmark!) * 100), 150),
         fullMark: 150,
       }));
 
-    // Radial bar data for investment efficiency
-    const spend = Number(m.ad_spend) || 0;
-    const msgs = Number(m.conversions) || 0;
-    const clicks = Number(m.clicks) || 0;
-    const reach = Number(m.reach) || 0;
+    // ── SMART USER JOURNEY FUNNEL ─────────────────────────────
+    // Stages adapt to whichever data is present (não foca só em conversão direta)
+    const num = (k: string) => Number(m[k]) || 0;
+    const funnelStages: Array<{ name: string; value: number; fill: string }> = [];
+    const awareness = num("impressions") || num("reach");
+    if (awareness > 0) funnelStages.push({ name: num("impressions") ? "Impressões" : "Alcance", value: awareness, fill: CHART_COLORS[2] });
+    const reachVal = num("reach");
+    if (num("impressions") && reachVal > 0 && reachVal !== awareness) funnelStages.push({ name: "Alcance", value: reachVal, fill: CHART_COLORS[1] });
+    const interest = num("video_views") + num("profile_visits");
+    if (interest > 0) {
+      const lbl = num("profile_visits") && num("video_views") ? "Perfil + Vídeo"
+                 : num("profile_visits") ? "Visitas ao Perfil" : "Views de Vídeo";
+      funnelStages.push({ name: lbl, value: interest, fill: CHART_COLORS[5] });
+    }
+    const traffic = num("link_clicks") || num("clicks");
+    if (traffic > 0) funnelStages.push({ name: num("link_clicks") ? "Cliques no Link" : "Cliques", value: traffic, fill: CHART_COLORS[3] });
+    const landing = num("landing_page_views");
+    if (landing > 0 && landing !== traffic) funnelStages.push({ name: "Visitas na Landing", value: landing, fill: CHART_COLORS[4] });
+    const contact = num("messages") + num("conversions") + num("leads");
+    if (contact > 0) {
+      const parts: string[] = [];
+      if (num("messages") + num("conversions")) parts.push("Conversas");
+      if (num("leads")) parts.push("Leads");
+      funnelStages.push({ name: parts.join(" + "), value: contact, fill: CHART_COLORS[0] });
+    }
+    const sales = num("purchases");
+    if (sales > 0) funnelStages.push({ name: "Compras", value: sales, fill: CHART_COLORS[6] });
+
+    const funnelData = funnelStages.length >= 2
+      ? funnelStages.sort((a, b) => b.value - a.value)
+      : null;
+
+    // Efficiency radial (any cost-per-* present)
+    const spend = num("ad_spend");
     const efficiencyData: Array<{ name: string; value: number; fill: string }> = [];
-    if (spend > 0 && msgs > 0) {
-      const costPerMsg = spend / msgs;
-      efficiencyData.push({ name: "Custo/Msg", value: Math.min(Math.round((1 / costPerMsg) * 100), 100), fill: "hsl(145, 100%, 50%)" });
-    }
-    if (spend > 0 && clicks > 0) {
-      const cpc = spend / clicks;
-      efficiencyData.push({ name: "Custo/Clique", value: Math.min(Math.round((1 / cpc) * 50), 100), fill: "hsl(200, 100%, 50%)" });
-    }
-    if (reach > 0 && clicks > 0) {
-      efficiencyData.push({ name: "Conversão", value: Math.min(Math.round((clicks / reach) * 1000), 100), fill: "hsl(263, 70%, 66%)" });
+    const buildEff = (label: string, value: number, max: number, color: string) => {
+      efficiencyData.push({ name: label, value: Math.min(Math.round((1 / value) * max), 100), fill: color });
+    };
+    if (spend && contact > 0) buildEff("Custo/Conversa", spend / contact, 100, CHART_COLORS[0]);
+    if (spend && traffic > 0) buildEff("Custo/Clique", spend / traffic, 50, CHART_COLORS[1]);
+    if (reachVal && traffic > 0) {
+      efficiencyData.push({ name: "Cliques/Alcance", value: Math.min(Math.round((traffic / reachVal) * 1000), 100), fill: CHART_COLORS[2] });
     }
 
-    // KPI calculations
+    // ── SMART KPIs (qualquer combinação de investimento × resultado) ──
     const kpis: Array<{ label: string; value: string; detail: string; icon: any; color: string; status: "good" | "warning" | "bad" }> = [];
-    if (spend > 0 && msgs > 0) {
-      const costPerMsg = spend / msgs;
-      kpis.push({
-        label: "Custo por Mensagem",
-        value: `R$ ${costPerMsg.toFixed(2)}`,
-        detail: `${msgs} mensagens com R$ ${spend.toFixed(2)} investidos`,
-        icon: DollarSign,
-        color: "hsl(145, 100%, 50%)",
-        status: costPerMsg < 15 ? "good" : costPerMsg < 30 ? "warning" : "bad",
-      });
+    const fmtR = (v: number) => "R$ " + v.toFixed(2);
+
+    if (spend > 0 && contact > 0) {
+      const v = spend / contact;
+      kpis.push({ label: "Custo por Conversa", value: fmtR(v), detail: `${contact} contatos com ${fmtR(spend)} investidos`,
+        icon: MessageCircle, color: "hsl(142, 71%, 45%)", status: v < 15 ? "good" : v < 30 ? "warning" : "bad" });
     }
-    if (spend > 0 && clicks > 0) {
-      const cpc = spend / clicks;
-      kpis.push({
-        label: "Custo por Clique (CPC)",
-        value: `R$ ${cpc.toFixed(2)}`,
-        detail: `${clicks} cliques gerados no período`,
-        icon: MousePointerClick,
-        color: "hsl(200, 100%, 50%)",
-        status: cpc < 2 ? "good" : cpc < 5 ? "warning" : "bad",
-      });
+    if (spend > 0 && traffic > 0) {
+      const v = spend / traffic;
+      kpis.push({ label: "Custo por Clique", value: fmtR(v), detail: `${traffic.toLocaleString("pt-BR")} cliques no período`,
+        icon: MousePointerClick, color: "hsl(200, 100%, 50%)", status: v < 2 ? "good" : v < 5 ? "warning" : "bad" });
     }
-    if (reach > 0 && spend > 0) {
-      const cpm = (spend / reach) * 1000;
-      kpis.push({
-        label: "CPM (Custo por Mil)",
-        value: `R$ ${cpm.toFixed(2)}`,
-        detail: `Custo para alcançar 1.000 pessoas`,
-        icon: Eye,
-        color: "hsl(263, 70%, 66%)",
-        status: cpm < 15 ? "good" : cpm < 40 ? "warning" : "bad",
-      });
+    if (reachVal > 0 && spend > 0) {
+      const v = (spend / reachVal) * 1000;
+      kpis.push({ label: "CPM", value: fmtR(v), detail: `Custo para alcançar 1.000 pessoas`,
+        icon: Eye, color: "hsl(263, 70%, 66%)", status: v < 15 ? "good" : v < 40 ? "warning" : "bad" });
     }
-    if (reach > 0 && clicks > 0) {
-      const convRate = (clicks / reach) * 100;
-      kpis.push({
-        label: "Taxa de Cliques/Alcance",
-        value: `${convRate.toFixed(2)}%`,
-        detail: `${clicks} cliques de ${metricConfig.reach.format(reach)} alcançados`,
-        icon: Target,
-        color: "hsl(38, 92%, 50%)",
-        status: convRate > 1 ? "good" : convRate > 0.3 ? "warning" : "bad",
-      });
+    if (num("profile_visits") > 0 && reachVal > 0) {
+      const r = (num("profile_visits") / reachVal) * 100;
+      kpis.push({ label: "Taxa Perfil/Alcance", value: r.toFixed(2) + "%", detail: `${num("profile_visits").toLocaleString("pt-BR")} visitas vs. alcance`,
+        icon: Target, color: "hsl(190, 90%, 50%)", status: r > 2 ? "good" : r > 0.5 ? "warning" : "bad" });
+    }
+    if (num("profile_visits") > 0 && contact > 0) {
+      const r = (contact / num("profile_visits")) * 100;
+      kpis.push({ label: "Perfil → Conversa", value: r.toFixed(1) + "%", detail: `${contact} de ${num("profile_visits").toLocaleString("pt-BR")} visitantes converteram`,
+        icon: ArrowRight, color: "hsl(145, 100%, 50%)", status: r > 10 ? "good" : r > 3 ? "warning" : "bad" });
+    }
+    if (spend > 0 && num("purchases") > 0) {
+      const v = spend / num("purchases");
+      kpis.push({ label: "Custo por Compra", value: fmtR(v), detail: `${num("purchases")} vendas geradas`,
+        icon: Award, color: "hsl(50, 95%, 55%)", status: v < 50 ? "good" : v < 150 ? "warning" : "bad" });
+    }
+    if (num("roas") > 0) {
+      const v = num("roas");
+      kpis.push({ label: "ROAS", value: v.toFixed(2) + "x", detail: `Retorno sobre o investimento publicitário`,
+        icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 3 ? "good" : v > 1 ? "warning" : "bad" });
     }
 
-    // Auto insights
+    // ── Auto insights ──
     const insights: Array<{ text: string; type: "success" | "info" | "warning" }> = [];
-
-    if (spend > 0 && msgs > 0) {
-      const costPerMsg = spend / msgs;
-      insights.push({
-        text: `Cada mensagem recebida custou em média R$ ${costPerMsg.toFixed(2)} de investimento em mídia. ${costPerMsg < 15 ? "Esse é um custo competitivo para o mercado." : "Há oportunidade de otimizar o custo por lead."}`,
-        type: costPerMsg < 15 ? "success" : "warning",
-      });
+    if (spend > 0 && contact > 0) {
+      const v = spend / contact;
+      insights.push({ text: `Cada conversa iniciada custou em média R$ ${v.toFixed(2)}. ${v < 15 ? "Custo competitivo para o segmento." : "Há espaço para otimizar o custo por contato com testes de criativo e segmentação."}`, type: v < 15 ? "success" : "warning" });
     }
-    if (spend > 0 && clicks > 0) {
-      const cpc = spend / clicks;
-      insights.push({
-        text: `O custo por clique (CPC) ficou em R$ ${cpc.toFixed(2)}. ${cpc < 3 ? "Valor dentro do esperado para campanhas de tráfego." : "Recomendamos ajustar a segmentação para reduzir o CPC."}`,
-        type: cpc < 3 ? "info" : "warning",
-      });
+    if (num("profile_visits") > 0 && contact > 0) {
+      const r = (contact / num("profile_visits")) * 100;
+      insights.push({ text: `${r.toFixed(1)}% das visitas ao perfil viraram conversa — ${r > 10 ? "ótima taxa de conversão entre interesse e contato." : "vale revisar a bio, os destaques e o primeiro post para aumentar a conversão."}`, type: r > 10 ? "success" : "info" });
     }
-    if (m.engagement && (m.engagement as number) > 3) {
-      insights.push({
-        text: `A taxa de engajamento de ${(m.engagement as number).toFixed(1)}% está acima da média de mercado (1-3%), indicando excelente desempenho do conteúdo e boa ressonância com o público-alvo.`,
-        type: "success",
-      });
+    if (spend > 0 && traffic > 0) {
+      const cpc = spend / traffic;
+      insights.push({ text: `CPC médio de R$ ${cpc.toFixed(2)}. ${cpc < 3 ? "Dentro do esperado para campanhas de tráfego." : "Recomendamos ajustar segmentação ou criativos."}`, type: cpc < 3 ? "info" : "warning" });
     }
-    if (reach > 0 && m.impressions) {
-      const freq = (m.impressions as number) / reach;
-      insights.push({
-        text: `A frequência média foi de ${freq.toFixed(1)}x, ou seja, cada pessoa viu o anúncio em média ${freq.toFixed(1)} vezes. ${freq > 3 ? "Considere expandir o público para evitar fadiga de anúncio." : "Frequência saudável para o período."}`,
-        type: freq > 3 ? "warning" : "info",
-      });
+    const engRate = num("engagement_rate") || num("engagement");
+    if (engRate > 3 && num("engagement_rate")) {
+      insights.push({ text: `Taxa de engajamento de ${engRate.toFixed(1)}% acima da média de mercado (1-3%), indicando ótima ressonância do conteúdo.`, type: "success" });
     }
-    if (m.followers_gained && (m.followers_gained as number) > 0) {
-      insights.push({
-        text: `Foram conquistados ${(m.followers_gained as number).toLocaleString("pt-BR")} novos seguidores no período, fortalecendo a base de audiência organicamente.`,
-        type: "success",
-      });
+    if (reachVal > 0 && num("impressions") > 0) {
+      const freq = num("impressions") / reachVal;
+      insights.push({ text: `Frequência média de ${freq.toFixed(1)}x — cada pessoa viu o anúncio ${freq.toFixed(1)} vez(es). ${freq > 3 ? "Considere ampliar o público para evitar fadiga." : "Frequência saudável."}`, type: freq > 3 ? "warning" : "info" });
+    }
+    if (num("followers_gained") > 0) {
+      insights.push({ text: `${num("followers_gained").toLocaleString("pt-BR")} novos seguidores no período, fortalecendo organicamente a base.`, type: "success" });
+    }
+    if (num("roas") > 0) {
+      const v = num("roas");
+      insights.push({ text: `ROAS de ${v.toFixed(2)}x — cada R$ 1 investido retornou R$ ${v.toFixed(2)} em receita.`, type: v > 2 ? "success" : "info" });
     }
 
     // Category grouping
     const categories = new Map<string, typeof standardMetrics>();
-    standardMetrics.forEach(m => {
-      const cat = m.category;
-      if (!categories.has(cat)) categories.set(cat, []);
-      categories.get(cat)!.push(m);
+    standardMetrics.forEach(mm => {
+      if (!categories.has(mm.category)) categories.set(mm.category, []);
+      categories.get(mm.category)!.push(mm);
     });
 
     const periodDays = report.period_start && report.period_end ? daysBetween(report.period_start, report.period_end) : 0;
 
-    return { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, kpis, insights, periodDays, categories, spend, msgs, clicks, reach };
+    return { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories, spend, contact, traffic, reach: reachVal };
   }, [report]);
 
   if (isLoading) {
