@@ -292,7 +292,7 @@ export default function ReportDetail() {
     }
     if (num("profile_visits") > 0 && contact > 0) {
       const r = (contact / num("profile_visits")) * 100;
-      insights.push({ text: `${r.toFixed(1)}% das visitas ao perfil viraram conversa — ${r > 10 ? "ótima taxa de conversão entre interesse e contato." : "vale revisar a bio, os destaques e o primeiro post para aumentar a conversão."}`, type: r > 10 ? "success" : "info" });
+      insights.push({ text: `${r.toFixed(1)}% das visitas ao perfil viraram conversa · ${r > 10 ? "ótima taxa de conversão entre interesse e contato." : "vale revisar a bio, os destaques e o primeiro post para aumentar a conversão."}`, type: r > 10 ? "success" : "info" });
     }
     if (spend > 0 && traffic > 0) {
       const cpc = spend / traffic;
@@ -304,14 +304,14 @@ export default function ReportDetail() {
     }
     if (reachVal > 0 && num("impressions") > 0) {
       const freq = num("impressions") / reachVal;
-      insights.push({ text: `Frequência média de ${freq.toFixed(1)}x — cada pessoa viu o anúncio ${freq.toFixed(1)} vez(es). ${freq > 3 ? "Considere ampliar o público para evitar fadiga." : "Frequência saudável."}`, type: freq > 3 ? "warning" : "info" });
+      insights.push({ text: `Frequência média de ${freq.toFixed(1)}x · cada pessoa viu o anúncio ${freq.toFixed(1)} vez(es). ${freq > 3 ? "Considere ampliar o público para evitar fadiga." : "Frequência saudável."}`, type: freq > 3 ? "warning" : "info" });
     }
     if (num("followers_gained") > 0) {
       insights.push({ text: `${num("followers_gained").toLocaleString("pt-BR")} novos seguidores no período, fortalecendo organicamente a base.`, type: "success" });
     }
     if (num("roas") > 0) {
       const v = num("roas");
-      insights.push({ text: `ROAS de ${v.toFixed(2)}x — cada R$ 1 investido retornou R$ ${v.toFixed(2)} em receita.`, type: v > 2 ? "success" : "info" });
+      insights.push({ text: `ROAS de ${v.toFixed(2)}x · cada R$ 1 investido retornou R$ ${v.toFixed(2)} em receita.`, type: v > 2 ? "success" : "info" });
     }
 
     // Category grouping
@@ -695,13 +695,13 @@ export default function ReportDetail() {
             </div>
           </div>
 
-          {/* Smart Journey Funnel — adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
+          {/* Smart Journey Funnel · adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
           {funnelData && funnelData.length >= 2 && (
             <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
               <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
                 <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                   <Target className="w-4 h-4 text-primary" />
-                  Jornada do Cliente — Funil Inteligente
+                  Jornada do Cliente · Funil Inteligente
                 </h3>
                 <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
                   Taxa global {((funnelData[funnelData.length - 1].value / funnelData[0].value) * 100).toFixed(2)}%
