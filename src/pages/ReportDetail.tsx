@@ -15,8 +15,7 @@ import {
   AreaChart, Area, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis,
-  PolarRadiusAxis, RadialBarChart, RadialBar,
-  FunnelChart, Funnel, LabelList,
+  PolarRadiusAxis,
 } from "recharts";
 import SourceDashboard from "@/components/reports/SourceDashboard";
 
@@ -292,7 +291,7 @@ export default function ReportDetail() {
     }
     if (num("profile_visits") > 0 && contact > 0) {
       const r = (contact / num("profile_visits")) * 100;
-      insights.push({ text: `${r.toFixed(1)}% das visitas ao perfil viraram conversa — ${r > 10 ? "ótima taxa de conversão entre interesse e contato." : "vale revisar a bio, os destaques e o primeiro post para aumentar a conversão."}`, type: r > 10 ? "success" : "info" });
+      insights.push({ text: `${r.toFixed(1)}% das visitas ao perfil viraram conversa · ${r > 10 ? "ótima taxa de conversão entre interesse e contato." : "vale revisar a bio, os destaques e o primeiro post para aumentar a conversão."}`, type: r > 10 ? "success" : "info" });
     }
     if (spend > 0 && traffic > 0) {
       const cpc = spend / traffic;
@@ -304,14 +303,14 @@ export default function ReportDetail() {
     }
     if (reachVal > 0 && num("impressions") > 0) {
       const freq = num("impressions") / reachVal;
-      insights.push({ text: `Frequência média de ${freq.toFixed(1)}x — cada pessoa viu o anúncio ${freq.toFixed(1)} vez(es). ${freq > 3 ? "Considere ampliar o público para evitar fadiga." : "Frequência saudável."}`, type: freq > 3 ? "warning" : "info" });
+      insights.push({ text: `Frequência média de ${freq.toFixed(1)}x · cada pessoa viu o anúncio ${freq.toFixed(1)} vez(es). ${freq > 3 ? "Considere ampliar o público para evitar fadiga." : "Frequência saudável."}`, type: freq > 3 ? "warning" : "info" });
     }
     if (num("followers_gained") > 0) {
       insights.push({ text: `${num("followers_gained").toLocaleString("pt-BR")} novos seguidores no período, fortalecendo organicamente a base.`, type: "success" });
     }
     if (num("roas") > 0) {
       const v = num("roas");
-      insights.push({ text: `ROAS de ${v.toFixed(2)}x — cada R$ 1 investido retornou R$ ${v.toFixed(2)} em receita.`, type: v > 2 ? "success" : "info" });
+      insights.push({ text: `ROAS de ${v.toFixed(2)}x · cada R$ 1 investido retornou R$ ${v.toFixed(2)} em receita.`, type: v > 2 ? "success" : "info" });
     }
 
     // Category grouping
@@ -652,41 +651,70 @@ export default function ReportDetail() {
               </div>
             </div>
 
-            {/* Column stats sidebar */}
+            {/* Análise por Métrica — refinada com sparkline + barra de posição */}
             <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 flex flex-col">
-              <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                 <LayoutGrid className="w-4 h-4 text-primary" />
                 Análise por Métrica
               </h3>
-              <div className="space-y-5 flex-1">
+              <p className="text-[10.5px] text-muted-foreground mb-4">Desempenho consolidado de cada série no período.</p>
+              <div className="space-y-4 flex-1">
                 {colStats.map((cs) => {
                   const TrendIcon = cs.trend > 3 ? ArrowUpRight : cs.trend < -3 ? ArrowDownRight : ArrowRight;
-                  const trendColor = cs.trend > 3 ? "text-primary" : cs.trend < -3 ? "text-destructive" : "text-muted-foreground";
+                  const trendBg = cs.trend > 3 ? "bg-primary/10 text-primary border-primary/20"
+                                : cs.trend < -3 ? "bg-destructive/10 text-destructive border-destructive/20"
+                                : "bg-secondary text-muted-foreground border-border";
+                  const series = chartData.map((r, i) => ({ i, v: Number(r[cs.col]) || 0 }));
                   return (
-                    <div key={cs.col} className="space-y-2">
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="w-3 h-3 rounded-full" style={{ background: cs.color }} />
-                          <span className="text-[12px] font-semibold text-foreground">{cs.col}</span>
+                    <div key={cs.col} className="rounded-xl border border-border/60 bg-secondary/20 p-3.5 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-card" style={{ background: cs.color, boxShadow: `0 0 12px ${cs.color}55` }} />
+                          <span className="text-[12px] font-semibold text-foreground truncate">{cs.col}</span>
                         </div>
-                        <span className={`flex items-center gap-0.5 text-[11px] font-bold ${trendColor}`}>
-                          <TrendIcon className="w-3 h-3" />
+                        <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${trendBg}`}>
+                          <TrendIcon className="w-2.5 h-2.5" />
                           {Math.abs(cs.trend).toFixed(0)}%
                         </span>
                       </div>
-                      <div className="grid grid-cols-3 gap-1.5">
-                        {[
-                          { l: "Total", v: cs.total },
-                          { l: "Média", v: cs.avg },
-                          { l: "Máximo", v: cs.max },
-                        ].map(item => (
-                          <div key={item.l} className="bg-secondary/50 rounded-lg px-2 py-2 text-center">
-                            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">{item.l}</p>
-                            <p className="text-[12px] font-mono font-bold text-foreground mt-0.5">
-                              {item.v >= 1000 ? (item.v / 1000).toFixed(1) + "K" : Math.round(item.v).toLocaleString("pt-BR")}
-                            </p>
+
+                      <div className="flex items-end justify-between gap-3">
+                        <div>
+                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80">Total</p>
+                          <p className="text-xl font-mono font-bold text-foreground leading-none">
+                            {cs.total >= 1000 ? (cs.total / 1000).toFixed(cs.total >= 10000 ? 0 : 1) + "K" : Math.round(cs.total).toLocaleString("pt-BR")}
+                          </p>
+                        </div>
+                        {series.length > 2 && (
+                          <div className="w-24 h-10">
+                            <ResponsiveContainer width="100%" height="100%">
+                              <AreaChart data={series} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                                <defs>
+                                  <linearGradient id={`spk-${cs.col}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stopColor={cs.color} stopOpacity={0.55} />
+                                    <stop offset="100%" stopColor={cs.color} stopOpacity={0} />
+                                  </linearGradient>
+                                </defs>
+                                <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.8} fill={`url(#spk-${cs.col})`} dot={false} />
+                              </AreaChart>
+                            </ResponsiveContainer>
                           </div>
-                        ))}
+                        )}
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 pt-1">
+                        <div className="rounded-lg bg-card/60 border border-border/40 px-2.5 py-1.5">
+                          <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Média</p>
+                          <p className="text-[12px] font-mono font-semibold text-foreground">
+                            {cs.avg >= 1000 ? (cs.avg / 1000).toFixed(1) + "K" : Math.round(cs.avg).toLocaleString("pt-BR")}
+                          </p>
+                        </div>
+                        <div className="rounded-lg bg-card/60 border border-border/40 px-2.5 py-1.5">
+                          <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Pico</p>
+                          <p className="text-[12px] font-mono font-semibold text-foreground">
+                            {cs.max >= 1000 ? (cs.max / 1000).toFixed(1) + "K" : Math.round(cs.max).toLocaleString("pt-BR")}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   );
@@ -695,137 +723,281 @@ export default function ReportDetail() {
             </div>
           </div>
 
-          {/* Smart Journey Funnel — adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
-          {funnelData && funnelData.length >= 2 && (
-            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Target className="w-4 h-4 text-primary" />
-                  Jornada do Cliente — Funil Inteligente
-                </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-                  Taxa global {((funnelData[funnelData.length - 1].value / funnelData[0].value) * 100).toFixed(2)}%
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground mb-4">
-                Como cada pessoa avançou da descoberta até a ação final no período analisado.
-              </p>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2 h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <FunnelChart>
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                        formatter={(v: any) => [Number(v).toLocaleString("pt-BR"), ""]}
-                      />
-                      <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                        {funnelData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                        <LabelList position="right" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={12} />
-                        <LabelList position="center" fill="#000" stroke="none" dataKey="value" formatter={(v: any) => Number(v).toLocaleString("pt-BR")} fontSize={13} />
-                      </Funnel>
-                    </FunnelChart>
-                  </ResponsiveContainer>
+          {/* Smart Journey Funnel · adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
+          {funnelData && funnelData.length >= 2 && (() => {
+            const top = funnelData[0].value;
+            const bottom = funnelData[funnelData.length - 1].value;
+            const globalRate = top > 0 ? (bottom / top) * 100 : 0;
+            const followers = Number((report.metrics as any)?.followers_gained) || 0;
+            const rowH = 64;
+            const totalH = funnelData.length * rowH + 12;
+            return (
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid relative overflow-hidden">
+                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
+                <div className="relative flex items-center justify-between flex-wrap gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Target className="w-4 h-4 text-primary" />
+                    Jornada do Cliente · Funil Inteligente
+                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
+                      Taxa global {globalRate.toFixed(2)}%
+                    </span>
+                    {followers > 0 && (
+                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-secondary text-foreground border border-border font-semibold uppercase tracking-wider inline-flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        +{followers.toLocaleString("pt-BR")} seguidores
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {funnelData.map((stage, i) => {
-                    const prev = i > 0 ? funnelData[i - 1].value : stage.value;
-                    const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
-                    return (
-                      <div key={i} className="bg-secondary/40 rounded-xl p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: stage.fill }} />
-                            <span className="text-[11px] font-semibold text-foreground truncate">{stage.name}</span>
-                          </div>
-                          <span className="text-[10px] font-mono text-muted-foreground">{i > 0 ? rate.toFixed(1) + "%" : "100%"}</span>
-                        </div>
-                        <p className="text-base font-bold font-mono text-foreground mt-0.5">{stage.value.toLocaleString("pt-BR")}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </div>
-          )}
+                <p className="text-[11px] text-muted-foreground mb-5 relative">
+                  Como cada pessoa avançou da descoberta até a ação final no período analisado.
+                </p>
 
-          {/* Secondary charts: Radar + Pie + Efficiency */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Radar Chart */}
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
+                  {/* Trapezoid funnel */}
+                  <div className="lg:col-span-3">
+                    <svg viewBox={`0 0 400 ${totalH}`} className="w-full" style={{ height: totalH }} preserveAspectRatio="none">
+                      <defs>
+                        {funnelData.map((s, i) => (
+                          <linearGradient key={i} id={`fg-${i}`} x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor={s.fill} stopOpacity={0.95} />
+                            <stop offset="100%" stopColor={s.fill} stopOpacity={0.55} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      {funnelData.map((stage, i) => {
+                        const pct = top > 0 ? stage.value / top : 0;
+                        const maxW = 380;
+                        const w = Math.max(64, maxW * (0.25 + 0.75 * pct));
+                        const next = funnelData[i + 1];
+                        const nextPct = next && top > 0 ? next.value / top : pct;
+                        const wNext = next ? Math.max(64, maxW * (0.25 + 0.75 * nextPct)) : w * 0.92;
+                        const cx = 200;
+                        const y = i * rowH + 6;
+                        const h = rowH - 10;
+                        const points = [
+                          [cx - w / 2, y],
+                          [cx + w / 2, y],
+                          [cx + wNext / 2, y + h],
+                          [cx - wNext / 2, y + h],
+                        ].map(p => p.join(",")).join(" ");
+                        return (
+                          <g key={i}>
+                            <polygon
+                              points={points}
+                              fill={`url(#fg-${i})`}
+                              stroke={stage.fill}
+                              strokeWidth={1}
+                              style={{ filter: `drop-shadow(0 4px 12px ${stage.fill}33)` }}
+                            />
+                            <text
+                              x={cx}
+                              y={y + h / 2 + 5}
+                              textAnchor="middle"
+                              fontSize={15}
+                              fontWeight={700}
+                              fill="hsl(var(--background))"
+                              style={{ fontFamily: "JetBrains Mono, monospace" }}
+                            >
+                              {stage.value.toLocaleString("pt-BR")}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+
+                  {/* Stage list */}
+                  <div className="lg:col-span-2 space-y-2">
+                    {funnelData.map((stage, i) => {
+                      const prev = i > 0 ? funnelData[i - 1].value : stage.value;
+                      const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
+                      const dropOff = i > 0 ? prev - stage.value : 0;
+                      return (
+                        <div key={i} className="rounded-xl border border-border/60 bg-secondary/20 p-3 group hover:border-primary/30 transition-colors">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono shrink-0"
+                                style={{ background: `${stage.fill}18`, color: stage.fill, border: `1px solid ${stage.fill}30` }}>
+                                {String(i + 1).padStart(2, "0")}
+                              </span>
+                              <span className="text-[12px] font-semibold text-foreground truncate">{stage.name}</span>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-card border border-border text-foreground">
+                              {i > 0 ? rate.toFixed(1) + "%" : "100%"}
+                            </span>
+                          </div>
+                          <div className="flex items-end justify-between gap-2">
+                            <p className="text-lg font-mono font-bold text-foreground leading-none">
+                              {stage.value.toLocaleString("pt-BR")}
+                            </p>
+                            {dropOff > 0 && (
+                              <span className="text-[9.5px] text-muted-foreground inline-flex items-center gap-0.5">
+                                <ArrowDownRight className="w-2.5 h-2.5 text-destructive" />
+                                {dropOff.toLocaleString("pt-BR")} saíram
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 h-1 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${Math.min((stage.value / top) * 100, 100)}%`, background: `linear-gradient(90deg, ${stage.fill}, ${stage.fill}99)` }}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Distribuição de Resultados · full width donut com legenda lateral */}
+          {pieData.length >= 2 && (() => {
+            const totalPie = pieData.reduce((s, d) => s + d.value, 0);
+            return (
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <PieChartIcon className="w-4 h-4 text-primary" />
+                    Distribuição de Resultados
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                    {pieData.length} métricas
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-4">Participação relativa de cada métrica no resultado total.</p>
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
+                  <div className="lg:col-span-2 h-72 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={68}
+                          outerRadius={108}
+                          paddingAngle={3}
+                          dataKey="value"
+                          stroke="hsl(var(--card))"
+                          strokeWidth={3}
+                        >
+                          {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}
+                          formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Total</p>
+                      <p className="text-2xl font-mono font-bold text-foreground">
+                        {totalPie >= 1000 ? (totalPie / 1000).toFixed(1) + "K" : totalPie.toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-3 space-y-2">
+                    {pieData.map((d, i) => {
+                      const pct = totalPie > 0 ? (d.value / totalPie) * 100 : 0;
+                      return (
+                        <div key={i} className="flex items-center gap-3 rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5">
+                          <span className="w-2.5 h-8 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 12px ${d.fill}55` }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[12px] font-mono font-bold text-foreground">
+                                  {d.value.toLocaleString("pt-BR")}
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground min-w-[42px] text-center">
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}99)` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Radar + Eficiência refinada */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {radarData.length >= 3 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
                   Diagnóstico de Performance
                 </h3>
-                <div className="h-56">
+                <p className="text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={radarData}>
-                      <PolarGrid stroke="hsl(var(--border))" />
-                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                      <defs>
+                        <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
+                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.45} />
+                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.08} />
+                        </radialGradient>
+                      </defs>
+                      <PolarGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600 }} />
                       <PolarRadiusAxis tick={false} axisLine={false} />
-                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="hsl(145, 100%, 50%)" fillOpacity={0.15} strokeWidth={2} />
+                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="url(#radarFill)" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(145, 100%, 50%)", stroke: "hsl(var(--card))", strokeWidth: 2 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: any) => [v + "%", "vs. benchmark"]} />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center mt-2">Comparativo vs. benchmarks de mercado (100% = referência)</p>
               </div>
             )}
 
-            {/* Pie Chart */}
-            {pieData.length >= 2 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <PieChartIcon className="w-4 h-4 text-primary" />
-                  Distribuição de Resultados
-                </h3>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 11 }}
-                        formatter={(value: any) => [Number(value).toLocaleString("pt-BR"), ""]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-wrap gap-2 justify-center mt-2">
-                  {pieData.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
-                      {d.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Efficiency radial */}
             {efficiencyData.length > 0 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Gauge className="w-4 h-4 text-primary" />
                   Índice de Eficiência
                 </h3>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadialBarChart cx="50%" cy="50%" innerRadius="30%" outerRadius="90%" data={efficiencyData} startAngle={180} endAngle={0}>
-                      <RadialBar background dataKey="value" cornerRadius={10} />
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 11 }}
-                      />
-                    </RadialBarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-wrap gap-3 justify-center mt-2">
-                  {efficiencyData.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
-                      {d.name}: {d.value}%
-                    </span>
-                  ))}
+                <p className="text-[11px] text-muted-foreground mb-4">Quanto maior o índice, melhor o aproveitamento da verba.</p>
+                <div className="space-y-4">
+                  {efficiencyData.map((d, i) => {
+                    const grade = d.value >= 70 ? "Excelente" : d.value >= 45 ? "Bom" : d.value >= 25 ? "Regular" : "Crítico";
+                    const gradeColor = d.value >= 70 ? "text-primary border-primary/30 bg-primary/10"
+                                     : d.value >= 45 ? "text-foreground border-border bg-secondary"
+                                     : d.value >= 25 ? "text-warning border-warning/30 bg-warning/10"
+                                     : "text-destructive border-destructive/30 bg-destructive/10";
+                    return (
+                      <div key={i} className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 10px ${d.fill}66` }} />
+                            <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${gradeColor}`}>{grade}</span>
+                            <span className="text-[13px] font-mono font-bold text-foreground tabular-nums w-10 text-right">{d.value}%</span>
+                          </div>
+                        </div>
+                        <div className="relative h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className="absolute inset-y-0 left-1/4 w-px bg-border" />
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                          <div className="absolute inset-y-0 left-3/4 w-px bg-border" />
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                            style={{ width: `${d.value}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}cc)`, boxShadow: `0 0 10px ${d.fill}55` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
