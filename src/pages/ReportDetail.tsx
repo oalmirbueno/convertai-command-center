@@ -725,57 +725,136 @@ export default function ReportDetail() {
           </div>
 
           {/* Smart Journey Funnel · adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
-          {funnelData && funnelData.length >= 2 && (
-            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
-              <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Target className="w-4 h-4 text-primary" />
-                  Jornada do Cliente · Funil Inteligente
-                </h3>
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-                  Taxa global {((funnelData[funnelData.length - 1].value / funnelData[0].value) * 100).toFixed(2)}%
-                </span>
-              </div>
-              <p className="text-[11px] text-muted-foreground mb-4">
-                Como cada pessoa avançou da descoberta até a ação final no período analisado.
-              </p>
-              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-                <div className="lg:col-span-2 h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <FunnelChart>
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                        formatter={(v: any) => [Number(v).toLocaleString("pt-BR"), ""]}
-                      />
-                      <Funnel dataKey="value" data={funnelData} isAnimationActive>
-                        {funnelData.map((d, i) => <Cell key={i} fill={d.fill} />)}
-                        <LabelList position="right" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={12} />
-                        <LabelList position="center" fill="#000" stroke="none" dataKey="value" formatter={(v: any) => Number(v).toLocaleString("pt-BR")} fontSize={13} />
-                      </Funnel>
-                    </FunnelChart>
-                  </ResponsiveContainer>
+          {funnelData && funnelData.length >= 2 && (() => {
+            const top = funnelData[0].value;
+            const bottom = funnelData[funnelData.length - 1].value;
+            const globalRate = top > 0 ? (bottom / top) * 100 : 0;
+            const followers = Number((report.metrics as any)?.followers_gained) || 0;
+            const rowH = 64;
+            const totalH = funnelData.length * rowH + 12;
+            return (
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid relative overflow-hidden">
+                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
+                <div className="relative flex items-center justify-between flex-wrap gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <Target className="w-4 h-4 text-primary" />
+                    Jornada do Cliente · Funil Inteligente
+                  </h3>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
+                      Taxa global {globalRate.toFixed(2)}%
+                    </span>
+                    {followers > 0 && (
+                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-secondary text-foreground border border-border font-semibold uppercase tracking-wider inline-flex items-center gap-1">
+                        <Users className="w-3 h-3" />
+                        +{followers.toLocaleString("pt-BR")} seguidores
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  {funnelData.map((stage, i) => {
-                    const prev = i > 0 ? funnelData[i - 1].value : stage.value;
-                    const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
-                    return (
-                      <div key={i} className="bg-secondary/40 rounded-xl p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-2 min-w-0">
-                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: stage.fill }} />
-                            <span className="text-[11px] font-semibold text-foreground truncate">{stage.name}</span>
+                <p className="text-[11px] text-muted-foreground mb-5 relative">
+                  Como cada pessoa avançou da descoberta até a ação final no período analisado.
+                </p>
+
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
+                  {/* Trapezoid funnel */}
+                  <div className="lg:col-span-3">
+                    <svg viewBox={`0 0 400 ${totalH}`} className="w-full" style={{ height: totalH }} preserveAspectRatio="none">
+                      <defs>
+                        {funnelData.map((s, i) => (
+                          <linearGradient key={i} id={`fg-${i}`} x1="0" y1="0" x2="1" y2="0">
+                            <stop offset="0%" stopColor={s.fill} stopOpacity={0.95} />
+                            <stop offset="100%" stopColor={s.fill} stopOpacity={0.55} />
+                          </linearGradient>
+                        ))}
+                      </defs>
+                      {funnelData.map((stage, i) => {
+                        const pct = top > 0 ? stage.value / top : 0;
+                        const maxW = 380;
+                        const w = Math.max(64, maxW * (0.25 + 0.75 * pct));
+                        const next = funnelData[i + 1];
+                        const nextPct = next && top > 0 ? next.value / top : pct;
+                        const wNext = next ? Math.max(64, maxW * (0.25 + 0.75 * nextPct)) : w * 0.92;
+                        const cx = 200;
+                        const y = i * rowH + 6;
+                        const h = rowH - 10;
+                        const points = [
+                          [cx - w / 2, y],
+                          [cx + w / 2, y],
+                          [cx + wNext / 2, y + h],
+                          [cx - wNext / 2, y + h],
+                        ].map(p => p.join(",")).join(" ");
+                        return (
+                          <g key={i}>
+                            <polygon
+                              points={points}
+                              fill={`url(#fg-${i})`}
+                              stroke={stage.fill}
+                              strokeWidth={1}
+                              style={{ filter: `drop-shadow(0 4px 12px ${stage.fill}33)` }}
+                            />
+                            <text
+                              x={cx}
+                              y={y + h / 2 + 5}
+                              textAnchor="middle"
+                              fontSize={15}
+                              fontWeight={700}
+                              fill="hsl(var(--background))"
+                              style={{ fontFamily: "JetBrains Mono, monospace" }}
+                            >
+                              {stage.value.toLocaleString("pt-BR")}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+
+                  {/* Stage list */}
+                  <div className="lg:col-span-2 space-y-2">
+                    {funnelData.map((stage, i) => {
+                      const prev = i > 0 ? funnelData[i - 1].value : stage.value;
+                      const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
+                      const dropOff = i > 0 ? prev - stage.value : 0;
+                      return (
+                        <div key={i} className="rounded-xl border border-border/60 bg-secondary/20 p-3 group hover:border-primary/30 transition-colors">
+                          <div className="flex items-center justify-between gap-2 mb-1.5">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono shrink-0"
+                                style={{ background: `${stage.fill}18`, color: stage.fill, border: `1px solid ${stage.fill}30` }}>
+                                {String(i + 1).padStart(2, "0")}
+                              </span>
+                              <span className="text-[12px] font-semibold text-foreground truncate">{stage.name}</span>
+                            </div>
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-card border border-border text-foreground">
+                              {i > 0 ? rate.toFixed(1) + "%" : "100%"}
+                            </span>
                           </div>
-                          <span className="text-[10px] font-mono text-muted-foreground">{i > 0 ? rate.toFixed(1) + "%" : "100%"}</span>
+                          <div className="flex items-end justify-between gap-2">
+                            <p className="text-lg font-mono font-bold text-foreground leading-none">
+                              {stage.value.toLocaleString("pt-BR")}
+                            </p>
+                            {dropOff > 0 && (
+                              <span className="text-[9.5px] text-muted-foreground inline-flex items-center gap-0.5">
+                                <ArrowDownRight className="w-2.5 h-2.5 text-destructive" />
+                                {dropOff.toLocaleString("pt-BR")} saíram
+                              </span>
+                            )}
+                          </div>
+                          <div className="mt-2 h-1 rounded-full bg-secondary overflow-hidden">
+                            <div
+                              className="h-full rounded-full transition-all duration-700"
+                              style={{ width: `${Math.min((stage.value / top) * 100, 100)}%`, background: `linear-gradient(90deg, ${stage.fill}, ${stage.fill}99)` }}
+                            />
+                          </div>
                         </div>
-                        <p className="text-base font-bold font-mono text-foreground mt-0.5">{stage.value.toLocaleString("pt-BR")}</p>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Secondary charts: Radar + Pie + Efficiency */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
