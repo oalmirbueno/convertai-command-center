@@ -138,14 +138,17 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
   })).filter(d => d.value > 0);
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
 
-  // ── 3. Funil (Ads): Impressões → Cliques → Conversões ──
+  const convType = detectConvType(convKey, source);
+
+  // ── 3. Funil (Ads): Impressões → Cliques → {convType.noun} ──
   const funnelStages = (isAds && impressKey && clicksKey)
     ? [
         { name: "Impressões", value: rows.reduce((s, r) => s + (Number(r[impressKey]) || 0), 0), fill: PALETTE[2] },
         { name: "Cliques",    value: rows.reduce((s, r) => s + (Number(r[clicksKey]) || 0), 0), fill: PALETTE[1] },
-        ...(convKey ? [{ name: "Conversões", value: rows.reduce((s, r) => s + (Number(r[convKey]) || 0), 0), fill: PALETTE[0] }] : []),
+        ...(convKey ? [{ name: convType.noun, value: rows.reduce((s, r) => s + (Number(r[convKey]) || 0), 0), fill: PALETTE[0] }] : []),
       ].filter(d => d.value > 0)
     : null;
+
 
   // ── 4. Treemap (Sales: receita por produto/canal) ──
   const treemapData = (isSales && revenueKey)
