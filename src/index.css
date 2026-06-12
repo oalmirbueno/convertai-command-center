@@ -334,18 +334,23 @@
 
 /* Print styles for reports */
 @media print {
+  @page { size: A4; margin: 14mm 12mm; }
   nav, .topnav, .sidebar, .no-print, [role="navigation"] { display: none !important; }
-  body { background: white !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  .print-report { max-width: 100% !important; padding: 0 !important; }
-  .print-report .bg-secondary\/30, .print-report .bg-secondary\/50 { background: #f5f5f5 !important; }
-  .bg-card { background: white !important; border: none !important; box-shadow: none !important; }
+  html, body { background: white !important; color: #111 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .print-report { max-width: 100% !important; padding: 0 !important; gap: 14px !important; }
+  .print-report .bg-secondary\/30, .print-report .bg-secondary\/50, .print-report .bg-secondary\/40, .print-report .bg-secondary\/20 { background: #f5f5f5 !important; }
+  .bg-card { background: white !important; border: 1px solid #e5e5e5 !important; box-shadow: none !important; }
   .text-foreground { color: #111 !important; }
-  .text-muted-foreground { color: #666 !important; }
-  .text-primary { color: #00cc66 !important; }
-  .bg-primary { background: #00cc66 !important; }
-  .border-border { border-color: #e0e0e0 !important; }
-  .border-border\/50 { border-color: #eee !important; }
-  /* Hide the modal backdrop and make content full page */
+  .text-muted-foreground, .text-muted-foreground\/60 { color: #555 !important; }
+  .text-primary { color: #00b85a !important; }
+  .bg-primary { background: #00b85a !important; }
+  .border-border, .border-border\/50, .border-border\/40, .border-border\/30 { border-color: #e5e5e5 !important; }
+  /* Charts: keep together, no page break in the middle */
+  section, .page-break-inside-avoid, .recharts-responsive-container, .recharts-wrapper { break-inside: avoid !important; page-break-inside: avoid !important; }
+  h1, h2, h3 { break-after: avoid !important; page-break-after: avoid !important; }
+  /* Hide hover overlays / gradients */
+  .blur-\[80px\], .blur-\[60px\] { display: none !important; }
+  /* Modal backdrop */
   .fixed.inset-0 > .absolute.inset-0 { display: none !important; }
   .fixed.inset-0 { position: static !important; }
   .fixed.inset-0 > .relative { position: static !important; max-width: 100% !important; max-height: none !important; border: none !important; box-shadow: none !important; border-radius: 0 !important; }
