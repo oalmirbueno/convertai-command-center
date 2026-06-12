@@ -28,8 +28,13 @@ export interface ParsedReport {
 }
 
 /* ── Normalizadores ──────────────────────────────────────── */
+// Remove acentos, espaços, parênteses e qualificadores comuns ("(BRL)", "(todos)",
+// "(taxa de cliques no link)" etc.) para que "Valor usado (BRL)" case com "valorusado".
 const norm = (s: string) =>
-  String(s ?? "").toLowerCase().trim().replace(/[\s_\-]+/g, "").replace(/[áàâã]/g, "a")
+  String(s ?? "").toLowerCase().trim()
+    .replace(/\([^)]*\)/g, "")              // remove tudo dentro de parênteses
+    .replace(/[\s_\-/.]+/g, "")
+    .replace(/[áàâã]/g, "a")
     .replace(/[éê]/g, "e").replace(/[í]/g, "i").replace(/[óôõ]/g, "o").replace(/[ú]/g, "u")
     .replace(/[ç]/g, "c");
 
