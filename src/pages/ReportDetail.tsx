@@ -347,7 +347,7 @@ export default function ReportDetail() {
     );
   }
 
-  const { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, kpis, insights, periodDays, categories, spend, msgs, clicks, reach } = analysis;
+  const { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories } = analysis;
 
   const periodLabel = report.period_start && report.period_end
     ? `${fmtDate(report.period_start)} a ${fmtDate(report.period_end)}`
