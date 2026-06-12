@@ -10,9 +10,17 @@ import { useState } from "react";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
 
 const metricLabels: Record<string, string> = {
-  reach: "Alcance", impressions: "Impressões", engagement: "Engaj. %",
-  clicks: "Cliques", ctr: "CTR %", conversions: "Mensagens",
-  followers_gained: "Seguidores", ad_spend: "Investido", cpa: "CPA",
+  reach: "Alcance", impressions: "Impressões", frequency: "Freq.",
+  clicks: "Cliques", link_clicks: "Cliq. Link", ctr: "CTR %", cpc: "CPC", cpm: "CPM",
+  ad_spend: "Investido", results: "Resultados", cost_per_result: "Custo/Result.", cpa: "CPA",
+  messages: "Mensagens", cost_per_message: "Custo/Msg",
+  leads: "Leads", cost_per_lead: "Custo/Lead",
+  profile_visits: "Visitas Perfil", followers_gained: "Novos Seguid.", followers_total: "Seguidores",
+  engagement: "Engaj.", engagement_rate: "Tx. Engaj. %",
+  likes: "Curtidas", comments: "Coment.", shares: "Compart.", saves: "Salvos",
+  video_views: "Views Vídeo", thru_plays: "ThruPlays",
+  purchases: "Compras", revenue: "Receita", roas: "ROAS",
+  conversions: "Conversões",
 };
 
 function formatNumber(n: number) {
@@ -96,13 +104,12 @@ export default function AdminReports() {
 function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onView, onSend }: any) {
   const grouped = groupReports(reports as any[], getClientName);
   const clients = Object.keys(grouped).sort();
-  const [openClients, setOpenClients] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(clients.map(c => [c, true]))
-  );
+  // Pastas iniciam RECOLHIDAS — usuário expande clicando
+  const [openClients, setOpenClients] = useState<Record<string, boolean>>({});
   const [openModels, setOpenModels] = useState<Record<string, boolean>>({});
 
   const toggleClient = (c: string) => setOpenClients(s => ({ ...s, [c]: !s[c] }));
-  const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: s[k] === false ? true : false }));
+  const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: !s[k] }));
 
   return (
     <div className="space-y-3">
@@ -110,7 +117,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
         const models = grouped[client];
         const modelKeys = PERIOD_ORDER.filter(p => models[p]);
         const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
-        const isOpen = openClients[client] !== false;
+        const isOpen = !!openClients[client];
         return (
           <div key={client} className="bg-card border border-border rounded-2xl overflow-hidden">
             <button
@@ -129,7 +136,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
                 {modelKeys.map((model) => {
                   const list = models[model];
                   const key = `${client}::${model}`;
-                  const modelOpen = openModels[key] !== false;
+                  const modelOpen = !!openModels[key];
                   return (
                     <div key={model} className="bg-background/40">
                       <button

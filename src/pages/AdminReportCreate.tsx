@@ -15,15 +15,46 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 const defaultMetrics = [
+  // Alcance e exposição
   { key: "reach", label: "Alcance", suffix: "" },
   { key: "impressions", label: "Impressões", suffix: "" },
-  { key: "engagement", label: "Engajamento", suffix: "%" },
-  { key: "clicks", label: "Cliques", suffix: "" },
+  { key: "frequency", label: "Frequência", suffix: "x" },
+  // Tráfego
+  { key: "clicks", label: "Cliques (Todos)", suffix: "" },
+  { key: "link_clicks", label: "Cliques no Link", suffix: "" },
+  { key: "landing_page_views", label: "Visit. Landing", suffix: "" },
   { key: "ctr", label: "CTR", suffix: "%" },
-  { key: "conversions", label: "Mensagens", suffix: "" },
-  { key: "followers_gained", label: "Novos Seguidores", suffix: "" },
+  { key: "cpc", label: "CPC", suffix: "R$" },
+  { key: "cpm", label: "CPM", suffix: "R$" },
+  // Investimento e resultado
   { key: "ad_spend", label: "Investimento", suffix: "R$" },
+  { key: "results", label: "Resultados", suffix: "" },
+  { key: "cost_per_result", label: "Custo/Resultado", suffix: "R$" },
   { key: "cpa", label: "CPA", suffix: "R$" },
+  // Mensagens / Leads (distintos!)
+  { key: "messages", label: "Mensagens", suffix: "" },
+  { key: "cost_per_message", label: "Custo/Mensagem", suffix: "R$" },
+  { key: "leads", label: "Leads", suffix: "" },
+  { key: "cost_per_lead", label: "Custo/Lead", suffix: "R$" },
+  // Social / Perfil
+  { key: "profile_visits", label: "Visitas ao Perfil", suffix: "" },
+  { key: "followers_gained", label: "Novos Seguidores", suffix: "" },
+  { key: "followers_total", label: "Seguidores (Total)", suffix: "" },
+  { key: "engagement", label: "Engajamento", suffix: "" },
+  { key: "engagement_rate", label: "Taxa Engaj.", suffix: "%" },
+  { key: "likes", label: "Curtidas", suffix: "" },
+  { key: "comments", label: "Comentários", suffix: "" },
+  { key: "shares", label: "Compart.", suffix: "" },
+  { key: "saves", label: "Salvamentos", suffix: "" },
+  // Vídeo
+  { key: "video_views", label: "Views de Vídeo", suffix: "" },
+  { key: "thru_plays", label: "ThruPlays", suffix: "" },
+  // E-commerce
+  { key: "purchases", label: "Compras", suffix: "" },
+  { key: "revenue", label: "Receita", suffix: "R$" },
+  { key: "roas", label: "ROAS", suffix: "x" },
+  { key: "add_to_cart", label: "Add. Carrinho", suffix: "" },
+  { key: "initiate_checkout", label: "Checkout Inic.", suffix: "" },
 ];
 
 interface CustomMetric {
@@ -88,10 +119,19 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       setChartData(parsed.chartData as any);
       setChartColumns(parsed.chartColumns);
       setMetrics(prev => ({ ...prev, ...Object.fromEntries(Object.entries(parsed.metrics).map(([k, v]) => [k, Math.round(Number(v) * 100) / 100])) }));
+      if (parsed.customMetrics?.length) {
+        setCustomMetrics(prev => {
+          const existing = new Set(prev.map(m => m.label.toLowerCase()));
+          const additions = parsed.customMetrics.filter(m => !existing.has(m.label.toLowerCase()));
+          return [...prev, ...additions];
+        });
+      }
       if (parsed.periodStart && !periodStart) setPeriodStart(parsed.periodStart);
       if (parsed.periodEnd && !periodEnd) setPeriodEnd(parsed.periodEnd);
       setParsedSource({ source: parsed.source, label: parsed.sourceLabel, rows: parsed.rows, dimensionKey: parsed.dimensionKey });
-      toast.success(`${parsed.sourceLabel} detectado · ${parsed.rows.length} linhas, ${parsed.chartColumns.length} métricas`);
+      const mappedCount = Object.keys(parsed.metrics).length;
+      const customCount = parsed.customMetrics?.length || 0;
+      toast.success(`${parsed.sourceLabel} · ${parsed.rows.length} linhas · ${mappedCount} métricas mapeadas${customCount ? ` + ${customCount} personalizadas` : ""}`);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao processar arquivo: " + (err?.message || "desconhecido"));
