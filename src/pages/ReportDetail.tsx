@@ -856,84 +856,149 @@ export default function ReportDetail() {
             );
           })()}
 
-          {/* Secondary charts: Radar + Pie + Efficiency */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {/* Radar Chart */}
+          {/* Distribuição de Resultados · full width donut com legenda lateral */}
+          {pieData.length >= 2 && (() => {
+            const totalPie = pieData.reduce((s, d) => s + d.value, 0);
+            return (
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                    <PieChartIcon className="w-4 h-4 text-primary" />
+                    Distribuição de Resultados
+                  </h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground border border-border">
+                    {pieData.length} métricas
+                  </span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mb-4">Participação relativa de cada métrica no resultado total.</p>
+                <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
+                  <div className="lg:col-span-2 h-72 relative">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={68}
+                          outerRadius={108}
+                          paddingAngle={3}
+                          dataKey="value"
+                          stroke="hsl(var(--card))"
+                          strokeWidth={3}
+                        >
+                          {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}
+                          formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                      <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Total</p>
+                      <p className="text-2xl font-mono font-bold text-foreground">
+                        {totalPie >= 1000 ? (totalPie / 1000).toFixed(1) + "K" : totalPie.toLocaleString("pt-BR")}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="lg:col-span-3 space-y-2">
+                    {pieData.map((d, i) => {
+                      const pct = totalPie > 0 ? (d.value / totalPie) * 100 : 0;
+                      return (
+                        <div key={i} className="flex items-center gap-3 rounded-xl border border-border/50 bg-secondary/20 px-3 py-2.5">
+                          <span className="w-2.5 h-8 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 12px ${d.fill}55` }} />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <span className="text-[12px] font-mono font-bold text-foreground">
+                                  {d.value.toLocaleString("pt-BR")}
+                                </span>
+                                <span className="text-[10px] font-mono px-1.5 py-0.5 rounded-md bg-card border border-border text-muted-foreground min-w-[42px] text-center">
+                                  {pct.toFixed(1)}%
+                                </span>
+                              </div>
+                            </div>
+                            <div className="h-1 rounded-full bg-secondary overflow-hidden">
+                              <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}99)` }} />
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Radar + Eficiência refinada */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {radarData.length >= 3 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
                   Diagnóstico de Performance
                 </h3>
-                <div className="h-56">
+                <p className="text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
+                <div className="h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={radarData}>
-                      <PolarGrid stroke="hsl(var(--border))" />
-                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} />
+                      <defs>
+                        <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
+                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.45} />
+                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.08} />
+                        </radialGradient>
+                      </defs>
+                      <PolarGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600 }} />
                       <PolarRadiusAxis tick={false} axisLine={false} />
-                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="hsl(145, 100%, 50%)" fillOpacity={0.15} strokeWidth={2} />
+                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="url(#radarFill)" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(145, 100%, 50%)", stroke: "hsl(var(--card))", strokeWidth: 2 }} />
+                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: any) => [v + "%", "vs. benchmark"]} />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
-                <p className="text-[10px] text-muted-foreground text-center mt-2">Comparativo vs. benchmarks de mercado (100% = referência)</p>
               </div>
             )}
 
-            {/* Pie Chart */}
-            {pieData.length >= 2 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-                  <PieChartIcon className="w-4 h-4 text-primary" />
-                  Distribuição de Resultados
-                </h3>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={pieData} cx="50%" cy="50%" innerRadius={45} outerRadius={70} paddingAngle={4} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                        {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
-                      </Pie>
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 11 }}
-                        formatter={(value: any) => [Number(value).toLocaleString("pt-BR"), ""]}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-wrap gap-2 justify-center mt-2">
-                  {pieData.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
-                      {d.name}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Efficiency radial */}
             {efficiencyData.length > 0 && (
-              <div className="bg-card border border-border rounded-2xl p-5">
-                <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Gauge className="w-4 h-4 text-primary" />
                   Índice de Eficiência
                 </h3>
-                <div className="h-56">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <RadialBarChart cx="50%" cy="50%" innerRadius="30%" outerRadius="90%" data={efficiencyData} startAngle={180} endAngle={0}>
-                      <RadialBar background dataKey="value" cornerRadius={10} />
-                      <Tooltip
-                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 11 }}
-                      />
-                    </RadialBarChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex flex-wrap gap-3 justify-center mt-2">
-                  {efficiencyData.map((d, i) => (
-                    <span key={i} className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-                      <span className="w-2 h-2 rounded-full" style={{ background: d.fill }} />
-                      {d.name}: {d.value}%
-                    </span>
-                  ))}
+                <p className="text-[11px] text-muted-foreground mb-4">Quanto maior o índice, melhor o aproveitamento da verba.</p>
+                <div className="space-y-4">
+                  {efficiencyData.map((d, i) => {
+                    const grade = d.value >= 70 ? "Excelente" : d.value >= 45 ? "Bom" : d.value >= 25 ? "Regular" : "Crítico";
+                    const gradeColor = d.value >= 70 ? "text-primary border-primary/30 bg-primary/10"
+                                     : d.value >= 45 ? "text-foreground border-border bg-secondary"
+                                     : d.value >= 25 ? "text-warning border-warning/30 bg-warning/10"
+                                     : "text-destructive border-destructive/30 bg-destructive/10";
+                    return (
+                      <div key={i} className="space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2 h-2 rounded-full shrink-0" style={{ background: d.fill, boxShadow: `0 0 10px ${d.fill}66` }} />
+                            <span className="text-[12px] font-semibold text-foreground truncate">{d.name}</span>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className={`text-[9.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-md border ${gradeColor}`}>{grade}</span>
+                            <span className="text-[13px] font-mono font-bold text-foreground tabular-nums w-10 text-right">{d.value}%</span>
+                          </div>
+                        </div>
+                        <div className="relative h-2 rounded-full bg-secondary overflow-hidden">
+                          <div className="absolute inset-y-0 left-1/4 w-px bg-border" />
+                          <div className="absolute inset-y-0 left-1/2 w-px bg-border" />
+                          <div className="absolute inset-y-0 left-3/4 w-px bg-border" />
+                          <div
+                            className="absolute inset-y-0 left-0 rounded-full transition-all duration-700"
+                            style={{ width: `${d.value}%`, background: `linear-gradient(90deg, ${d.fill}, ${d.fill}cc)`, boxShadow: `0 0 10px ${d.fill}55` }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
