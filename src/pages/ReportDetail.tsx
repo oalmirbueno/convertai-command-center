@@ -20,20 +20,58 @@ import {
 } from "recharts";
 import SourceDashboard from "@/components/reports/SourceDashboard";
 
+const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
+const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtPct   = (v: number, d = 1) => v.toFixed(d) + "%";
+const fmtMult  = (v: number) => v.toFixed(2) + "x";
+
 /* ── Metric Config ────────────────────────────────────────── */
 const metricConfig: Record<string, {
   label: string; shortLabel: string; format: (v: number) => string;
   icon: any; color: string; unit: string; category: string; benchmark?: number;
 }> = {
-  reach:            { label: "Alcance Total",         shortLabel: "Alcance",     format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(Math.round(v)), icon: Eye,               color: "hsl(200, 100%, 50%)", unit: "pessoas",  category: "Visibilidade", benchmark: 10000 },
-  impressions:      { label: "Impressões Totais",     shortLabel: "Impressões",  format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(Math.round(v)), icon: BarChart3,         color: "hsl(263, 70%, 66%)", unit: "vezes",    category: "Visibilidade", benchmark: 15000 },
-  engagement:       { label: "Taxa de Engajamento",   shortLabel: "Engajamento", format: v => v.toFixed(1) + "%",                                             icon: Zap,               color: "hsl(145, 100%, 50%)", unit: "%",       category: "Interação",    benchmark: 3 },
-  clicks:           { label: "Cliques no Link",       shortLabel: "Cliques",     format: v => v >= 1000 ? (v / 1000).toFixed(1) + "K" : String(Math.round(v)), icon: MousePointerClick, color: "hsl(38, 92%, 50%)",  unit: "cliques",  category: "Conversão",    benchmark: 100 },
-  ctr:              { label: "Click-Through Rate",    shortLabel: "CTR",         format: v => v.toFixed(2) + "%",                                             icon: Target,            color: "hsl(346, 87%, 60%)", unit: "%",        category: "Conversão",    benchmark: 1 },
-  conversions:      { label: "Mensagens Recebidas",   shortLabel: "Mensagens",   format: v => String(Math.round(v)),                                          icon: MessageCircle,     color: "hsl(142, 71%, 45%)", unit: "msgs",     category: "Conversão",    benchmark: 20 },
-  followers_gained: { label: "Novos Seguidores",      shortLabel: "Seguidores",  format: v => "+" + Math.round(v).toLocaleString("pt-BR"),                     icon: Users,             color: "hsl(188, 94%, 43%)", unit: "pessoas",  category: "Crescimento" },
-  ad_spend:         { label: "Investimento em Mídia",  shortLabel: "Investido",   format: v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2 }), icon: DollarSign,       color: "hsl(221, 83%, 53%)", unit: "R$",       category: "Investimento" },
-  cpa:              { label: "Custo por Mensagem",    shortLabel: "CPA",         format: v => "R$ " + v.toFixed(2),                                           icon: DollarSign,        color: "hsl(280, 70%, 60%)", unit: "R$",       category: "Eficiência" },
+  // ── Visibilidade ──
+  reach:              { label: "Alcance Total",          shortLabel: "Alcance",       format: fmtInt,   icon: Eye,               color: "hsl(200, 100%, 50%)", unit: "pessoas",  category: "Visibilidade", benchmark: 10000 },
+  impressions:        { label: "Impressões Totais",      shortLabel: "Impressões",    format: fmtInt,   icon: BarChart3,         color: "hsl(263, 70%, 66%)", unit: "vezes",    category: "Visibilidade", benchmark: 15000 },
+  frequency:          { label: "Frequência Média",       shortLabel: "Frequência",    format: v => v.toFixed(2) + "x", icon: Activity, color: "hsl(220, 70%, 60%)", unit: "x",      category: "Visibilidade" },
+  // ── Tráfego ──
+  clicks:             { label: "Cliques (Todos)",        shortLabel: "Cliques",       format: fmtInt,   icon: MousePointerClick, color: "hsl(38, 92%, 50%)",  unit: "cliques",  category: "Tráfego",      benchmark: 100 },
+  link_clicks:        { label: "Cliques no Link",        shortLabel: "Cliq. Link",    format: fmtInt,   icon: MousePointerClick, color: "hsl(28, 92%, 55%)",  unit: "cliques",  category: "Tráfego" },
+  landing_page_views: { label: "Visitas na Landing",     shortLabel: "Landing",       format: fmtInt,   icon: LayoutGrid,        color: "hsl(18, 88%, 58%)",  unit: "visitas",  category: "Tráfego" },
+  ctr:                { label: "Click-Through Rate",     shortLabel: "CTR",           format: v => fmtPct(v, 2), icon: Target,    color: "hsl(346, 87%, 60%)", unit: "%",        category: "Tráfego",      benchmark: 1 },
+  cpc:                { label: "Custo por Clique",       shortLabel: "CPC",           format: fmtMoney, icon: DollarSign,        color: "hsl(355, 80%, 55%)", unit: "R$",       category: "Tráfego" },
+  cpm:                { label: "Custo por Mil Impr.",    shortLabel: "CPM",           format: fmtMoney, icon: DollarSign,        color: "hsl(330, 75%, 55%)", unit: "R$",       category: "Tráfego" },
+  // ── Investimento ──
+  ad_spend:           { label: "Investimento em Mídia",  shortLabel: "Investido",     format: fmtMoney, icon: DollarSign,        color: "hsl(221, 83%, 53%)", unit: "R$",       category: "Investimento" },
+  results:            { label: "Resultados",             shortLabel: "Resultados",    format: fmtInt,   icon: CheckCircle2,      color: "hsl(160, 70%, 45%)", unit: "result.",  category: "Investimento" },
+  cost_per_result:    { label: "Custo por Resultado",    shortLabel: "Custo/Result.", format: fmtMoney, icon: DollarSign,        color: "hsl(165, 65%, 50%)", unit: "R$",       category: "Investimento" },
+  cpa:                { label: "Custo por Aquisição",    shortLabel: "CPA",           format: fmtMoney, icon: DollarSign,        color: "hsl(280, 70%, 60%)", unit: "R$",       category: "Investimento" },
+  // ── Conversa & Leads ──
+  messages:           { label: "Mensagens Recebidas",    shortLabel: "Mensagens",     format: fmtInt,   icon: MessageCircle,     color: "hsl(142, 71%, 45%)", unit: "msgs",     category: "Conversão",    benchmark: 20 },
+  conversions:        { label: "Conversas Iniciadas",    shortLabel: "Conversas",     format: fmtInt,   icon: MessageCircle,     color: "hsl(135, 75%, 48%)", unit: "conv.",    category: "Conversão" },
+  cost_per_message:   { label: "Custo por Mensagem",     shortLabel: "Custo/Msg",     format: fmtMoney, icon: DollarSign,        color: "hsl(150, 60%, 45%)", unit: "R$",       category: "Conversão" },
+  leads:              { label: "Leads Capturados",       shortLabel: "Leads",         format: fmtInt,   icon: Users,             color: "hsl(170, 75%, 45%)", unit: "leads",    category: "Conversão" },
+  cost_per_lead:      { label: "Custo por Lead",         shortLabel: "Custo/Lead",    format: fmtMoney, icon: DollarSign,        color: "hsl(178, 70%, 45%)", unit: "R$",       category: "Conversão" },
+  // ── Perfil & Crescimento ──
+  profile_visits:     { label: "Visitas ao Perfil",      shortLabel: "Vis. Perfil",   format: fmtInt,   icon: Eye,               color: "hsl(190, 90%, 50%)", unit: "visitas",  category: "Perfil" },
+  followers_gained:   { label: "Novos Seguidores",       shortLabel: "Novos Seg.",    format: v => "+" + fmtInt(v), icon: Users,  color: "hsl(188, 94%, 43%)", unit: "pessoas",  category: "Perfil" },
+  followers_total:    { label: "Total de Seguidores",    shortLabel: "Seguidores",    format: fmtInt,   icon: Users,             color: "hsl(195, 85%, 50%)", unit: "pessoas",  category: "Perfil" },
+  // ── Interação ──
+  engagement:         { label: "Engajamento Total",      shortLabel: "Engajamento",   format: fmtInt,   icon: Zap,               color: "hsl(145, 100%, 50%)", unit: "interações", category: "Interação" },
+  engagement_rate:    { label: "Taxa de Engajamento",    shortLabel: "Taxa Engaj.",   format: v => fmtPct(v, 2), icon: Zap,       color: "hsl(140, 95%, 50%)", unit: "%",        category: "Interação",    benchmark: 3 },
+  likes:              { label: "Curtidas",               shortLabel: "Curtidas",      format: fmtInt,   icon: Star,              color: "hsl(350, 85%, 60%)", unit: "likes",    category: "Interação" },
+  comments:           { label: "Comentários",            shortLabel: "Coment.",       format: fmtInt,   icon: MessageCircle,     color: "hsl(45, 90%, 55%)",  unit: "coment.",  category: "Interação" },
+  shares:             { label: "Compartilhamentos",      shortLabel: "Compart.",      format: fmtInt,   icon: ArrowUpRight,      color: "hsl(210, 85%, 60%)", unit: "compart.", category: "Interação" },
+  saves:              { label: "Salvamentos",            shortLabel: "Salvos",        format: fmtInt,   icon: Award,             color: "hsl(260, 75%, 60%)", unit: "salvos",   category: "Interação" },
+  // ── Vídeo ──
+  video_views:        { label: "Visualizações de Vídeo", shortLabel: "Views Vídeo",   format: fmtInt,   icon: Eye,               color: "hsl(295, 75%, 60%)", unit: "views",    category: "Vídeo" },
+  thru_plays:         { label: "ThruPlays (Vídeo)",      shortLabel: "ThruPlays",     format: fmtInt,   icon: Eye,               color: "hsl(310, 75%, 58%)", unit: "plays",    category: "Vídeo" },
+  // ── E-commerce ──
+  purchases:          { label: "Compras Realizadas",     shortLabel: "Compras",       format: fmtInt,   icon: Award,             color: "hsl(50, 95%, 55%)",  unit: "compras",  category: "E-commerce" },
+  revenue:            { label: "Receita Gerada",         shortLabel: "Receita",       format: fmtMoney, icon: DollarSign,        color: "hsl(55, 95%, 55%)",  unit: "R$",       category: "E-commerce" },
+  roas:               { label: "ROAS",                   shortLabel: "ROAS",          format: fmtMult,  icon: TrendingUp,        color: "hsl(60, 90%, 50%)",  unit: "x",        category: "E-commerce" },
+  add_to_cart:        { label: "Adições ao Carrinho",    shortLabel: "Add Carrinho",  format: fmtInt,   icon: ArrowRight,        color: "hsl(35, 90%, 55%)",  unit: "items",    category: "E-commerce" },
+  initiate_checkout:  { label: "Checkouts Iniciados",    shortLabel: "Checkout",      format: fmtInt,   icon: ArrowRight,        color: "hsl(30, 90%, 55%)",  unit: "checkouts", category: "E-commerce" },
 };
 
 const CHART_COLORS = [
