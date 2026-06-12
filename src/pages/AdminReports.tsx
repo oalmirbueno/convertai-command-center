@@ -104,13 +104,12 @@ export default function AdminReports() {
 function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onView, onSend }: any) {
   const grouped = groupReports(reports as any[], getClientName);
   const clients = Object.keys(grouped).sort();
-  const [openClients, setOpenClients] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(clients.map(c => [c, true]))
-  );
+  // Pastas iniciam RECOLHIDAS — usuário expande clicando
+  const [openClients, setOpenClients] = useState<Record<string, boolean>>({});
   const [openModels, setOpenModels] = useState<Record<string, boolean>>({});
 
   const toggleClient = (c: string) => setOpenClients(s => ({ ...s, [c]: !s[c] }));
-  const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: s[k] === false ? true : false }));
+  const toggleModel = (k: string) => setOpenModels(s => ({ ...s, [k]: !s[k] }));
 
   return (
     <div className="space-y-3">
@@ -118,7 +117,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
         const models = grouped[client];
         const modelKeys = PERIOD_ORDER.filter(p => models[p]);
         const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
-        const isOpen = openClients[client] !== false;
+        const isOpen = !!openClients[client];
         return (
           <div key={client} className="bg-card border border-border rounded-2xl overflow-hidden">
             <button
