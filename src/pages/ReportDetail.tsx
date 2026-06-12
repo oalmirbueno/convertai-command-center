@@ -695,6 +695,59 @@ export default function ReportDetail() {
             </div>
           </div>
 
+          {/* Smart Journey Funnel — adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
+          {funnelData && funnelData.length >= 2 && (
+            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+              <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" />
+                  Jornada do Cliente — Funil Inteligente
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
+                  Taxa global {((funnelData[funnelData.length - 1].value / funnelData[0].value) * 100).toFixed(2)}%
+                </span>
+              </div>
+              <p className="text-[11px] text-muted-foreground mb-4">
+                Como cada pessoa avançou da descoberta até a ação final no período analisado.
+              </p>
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                <div className="lg:col-span-2 h-72">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <FunnelChart>
+                      <Tooltip
+                        contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                        formatter={(v: any) => [Number(v).toLocaleString("pt-BR"), ""]}
+                      />
+                      <Funnel dataKey="value" data={funnelData} isAnimationActive>
+                        {funnelData.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                        <LabelList position="right" fill="hsl(var(--foreground))" stroke="none" dataKey="name" fontSize={12} />
+                        <LabelList position="center" fill="#000" stroke="none" dataKey="value" formatter={(v: any) => Number(v).toLocaleString("pt-BR")} fontSize={13} />
+                      </Funnel>
+                    </FunnelChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="space-y-2">
+                  {funnelData.map((stage, i) => {
+                    const prev = i > 0 ? funnelData[i - 1].value : stage.value;
+                    const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
+                    return (
+                      <div key={i} className="bg-secondary/40 rounded-xl p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: stage.fill }} />
+                            <span className="text-[11px] font-semibold text-foreground truncate">{stage.name}</span>
+                          </div>
+                          <span className="text-[10px] font-mono text-muted-foreground">{i > 0 ? rate.toFixed(1) + "%" : "100%"}</span>
+                        </div>
+                        <p className="text-base font-bold font-mono text-foreground mt-0.5">{stage.value.toLocaleString("pt-BR")}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Secondary charts: Radar + Pie + Efficiency */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {/* Radar Chart */}
