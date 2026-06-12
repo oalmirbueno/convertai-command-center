@@ -18,6 +18,8 @@ export interface ParsedReport {
   totals: Record<string, number>;
   /** Métricas mapeadas para o schema interno (reach, clicks, ad_spend, etc.) */
   metrics: Record<string, number>;
+  /** Métricas detectadas como numéricas mas SEM mapeamento → auto-personalizadas */
+  customMetrics: Array<{ label: string; value: number }>;
   /** Período inferido a partir de coluna de data, se houver */
   periodStart?: string;
   periodEnd?: string;
