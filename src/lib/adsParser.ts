@@ -275,8 +275,7 @@ export function parseMatrix(matrix: any[][]): ParsedReport {
   const metrics: Record<string, number> = {};
   numericCols.forEach(c => {
     if (!c.metricKey) return;
-    // métricas de taxa (CTR, engagement) usam média; demais somam
-    if (["ctr", "engagement", "cpc", "cpm", "cpa", "roas"].includes(c.metricKey)) {
+    if (RATE_METRICS.has(c.metricKey)) {
       const vals = rows.map(r => Number(r[c.clean]) || 0).filter(v => v > 0);
       metrics[c.metricKey] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
     } else {
@@ -284,10 +283,16 @@ export function parseMatrix(matrix: any[][]): ParsedReport {
     }
   });
 
+  // Colunas numéricas SEM mapeamento → viram métricas "personalizadas" (totalizadas)
+  const customMetrics: Array<{ label: string; value: number }> = numericCols
+    .filter(c => !c.metricKey)
+    .map(c => ({ label: c.clean, value: Math.round((totals[c.clean] || 0) * 100) / 100 }))
+    .filter(m => m.value !== 0);
+
   return {
     source, sourceLabel, chartData,
     chartColumns: numericCols.map(c => c.clean),
-    rows, totals, metrics, periodStart, periodEnd,
+    rows, totals, metrics, customMetrics, periodStart, periodEnd,
     dimensionKey: dim.key,
   };
 }
