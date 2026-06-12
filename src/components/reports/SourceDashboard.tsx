@@ -47,11 +47,46 @@ function pickKey(rows: any[], candidates: string[], exclude: string[] = []): str
   return null;
 }
 
+/** Infere o TIPO de conversão a partir do nome da coluna detectada como "resultados".
+ *  Evita o termo genérico "Conversões" — o cliente precisa saber conversão DE QUÊ. */
+function detectConvType(convKey: string | null, source: string): {
+  noun: string;          // rótulo curto p/ KPI/funil (ex.: "Mensagens")
+  short: string;         // versão muito curta p/ chips (ex.: "msgs")
+  explainer: string;     // frase explicativa (ex.: "conversas iniciadas pelo anúncio")
+} {
+  const k = (convKey || "").toLowerCase();
+  if (!convKey) {
+    return { noun: source === "sales" ? "Vendas" : "Resultados", short: "result.",
+             explainer: "ações que o anúncio gerou no período" };
+  }
+  if (/mensag|conversa|messag|chat|whats/.test(k))
+    return { noun: "Mensagens",      short: "msgs",     explainer: "conversas iniciadas a partir do anúncio (clicaram em 'Enviar mensagem')" };
+  if (/lead|cadastr|formul/.test(k))
+    return { noun: "Leads",          short: "leads",    explainer: "cadastros recebidos via formulário do anúncio" };
+  if (/compra|purchase|pedido|order|venda|sale/.test(k))
+    return { noun: "Compras",        short: "vendas",   explainer: "vendas concluídas atribuídas ao anúncio" };
+  if (/instal|install|app/.test(k))
+    return { noun: "Instalações",    short: "installs", explainer: "instalações de app geradas pelo anúncio" };
+  if (/visualiz|view|reprod|play/.test(k))
+    return { noun: "Visualizações",  short: "views",    explainer: "visualizações de vídeo/conteúdo geradas pelo anúncio" };
+  if (/cadastr|sign|inscr|register/.test(k))
+    return { noun: "Inscrições",     short: "inscr.",   explainer: "inscrições/cadastros gerados" };
+  if (/contat|chamad|call/.test(k))
+    return { noun: "Contatos",       short: "contatos", explainer: "contatos diretos gerados pelo anúncio" };
+  if (/resultado|result/.test(k))
+    // "Resultados" é a métrica nativa do Meta — usamos a própria coluna como subtítulo
+    return { noun: "Resultados",     short: "result.",  explainer: `meta de otimização configurada no anúncio (coluna "${convKey}")` };
+  // fallback: usa o próprio nome da coluna como rótulo (capitalizado)
+  const pretty = convKey.replace(/\b\w/g, c => c.toUpperCase());
+  return { noun: pretty, short: pretty.slice(0, 8).toLowerCase(), explainer: `valor agregado da coluna "${convKey}"` };
+}
+
 const tooltipStyle = {
   background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
   borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))",
   boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
 };
+
 
 export default function SourceDashboard({ source, sourceLabel, rows, dimensionKey }: Props) {
   if (!rows || rows.length === 0) return null;
@@ -103,14 +138,17 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
   })).filter(d => d.value > 0);
   const pieTotal = pieData.reduce((s, d) => s + d.value, 0);
 
-  // ── 3. Funil (Ads): Impressões → Cliques → Conversões ──
+  const convType = detectConvType(convKey, source);
+
+  // ── 3. Funil (Ads): Impressões → Cliques → {convType.noun} ──
   const funnelStages = (isAds && impressKey && clicksKey)
     ? [
         { name: "Impressões", value: rows.reduce((s, r) => s + (Number(r[impressKey]) || 0), 0), fill: PALETTE[2] },
         { name: "Cliques",    value: rows.reduce((s, r) => s + (Number(r[clicksKey]) || 0), 0), fill: PALETTE[1] },
-        ...(convKey ? [{ name: "Conversões", value: rows.reduce((s, r) => s + (Number(r[convKey]) || 0), 0), fill: PALETTE[0] }] : []),
+        ...(convKey ? [{ name: convType.noun, value: rows.reduce((s, r) => s + (Number(r[convKey]) || 0), 0), fill: PALETTE[0] }] : []),
       ].filter(d => d.value > 0)
     : null;
+
 
   // ── 4. Treemap (Sales: receita por produto/canal) ──
   const treemapData = (isSales && revenueKey)
@@ -135,7 +173,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
     if (totalSpend > 0) heroKpis.push({ label: "Investido", value: fmtMoney(totalSpend), icon: DollarSign, color: PALETTE[0] });
     if (totalImpr > 0)  heroKpis.push({ label: "Impressões", value: fmtN(totalImpr), icon: Activity, color: PALETTE[2] });
     if (totalClicks > 0) heroKpis.push({ label: "Cliques", value: fmtN(totalClicks), sub: totalImpr > 0 ? `CTR ${((totalClicks/totalImpr)*100).toFixed(2)}%` : undefined, icon: Target, color: PALETTE[1] });
-    if (totalConv > 0)   heroKpis.push({ label: "Conversões", value: fmtN(totalConv), sub: totalSpend > 0 ? `CPA ${fmtMoney(totalSpend/totalConv)}` : undefined, icon: TrendingUp, color: PALETTE[3] });
+    if (totalConv > 0)   heroKpis.push({ label: convType.noun, value: fmtN(totalConv), sub: totalSpend > 0 ? `Custo ${fmtMoney(totalSpend/totalConv)} / ${convType.short}` : convType.explainer.split("(")[0].trim().slice(0, 32), icon: TrendingUp, color: PALETTE[3] });
   } else if (isSales) {
     if (totalRevenue > 0) heroKpis.push({ label: "Receita", value: fmtMoney(totalRevenue), icon: DollarSign, color: PALETTE[0] });
     if (totalOrders > 0)  heroKpis.push({ label: "Pedidos", value: fmtN(totalOrders), icon: ShoppingCart, color: PALETTE[1] });
@@ -194,15 +232,22 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
             <div className="relative flex items-center justify-between flex-wrap gap-2 mb-1">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary" />
-                Funil de Conversão · {sourceLabel}
+                Funil de {convType.noun} · {sourceLabel}
               </h3>
               <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-                Taxa global {globalRate.toFixed(2)}%
+                {convType.short} / impressão · {globalRate.toFixed(2)}%
               </span>
             </div>
-            <p className="text-[11px] text-muted-foreground mb-5 relative">
-              Como cada impressão evoluiu até a conversão no período analisado.
+            <p className="text-[11px] text-muted-foreground mb-2 relative">
+              Como cada impressão evoluiu até virar <span className="text-foreground font-semibold">{convType.noun.toLowerCase()}</span> no período.
             </p>
+            {convKey && (
+              <div className="mb-5 inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-secondary/40 border border-border/60 text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                <span>Conversão = <span className="text-foreground font-semibold">{convType.noun}</span> · {convType.explainer}</span>
+              </div>
+            )}
+
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
               {/* Trapezoid funnel */}
