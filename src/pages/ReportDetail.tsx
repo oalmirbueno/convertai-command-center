@@ -16,6 +16,7 @@ import {
   XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
   PieChart, Pie, Cell, RadarChart, Radar, PolarGrid, PolarAngleAxis,
   PolarRadiusAxis, RadialBarChart, RadialBar,
+  FunnelChart, Funnel, LabelList,
 } from "recharts";
 import SourceDashboard from "@/components/reports/SourceDashboard";
 
