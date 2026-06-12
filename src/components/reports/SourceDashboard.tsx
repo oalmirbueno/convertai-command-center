@@ -47,11 +47,46 @@ function pickKey(rows: any[], candidates: string[], exclude: string[] = []): str
   return null;
 }
 
+/** Infere o TIPO de conversão a partir do nome da coluna detectada como "resultados".
+ *  Evita o termo genérico "Conversões" — o cliente precisa saber conversão DE QUÊ. */
+function detectConvType(convKey: string | null, source: string): {
+  noun: string;          // rótulo curto p/ KPI/funil (ex.: "Mensagens")
+  short: string;         // versão muito curta p/ chips (ex.: "msgs")
+  explainer: string;     // frase explicativa (ex.: "conversas iniciadas pelo anúncio")
+} {
+  const k = (convKey || "").toLowerCase();
+  if (!convKey) {
+    return { noun: source === "sales" ? "Vendas" : "Resultados", short: "result.",
+             explainer: "ações que o anúncio gerou no período" };
+  }
+  if (/mensag|conversa|messag|chat|whats/.test(k))
+    return { noun: "Mensagens",      short: "msgs",     explainer: "conversas iniciadas a partir do anúncio (clicaram em 'Enviar mensagem')" };
+  if (/lead|cadastr|formul/.test(k))
+    return { noun: "Leads",          short: "leads",    explainer: "cadastros recebidos via formulário do anúncio" };
+  if (/compra|purchase|pedido|order|venda|sale/.test(k))
+    return { noun: "Compras",        short: "vendas",   explainer: "vendas concluídas atribuídas ao anúncio" };
+  if (/instal|install|app/.test(k))
+    return { noun: "Instalações",    short: "installs", explainer: "instalações de app geradas pelo anúncio" };
+  if (/visualiz|view|reprod|play/.test(k))
+    return { noun: "Visualizações",  short: "views",    explainer: "visualizações de vídeo/conteúdo geradas pelo anúncio" };
+  if (/cadastr|sign|inscr|register/.test(k))
+    return { noun: "Inscrições",     short: "inscr.",   explainer: "inscrições/cadastros gerados" };
+  if (/contat|chamad|call/.test(k))
+    return { noun: "Contatos",       short: "contatos", explainer: "contatos diretos gerados pelo anúncio" };
+  if (/resultado|result/.test(k))
+    // "Resultados" é a métrica nativa do Meta — usamos a própria coluna como subtítulo
+    return { noun: "Resultados",     short: "result.",  explainer: `meta de otimização configurada no anúncio (coluna "${convKey}")` };
+  // fallback: usa o próprio nome da coluna como rótulo (capitalizado)
+  const pretty = convKey.replace(/\b\w/g, c => c.toUpperCase());
+  return { noun: pretty, short: pretty.slice(0, 8).toLowerCase(), explainer: `valor agregado da coluna "${convKey}"` };
+}
+
 const tooltipStyle = {
   background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
   borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))",
   boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
 };
+
 
 export default function SourceDashboard({ source, sourceLabel, rows, dimensionKey }: Props) {
   if (!rows || rows.length === 0) return null;
