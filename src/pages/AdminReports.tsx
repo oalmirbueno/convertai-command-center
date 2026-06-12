@@ -136,7 +136,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
                 {modelKeys.map((model) => {
                   const list = models[model];
                   const key = `${client}::${model}`;
-                  const modelOpen = openModels[key] !== false;
+                  const modelOpen = !!openModels[key];
                   return (
                     <div key={model} className="bg-background/40">
                       <button
