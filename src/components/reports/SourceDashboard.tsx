@@ -232,15 +232,22 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
             <div className="relative flex items-center justify-between flex-wrap gap-2 mb-1">
               <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                 <Target className="w-4 h-4 text-primary" />
-                Funil de Conversão · {sourceLabel}
+                Funil de {convType.noun} · {sourceLabel}
               </h3>
               <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-                Taxa global {globalRate.toFixed(2)}%
+                {convType.short} / impressão · {globalRate.toFixed(2)}%
               </span>
             </div>
-            <p className="text-[11px] text-muted-foreground mb-5 relative">
-              Como cada impressão evoluiu até a conversão no período analisado.
+            <p className="text-[11px] text-muted-foreground mb-2 relative">
+              Como cada impressão evoluiu até virar <span className="text-foreground font-semibold">{convType.noun.toLowerCase()}</span> no período.
             </p>
+            {convKey && (
+              <div className="mb-5 inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-secondary/40 border border-border/60 text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                <span>Conversão = <span className="text-foreground font-semibold">{convType.noun}</span> · {convType.explainer}</span>
+              </div>
+            )}
+
 
             <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
               {/* Trapezoid funnel */}
