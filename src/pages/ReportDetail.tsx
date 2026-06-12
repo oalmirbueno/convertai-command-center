@@ -627,91 +627,94 @@ export default function ReportDetail() {
             Evolução e Análise Visual
           </h2>
 
-          {/* Main chart + column analysis */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-            <div className="lg:col-span-2 bg-card border border-border rounded-2xl p-5 sm:p-6">
-              <div className="flex items-center justify-between mb-5">
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  <Activity className="w-4 h-4 text-primary" />
-                  Evolução do Período
-                </h3>
-                <div className="flex items-center gap-3 flex-wrap">
-                  {chartColumns.map((col, i) => (
-                    <span key={col} className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
-                      {col}
-                    </span>
-                  ))}
-                </div>
-              </div>
-              <div className="h-64 sm:h-80">
-                <ResponsiveContainer width="100%" height="100%">
-                  {renderMainChart()!}
-                </ResponsiveContainer>
+          {/* Main chart — agora ocupa largura total para evitar espaço vazio */}
+          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
+            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
+              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                <Activity className="w-4 h-4 text-primary" />
+                Evolução do Período
+              </h3>
+              <div className="flex items-center gap-3 flex-wrap">
+                {chartColumns.map((col, i) => (
+                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                    {col}
+                  </span>
+                ))}
               </div>
             </div>
+            <div className="h-72 sm:h-96">
+              <ResponsiveContainer width="100%" height="100%">
+                {renderMainChart()!}
+              </ResponsiveContainer>
+            </div>
+          </div>
 
-            {/* Análise por Métrica — refinada com sparkline + barra de posição */}
-            <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 flex flex-col">
-              <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
-                <LayoutGrid className="w-4 h-4 text-primary" />
-                Análise por Métrica
-              </h3>
-              <p className="text-[10.5px] text-muted-foreground mb-4">Desempenho consolidado de cada série no período.</p>
-              <div className="space-y-4 flex-1">
+          {/* Análise por Métrica — agora abaixo do gráfico, cards lado-a-lado (estilo Rams) */}
+          {colStats.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between flex-wrap gap-2 px-1">
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <LayoutGrid className="w-4 h-4 text-primary" />
+                  Análise por Métrica
+                </h3>
+                <p className="text-[10.5px] text-muted-foreground">Desempenho consolidado de cada série · {colStats.length} {colStats.length === 1 ? "métrica" : "métricas"}</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
                 {colStats.map((cs) => {
                   const TrendIcon = cs.trend > 3 ? ArrowUpRight : cs.trend < -3 ? ArrowDownRight : ArrowRight;
                   const trendBg = cs.trend > 3 ? "bg-primary/10 text-primary border-primary/20"
                                 : cs.trend < -3 ? "bg-destructive/10 text-destructive border-destructive/20"
                                 : "bg-secondary text-muted-foreground border-border";
                   const series = chartData.map((r, i) => ({ i, v: Number(r[cs.col]) || 0 }));
+                  const safeId = cs.col.replace(/[^a-zA-Z0-9]/g, "_");
                   return (
-                    <div key={cs.col} className="rounded-xl border border-border/60 bg-secondary/20 p-3.5 space-y-2.5">
-                      <div className="flex items-center justify-between gap-2">
+                    <div key={cs.col} className="group relative rounded-2xl border border-border bg-card p-4 hover:border-primary/30 transition-all overflow-hidden">
+                      <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-[0.06] pointer-events-none" style={{ background: cs.color, transform: "translate(35%,-35%)" }} />
+                      <div className="relative flex items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2 min-w-0">
                           <span className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-card" style={{ background: cs.color, boxShadow: `0 0 12px ${cs.color}55` }} />
-                          <span className="text-[12px] font-semibold text-foreground truncate">{cs.col}</span>
+                          <span className="text-[11.5px] font-semibold text-foreground truncate">{cs.col}</span>
                         </div>
-                        <span className={`flex items-center gap-1 text-[10px] font-bold px-1.5 py-0.5 rounded-md border ${trendBg}`}>
+                        <span className={`flex items-center gap-1 text-[9.5px] font-bold px-1.5 py-0.5 rounded-md border ${trendBg}`}>
                           <TrendIcon className="w-2.5 h-2.5" />
                           {Math.abs(cs.trend).toFixed(0)}%
                         </span>
                       </div>
 
-                      <div className="flex items-end justify-between gap-3">
-                        <div>
-                          <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80">Total</p>
-                          <p className="text-xl font-mono font-bold text-foreground leading-none">
-                            {cs.total >= 1000 ? (cs.total / 1000).toFixed(cs.total >= 10000 ? 0 : 1) + "K" : Math.round(cs.total).toLocaleString("pt-BR")}
-                          </p>
-                        </div>
-                        {series.length > 2 && (
-                          <div className="w-24 h-10">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <AreaChart data={series} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-                                <defs>
-                                  <linearGradient id={`spk-${cs.col}`} x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stopColor={cs.color} stopOpacity={0.55} />
-                                    <stop offset="100%" stopColor={cs.color} stopOpacity={0} />
-                                  </linearGradient>
-                                </defs>
-                                <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.8} fill={`url(#spk-${cs.col})`} dot={false} />
-                              </AreaChart>
-                            </ResponsiveContainer>
-                          </div>
-                        )}
+                      <div className="relative">
+                        <p className="text-[9px] uppercase tracking-wider text-muted-foreground/80">Total</p>
+                        <p className="text-2xl font-mono font-bold text-foreground leading-none mt-0.5">
+                          {cs.total >= 1000 ? (cs.total / 1000).toFixed(cs.total >= 10000 ? 0 : 1) + "K" : Math.round(cs.total).toLocaleString("pt-BR")}
+                        </p>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 pt-1">
-                        <div className="rounded-lg bg-card/60 border border-border/40 px-2.5 py-1.5">
+                      {series.length > 2 && (
+                        <div className="relative h-12 mt-3 -mx-1">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart data={series} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
+                              <defs>
+                                <linearGradient id={`spk-${safeId}`} x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="0%" stopColor={cs.color} stopOpacity={0.55} />
+                                  <stop offset="100%" stopColor={cs.color} stopOpacity={0} />
+                                </linearGradient>
+                              </defs>
+                              <Area type="monotone" dataKey="v" stroke={cs.color} strokeWidth={1.8} fill={`url(#spk-${safeId})`} dot={false} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      )}
+
+                      <div className="relative grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-border/40">
+                        <div>
                           <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Média</p>
-                          <p className="text-[12px] font-mono font-semibold text-foreground">
+                          <p className="text-[12px] font-mono font-semibold text-foreground mt-0.5">
                             {cs.avg >= 1000 ? (cs.avg / 1000).toFixed(1) + "K" : Math.round(cs.avg).toLocaleString("pt-BR")}
                           </p>
                         </div>
-                        <div className="rounded-lg bg-card/60 border border-border/40 px-2.5 py-1.5">
+                        <div>
                           <p className="text-[8.5px] uppercase tracking-wider text-muted-foreground/80">Pico</p>
-                          <p className="text-[12px] font-mono font-semibold text-foreground">
+                          <p className="text-[12px] font-mono font-semibold text-foreground mt-0.5">
                             {cs.max >= 1000 ? (cs.max / 1000).toFixed(1) + "K" : Math.round(cs.max).toLocaleString("pt-BR")}
                           </p>
                         </div>
@@ -721,7 +724,7 @@ export default function ReportDetail() {
                 })}
               </div>
             </div>
-          </div>
+          )}
 
           {/* Smart Journey Funnel · adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
           {funnelData && funnelData.length >= 2 && (() => {
