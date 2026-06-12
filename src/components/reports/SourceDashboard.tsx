@@ -173,7 +173,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
     if (totalSpend > 0) heroKpis.push({ label: "Investido", value: fmtMoney(totalSpend), icon: DollarSign, color: PALETTE[0] });
     if (totalImpr > 0)  heroKpis.push({ label: "Impressões", value: fmtN(totalImpr), icon: Activity, color: PALETTE[2] });
     if (totalClicks > 0) heroKpis.push({ label: "Cliques", value: fmtN(totalClicks), sub: totalImpr > 0 ? `CTR ${((totalClicks/totalImpr)*100).toFixed(2)}%` : undefined, icon: Target, color: PALETTE[1] });
-    if (totalConv > 0)   heroKpis.push({ label: "Conversões", value: fmtN(totalConv), sub: totalSpend > 0 ? `CPA ${fmtMoney(totalSpend/totalConv)}` : undefined, icon: TrendingUp, color: PALETTE[3] });
+    if (totalConv > 0)   heroKpis.push({ label: convType.noun, value: fmtN(totalConv), sub: totalSpend > 0 ? `Custo ${fmtMoney(totalSpend/totalConv)} / ${convType.short}` : convType.explainer.split("(")[0].trim().slice(0, 32), icon: TrendingUp, color: PALETTE[3] });
   } else if (isSales) {
     if (totalRevenue > 0) heroKpis.push({ label: "Receita", value: fmtMoney(totalRevenue), icon: DollarSign, color: PALETTE[0] });
     if (totalOrders > 0)  heroKpis.push({ label: "Pedidos", value: fmtN(totalOrders), icon: ShoppingCart, color: PALETTE[1] });
