@@ -72,6 +72,9 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setName(editProject.name || "");
       setDescription(editProject.description || "");
       setProjectType(editProject.project_type || "other");
+      setBillingMode(editProject.billing_mode || "included");
+      setBrand(editProject.brand || "");
+      setTotalValue(editProject.total_value != null ? String(editProject.total_value) : "");
       setStartDate(editProject.start_date ? new Date(editProject.start_date) : new Date());
       setDeadline(editProject.deadline ? new Date(editProject.deadline) : undefined);
       setScope(editProject.scope || "");
@@ -81,6 +84,11 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setName("");
       setDescription("");
       setProjectType("other");
+      setBillingMode("included");
+      setBrand("");
+      setTotalValue("");
+      setEntryPct("50");
+      setInstallmentsCount("1");
       setStartDate(new Date());
       setDeadline(undefined);
       setScope("");
