@@ -175,7 +175,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       return { ...r, net, acumulado: acc };
     });
     return rows;
-  }, [billing, projectPayments, expenses, period]);
+  }, [billingFiltered, paymentsFiltered, expenses, period]);
 
   // KPIs (current month)
   const currentKey = monthKey(new Date());
