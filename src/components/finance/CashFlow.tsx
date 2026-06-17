@@ -101,7 +101,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     }
 
     // Receitas (billing)
-    (billing || []).forEach((b: any) => {
+    (billingFiltered || []).forEach((b: any) => {
       const paidAt = parseDate(b.paid_date);
       const due = parseDate(b.due_date);
       const amount = Number(b.amount) || 0;
@@ -115,7 +115,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     });
 
     // Receitas (project installments)
-    (projectPayments || []).forEach((p: any) => {
+    (paymentsFiltered || []).forEach((p: any) => {
       (p.installments || []).forEach((i: any) => {
         const paidAt = parseDate(i.paid_date);
         const due = parseDate(i.due_date);
