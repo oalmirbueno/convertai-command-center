@@ -225,7 +225,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
   const accountsReceivable = useMemo(() => {
     const out: any[] = [];
-    (billing || []).filter((b: any) => b.status !== "paid").forEach((b: any) => {
+    (billingFiltered || []).filter((b: any) => b.status !== "paid").forEach((b: any) => {
       const due = parseDate(b.due_date);
       if (!due) return;
       out.push({
@@ -234,7 +234,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         client: b.client?.full_name || b.client?.company_name || "—",
       });
     });
-    (projectPayments || []).forEach((p: any) => {
+    (paymentsFiltered || []).forEach((p: any) => {
       (p.installments || []).filter((i: any) => i.status !== "paid").forEach((i: any) => {
         const due = parseDate(i.due_date);
         if (!due) return;
@@ -247,7 +247,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       });
     });
     return out.sort((a, b) => parseDate(a.due_date)!.getTime() - parseDate(b.due_date)!.getTime());
-  }, [billing, projectPayments]);
+  }, [billingFiltered, paymentsFiltered]);
 
   // ───────── Mutations ─────────
   const saveExpense = async (form: any) => {
