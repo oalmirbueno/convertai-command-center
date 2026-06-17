@@ -110,13 +110,24 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       return;
     }
 
+    if (billingMode === "one_off") {
+      const total = parseFloat(totalValue);
+      if (!total || total <= 0) {
+        toast.error("Informe o valor total do projeto avulso");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      const payload = {
+      const payload: any = {
         client_id: clientId,
         name: name.trim(),
         description: description.trim() || null,
         project_type: projectType,
+        billing_mode: billingMode,
+        brand: brand || null,
+        total_value: billingMode === "one_off" ? parseFloat(totalValue) : null,
         start_date: format(startDate, "yyyy-MM-dd"),
         deadline: format(deadline, "yyyy-MM-dd"),
         scope: scope.trim() || null,
@@ -137,6 +148,60 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       } else {
         const { data: newProject, error } = await supabase.from("projects").insert(payload).select().single();
         if (error) throw error;
+
+        // ── Auto-create payment plan for one_off projects ──
+        if (billingMode === "one_off" && newProject) {
+          try {
+            const total = parseFloat(totalValue);
+            const ePct = parseFloat(entryPct) || 0;
+            const iCount = parseInt(installmentsCount) || 1;
+            const entryAmount = (total * ePct) / 100;
+            const remaining = total - entryAmount;
+            const perInstallment = iCount > 0 ? remaining / iCount : 0;
+
+            const { data: paymentData, error: payErr } = await supabase
+              .from("project_payments")
+              .insert({
+                project_id: newProject.id,
+                client_id: clientId,
+                total_value: total,
+                entry_percentage: ePct,
+                entry_amount: entryAmount,
+                installments_count: iCount,
+                created_by: user?.id,
+              } as any)
+              .select().single();
+            if (payErr) throw payErr;
+
+            const today = format(new Date(), "yyyy-MM-dd");
+            const instRows: any[] = [{
+              payment_id: paymentData.id,
+              installment_number: 0,
+              amount: entryAmount,
+              due_date: today,
+              status: "pending",
+              description: `Entrada (${ePct}%)`,
+            }];
+            for (let i = 1; i <= iCount; i++) {
+              const d = new Date(); d.setMonth(d.getMonth() + i);
+              instRows.push({
+                payment_id: paymentData.id,
+                installment_number: i,
+                amount: perInstallment,
+                due_date: format(d, "yyyy-MM-dd"),
+                status: "pending",
+                description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
+              });
+            }
+            await supabase.from("payment_installments").insert(instRows);
+            toast.success(`Plano de pagamento criado (entrada + ${iCount}x)`);
+          } catch (e: any) {
+            console.error("payment auto-create failed", e);
+            toast.warning("Projeto criado, mas o plano de pagamento falhou. Configure manualmente.");
+          }
+        }
+
+
 
         // Create notification for client
         await supabase.from("notifications").insert({
