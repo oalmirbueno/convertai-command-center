@@ -157,7 +157,22 @@ export default function Clients() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-foreground truncate">{c.company_name || c.full_name}</p>
+                  {(() => {
+                    const t = typeBadge[(c as any).client_type || "recurring"];
+                    return t ? (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider border ${t.cls}`}>
+                        {t.label}
+                      </span>
+                    ) : null;
+                  })()}
+                  {(c as any).brand && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-foreground/5 text-muted-foreground border border-border">
+                      {(c as any).brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground">{c.email}</p>
               </div>
               {isAdmin && ((c as any).plan_name || (c as any).plan_value) && (
