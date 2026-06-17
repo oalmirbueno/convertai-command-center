@@ -48,6 +48,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
