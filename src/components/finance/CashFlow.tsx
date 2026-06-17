@@ -58,6 +58,26 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
   const [expenseModal, setExpenseModal] = useState<any | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
+
+  // Filter sources by segment
+  const billingFiltered = useMemo(() => {
+    if (segment === "all") return billing || [];
+    return (billing || []).filter((b: any) => {
+      const ct = b.client?.client_type || "recurring";
+      if (segment === "recurring") return ct === "recurring" || ct === "hybrid";
+      return false; // one_off doesn't generate billing
+    });
+  }, [billing, segment]);
+
+  const paymentsFiltered = useMemo(() => {
+    if (segment === "all") return projectPayments || [];
+    if (segment === "recurring") return []; // project_payments are one-off by nature
+    return (projectPayments || []).filter((p: any) => {
+      const mode = p.project?.billing_mode || "one_off";
+      return mode === "one_off";
+    });
+  }, [projectPayments, segment]);
 
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses"],
