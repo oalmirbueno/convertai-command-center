@@ -61,6 +61,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
 
   const reset = () => {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
+    setClientType("recurring"); setBrand("");
     setServices({});
     setCreatedSuccess(false);
   };
