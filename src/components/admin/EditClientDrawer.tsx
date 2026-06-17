@@ -195,6 +195,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       setPlanStatus(client.plan_status || "active");
       setRenewalDate(client.plan_renewal_date || "");
       setServices(client.services_config || {});
+      setClientType((client as any).client_type || "recurring");
+      setBrand((client as any).brand || "");
       setClientPassword("");
       setAvatarUrl(client.avatar_url || "");
     }
