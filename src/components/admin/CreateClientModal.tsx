@@ -118,10 +118,12 @@ export default function CreateClientModal({ open, onClose }: Props) {
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
+          client_type: clientType,
+          brand: brand || null,
           first_access_token: firstAccessToken,
           first_access_used_at: null,
           portal_password: null,
-        }).eq("id", newUserId);
+        } as any).eq("id", newUserId);
       }
 
       setCreatedSuccess(true);
