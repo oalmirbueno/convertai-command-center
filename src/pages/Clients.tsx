@@ -101,28 +101,46 @@ export default function Clients() {
         )}
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
-              tab === t.value
-                ? "bg-background text-foreground font-medium shadow-sm"
-                : "text-muted-foreground hover:text-foreground bg-transparent"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Status + Type Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
+                tab === t.value
+                  ? "bg-background text-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
+          {TYPE_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTypeFilter(t.value)}
+              className={`px-3 py-1.5 rounded-md text-[12px] transition-colors cursor-pointer border-none ${
+                typeFilter === t.value
+                  ? "bg-background text-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : filtered.length === 0 ? (
         <div className="text-sm text-muted-foreground py-8 text-center">
-          Nenhum cliente {statusLabel[tab]?.toLowerCase()} encontrado.
+          Nenhum cliente encontrado com os filtros aplicados.
         </div>
       ) : (
         <div className="space-y-1 stagger-children">
