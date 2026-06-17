@@ -895,6 +895,8 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          brand: Database["public"]["Enums"]["brand_type"] | null
+          client_type: Database["public"]["Enums"]["client_type"]
           company_name: string | null
           created_at: string
           deleted_at: string | null
@@ -919,6 +921,8 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          brand?: Database["public"]["Enums"]["brand_type"] | null
+          client_type?: Database["public"]["Enums"]["client_type"]
           company_name?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -943,6 +947,8 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          brand?: Database["public"]["Enums"]["brand_type"] | null
+          client_type?: Database["public"]["Enums"]["client_type"]
           company_name?: string | null
           created_at?: string
           deleted_at?: string | null
@@ -1030,6 +1036,8 @@ export type Database = {
       }
       projects: {
         Row: {
+          billing_mode: Database["public"]["Enums"]["project_billing_mode"]
+          brand: Database["public"]["Enums"]["brand_type"] | null
           client_id: string
           created_at: string
           created_by: string | null
@@ -1047,9 +1055,12 @@ export type Database = {
           status: string
           sync_error: string | null
           sync_status: string
+          total_value: number | null
           updated_at: string
         }
         Insert: {
+          billing_mode?: Database["public"]["Enums"]["project_billing_mode"]
+          brand?: Database["public"]["Enums"]["brand_type"] | null
           client_id: string
           created_at?: string
           created_by?: string | null
@@ -1067,9 +1078,12 @@ export type Database = {
           status?: string
           sync_error?: string | null
           sync_status?: string
+          total_value?: number | null
           updated_at?: string
         }
         Update: {
+          billing_mode?: Database["public"]["Enums"]["project_billing_mode"]
+          brand?: Database["public"]["Enums"]["brand_type"] | null
           client_id?: string
           created_at?: string
           created_by?: string | null
@@ -1087,6 +1101,7 @@ export type Database = {
           status?: string
           sync_error?: string | null
           sync_status?: string
+          total_value?: number | null
           updated_at?: string
         }
         Relationships: [
@@ -1890,6 +1905,9 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "client" | "design" | "traffic" | "manager"
+      brand_type: "aceleriq" | "sitebolt"
+      client_type: "recurring" | "one_off" | "hybrid"
+      project_billing_mode: "included" | "one_off"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2018,6 +2036,9 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "client", "design", "traffic", "manager"],
+      brand_type: ["aceleriq", "sitebolt"],
+      client_type: ["recurring", "one_off", "hybrid"],
+      project_billing_mode: ["included", "one_off"],
     },
   },
 } as const
