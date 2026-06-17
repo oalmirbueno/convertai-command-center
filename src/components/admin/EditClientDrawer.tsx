@@ -249,6 +249,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         phone: phone.trim() || null,
         plan_status: planStatus,
         services_config: services,
+        client_type: clientType,
+        brand: brand || null,
       };
 
       // Only admin can change plan name and renewal date
