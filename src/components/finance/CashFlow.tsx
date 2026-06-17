@@ -340,6 +340,31 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
+      {/* SEGMENT TOGGLE — Recorrente / Avulso */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Segmento:</span>
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1">
+          {[
+            { v: "all", label: "Tudo" },
+            { v: "recurring", label: "Recorrente (MRR)" },
+            { v: "one_off", label: "Avulso (Projetos)" },
+          ].map((s) => (
+            <button key={s.v} onClick={() => setSegment(s.v as any)}
+              className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer border-none ${
+                segment === s.v ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {segment !== "all" && (
+          <span className="text-[10px] text-muted-foreground italic">
+            {segment === "recurring" ? "Mostrando apenas mensalidades (billing de clientes recorrentes e híbridos)" : "Mostrando apenas contratos avulsos (project payments)"}
+          </span>
+        )}
+      </div>
+
+
       {/* KPI STRIP */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Receitas do mês" value={fmt(cur.receitas)}
