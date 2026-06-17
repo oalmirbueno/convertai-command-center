@@ -518,6 +518,63 @@ export type Database = {
         }
         Relationships: []
       }
+      expenses: {
+        Row: {
+          amount: number
+          attachment_url: string | null
+          brand: string | null
+          category: string
+          created_at: string
+          created_by: string | null
+          description: string
+          due_date: string
+          id: string
+          notes: string | null
+          paid_date: string | null
+          payment_method: string | null
+          recurrence: string
+          status: string
+          supplier: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount?: number
+          attachment_url?: string | null
+          brand?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          due_date: string
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
+          recurrence?: string
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          attachment_url?: string | null
+          brand?: string | null
+          category?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          due_date?: string
+          id?: string
+          notes?: string | null
+          paid_date?: string | null
+          payment_method?: string | null
+          recurrence?: string
+          status?: string
+          supplier?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       files: {
         Row: {
           approval_status: string
