@@ -42,6 +42,11 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [projectType, setProjectType] = useState("other");
+  const [billingMode, setBillingMode] = useState<"included" | "one_off">("included");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
+  const [totalValue, setTotalValue] = useState("");
+  const [entryPct, setEntryPct] = useState("50");
+  const [installmentsCount, setInstallmentsCount] = useState("1");
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [scope, setScope] = useState("");
