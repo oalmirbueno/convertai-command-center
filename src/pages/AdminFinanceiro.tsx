@@ -75,7 +75,7 @@ export default function AdminFinanceiro() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("project_payments")
-        .select("*, project:projects!project_payments_project_id_fkey(name, project_type), client:profiles!project_payments_client_id_fkey(full_name, company_name), installments:payment_installments(*)");
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type, billing_mode, brand), client:profiles!project_payments_client_id_fkey(full_name, company_name, client_type, brand), installments:payment_installments(*)");
       if (error) throw error;
       return data || [];
     },
