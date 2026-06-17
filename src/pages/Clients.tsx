@@ -41,6 +41,19 @@ const statusLabel: Record<string, string> = {
   inactive: "Inativo",
 };
 
+const TYPE_TABS = [
+  { value: "all", label: "Todos" },
+  { value: "recurring", label: "Recorrentes" },
+  { value: "one_off", label: "Avulsos" },
+  { value: "hybrid", label: "Híbridos" },
+];
+
+const typeBadge: Record<string, { label: string; cls: string }> = {
+  recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary border-primary/30" },
+  one_off: { label: "Avulso", cls: "bg-warning/10 text-warning border-warning/30" },
+  hybrid: { label: "Híbrido", cls: "bg-accent/10 text-accent-foreground border-accent/30" },
+};
+
 export default function Clients() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -50,10 +63,13 @@ export default function Clients() {
   const [editClient, setEditClient] = useState<any>(null);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [tab, setTab] = useState("active");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const filtered = (clients || []).filter((c: any) => {
     const status = c.plan_status || "active";
-    return status === tab;
+    if (status !== tab) return false;
+    if (typeFilter !== "all" && (c.client_type || "recurring") !== typeFilter) return false;
+    return true;
   });
 
   return (
