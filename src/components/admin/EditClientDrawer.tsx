@@ -60,6 +60,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [clientPassword, setClientPassword] = useState("");
   const [showStoredPw, setShowStoredPw] = useState(false);
   const [services, setServices] = useState<Record<string, boolean>>({});
+  const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
