@@ -236,6 +236,57 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 </div>
               </div>
 
+              {/* Tipo de relacionamento + Brand */}
+              <div className="pt-2 space-y-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Tipo de Cliente *</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { v: "recurring", label: "Recorrente", hint: "Mensalidade" },
+                      { v: "one_off", label: "Avulso", hint: "Projeto único" },
+                      { v: "hybrid", label: "Híbrido", hint: "Os dois" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setClientType(opt.v as any)}
+                        className={`px-3 py-2.5 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
+                          clientType === opt.v
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        <p className="font-semibold leading-tight">{opt.label}</p>
+                        <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Brand</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { v: "", label: "Definir depois" },
+                      { v: "aceleriq", label: "AcelerIQ" },
+                      { v: "sitebolt", label: "SiteBolt" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setBrand(opt.v as any)}
+                        className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
+                          brand === opt.v
+                            ? "border-primary bg-primary/10 text-foreground font-semibold"
+                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 block">Serviços Ativos</label>
                 <div className="space-y-3">
