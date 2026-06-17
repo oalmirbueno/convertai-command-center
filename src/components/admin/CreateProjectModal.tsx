@@ -42,6 +42,11 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [projectType, setProjectType] = useState("other");
+  const [billingMode, setBillingMode] = useState<"included" | "one_off">("included");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
+  const [totalValue, setTotalValue] = useState("");
+  const [entryPct, setEntryPct] = useState("50");
+  const [installmentsCount, setInstallmentsCount] = useState("1");
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [scope, setScope] = useState("");
@@ -67,6 +72,9 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setName(editProject.name || "");
       setDescription(editProject.description || "");
       setProjectType(editProject.project_type || "other");
+      setBillingMode(editProject.billing_mode || "included");
+      setBrand(editProject.brand || "");
+      setTotalValue(editProject.total_value != null ? String(editProject.total_value) : "");
       setStartDate(editProject.start_date ? new Date(editProject.start_date) : new Date());
       setDeadline(editProject.deadline ? new Date(editProject.deadline) : undefined);
       setScope(editProject.scope || "");
@@ -76,6 +84,11 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setName("");
       setDescription("");
       setProjectType("other");
+      setBillingMode("included");
+      setBrand("");
+      setTotalValue("");
+      setEntryPct("50");
+      setInstallmentsCount("1");
       setStartDate(new Date());
       setDeadline(undefined);
       setScope("");
@@ -97,13 +110,24 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       return;
     }
 
+    if (billingMode === "one_off") {
+      const total = parseFloat(totalValue);
+      if (!total || total <= 0) {
+        toast.error("Informe o valor total do projeto avulso");
+        return;
+      }
+    }
+
     setSaving(true);
     try {
-      const payload = {
+      const payload: any = {
         client_id: clientId,
         name: name.trim(),
         description: description.trim() || null,
         project_type: projectType,
+        billing_mode: billingMode,
+        brand: brand || null,
+        total_value: billingMode === "one_off" ? parseFloat(totalValue) : null,
         start_date: format(startDate, "yyyy-MM-dd"),
         deadline: format(deadline, "yyyy-MM-dd"),
         scope: scope.trim() || null,
@@ -124,6 +148,60 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       } else {
         const { data: newProject, error } = await supabase.from("projects").insert(payload).select().single();
         if (error) throw error;
+
+        // ── Auto-create payment plan for one_off projects ──
+        if (billingMode === "one_off" && newProject) {
+          try {
+            const total = parseFloat(totalValue);
+            const ePct = parseFloat(entryPct) || 0;
+            const iCount = parseInt(installmentsCount) || 1;
+            const entryAmount = (total * ePct) / 100;
+            const remaining = total - entryAmount;
+            const perInstallment = iCount > 0 ? remaining / iCount : 0;
+
+            const { data: paymentData, error: payErr } = await supabase
+              .from("project_payments")
+              .insert({
+                project_id: newProject.id,
+                client_id: clientId,
+                total_value: total,
+                entry_percentage: ePct,
+                entry_amount: entryAmount,
+                installments_count: iCount,
+                created_by: user?.id,
+              } as any)
+              .select().single();
+            if (payErr) throw payErr;
+
+            const today = format(new Date(), "yyyy-MM-dd");
+            const instRows: any[] = [{
+              payment_id: paymentData.id,
+              installment_number: 0,
+              amount: entryAmount,
+              due_date: today,
+              status: "pending",
+              description: `Entrada (${ePct}%)`,
+            }];
+            for (let i = 1; i <= iCount; i++) {
+              const d = new Date(); d.setMonth(d.getMonth() + i);
+              instRows.push({
+                payment_id: paymentData.id,
+                installment_number: i,
+                amount: perInstallment,
+                due_date: format(d, "yyyy-MM-dd"),
+                status: "pending",
+                description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
+              });
+            }
+            await supabase.from("payment_installments").insert(instRows);
+            toast.success(`Plano de pagamento criado (entrada + ${iCount}x)`);
+          } catch (e: any) {
+            console.error("payment auto-create failed", e);
+            toast.warning("Projeto criado, mas o plano de pagamento falhou. Configure manualmente.");
+          }
+        }
+
+
 
         // Create notification for client
         await supabase.from("notifications").insert({
@@ -262,6 +340,68 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
               ))}
             </select>
           </div>
+
+          {/* Tipo de Cobrança + Brand */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Cobrança</label>
+              <div className="grid grid-cols-2 gap-1.5">
+                {[
+                  { v: "included", label: "Plano" },
+                  { v: "one_off", label: "Avulso" },
+                ].map((opt) => (
+                  <button key={opt.v} type="button" onClick={() => setBillingMode(opt.v as any)}
+                    className={`px-2.5 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
+                      billingMode === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                    }`}>{opt.label}</button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
+              <select value={brand} onChange={(e) => setBrand(e.target.value as any)}
+                className="w-full bg-secondary border border-border rounded-[10px] px-3 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50">
+                <option value="">— Definir depois —</option>
+                <option value="aceleriq">AcelerIQ</option>
+                <option value="sitebolt">SiteBolt</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Financeiro do projeto avulso */}
+          {billingMode === "one_off" && (
+            <div className="rounded-[12px] border border-primary/30 bg-primary/5 p-3.5 space-y-3">
+              <div className="flex items-center gap-2">
+                <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro do Projeto</p>
+                <span className="text-[10px] text-muted-foreground">Cria entrada + parcelas automaticamente</span>
+              </div>
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
+                  <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00"
+                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada %</label>
+                  <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100"
+                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas</label>
+                  <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1"
+                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                </div>
+              </div>
+              {totalValue && parseFloat(totalValue) > 0 && (
+                <p className="text-[11px] text-muted-foreground">
+                  Entrada: <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * parseFloat(entryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                  {" · "}
+                  {installmentsCount}× de <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * (100 - parseFloat(entryPct || "0"))) / 100 / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                </p>
+              )}
+            </div>
+          )}
+
 
           {!isEdit && projectTemplates[projectType] && (
             <label className="flex items-center gap-2.5 p-3 rounded-[10px] bg-primary/5 border border-primary/20 cursor-pointer">

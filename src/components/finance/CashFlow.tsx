@@ -58,6 +58,26 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
   const [expenseModal, setExpenseModal] = useState<any | null>(null);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
+  const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
+
+  // Filter sources by segment
+  const billingFiltered = useMemo(() => {
+    if (segment === "all") return billing || [];
+    return (billing || []).filter((b: any) => {
+      const ct = b.client?.client_type || "recurring";
+      if (segment === "recurring") return ct === "recurring" || ct === "hybrid";
+      return false; // one_off doesn't generate billing
+    });
+  }, [billing, segment]);
+
+  const paymentsFiltered = useMemo(() => {
+    if (segment === "all") return projectPayments || [];
+    if (segment === "recurring") return []; // project_payments are one-off by nature
+    return (projectPayments || []).filter((p: any) => {
+      const mode = p.project?.billing_mode || "one_off";
+      return mode === "one_off";
+    });
+  }, [projectPayments, segment]);
 
   const { data: expenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -81,7 +101,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     }
 
     // Receitas (billing)
-    (billing || []).forEach((b: any) => {
+    (billingFiltered || []).forEach((b: any) => {
       const paidAt = parseDate(b.paid_date);
       const due = parseDate(b.due_date);
       const amount = Number(b.amount) || 0;
@@ -95,7 +115,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     });
 
     // Receitas (project installments)
-    (projectPayments || []).forEach((p: any) => {
+    (paymentsFiltered || []).forEach((p: any) => {
       (p.installments || []).forEach((i: any) => {
         const paidAt = parseDate(i.paid_date);
         const due = parseDate(i.due_date);
@@ -155,7 +175,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       return { ...r, net, acumulado: acc };
     });
     return rows;
-  }, [billing, projectPayments, expenses, period]);
+  }, [billingFiltered, paymentsFiltered, expenses, period]);
 
   // KPIs (current month)
   const currentKey = monthKey(new Date());
@@ -205,7 +225,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
   const accountsReceivable = useMemo(() => {
     const out: any[] = [];
-    (billing || []).filter((b: any) => b.status !== "paid").forEach((b: any) => {
+    (billingFiltered || []).filter((b: any) => b.status !== "paid").forEach((b: any) => {
       const due = parseDate(b.due_date);
       if (!due) return;
       out.push({
@@ -214,7 +234,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         client: b.client?.full_name || b.client?.company_name || "—",
       });
     });
-    (projectPayments || []).forEach((p: any) => {
+    (paymentsFiltered || []).forEach((p: any) => {
       (p.installments || []).filter((i: any) => i.status !== "paid").forEach((i: any) => {
         const due = parseDate(i.due_date);
         if (!due) return;
@@ -227,7 +247,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       });
     });
     return out.sort((a, b) => parseDate(a.due_date)!.getTime() - parseDate(b.due_date)!.getTime());
-  }, [billing, projectPayments]);
+  }, [billingFiltered, paymentsFiltered]);
 
   // ───────── Mutations ─────────
   const saveExpense = async (form: any) => {
@@ -319,6 +339,31 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </button>
         </div>
       </div>
+
+      {/* SEGMENT TOGGLE — Recorrente / Avulso */}
+      <div className="flex items-center gap-2 flex-wrap">
+        <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Segmento:</span>
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1">
+          {[
+            { v: "all", label: "Tudo" },
+            { v: "recurring", label: "Recorrente (MRR)" },
+            { v: "one_off", label: "Avulso (Projetos)" },
+          ].map((s) => (
+            <button key={s.v} onClick={() => setSegment(s.v as any)}
+              className={`px-3 py-1 rounded-md text-[12px] font-medium transition-colors cursor-pointer border-none ${
+                segment === s.v ? "bg-primary text-primary-foreground" : "bg-transparent text-muted-foreground hover:text-foreground"
+              }`}>
+              {s.label}
+            </button>
+          ))}
+        </div>
+        {segment !== "all" && (
+          <span className="text-[10px] text-muted-foreground italic">
+            {segment === "recurring" ? "Mostrando apenas mensalidades (billing de clientes recorrentes e híbridos)" : "Mostrando apenas contratos avulsos (project payments)"}
+          </span>
+        )}
+      </div>
+
 
       {/* KPI STRIP */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">

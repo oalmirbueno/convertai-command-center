@@ -41,6 +41,19 @@ const statusLabel: Record<string, string> = {
   inactive: "Inativo",
 };
 
+const TYPE_TABS = [
+  { value: "all", label: "Todos" },
+  { value: "recurring", label: "Recorrentes" },
+  { value: "one_off", label: "Avulsos" },
+  { value: "hybrid", label: "Híbridos" },
+];
+
+const typeBadge: Record<string, { label: string; cls: string }> = {
+  recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary border-primary/30" },
+  one_off: { label: "Avulso", cls: "bg-warning/10 text-warning border-warning/30" },
+  hybrid: { label: "Híbrido", cls: "bg-accent/10 text-accent-foreground border-accent/30" },
+};
+
 export default function Clients() {
   const { profile } = useAuth();
   const navigate = useNavigate();
@@ -50,10 +63,13 @@ export default function Clients() {
   const [editClient, setEditClient] = useState<any>(null);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [tab, setTab] = useState("active");
+  const [typeFilter, setTypeFilter] = useState("all");
 
   const filtered = (clients || []).filter((c: any) => {
     const status = c.plan_status || "active";
-    return status === tab;
+    if (status !== tab) return false;
+    if (typeFilter !== "all" && (c.client_type || "recurring") !== typeFilter) return false;
+    return true;
   });
 
   return (
@@ -85,28 +101,46 @@ export default function Clients() {
         )}
       </div>
 
-      {/* Status Tabs */}
-      <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
-        {STATUS_TABS.map((t) => (
-          <button
-            key={t.value}
-            onClick={() => setTab(t.value)}
-            className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
-              tab === t.value
-                ? "bg-background text-foreground font-medium shadow-sm"
-                : "text-muted-foreground hover:text-foreground bg-transparent"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
+      {/* Status + Type Filters */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
+          {STATUS_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTab(t.value)}
+              className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
+                tab === t.value
+                  ? "bg-background text-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit">
+          {TYPE_TABS.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTypeFilter(t.value)}
+              className={`px-3 py-1.5 rounded-md text-[12px] transition-colors cursor-pointer border-none ${
+                typeFilter === t.value
+                  ? "bg-background text-foreground font-medium shadow-sm"
+                  : "text-muted-foreground hover:text-foreground bg-transparent"
+              }`}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : filtered.length === 0 ? (
         <div className="text-sm text-muted-foreground py-8 text-center">
-          Nenhum cliente {statusLabel[tab]?.toLowerCase()} encontrado.
+          Nenhum cliente encontrado com os filtros aplicados.
         </div>
       ) : (
         <div className="space-y-1 stagger-children">
@@ -123,7 +157,22 @@ export default function Clients() {
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="text-sm font-medium text-foreground truncate">{c.company_name || c.full_name}</p>
+                  {(() => {
+                    const t = typeBadge[(c as any).client_type || "recurring"];
+                    return t ? (
+                      <span className={`inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider border ${t.cls}`}>
+                        {t.label}
+                      </span>
+                    ) : null;
+                  })()}
+                  {(c as any).brand && (
+                    <span className="inline-flex items-center px-1.5 py-0.5 rounded-md text-[9px] font-semibold uppercase tracking-wider bg-foreground/5 text-muted-foreground border border-border">
+                      {(c as any).brand === "aceleriq" ? "AcelerIQ" : "SiteBolt"}
+                    </span>
+                  )}
+                </div>
                 <p className="text-[11px] text-muted-foreground">{c.email}</p>
               </div>
               {isAdmin && ((c as any).plan_name || (c as any).plan_value) && (

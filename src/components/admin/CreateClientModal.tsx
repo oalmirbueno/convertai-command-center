@@ -48,6 +48,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [company, setCompany] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
+  const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
@@ -59,6 +61,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
 
   const reset = () => {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
+    setClientType("recurring"); setBrand("");
     setServices({});
     setCreatedSuccess(false);
   };
@@ -115,10 +118,12 @@ export default function CreateClientModal({ open, onClose }: Props) {
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
+          client_type: clientType,
+          brand: brand || null,
           first_access_token: firstAccessToken,
           first_access_used_at: null,
           portal_password: null,
-        }).eq("id", newUserId);
+        } as any).eq("id", newUserId);
       }
 
       setCreatedSuccess(true);
@@ -228,6 +233,57 @@ export default function CreateClientModal({ open, onClose }: Props) {
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Telefone</label>
                   <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="(00) 00000-0000"
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                </div>
+              </div>
+
+              {/* Tipo de relacionamento + Brand */}
+              <div className="pt-2 space-y-3">
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Tipo de Cliente *</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { v: "recurring", label: "Recorrente", hint: "Mensalidade" },
+                      { v: "one_off", label: "Avulso", hint: "Projeto único" },
+                      { v: "hybrid", label: "Híbrido", hint: "Os dois" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setClientType(opt.v as any)}
+                        className={`px-3 py-2.5 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
+                          clientType === opt.v
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        <p className="font-semibold leading-tight">{opt.label}</p>
+                        <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-2 block">Brand</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { v: "", label: "Definir depois" },
+                      { v: "aceleriq", label: "AcelerIQ" },
+                      { v: "sitebolt", label: "SiteBolt" },
+                    ].map((opt) => (
+                      <button
+                        key={opt.v}
+                        type="button"
+                        onClick={() => setBrand(opt.v as any)}
+                        className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
+                          brand === opt.v
+                            ? "border-primary bg-primary/10 text-foreground font-semibold"
+                            : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
 

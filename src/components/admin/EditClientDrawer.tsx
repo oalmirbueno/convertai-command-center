@@ -60,6 +60,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [clientPassword, setClientPassword] = useState("");
   const [showStoredPw, setShowStoredPw] = useState(false);
   const [services, setServices] = useState<Record<string, boolean>>({});
+  const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
+  const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
@@ -193,6 +195,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       setPlanStatus(client.plan_status || "active");
       setRenewalDate(client.plan_renewal_date || "");
       setServices(client.services_config || {});
+      setClientType((client as any).client_type || "recurring");
+      setBrand((client as any).brand || "");
       setClientPassword("");
       setAvatarUrl(client.avatar_url || "");
     }
@@ -245,6 +249,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
         phone: phone.trim() || null,
         plan_status: planStatus,
         services_config: services,
+        client_type: clientType,
+        brand: brand || null,
       };
 
       // Only admin can change plan name and renewal date
@@ -439,6 +445,41 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 ))}
               </div>
             </div>
+
+            {/* Tipo de Cliente + Brand */}
+            <div className="space-y-3 p-3 rounded-[10px] border border-border bg-secondary/30">
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Tipo de Cliente</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { v: "recurring", label: "Recorrente" },
+                    { v: "one_off", label: "Avulso" },
+                    { v: "hybrid", label: "Híbrido" },
+                  ].map((opt) => (
+                    <button key={opt.v} type="button" onClick={() => setClientType(opt.v as any)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] border transition-all cursor-pointer ${
+                        clientType === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
+                      }`}>{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[
+                    { v: "", label: "—" },
+                    { v: "aceleriq", label: "AcelerIQ" },
+                    { v: "sitebolt", label: "SiteBolt" },
+                  ].map((opt) => (
+                    <button key={opt.v} type="button" onClick={() => setBrand(opt.v as any)}
+                      className={`px-2 py-1.5 rounded-md text-[11px] border transition-all cursor-pointer ${
+                        brand === opt.v ? "border-primary bg-primary/10 text-foreground font-semibold" : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
+                      }`}>{opt.label}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
 
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome Completo</label>
