@@ -13,6 +13,7 @@ import {
   Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Download,
   Edit3, Trash2, Calendar, Filter, Sparkles, ArrowUpRight, ArrowDownRight,
 } from "lucide-react";
+import NewIncomeModal from "./NewIncomeModal";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -57,6 +58,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const qc = useQueryClient();
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
   const [expenseModal, setExpenseModal] = useState<any | null>(null);
+  const [incomeModalOpen, setIncomeModalOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
 
@@ -332,6 +334,10 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <button onClick={exportCSV}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer">
             <Download className="w-3.5 h-3.5" /> CSV
+          </button>
+          <button onClick={() => setIncomeModalOpen(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 cursor-pointer">
+            <ArrowUpRight className="w-3.5 h-3.5" /> Nova Entrada
           </button>
           <button onClick={() => setExpenseModal({})}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 border-none cursor-pointer">
@@ -638,6 +644,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </div>
         </DialogContent>
       </Dialog>
+
+      <NewIncomeModal open={incomeModalOpen} onClose={() => setIncomeModalOpen(false)} existingProjects={[]} />
     </div>
   );
 }
