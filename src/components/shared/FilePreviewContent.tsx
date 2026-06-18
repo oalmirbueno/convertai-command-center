@@ -28,12 +28,76 @@ const isAudio = (fileName: string, fileUrl?: string) => {
   return ["mp3", "wav", "m4a", "ogg"].includes(ext);
 };
 
+// Detect external video providers and convert to embeddable URL
+export const getVideoEmbedUrl = (url: string): string | null => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    const host = u.hostname.replace(/^www\./, "");
+
+    // YouTube
+    if (host === "youtu.be") {
+      const id = u.pathname.slice(1);
+      return id ? `https://www.youtube.com/embed/${id}` : null;
+    }
+    if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+      const v = u.searchParams.get("v");
+      if (v) return `https://www.youtube.com/embed/${v}`;
+      const m = u.pathname.match(/\/(embed|shorts|live)\/([\w-]+)/);
+      if (m) return `https://www.youtube.com/embed/${m[2]}`;
+    }
+    // Vimeo
+    if (host.endsWith("vimeo.com")) {
+      const id = u.pathname.split("/").filter(Boolean)[0];
+      if (id && /^\d+$/.test(id)) return `https://player.vimeo.com/video/${id}`;
+    }
+    // Loom
+    if (host.endsWith("loom.com")) {
+      const m = u.pathname.match(/\/(share|embed)\/([\w-]+)/);
+      if (m) return `https://www.loom.com/embed/${m[2]}`;
+    }
+    // Google Drive
+    if (host.endsWith("drive.google.com")) {
+      const m = u.pathname.match(/\/file\/d\/([\w-]+)/);
+      const id = m?.[1] || u.searchParams.get("id");
+      if (id) return `https://drive.google.com/file/d/${id}/preview`;
+    }
+    // Wistia
+    if (host.endsWith("wistia.com") || host.endsWith("wistia.net")) {
+      const m = u.pathname.match(/\/medias\/([\w-]+)/);
+      if (m) return `https://fast.wistia.net/embed/iframe/${m[1]}`;
+    }
+  } catch { /* not a URL */ }
+  return null;
+};
+
+export const isExternalVideoUrl = (url: string) => !!getVideoEmbedUrl(url);
+
+
 interface Props {
   fileName: string;
   fileUrl: string;
 }
 
 export default function FilePreviewContent({ fileName, fileUrl }: Props) {
+  // External video providers (YouTube/Vimeo/Loom/Drive/Wistia) — embed iframe, no storage cost
+  const embedUrl = getVideoEmbedUrl(fileUrl);
+  if (embedUrl) {
+    return (
+      <div className="bg-black rounded-xl overflow-hidden">
+        <div className="relative w-full" style={{ paddingTop: "56.25%" }}>
+          <iframe
+            src={embedUrl}
+            title={fileName}
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+            allowFullScreen
+            className="absolute inset-0 w-full h-full border-0"
+          />
+        </div>
+      </div>
+    );
+  }
+
   if (isImage(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center p-2">
