@@ -229,11 +229,15 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       }
 
       toast.success("Entrada avulsa registrada");
-      qc.invalidateQueries({ queryKey: ["project_payments"] });
-      qc.invalidateQueries({ queryKey: ["projects"] });
-      qc.invalidateQueries({ queryKey: ["clients"] });
-      qc.invalidateQueries({ queryKey: ["expenses"] });
-      qc.invalidateQueries({ queryKey: ["billing"] });
+      await Promise.all([
+        qc.invalidateQueries({ queryKey: ["all-project-payments-finance"] }),
+        qc.invalidateQueries({ queryKey: ["project_payments"] }),
+        qc.invalidateQueries({ queryKey: ["projects"] }),
+        qc.invalidateQueries({ queryKey: ["clients"] }),
+        qc.invalidateQueries({ queryKey: ["expenses"] }),
+        qc.invalidateQueries({ queryKey: ["billing"] }),
+        qc.refetchQueries({ queryKey: ["all-project-payments-finance"] }),
+      ]);
       reset();
       onClose();
     } catch (e: any) {
