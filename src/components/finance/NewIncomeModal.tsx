@@ -178,12 +178,12 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         });
       }
 
-      // 2. Create payment plan
-      const ePct = parseFloat(entryPct) || 0;
-      const iCount = parseInt(installmentsCount) || 1;
-      const entryAmount = (total * ePct) / 100;
-      const remaining = total - entryAmount;
-      const perInstallment = iCount > 0 ? remaining / iCount : 0;
+      // 2. Create payment plan (à vista = 1 parcela; parcelado = N parcelas iguais)
+      const iCount = paymentMode === "a_vista" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
+      const perInstallment = total / iCount;
+      const paidCount = alreadyPaid
+        ? (paymentMode === "a_vista" ? iCount : Math.min(parseInt(paidInstallments) || 0, iCount))
+        : 0;
 
       const { data: paymentData, error: payErr } = await supabase
         .from("project_payments")
@@ -191,8 +191,8 @@ export default function NewIncomeModal({ open, onClose }: Props) {
           project_id: projectId,
           client_id: clientId,
           total_value: total,
-          entry_percentage: ePct,
-          entry_amount: entryAmount,
+          entry_percentage: 0,
+          entry_amount: 0,
           installments_count: iCount,
           created_by: user?.id,
         } as any)
@@ -202,25 +202,18 @@ export default function NewIncomeModal({ open, onClose }: Props) {
 
       const baseDate = new Date(firstDueDate + "T12:00:00");
       const instRows: any[] = [];
-      if (ePct > 0) {
-        instRows.push({
-          payment_id: paymentData.id,
-          installment_number: 0,
-          amount: entryAmount,
-          due_date: format(baseDate, "yyyy-MM-dd"),
-          status: "pending",
-          description: `Entrada (${ePct}%)`,
-        });
-      }
       for (let i = 1; i <= iCount; i++) {
-        const d = new Date(baseDate); d.setMonth(d.getMonth() + i);
+        const d = new Date(baseDate);
+        if (i > 1) d.setMonth(d.getMonth() + (i - 1));
+        const isPaid = i <= paidCount;
         instRows.push({
           payment_id: paymentData.id,
           installment_number: i,
           amount: perInstallment,
           due_date: format(d, "yyyy-MM-dd"),
-          status: "pending",
-          description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
+          status: isPaid ? "paid" : "pending",
+          paid_at: isPaid ? new Date().toISOString() : null,
+          description: iCount === 1 ? "Pagamento à vista" : `Parcela ${i}/${iCount}`,
         });
       }
       if (instRows.length) await supabase.from("payment_installments").insert(instRows);
