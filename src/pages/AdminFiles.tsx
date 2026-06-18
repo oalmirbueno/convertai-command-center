@@ -120,7 +120,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
-  const [uploadMode, setUploadMode] = useState<"single" | "carousel">("single");
+  const [uploadMode, setUploadMode] = useState<"single" | "carousel" | "video_link">("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
@@ -130,6 +130,7 @@ export default function AdminFiles() {
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadVideoUrl, setUploadVideoUrl] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -223,12 +224,65 @@ export default function AdminFiles() {
   }, [activeFolder, uploadFiles.length]);
 
   const handleUpload = async () => {
-    if (uploadFiles.length === 0 || !user || !selectedClient || selectedClient === "all") {
-      toast({ title: "Selecione um cliente e ao menos um arquivo", variant: "destructive" });
+    if (!user || !selectedClient || selectedClient === "all") {
+      toast({ title: "Selecione um cliente", variant: "destructive" });
+      return;
+    }
+    if (uploadMode === "video_link") {
+      if (!uploadVideoUrl.trim()) {
+        toast({ title: "Cole a URL do vídeo", variant: "destructive" });
+        return;
+      }
+      try {
+        new URL(uploadVideoUrl.trim());
+      } catch {
+        toast({ title: "URL inválida", variant: "destructive" });
+        return;
+      }
+    } else if (uploadFiles.length === 0) {
+      toast({ title: "Selecione ao menos um arquivo", variant: "destructive" });
       return;
     }
     setUploading(true);
     setUploadProgress(5);
+
+    try {
+      // Video link branch — no storage upload, just save the URL as a file record
+      if (uploadMode === "video_link") {
+        const url = uploadVideoUrl.trim();
+        const displayName = uploadName.trim() || (() => {
+          try {
+            const u = new URL(url);
+            return `Vídeo • ${u.hostname.replace(/^www\./, "")}`;
+          } catch { return "Vídeo externo"; }
+        })();
+        await supabase.from("files").insert({
+          client_id: selectedClient,
+          file_name: displayName,
+          file_url: url,
+          file_type: "video",
+          folder: uploadFolder,
+          uploaded_by: user.id,
+          project_id: uploadProject === "none" ? null : uploadProject || null,
+          approval_status: uploadApproval ? "pending" : "none",
+          caption: uploadCaption.trim() || null,
+          description: uploadDescription.trim() || null,
+        });
+        setUploadProgress(100);
+        await supabase.from("notifications").insert({
+          user_id: selectedClient,
+          message: uploadApproval ? `Vídeo para aprovação: ${displayName}` : `Novo vídeo: ${displayName}`,
+          notification_type: uploadApproval ? "approval" : "delivery",
+          link: uploadApproval ? "/aprovacoes" : "/documentos",
+        });
+        queryClient.invalidateQueries({ queryKey: ["all-files"] });
+        toast({ title: "Vídeo adicionado" });
+        setUploadOpen(false);
+        resetUploadForm();
+        setUploading(false);
+        return;
+      }
+
 
     try {
       const totalFiles = uploadFiles.length;
@@ -328,6 +382,7 @@ export default function AdminFiles() {
     setUploadCaption("");
     setUploadCarousel("");
     setUploadDescription("");
+    setUploadVideoUrl("");
   };
 
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; url: string } | null>(null);
