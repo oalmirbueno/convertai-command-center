@@ -46,9 +46,11 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("sitebolt");
   const [generateTasks, setGenerateTasks] = useState(true);
   const [totalValue, setTotalValue] = useState("");
-  const [entryPct, setEntryPct] = useState("50");
-  const [installmentsCount, setInstallmentsCount] = useState("1");
+  const [paymentMode, setPaymentMode] = useState<"a_vista" | "parcelado">("a_vista");
+  const [installmentsCount, setInstallmentsCount] = useState("2");
   const [firstDueDate, setFirstDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
+  const [paidInstallments, setPaidInstallments] = useState("0");
 
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
@@ -83,8 +85,9 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const reset = () => {
     setClientId(""); setProjectMode("new"); setExistingProjectId("");
     setProjectType("site"); setName(""); setDescription(""); setBrand("sitebolt");
-    setGenerateTasks(true); setTotalValue(""); setEntryPct("50");
-    setInstallmentsCount("1"); setFirstDueDate(new Date().toISOString().slice(0, 10));
+    setGenerateTasks(true); setTotalValue(""); setPaymentMode("a_vista");
+    setInstallmentsCount("2"); setFirstDueDate(new Date().toISOString().slice(0, 10));
+    setAlreadyPaid(false); setPaidInstallments("0");
   };
 
   const handleSave = async () => {
@@ -175,12 +178,12 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         });
       }
 
-      // 2. Create payment plan
-      const ePct = parseFloat(entryPct) || 0;
-      const iCount = parseInt(installmentsCount) || 1;
-      const entryAmount = (total * ePct) / 100;
-      const remaining = total - entryAmount;
-      const perInstallment = iCount > 0 ? remaining / iCount : 0;
+      // 2. Create payment plan (à vista = 1 parcela; parcelado = N parcelas iguais)
+      const iCount = paymentMode === "a_vista" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
+      const perInstallment = total / iCount;
+      const paidCount = alreadyPaid
+        ? (paymentMode === "a_vista" ? iCount : Math.min(parseInt(paidInstallments) || 0, iCount))
+        : 0;
 
       const { data: paymentData, error: payErr } = await supabase
         .from("project_payments")
@@ -188,8 +191,8 @@ export default function NewIncomeModal({ open, onClose }: Props) {
           project_id: projectId,
           client_id: clientId,
           total_value: total,
-          entry_percentage: ePct,
-          entry_amount: entryAmount,
+          entry_percentage: 0,
+          entry_amount: 0,
           installments_count: iCount,
           created_by: user?.id,
         } as any)
@@ -199,25 +202,18 @@ export default function NewIncomeModal({ open, onClose }: Props) {
 
       const baseDate = new Date(firstDueDate + "T12:00:00");
       const instRows: any[] = [];
-      if (ePct > 0) {
-        instRows.push({
-          payment_id: paymentData.id,
-          installment_number: 0,
-          amount: entryAmount,
-          due_date: format(baseDate, "yyyy-MM-dd"),
-          status: "pending",
-          description: `Entrada (${ePct}%)`,
-        });
-      }
       for (let i = 1; i <= iCount; i++) {
-        const d = new Date(baseDate); d.setMonth(d.getMonth() + i);
+        const d = new Date(baseDate);
+        if (i > 1) d.setMonth(d.getMonth() + (i - 1));
+        const isPaid = i <= paidCount;
         instRows.push({
           payment_id: paymentData.id,
           installment_number: i,
           amount: perInstallment,
           due_date: format(d, "yyyy-MM-dd"),
-          status: "pending",
-          description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
+          status: isPaid ? "paid" : "pending",
+          paid_at: isPaid ? new Date().toISOString() : null,
+          description: iCount === 1 ? "Pagamento à vista" : `Parcela ${i}/${iCount}`,
         });
       }
       if (instRows.length) await supabase.from("payment_installments").insert(instRows);
@@ -362,30 +358,69 @@ export default function NewIncomeModal({ open, onClose }: Props) {
 
           {/* Financeiro */}
           <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3">
-            <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro</p>
-            <div className="grid grid-cols-3 gap-2">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
-                <Input type="number" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} className="mt-1" placeholder="0,00" />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada %</label>
-                <Input type="number" step="1" min="0" max="100" value={entryPct} onChange={(e) => setEntryPct(e.target.value)} className="mt-1" />
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas</label>
-                <Input type="number" step="1" min="1" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="mt-1" />
-              </div>
-            </div>
+            <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro · Pagamento único (sem renovação)</p>
+
             <div>
-              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Primeira data (entrada)</label>
-              <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="mt-1" />
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
+              <Input type="number" step="0.01" value={totalValue} onChange={(e) => setTotalValue(e.target.value)} className="mt-1" placeholder="0,00" />
             </div>
+
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Forma de pagamento</label>
+              <div className="grid grid-cols-2 gap-2">
+                <button type="button" onClick={() => setPaymentMode("a_vista")}
+                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                    paymentMode === "a_vista" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
+                  }`}>À vista</button>
+                <button type="button" onClick={() => setPaymentMode("parcelado")}
+                  className={`px-3 py-2 rounded-lg text-[12px] border transition-colors cursor-pointer ${
+                    paymentMode === "parcelado" ? "bg-primary/10 border-primary text-foreground font-semibold" : "bg-secondary border-border text-muted-foreground"
+                  }`}>Parcelado</button>
+              </div>
+            </div>
+
+            {paymentMode === "parcelado" && (
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nº parcelas</label>
+                  <Input type="number" step="1" min="2" value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} className="mt-1" />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">1ª data</label>
+                  <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="mt-1" />
+                </div>
+              </div>
+            )}
+
+            {paymentMode === "a_vista" && (
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Data do pagamento</label>
+                <Input type="date" value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} className="mt-1" />
+              </div>
+            )}
+
+            <label className="flex items-center gap-2.5 p-2.5 rounded-lg bg-secondary/50 border border-border cursor-pointer">
+              <input type="checkbox" checked={alreadyPaid} onChange={(e) => setAlreadyPaid(e.target.checked)} className="accent-primary w-4 h-4" />
+              <div className="text-[11px] flex-1">
+                <p className="text-foreground font-medium">Já foi pago</p>
+                <p className="text-muted-foreground">Marca a entrada como recebida no fluxo de caixa.</p>
+              </div>
+            </label>
+
+            {alreadyPaid && paymentMode === "parcelado" && (
+              <div>
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas já pagas</label>
+                <Input type="number" step="1" min="0" max={installmentsCount} value={paidInstallments} onChange={(e) => setPaidInstallments(e.target.value)} className="mt-1" />
+                <p className="text-[10px] text-muted-foreground mt-1">de {installmentsCount}</p>
+              </div>
+            )}
+
             {totalValue && parseFloat(totalValue) > 0 && (
               <p className="text-[11px] text-muted-foreground">
-                Entrada: <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * parseFloat(entryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
-                {" · "}
-                {installmentsCount}× de <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * (100 - parseFloat(entryPct || "0"))) / 100 / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                {paymentMode === "a_vista"
+                  ? <>Total: <span className="text-foreground font-mono">R$ {parseFloat(totalValue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
+                  : <>{installmentsCount}× de <span className="text-foreground font-mono">R$ {(parseFloat(totalValue) / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
+                }
               </p>
             )}
           </div>
