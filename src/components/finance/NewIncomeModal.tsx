@@ -85,8 +85,9 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const reset = () => {
     setClientId(""); setProjectMode("new"); setExistingProjectId("");
     setProjectType("site"); setName(""); setDescription(""); setBrand("sitebolt");
-    setGenerateTasks(true); setTotalValue(""); setEntryPct("50");
-    setInstallmentsCount("1"); setFirstDueDate(new Date().toISOString().slice(0, 10));
+    setGenerateTasks(true); setTotalValue(""); setPaymentMode("a_vista");
+    setInstallmentsCount("2"); setFirstDueDate(new Date().toISOString().slice(0, 10));
+    setAlreadyPaid(false); setPaidInstallments("0");
   };
 
   const handleSave = async () => {
