@@ -19,7 +19,7 @@ const typeLabels: Record<string, string> = {
 };
 
 const ACCEPTED_FORMATS = ".pdf,.md,.txt,.doc,.docx";
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 const MAX_FILES = 10;
 
 interface Props { open: boolean; onClose: () => void; }
@@ -103,7 +103,7 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
     const valid: File[] = [];
     for (const f of newFiles) {
       if (f.size > MAX_FILE_SIZE) {
-        toast.error(`${f.name} é muito grande (máx 20MB)`);
+        toast.error(`${f.name} é muito grande (máx 2GB)`);
         continue;
       }
       if (files.length + valid.length >= MAX_FILES) {

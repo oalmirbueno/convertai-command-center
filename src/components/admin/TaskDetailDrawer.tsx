@@ -328,7 +328,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Não autenticado");
       for (const file of Array.from(files)) {
-        if (file.size > 100 * 1024 * 1024) { toast.error(`${file.name} excede 100MB`); continue; }
+        if (file.size > 2 * 1024 * 1024 * 1024) { toast.error(`${file.name} excede 2GB`); continue; }
         const ext = file.name.split(".").pop();
         const path = `task-attachments/${task.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("files").upload(path, file);
