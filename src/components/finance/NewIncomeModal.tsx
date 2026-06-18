@@ -46,9 +46,11 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("sitebolt");
   const [generateTasks, setGenerateTasks] = useState(true);
   const [totalValue, setTotalValue] = useState("");
-  const [entryPct, setEntryPct] = useState("50");
-  const [installmentsCount, setInstallmentsCount] = useState("1");
+  const [paymentMode, setPaymentMode] = useState<"a_vista" | "parcelado">("a_vista");
+  const [installmentsCount, setInstallmentsCount] = useState("2");
   const [firstDueDate, setFirstDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [alreadyPaid, setAlreadyPaid] = useState(false);
+  const [paidInstallments, setPaidInstallments] = useState("0");
 
   const selectedClient = useMemo(
     () => (clients || []).find((c: any) => c.id === clientId),
