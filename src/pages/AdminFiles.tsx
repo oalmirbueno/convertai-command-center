@@ -120,7 +120,7 @@ export default function AdminFiles() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Upload form state
-  const [uploadMode, setUploadMode] = useState<"single" | "carousel">("single");
+  const [uploadMode, setUploadMode] = useState<"single" | "carousel" | "video_link">("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(activeFolder);
@@ -130,6 +130,7 @@ export default function AdminFiles() {
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
+  const [uploadVideoUrl, setUploadVideoUrl] = useState("");
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
@@ -223,14 +224,65 @@ export default function AdminFiles() {
   }, [activeFolder, uploadFiles.length]);
 
   const handleUpload = async () => {
-    if (uploadFiles.length === 0 || !user || !selectedClient || selectedClient === "all") {
-      toast({ title: "Selecione um cliente e ao menos um arquivo", variant: "destructive" });
+    if (!user || !selectedClient || selectedClient === "all") {
+      toast({ title: "Selecione um cliente", variant: "destructive" });
+      return;
+    }
+    if (uploadMode === "video_link") {
+      if (!uploadVideoUrl.trim()) {
+        toast({ title: "Cole a URL do vídeo", variant: "destructive" });
+        return;
+      }
+      try {
+        new URL(uploadVideoUrl.trim());
+      } catch {
+        toast({ title: "URL inválida", variant: "destructive" });
+        return;
+      }
+    } else if (uploadFiles.length === 0) {
+      toast({ title: "Selecione ao menos um arquivo", variant: "destructive" });
       return;
     }
     setUploading(true);
     setUploadProgress(5);
 
     try {
+      // Video link branch — no storage upload, just save the URL as a file record
+      if (uploadMode === "video_link") {
+        const url = uploadVideoUrl.trim();
+        const displayName = uploadName.trim() || (() => {
+          try {
+            const u = new URL(url);
+            return `Vídeo • ${u.hostname.replace(/^www\./, "")}`;
+          } catch { return "Vídeo externo"; }
+        })();
+        await supabase.from("files").insert({
+          client_id: selectedClient,
+          file_name: displayName,
+          file_url: url,
+          file_type: "video",
+          folder: uploadFolder,
+          uploaded_by: user.id,
+          project_id: uploadProject === "none" ? null : uploadProject || null,
+          approval_status: uploadApproval ? "pending" : "none",
+          caption: uploadCaption.trim() || null,
+          description: uploadDescription.trim() || null,
+        });
+        setUploadProgress(100);
+        await supabase.from("notifications").insert({
+          user_id: selectedClient,
+          message: uploadApproval ? `Vídeo para aprovação: ${displayName}` : `Novo vídeo: ${displayName}`,
+          notification_type: uploadApproval ? "approval" : "delivery",
+          link: uploadApproval ? "/aprovacoes" : "/documentos",
+        });
+        queryClient.invalidateQueries({ queryKey: ["all-files"] });
+        toast({ title: "Vídeo adicionado" });
+        setUploadOpen(false);
+        resetUploadForm();
+        setUploading(false);
+        return;
+      }
+
       const totalFiles = uploadFiles.length;
       const isCarousel = uploadMode === "carousel" && totalFiles > 1;
       // For carousel: first file gets the main record, others are linked via parent_file_id
@@ -328,6 +380,7 @@ export default function AdminFiles() {
     setUploadCaption("");
     setUploadCarousel("");
     setUploadDescription("");
+    setUploadVideoUrl("");
   };
 
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; url: string } | null>(null);
@@ -607,20 +660,20 @@ export default function AdminFiles() {
             {/* Mode selector */}
             <div>
               <Label className="label-sm mb-1.5 block">Modo de envio</Label>
-              <div className="flex gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   onClick={() => { setUploadMode("single"); setUploadFiles(prev => prev.slice(0, 1)); }}
-                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
                     uploadMode === "single"
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  📄 Arquivo único
+                  📄 Arquivo
                 </button>
                 <button
                   onClick={() => setUploadMode("carousel")}
-                  className={`flex-1 px-4 py-2.5 rounded-xl text-sm font-medium border transition-colors ${
+                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
                     uploadMode === "carousel"
                       ? "bg-primary text-primary-foreground border-primary"
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
@@ -628,43 +681,72 @@ export default function AdminFiles() {
                 >
                   🎠 Carrossel
                 </button>
+                <button
+                  onClick={() => { setUploadMode("video_link"); setUploadFiles([]); }}
+                  className={`px-3 py-2.5 rounded-xl text-xs font-medium border transition-colors ${
+                    uploadMode === "video_link"
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-secondary text-muted-foreground border-border hover:text-foreground"
+                  }`}
+                >
+                  🎬 Link vídeo
+                </button>
               </div>
-            </div>
-
-            {/* Drag & Drop zone */}
-            <div
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-              className={`border-2 border-dashed rounded-2xl min-h-[100px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
-                dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
-              } ${uploadFiles.length > 0 ? "py-3" : "h-36"}`}
-            >
-              <Upload className="w-7 h-7 text-muted-foreground mb-2" />
-              <p className="text-sm text-muted-foreground">
-                {uploadFiles.length === 0
-                  ? uploadMode === "carousel"
-                    ? "Arraste ou clique para selecionar múltiplas imagens"
-                    : "Arraste ou clique para selecionar"
-                  : `${uploadFiles.length} arquivo(s) selecionado(s)`}
-              </p>
-              {uploadMode === "carousel" && (
-                <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione várias imagens para montar o carrossel</p>
+              {uploadMode === "video_link" && (
+                <p className="text-[11px] text-muted-foreground/70 mt-2">
+                  Cole link do YouTube, Vimeo, Loom, Drive, Wistia ou MP4 direto. Sem limite de tamanho — nada vai para o storage.
+                </p>
               )}
             </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept={ACCEPTED}
-              multiple={uploadMode === "carousel"}
-              className="hidden"
-              onChange={(e) => {
-                const files = Array.from(e.target.files || []);
-                if (files.length > 0) handleFilesSelect(files);
-                if (fileInputRef.current) fileInputRef.current.value = "";
-              }}
-            />
+
+            {uploadMode === "video_link" ? (
+              <div>
+                <Label className="label-sm">URL do vídeo</Label>
+                <Input
+                  value={uploadVideoUrl}
+                  onChange={(e) => setUploadVideoUrl(e.target.value)}
+                  placeholder="https://youtube.com/watch?v=... ou https://vimeo.com/..."
+                  className="mt-1 bg-secondary border-border rounded-xl"
+                />
+              </div>
+            ) : (
+              <>
+                {/* Drag & Drop zone */}
+                <div
+                  onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+                  onDragLeave={() => setDragOver(false)}
+                  onDrop={handleDrop}
+                  onClick={() => fileInputRef.current?.click()}
+                  className={`border-2 border-dashed rounded-2xl min-h-[100px] flex flex-col items-center justify-center cursor-pointer transition-colors ${
+                    dragOver ? "border-primary bg-primary/5" : "border-border hover:border-muted-foreground"
+                  } ${uploadFiles.length > 0 ? "py-3" : "h-36"}`}
+                >
+                  <Upload className="w-7 h-7 text-muted-foreground mb-2" />
+                  <p className="text-sm text-muted-foreground">
+                    {uploadFiles.length === 0
+                      ? uploadMode === "carousel"
+                        ? "Arraste ou clique para selecionar múltiplas imagens"
+                        : "Arraste ou clique para selecionar"
+                      : `${uploadFiles.length} arquivo(s) selecionado(s)`}
+                  </p>
+                  {uploadMode === "carousel" && (
+                    <p className="text-[11px] text-muted-foreground/60 mt-1">Selecione várias imagens para montar o carrossel</p>
+                  )}
+                </div>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={ACCEPTED}
+                  multiple={uploadMode === "carousel"}
+                  className="hidden"
+                  onChange={(e) => {
+                    const files = Array.from(e.target.files || []);
+                    if (files.length > 0) handleFilesSelect(files);
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                />
+              </>
+            )}
 
             {uploadFiles.length > 0 && (
               <div className="space-y-1.5 max-h-[140px] overflow-y-auto">
@@ -747,8 +829,8 @@ export default function AdminFiles() {
           </div>
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
             <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
-            <Button onClick={handleUpload} disabled={uploadFiles.length === 0 || uploading}>
-              {uploading ? "Enviando..." : uploadFiles.length > 1 ? `Enviar ${uploadFiles.length} arquivos` : "Enviar"}
+            <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
+              {uploading ? "Enviando..." : uploadMode === "video_link" ? "Adicionar vídeo" : uploadFiles.length > 1 ? `Enviar ${uploadFiles.length} arquivos` : "Enviar"}
             </Button>
           </DialogFooter>
         </DialogContent>
