@@ -130,6 +130,8 @@ export default function ReportDetail() {
     if (!report) return null;
 
     const m = { ...((report.metrics || {}) as Record<string, any>) };
+    const prevM = (previousReport?.metrics || {}) as Record<string, any>;
+    const prevNum = (k: string) => Number(prevM[k]) || 0;
 
     // ── Auto-heal: recalcula taxas/custos derivados a partir dos totais reais ──
     // Reports antigos podem ter CPC/CPM/CTR errados (export do Meta com colunas
