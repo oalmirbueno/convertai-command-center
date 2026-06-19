@@ -1134,26 +1134,64 @@ export default function ReportDetail() {
           {/* Radar + Eficiência refinada */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {radarData.length >= 3 && (
-              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
-                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+              <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none opacity-50"
+                  style={{ background: "radial-gradient(circle at 50% 60%, hsl(145 100% 50% / 0.10), transparent 70%)" }} />
+                <h3 className="relative text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
                   Diagnóstico de Performance
+                  <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.2em] text-primary/70 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
+                    {radarData.length} eixos
+                  </span>
                 </h3>
-                <p className="text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
-                <div className="h-64">
+                <p className="relative text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
+                <div className="relative h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={radarData}>
                       <defs>
                         <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.45} />
-                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.08} />
+                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.55} />
+                          <stop offset="60%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.04} />
                         </radialGradient>
+                        <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
+                          <feGaussianBlur stdDeviation="2.5" result="b" />
+                          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                        </filter>
                       </defs>
-                      <PolarGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600 }} />
+                      <PolarGrid stroke="hsl(145 100% 50%)" strokeOpacity={0.18} strokeDasharray="2 4" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600, fontFamily: "JetBrains Mono, monospace" }} />
                       <PolarRadiusAxis tick={false} axisLine={false} />
-                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="url(#radarFill)" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(145, 100%, 50%)", stroke: "hsl(var(--card))", strokeWidth: 2 }} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: any) => [v + "%", "vs. benchmark"]} />
+                      {/* Benchmark reference radar */}
+                      <Radar
+                        name="Benchmark"
+                        dataKey={() => 100}
+                        stroke="hsl(0 0% 60% / 0.4)"
+                        strokeDasharray="3 4"
+                        fill="transparent"
+                        strokeWidth={1}
+                        isAnimationActive={false}
+                      />
+                      <Radar
+                        name="Performance"
+                        dataKey="value"
+                        stroke="hsl(145, 100%, 50%)"
+                        fill="url(#radarFill)"
+                        strokeWidth={2.5}
+                        dot={{ r: 4, fill: "hsl(145, 100%, 50%)", stroke: "hsl(0 0% 7%)", strokeWidth: 2 }}
+                        filter="url(#radarGlow)"
+                        animationDuration={1600}
+                        animationEasing="ease-out"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
+                          border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
+                          fontSize: 12, fontFamily: "JetBrains Mono, monospace",
+                          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
+                        }}
+                        formatter={(v: any) => [v + "%", "vs. benchmark"]}
+                      />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
