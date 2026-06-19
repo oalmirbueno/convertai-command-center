@@ -291,37 +291,37 @@ export default function ReportDetail() {
     if (spend > 0 && contact > 0) {
       const v = spend / contact;
       kpis.push({ label: "Custo por Conversa", value: fmtR(v), detail: `${contact} contatos com ${fmtR(spend)} investidos`,
-        icon: MessageCircle, color: "hsl(142, 71%, 45%)", status: v < 15 ? "good" : v < 30 ? "warning" : "bad" });
+        icon: MessageCircle, color: "hsl(142, 71%, 45%)", status: v < 25 ? "good" : v < 60 ? "warning" : "bad" });
     }
     if (spend > 0 && traffic > 0) {
       const v = spend / traffic;
       kpis.push({ label: "Custo por Clique", value: fmtR(v), detail: `${traffic.toLocaleString("pt-BR")} cliques no período`,
-        icon: MousePointerClick, color: "hsl(200, 100%, 50%)", status: v < 2 ? "good" : v < 5 ? "warning" : "bad" });
+        icon: MousePointerClick, color: "hsl(200, 100%, 50%)", status: v < 3.5 ? "good" : v < 8 ? "warning" : "bad" });
     }
     if (reachVal > 0 && spend > 0) {
       const v = (spend / reachVal) * 1000;
       kpis.push({ label: "CPM", value: fmtR(v), detail: `Custo para alcançar 1.000 pessoas`,
-        icon: Eye, color: "hsl(263, 70%, 66%)", status: v < 15 ? "good" : v < 40 ? "warning" : "bad" });
+        icon: Eye, color: "hsl(263, 70%, 66%)", status: v < 25 ? "good" : v < 60 ? "warning" : "bad" });
     }
     if (num("profile_visits") > 0 && reachVal > 0) {
       const r = (num("profile_visits") / reachVal) * 100;
       kpis.push({ label: "Taxa Perfil/Alcance", value: r.toFixed(2) + "%", detail: `${num("profile_visits").toLocaleString("pt-BR")} visitas vs. alcance`,
-        icon: Target, color: "hsl(190, 90%, 50%)", status: r > 2 ? "good" : r > 0.5 ? "warning" : "bad" });
+        icon: Target, color: "hsl(190, 90%, 50%)", status: r > 1 ? "good" : r > 0.3 ? "warning" : "bad" });
     }
     if (num("profile_visits") > 0 && contact > 0) {
       const r = (contact / num("profile_visits")) * 100;
       kpis.push({ label: "Perfil → Conversa", value: r.toFixed(1) + "%", detail: `${contact} de ${num("profile_visits").toLocaleString("pt-BR")} visitantes converteram`,
-        icon: ArrowRight, color: "hsl(145, 100%, 50%)", status: r > 10 ? "good" : r > 3 ? "warning" : "bad" });
+        icon: ArrowRight, color: "hsl(145, 100%, 50%)", status: r > 5 ? "good" : r > 1.5 ? "warning" : "bad" });
     }
     if (spend > 0 && num("purchases") > 0) {
       const v = spend / num("purchases");
       kpis.push({ label: "Custo por Compra", value: fmtR(v), detail: `${num("purchases")} vendas geradas`,
-        icon: Award, color: "hsl(50, 95%, 55%)", status: v < 50 ? "good" : v < 150 ? "warning" : "bad" });
+        icon: Award, color: "hsl(50, 95%, 55%)", status: v < 80 ? "good" : v < 250 ? "warning" : "bad" });
     }
     if (num("roas") > 0) {
       const v = num("roas");
       kpis.push({ label: "ROAS", value: v.toFixed(2) + "x", detail: `Retorno sobre o investimento publicitário`,
-        icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 3 ? "good" : v > 1 ? "warning" : "bad" });
+        icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 2 ? "good" : v > 1 ? "warning" : "bad" });
     }
     // ── Crescimento de Seguidores (vs período anterior) ──
     const fg = num("followers_gained");
