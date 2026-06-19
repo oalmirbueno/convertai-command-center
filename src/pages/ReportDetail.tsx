@@ -533,6 +533,17 @@ export default function ReportDetail() {
       )}
       </div>
 
+      {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR ═══════════════ */}
+      {report.project_id && (
+        <ReportComparison
+          projectId={report.project_id}
+          currentReportId={report.id}
+          currentCreatedAt={report.created_at}
+          currentMetrics={report.metrics as any}
+          currentPeriod={{ start: report.period_start, end: report.period_end }}
+        />
+      )}
+
       {/* ═══════════════ KPI CARDS ═══════════════ */}
       {kpis.length > 0 && (
         <section className="space-y-3">
