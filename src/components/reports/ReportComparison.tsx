@@ -1,12 +1,16 @@
 // Comparação automática vs. relatório anterior do MESMO projeto
-// - Auto-cura taxas (CTR/CPC/CPM/ROAS) a partir dos totais
-// - Mostra delta % por métrica (subiu/desceu) com semântica (custo cair = bom)
-// - Gráfico de barras lado a lado por campanha (quando há __breakdown)
+// v2:
+// - Toggle "Comparar com anterior" no topo (persiste em localStorage por relatório)
+// - extractTotals(): lê tanto metrics.* quanto metrics.__breakdown (legado)
+// - Análise contextual: investimento × eficiência × intenção, não apenas seta
+// - Normalização por dia quando períodos têm tamanhos muito diferentes
 
+import { useState, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  ArrowUpRight, ArrowDownRight, GitCompareArrows, Minus, TrendingUp,
+  ArrowUpRight, ArrowDownRight, GitCompareArrows, Minus,
+  CheckCircle2, AlertTriangle, Info, ChevronDown, ChevronUp, Sparkles,
 } from "lucide-react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, Legend,
@@ -15,72 +19,344 @@ import {
 type AnyRec = Record<string, any>;
 
 const safeDiv = (a: number, b: number) => (b > 0 && isFinite(a / b) ? a / b : 0);
+const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "";
+const daysBetween = (a?: string, b?: string) => (a && b)
+  ? Math.max(1, Math.ceil((new Date(b).getTime() - new Date(a).getTime()) / 86400000) + 1)
+  : 0;
 
-function healMetrics(raw: AnyRec | null | undefined): AnyRec {
-  const m: AnyRec = { ...(raw || {}) };
-  const spend = Number(m.ad_spend) || 0;
-  const impr  = Number(m.impressions) || 0;
-  const reach = Number(m.reach) || 0;
-  const click = Number(m.link_clicks) || Number(m.clicks) || 0;
-  const res   = Number(m.results) || Number(m.conversions) || 0;
-  if (impr > 0 && click > 0)   m.ctr = safeDiv(click, impr) * 100;
-  if (click > 0 && spend > 0)  m.cpc = safeDiv(spend, click);
-  if (impr > 0 && spend > 0)   m.cpm = safeDiv(spend, impr) * 1000;
-  if (reach > 0 && impr > 0)   m.frequency = safeDiv(impr, reach);
-  if (res > 0 && spend > 0)    m.cost_per_result = safeDiv(spend, res);
-  if ((Number(m.messages)  || 0) > 0 && spend > 0) m.cost_per_message  = safeDiv(spend, Number(m.messages));
-  if ((Number(m.leads)     || 0) > 0 && spend > 0) m.cost_per_lead     = safeDiv(spend, Number(m.leads));
-  if ((Number(m.purchases) || 0) > 0 && spend > 0) m.cost_per_purchase = safeDiv(spend, Number(m.purchases));
-  if ((Number(m.revenue)   || 0) > 0 && spend > 0) m.roas              = safeDiv(Number(m.revenue), spend);
-  return m;
+/* ──────────────────────────────────────────────────────────
+   Extração robusta de totais (cobre relatórios antigos)
+   ────────────────────────────────────────────────────────── */
+const COL_HINTS = {
+  spend:    ["valor usado", "valor gasto", "amount spent", "amountspent", "investimento", "investido", "spend", "custo total"],
+  impr:     ["impressões", "impressoes", "impressions", "impr"],
+  reach:    ["alcance", "reach"],
+  click:    ["cliques no link", "link clicks", "cliques (todos)", "cliques todos", "cliques", "clicks"],
+  results:  ["resultados", "results", "conversões", "conversoes", "conversions"],
+  messages: ["mensagens", "messag", "conversas"],
+  leads:    ["leads", "cadastros"],
+  revenue:  ["revenue", "receita", "valor das compras", "valor de conversão", "vendas", "sales"],
+  purchases:["purchases", "compras", "pedidos", "orders"],
+};
+const NOT_RATE_FOR = {
+  spend:    ["custo por", "cost per", "cpc", "cpm", "cpa", "cpr"],
+  impr:     ["cpm", "custo por", "cost per"],
+  reach:    ["custo por", "cost per", "cpm"],
+  click:    ["custo por", "cost per", "cpc", "ctr", "%", "unico", "único"],
+  results:  ["custo por", "cost per", "início", "inicio", "encerramento"],
+  messages: ["custo por", "cost per"],
+  leads:    ["custo por", "cost per"],
+  revenue:  ["custo", "cost", "cpa"],
+  purchases:["custo", "cost", "valor"],
+};
+function sumFromBreakdown(rows: AnyRec[], kind: keyof typeof COL_HINTS): number {
+  if (!rows?.length) return 0;
+  const keys = Object.keys(rows[0]);
+  const exclude = NOT_RATE_FOR[kind];
+  const matched: string[] = [];
+  for (const hint of COL_HINTS[kind]) {
+    const h = hint.toLowerCase();
+    for (const k of keys) {
+      const lk = k.toLowerCase();
+      if (lk.includes(h) && !exclude.some(e => lk.includes(e)) && !matched.includes(k)) {
+        matched.push(k);
+        break;
+      }
+    }
+    if (matched.length) break;
+  }
+  if (!matched.length) return 0;
+  return rows.reduce((s, r) => s + (Number(r[matched[0]]) || 0), 0);
 }
 
-// Métricas onde MENOR é melhor (custo)
-const LOWER_IS_BETTER = new Set([
-  "cpc", "cpm", "cpa", "cost_per_result", "cost_per_message",
-  "cost_per_lead", "cost_per_purchase", "frequency",
-]);
+interface Totals {
+  spend: number; impr: number; reach: number; click: number;
+  results: number; messages: number; leads: number;
+  revenue: number; purchases: number;
+  ctr: number; cpc: number; cpm: number;
+  frequency: number; cost_per_result: number;
+  cost_per_message: number; cost_per_lead: number;
+  cost_per_purchase: number; roas: number;
+}
 
-const METRIC_LABELS: Record<string, { label: string; format: (v: number) => string }> = {
-  ad_spend:           { label: "Investido",       format: v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
-  impressions:        { label: "Impressões",      format: v => Math.round(v).toLocaleString("pt-BR") },
-  reach:              { label: "Alcance",         format: v => Math.round(v).toLocaleString("pt-BR") },
-  clicks:             { label: "Cliques",         format: v => Math.round(v).toLocaleString("pt-BR") },
-  link_clicks:        { label: "Cliques no Link", format: v => Math.round(v).toLocaleString("pt-BR") },
-  results:            { label: "Resultados",      format: v => Math.round(v).toLocaleString("pt-BR") },
-  messages:           { label: "Mensagens",       format: v => Math.round(v).toLocaleString("pt-BR") },
-  leads:              { label: "Leads",           format: v => Math.round(v).toLocaleString("pt-BR") },
-  purchases:          { label: "Compras",         format: v => Math.round(v).toLocaleString("pt-BR") },
-  revenue:            { label: "Receita",         format: v => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) },
-  ctr:                { label: "CTR",             format: v => v.toFixed(2) + "%" },
-  cpc:                { label: "CPC",             format: v => "R$ " + v.toFixed(2) },
-  cpm:                { label: "CPM",             format: v => "R$ " + v.toFixed(2) },
-  cpa:                { label: "CPA",             format: v => "R$ " + v.toFixed(2) },
-  cost_per_result:    { label: "Custo/Resultado", format: v => "R$ " + v.toFixed(2) },
-  cost_per_message:   { label: "Custo/Mensagem",  format: v => "R$ " + v.toFixed(2) },
-  cost_per_lead:      { label: "Custo/Lead",      format: v => "R$ " + v.toFixed(2) },
-  cost_per_purchase:  { label: "Custo/Compra",    format: v => "R$ " + v.toFixed(2) },
-  roas:               { label: "ROAS",            format: v => v.toFixed(2) + "x" },
-  frequency:          { label: "Frequência",      format: v => v.toFixed(2) + "x" },
-  engagement:         { label: "Engajamento",     format: v => Math.round(v).toLocaleString("pt-BR") },
-  engagement_rate:    { label: "Taxa Engaj.",     format: v => v.toFixed(2) + "%" },
-  followers_gained:   { label: "Novos Seg.",      format: v => Math.round(v).toLocaleString("pt-BR") },
-  profile_visits:     { label: "Visitas Perfil",  format: v => Math.round(v).toLocaleString("pt-BR") },
+function extractTotals(report: AnyRec | null | undefined): Totals {
+  const m = (report?.metrics || {}) as AnyRec;
+  const breakdown = Array.isArray(m.__breakdown) ? m.__breakdown as AnyRec[] : [];
+  const pick = (mapped: number, kind: keyof typeof COL_HINTS) =>
+    mapped > 0 ? mapped : sumFromBreakdown(breakdown, kind);
+
+  const spend  = pick(Number(m.ad_spend)    || 0, "spend");
+  const impr   = pick(Number(m.impressions) || 0, "impr");
+  const reach  = pick(Number(m.reach)       || 0, "reach");
+  const click  = pick(Number(m.link_clicks) || Number(m.clicks) || 0, "click");
+  const results= pick(Number(m.results)     || Number(m.conversions) || 0, "results");
+  const messages = pick(Number(m.messages)  || 0, "messages");
+  const leads    = pick(Number(m.leads)     || 0, "leads");
+  const revenue  = pick(Number(m.revenue)   || 0, "revenue");
+  const purchases= pick(Number(m.purchases) || 0, "purchases");
+
+  return {
+    spend, impr, reach, click, results, messages, leads, revenue, purchases,
+    ctr: safeDiv(click, impr) * 100,
+    cpc: safeDiv(spend, click),
+    cpm: safeDiv(spend, impr) * 1000,
+    frequency: safeDiv(impr, reach),
+    cost_per_result: safeDiv(spend, results),
+    cost_per_message: safeDiv(spend, messages),
+    cost_per_lead: safeDiv(spend, leads),
+    cost_per_purchase: safeDiv(spend, purchases),
+    roas: safeDiv(revenue, spend),
+  };
+}
+
+/* ──────────────────────────────────────────────────────────
+   Formatação por métrica
+   ────────────────────────────────────────────────────────── */
+const fmtR = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtN = (v: number) => Math.round(v).toLocaleString("pt-BR");
+
+const META: Record<string, { label: string; format: (v: number) => string; volume?: boolean }> = {
+  spend:           { label: "Investimento",      format: fmtR, volume: true },
+  impr:            { label: "Impressões",        format: fmtN, volume: true },
+  reach:           { label: "Alcance",           format: fmtN, volume: true },
+  click:           { label: "Cliques",           format: fmtN, volume: true },
+  results:         { label: "Resultados",        format: fmtN, volume: true },
+  messages:        { label: "Mensagens",         format: fmtN, volume: true },
+  leads:           { label: "Leads",             format: fmtN, volume: true },
+  revenue:         { label: "Receita",           format: fmtR, volume: true },
+  purchases:       { label: "Compras",           format: fmtN, volume: true },
+  ctr:             { label: "CTR",               format: v => v.toFixed(2) + "%" },
+  cpc:             { label: "CPC",               format: fmtR },
+  cpm:             { label: "CPM",               format: fmtR },
+  frequency:       { label: "Frequência",        format: v => v.toFixed(2) + "x" },
+  cost_per_result: { label: "Custo/Resultado",   format: fmtR },
+  cost_per_message:{ label: "Custo/Mensagem",    format: fmtR },
+  cost_per_lead:   { label: "Custo/Lead",        format: fmtR },
+  cost_per_purchase:{ label: "Custo/Compra",     format: fmtR },
+  roas:            { label: "ROAS",              format: v => v.toFixed(2) + "x" },
 };
 
-const fmtDate = (d?: string) => d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "";
+/* ──────────────────────────────────────────────────────────
+   Severidades contextuais (não é up=bom, down=ruim)
+   ────────────────────────────────────────────────────────── */
+type Severity = "expected" | "gain" | "attention" | "critical" | "neutral";
+
+const SEV_STYLE: Record<Severity, { tone: string; chip: string; label: string; icon: any }> = {
+  expected:  { tone: "border-border bg-secondary/30",
+               chip: "text-muted-foreground bg-secondary border-border",
+               label: "Esperado", icon: Info },
+  gain:      { tone: "border-primary/25 bg-primary/5",
+               chip: "text-primary bg-primary/10 border-primary/25",
+               label: "Ganho", icon: CheckCircle2 },
+  attention: { tone: "border-warning/30 bg-warning/5",
+               chip: "text-warning bg-warning/10 border-warning/30",
+               label: "Atenção", icon: AlertTriangle },
+  critical:  { tone: "border-destructive/30 bg-destructive/5",
+               chip: "text-destructive bg-destructive/10 border-destructive/30",
+               label: "Crítico", icon: AlertTriangle },
+  neutral:   { tone: "border-border bg-card",
+               chip: "text-muted-foreground bg-secondary border-border",
+               label: "Neutro", icon: Minus },
+};
+
+interface RowAnalysis {
+  key: string;
+  cur: number;
+  prev: number;
+  pct: number;            // delta % normalizado (quando aplica)
+  rawPct: number;         // delta % bruto
+  severity: Severity;
+  narrative: string;
+}
+
+/** Classifica cada métrica considerando o contexto investimento × resultado × eficiência. */
+function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number): RowAnalysis[] {
+  // Quando normaliza, divide volumétricas pela razão de dias (cur/prev)
+  const v = (kind: keyof Totals, side: "cur" | "prev") => {
+    const t = side === "cur" ? curT : prevT;
+    const raw = t[kind];
+    if (!normalize) return raw;
+    const isVol = META[kind]?.volume;
+    if (!isVol) return raw;
+    return side === "cur" ? raw / ratio : raw; // current dividido pra mesma base diária do anterior
+  };
+
+  const pctOf = (cur: number, prev: number) => prev !== 0 ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0);
+
+  // Contexto macro
+  const spendPct = pctOf(v("spend", "cur"), v("spend", "prev"));
+  const resPct   = pctOf(v("results", "cur"), v("results", "prev"));
+  const clickPct = pctOf(v("click", "cur"), v("click", "prev"));
+  const ctrPct   = pctOf(curT.ctr, prevT.ctr);
+  const significant = (p: number, t = 2) => Math.abs(p) >= t;
+
+  const eficiencia = (resPct: number, spendPct: number): Severity => {
+    // resultados acompanharam a verba?
+    if (!significant(spendPct) && !significant(resPct)) return "expected";
+    // mais eficiente: caiu menos que a verba ou subiu mais que ela
+    const delta = resPct - spendPct;
+    if (delta > 10)   return "gain";
+    if (delta < -15)  return "critical";
+    if (delta < -5)   return "attention";
+    return "expected";
+  };
+
+  const out: RowAnalysis[] = [];
+  const keys = Object.keys(META) as (keyof Totals)[];
+
+  for (const k of keys) {
+    const cur = v(k, "cur");
+    const prev = v(k, "prev");
+    if (cur === 0 && prev === 0) continue;
+
+    const rawPct = pctOf(curT[k], prevT[k]);
+    const pct = pctOf(cur, prev);
+    const meta = META[k];
+    const delta = pct;
+
+    let severity: Severity = "neutral";
+    let narrative = "";
+
+    switch (k) {
+      case "spend": {
+        if (!significant(delta)) { severity = "expected"; narrative = "Investimento estável no período."; break; }
+        severity = "expected";
+        narrative = delta > 0
+          ? `Mais verba alocada no período (${delta.toFixed(0)}% acima do anterior).`
+          : `Menos verba alocada no período (${Math.abs(delta).toFixed(0)}% abaixo do anterior). Quedas proporcionais em volume são esperadas.`;
+        break;
+      }
+
+      case "impr":
+      case "reach":
+      case "click":
+      case "results":
+      case "messages":
+      case "leads":
+      case "purchases":
+      case "revenue": {
+        if (!significant(delta)) { severity = "expected"; narrative = "Volume estável em relação ao período anterior."; break; }
+        // Compara com a variação de investimento
+        const efficiencyDelta = delta - spendPct;
+        if (Math.abs(spendPct) < 2 && delta > 5) {
+          severity = "gain"; narrative = `Crescimento real (+${delta.toFixed(0)}%) sem aumento de verba.`;
+        } else if (Math.abs(spendPct) < 2 && delta < -5) {
+          severity = "attention"; narrative = `Queda de ${Math.abs(delta).toFixed(0)}% sem mudança de verba — vale revisar criativos/segmentação.`;
+        } else if (efficiencyDelta > 10) {
+          severity = "gain"; narrative = `Volume cresceu ${delta > 0 ? "+" : ""}${delta.toFixed(0)}% enquanto a verba variou ${spendPct > 0 ? "+" : ""}${spendPct.toFixed(0)}% — mais eficiente.`;
+        } else if (efficiencyDelta < -15 && delta < 0) {
+          severity = "critical"; narrative = `Queda de ${Math.abs(delta).toFixed(0)}% acima da redução de verba (${spendPct.toFixed(0)}%) — perda real de eficiência.`;
+        } else if (delta < 0 && spendPct < 0 && Math.abs(delta - spendPct) < 8) {
+          severity = "expected"; narrative = `Volume acompanhou a redução de verba (${spendPct.toFixed(0)}%). Eficiência mantida.`;
+        } else if (delta > 0 && spendPct > 0 && Math.abs(delta - spendPct) < 8) {
+          severity = "expected"; narrative = `Volume cresceu junto com a verba — escala linear, sem ganho ou perda de eficiência.`;
+        } else if (efficiencyDelta < -5) {
+          severity = "attention"; narrative = `Volume caiu mais que a verba (${delta.toFixed(0)}% vs ${spendPct.toFixed(0)}%).`;
+        } else {
+          severity = "expected"; narrative = `Variação dentro do esperado para a mudança de verba.`;
+        }
+        break;
+      }
+
+      case "ctr": {
+        if (!significant(delta)) { severity = "expected"; narrative = "Qualidade do clique estável."; break; }
+        if (delta > 0)  { severity = "gain"; narrative = `Público mais qualificado: CTR +${delta.toFixed(1)}%.`; }
+        else            { severity = "attention"; narrative = `CTR caiu ${Math.abs(delta).toFixed(1)}% — criativos podem estar fatigando.`; }
+        break;
+      }
+
+      case "cpc":
+      case "cpm":
+      case "cost_per_result":
+      case "cost_per_message":
+      case "cost_per_lead":
+      case "cost_per_purchase": {
+        if (!significant(delta)) { severity = "expected"; narrative = "Custo unitário estável."; break; }
+        if (delta < 0) {
+          severity = "gain";
+          narrative = `Custo caiu ${Math.abs(delta).toFixed(0)}% — mídia mais eficiente.`;
+        } else {
+          // contexto: subiu o custo, mas CTR também subiu? então é qualidade
+          if (k === "cpc" && ctrPct > 5) {
+            severity = "expected";
+            narrative = `CPC subiu ${delta.toFixed(0)}%, mas CTR também (+${ctrPct.toFixed(1)}%) — público mais qualificado custa mais.`;
+          } else if (k === "cpm" && significant(delta, 15)) {
+            severity = "attention";
+            narrative = `CPM subiu ${delta.toFixed(0)}% — leilão mais disputado ou audiência mais cara.`;
+          } else {
+            severity = "attention";
+            narrative = `Custo unitário subiu ${delta.toFixed(0)}%.`;
+          }
+        }
+        break;
+      }
+
+      case "frequency": {
+        if (!significant(delta)) { severity = "expected"; narrative = "Frequência estável."; break; }
+        if (cur > 3 && delta > 0) {
+          severity = "attention";
+          narrative = `Frequência em ${cur.toFixed(1)}x — risco de fadiga. Considere ampliar o público.`;
+        } else if (delta > 0) {
+          severity = "expected";
+          narrative = `Frequência subiu para ${cur.toFixed(1)}x — ainda saudável.`;
+        } else {
+          severity = "expected";
+          narrative = `Frequência caiu para ${cur.toFixed(1)}x — público sendo renovado.`;
+        }
+        break;
+      }
+
+      case "roas": {
+        if (!significant(delta)) { severity = "expected"; narrative = "ROAS estável."; break; }
+        if (delta > 0) { severity = "gain"; narrative = `ROAS subiu para ${cur.toFixed(2)}x — cada R$ 1 retornou R$ ${cur.toFixed(2)}.`; }
+        else if (cur >= 2) { severity = "attention"; narrative = `ROAS caiu para ${cur.toFixed(2)}x — ainda lucrativo mas merece atenção.`; }
+        else { severity = "critical"; narrative = `ROAS caiu para ${cur.toFixed(2)}x — abaixo do ponto de equilíbrio.`; }
+        break;
+      }
+    }
+
+    out.push({ key: k, cur: curT[k], prev: prevT[k], pct, rawPct, severity, narrative });
+  }
+
+  // Override geral: período de queda com volumes proporcionais à verba
+  // (evita alarmar quando o cliente reduziu o investimento)
+  if (spendPct < -10) {
+    out.forEach(r => {
+      if (META[r.key]?.volume && r.key !== "spend" && r.severity === "attention") {
+        const eff = r.pct - spendPct;
+        if (eff > -8) { // caiu na mesma proporção da verba
+          r.severity = "expected";
+          r.narrative = `Acompanhou a redução de verba (${spendPct.toFixed(0)}%). Sem perda de eficiência.`;
+        }
+      }
+    });
+  }
+
+  return out;
+}
 
 interface Props {
   projectId: string;
   currentReportId: string;
   currentCreatedAt: string;
-  currentMetrics: AnyRec;
+  currentReportMetrics: AnyRec;
   currentPeriod?: { start?: string; end?: string };
 }
 
 export default function ReportComparison({
-  projectId, currentReportId, currentCreatedAt, currentMetrics, currentPeriod,
+  projectId, currentReportId, currentCreatedAt, currentReportMetrics, currentPeriod,
 }: Props) {
+  const storageKey = `report-compare-${currentReportId}`;
+  const [open, setOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return false;
+    return window.localStorage.getItem(storageKey) === "1";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(storageKey, open ? "1" : "0");
+    }
+  }, [open, storageKey]);
+
   const { data: previous, isLoading } = useQuery({
     queryKey: ["report-previous", projectId, currentReportId],
     queryFn: async () => {
@@ -98,52 +374,73 @@ export default function ReportComparison({
   });
 
   if (isLoading) return null;
+
+  // ── Estado 1: não há anterior ──
   if (!previous) {
     return (
-      <section className="bg-card border border-border rounded-2xl p-6">
-        <h2 className="text-sm font-semibold text-foreground flex items-center gap-2 mb-1">
-          <GitCompareArrows className="w-4 h-4 text-primary" />
-          Comparação com Relatório Anterior
-        </h2>
-        <p className="text-xs text-muted-foreground">
-          Este é o primeiro relatório deste projeto. Quando houver um relatório anterior,
-          a evolução aparecerá aqui automaticamente (subidas, quedas e gráficos lado a lado).
-        </p>
-      </section>
+      <div className="bg-card border border-border rounded-2xl px-5 py-3.5 flex items-center justify-between gap-3 flex-wrap">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <GitCompareArrows className="w-4 h-4 text-muted-foreground shrink-0" />
+          <p className="text-[12px] text-muted-foreground">
+            Primeiro relatório deste projeto — sem comparação disponível.
+          </p>
+        </div>
+      </div>
     );
   }
 
-  const current  = healMetrics(currentMetrics);
-  const prevHeal = healMetrics(previous.metrics as AnyRec);
+  // Datas e normalização
+  const curDays = daysBetween(currentPeriod?.start, currentPeriod?.end);
+  const prevDays = daysBetween(previous.period_start, previous.period_end);
+  const needNormalize = curDays > 0 && prevDays > 0 && Math.abs(curDays - prevDays) / Math.max(curDays, prevDays) > 0.2;
+  const ratio = needNormalize && prevDays > 0 ? curDays / prevDays : 1;
 
-  // Métricas comparáveis (presentes em pelo menos um lado e conhecidas)
-  const keys = Object.keys(METRIC_LABELS).filter(k => {
-    const a = Number(current[k]) || 0;
-    const b = Number(prevHeal[k]) || 0;
-    return (a !== 0 || b !== 0);
-  });
+  // ── Header / toggle (sempre visível) ──
+  const header = (
+    <button
+      onClick={() => setOpen(o => !o)}
+      className="w-full px-5 py-3.5 flex items-center justify-between gap-3 hover:bg-secondary/30 transition-colors cursor-pointer bg-transparent border-0 text-left"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="w-9 h-9 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+          <GitCompareArrows className="w-4 h-4 text-primary" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-sm font-semibold text-foreground">
+            Comparar com Relatório Anterior
+          </h2>
+          <p className="text-[11px] text-muted-foreground truncate">
+            {previous.title?.slice(0, 60) || fmtDate(previous.created_at)}
+            {prevDays > 0 && ` · ${fmtDate(previous.period_start)} → ${fmtDate(previous.period_end)}`}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <span className="text-[10px] px-2.5 py-1 rounded-full bg-secondary text-muted-foreground border border-border uppercase tracking-wider font-semibold hidden sm:inline">
+          {open ? "Ocultar" : "Mostrar análise"}
+        </span>
+        {open ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+      </div>
+    </button>
+  );
 
-  const rows = keys.map(k => {
-    const cur = Number(current[k]) || 0;
-    const prev = Number(prevHeal[k]) || 0;
-    const delta = cur - prev;
-    const pct = prev !== 0 ? (delta / prev) * 100 : (cur > 0 ? 100 : 0);
-    const lowerBetter = LOWER_IS_BETTER.has(k);
-    const trend: "up" | "down" | "flat" = Math.abs(pct) < 0.5 ? "flat" : delta > 0 ? "up" : "down";
-    const good = trend === "flat" ? null : lowerBetter ? trend === "down" : trend === "up";
-    return { k, cur, prev, pct, trend, good, cfg: METRIC_LABELS[k] };
-  });
+  if (!open) {
+    return <section className="bg-card border border-border rounded-2xl overflow-hidden">{header}</section>;
+  }
 
-  // Insights automáticos (top 3 melhorias e quedas mais relevantes)
-  const improved = rows.filter(r => r.good === true).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 3);
-  const worsened = rows.filter(r => r.good === false).sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct)).slice(0, 3);
+  // ── Análise ──
+  const curT = extractTotals({ metrics: currentReportMetrics });
+  const prevT = extractTotals(previous as AnyRec);
+  const rows = analyze(curT, prevT, needNormalize, ratio).filter(r => !(r.cur === 0 && r.prev === 0));
 
-  // ── Gráfico por campanha (quando há __breakdown nos dois lados) ──
-  const curBreak: AnyRec[] = Array.isArray((currentMetrics as any)?.__breakdown) ? (currentMetrics as any).__breakdown : [];
+  const gains      = rows.filter(r => r.severity === "gain").slice(0, 4);
+  const attention  = rows.filter(r => r.severity === "attention" || r.severity === "critical").slice(0, 4);
+
+  // ── Gráfico campanha-a-campanha (investimento) ──
+  const curBreak: AnyRec[]  = Array.isArray((currentReportMetrics as any)?.__breakdown) ? (currentReportMetrics as any).__breakdown : [];
   const prevBreak: AnyRec[] = Array.isArray((previous.metrics as any)?.__breakdown) ? (previous.metrics as any).__breakdown : [];
-  const curDim  = (currentMetrics as any)?.__dimension as string | undefined;
+  const curDim  = (currentReportMetrics as any)?.__dimension as string | undefined;
   const prevDim = (previous.metrics as any)?.__dimension as string | undefined;
-
   const findSpendCol = (rs: AnyRec[]) => {
     if (!rs.length) return null;
     const keys = Object.keys(rs[0]);
@@ -151,7 +448,6 @@ export default function ReportComparison({
   };
   const curSpendKey = findSpendCol(curBreak);
   const prevSpendKey = findSpendCol(prevBreak);
-
   const breakdownChart = (() => {
     if (!curSpendKey || !prevSpendKey || !curDim || !prevDim) return [];
     const prevMap = new Map(prevBreak.map(r => [String(r[prevDim] || "").trim(), Number(r[prevSpendKey]) || 0]));
@@ -170,70 +466,69 @@ export default function ReportComparison({
   })();
 
   return (
-    <section className="space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
-        <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
-          <GitCompareArrows className="w-3.5 h-3.5 text-primary" />
-          Comparação com Relatório Anterior
-        </h2>
-        <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-          vs. {previous.title?.slice(0, 32) || fmtDate(previous.created_at)}
-        </span>
-      </div>
+    <section className="bg-card border border-border rounded-2xl overflow-hidden">
+      {header}
 
-      {/* Sumário contextual */}
-      <div className="bg-card border border-border rounded-2xl p-5 relative overflow-hidden">
-        <div className="absolute -top-16 -right-16 w-48 h-48 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-        <div className="relative grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Atual</p>
+      <div className="border-t border-border/50 px-5 py-5 space-y-5">
+        {/* Períodos & aviso de normalização */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          <div className="rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Atual</p>
             <p className="text-sm font-semibold text-foreground">
               {currentPeriod?.start && currentPeriod?.end
                 ? `${fmtDate(currentPeriod.start)} → ${fmtDate(currentPeriod.end)}`
                 : "Período atual"}
+              {curDays > 0 && <span className="text-[11px] text-muted-foreground font-normal ml-2 font-mono">{curDays}d</span>}
             </p>
           </div>
-          <div className="space-y-1">
-            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Anterior</p>
+          <div className="rounded-xl border border-border bg-secondary/20 px-3.5 py-2.5">
+            <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">Anterior</p>
             <p className="text-sm font-semibold text-foreground">
               {previous.period_start && previous.period_end
                 ? `${fmtDate(previous.period_start)} → ${fmtDate(previous.period_end)}`
                 : fmtDate(previous.created_at)}
+              {prevDays > 0 && <span className="text-[11px] text-muted-foreground font-normal ml-2 font-mono">{prevDays}d</span>}
             </p>
           </div>
         </div>
 
-        {(improved.length > 0 || worsened.length > 0) && (
-          <div className="relative mt-5 pt-4 border-t border-border/50 grid grid-cols-1 md:grid-cols-2 gap-3">
-            {improved.length > 0 && (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-primary font-bold mb-1.5 flex items-center gap-1.5">
-                  <TrendingUp className="w-3 h-3" /> O que melhorou
+        {needNormalize && (
+          <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3.5 py-2.5">
+            <Info className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
+            <p className="text-[11px] text-foreground leading-relaxed">
+              Períodos com tamanhos diferentes ({curDays}d × {prevDays}d) — volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR/CPC/CPM/ROAS) são comparadas direto.
+            </p>
+          </div>
+        )}
+
+        {/* Sumário contextual: ganhos × atenções */}
+        {(gains.length > 0 || attention.length > 0) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {gains.length > 0 && (
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3.5">
+                <p className="text-[10px] uppercase tracking-wider text-primary font-bold mb-2 flex items-center gap-1.5">
+                  <Sparkles className="w-3 h-3" /> Ganhos do período
                 </p>
-                <ul className="space-y-1">
-                  {improved.map(r => (
-                    <li key={r.k} className="text-[12px] text-foreground flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">{r.cfg.label}</span>
-                      <span className="font-mono font-bold text-primary">
-                        {r.pct > 0 ? "+" : ""}{r.pct.toFixed(1)}%
-                      </span>
+                <ul className="space-y-1.5">
+                  {gains.map(r => (
+                    <li key={r.key} className="text-[12px] text-foreground leading-snug">
+                      <span className="font-semibold">{META[r.key].label}</span>
+                      <span className="text-muted-foreground"> — {r.narrative}</span>
                     </li>
                   ))}
                 </ul>
               </div>
             )}
-            {worsened.length > 0 && (
-              <div className="rounded-xl border border-destructive/20 bg-destructive/5 p-3">
-                <p className="text-[10px] uppercase tracking-wider text-destructive font-bold mb-1.5 flex items-center gap-1.5">
-                  <ArrowDownRight className="w-3 h-3" /> Pontos de atenção
+            {attention.length > 0 && (
+              <div className="rounded-xl border border-warning/30 bg-warning/5 p-3.5">
+                <p className="text-[10px] uppercase tracking-wider text-warning font-bold mb-2 flex items-center gap-1.5">
+                  <AlertTriangle className="w-3 h-3" /> Pontos de atenção
                 </p>
-                <ul className="space-y-1">
-                  {worsened.map(r => (
-                    <li key={r.k} className="text-[12px] text-foreground flex items-center justify-between gap-2">
-                      <span className="text-muted-foreground">{r.cfg.label}</span>
-                      <span className="font-mono font-bold text-destructive">
-                        {r.pct > 0 ? "+" : ""}{r.pct.toFixed(1)}%
-                      </span>
+                <ul className="space-y-1.5">
+                  {attention.map(r => (
+                    <li key={r.key} className="text-[12px] text-foreground leading-snug">
+                      <span className="font-semibold">{META[r.key].label}</span>
+                      <span className="text-muted-foreground"> — {r.narrative}</span>
                     </li>
                   ))}
                 </ul>
@@ -241,59 +536,69 @@ export default function ReportComparison({
             )}
           </div>
         )}
-      </div>
 
-      {/* Grid de métricas comparadas */}
-      {rows.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-          {rows.map(r => {
-            const Icon = r.trend === "flat" ? Minus : r.trend === "up" ? ArrowUpRight : ArrowDownRight;
-            const tone =
-              r.good === null ? "text-muted-foreground bg-secondary/40 border-border" :
-              r.good ? "text-primary bg-primary/10 border-primary/20" :
-              "text-destructive bg-destructive/10 border-destructive/20";
-            return (
-              <div key={r.k} className="bg-card border border-border rounded-2xl p-4 hover:border-primary/20 transition-colors">
-                <div className="flex items-center justify-between mb-2">
-                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold">{r.cfg.label}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-md border font-mono font-bold flex items-center gap-1 ${tone}`}>
-                    <Icon className="w-3 h-3" />
-                    {r.trend === "flat" ? "0%" : (r.pct > 0 ? "+" : "") + r.pct.toFixed(1) + "%"}
-                  </span>
+        {/* Grid de métricas com contexto */}
+        {rows.length > 0 && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            {rows.map(r => {
+              const sev = SEV_STYLE[r.severity];
+              const meta = META[r.key];
+              const Icon = sev.icon;
+              const TrendIcon = Math.abs(r.rawPct) < 0.5 ? Minus : r.rawPct > 0 ? ArrowUpRight : ArrowDownRight;
+              return (
+                <div key={r.key} className={`rounded-2xl border p-4 transition-colors ${sev.tone}`}>
+                  <div className="flex items-center justify-between gap-2 mb-2">
+                    <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-semibold truncate">
+                      {meta.label}
+                    </p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-md border font-bold flex items-center gap-1 ${sev.chip}`}>
+                      <Icon className="w-3 h-3" />
+                      {sev.label}
+                    </span>
+                  </div>
+                  <div className="flex items-baseline gap-2 flex-wrap">
+                    <p className="text-xl font-bold font-mono text-foreground tracking-tight">{meta.format(r.cur)}</p>
+                    <span className="text-[11px] font-mono font-semibold text-muted-foreground flex items-center gap-0.5">
+                      <TrendIcon className="w-3 h-3" />
+                      {Math.abs(r.rawPct) < 0.5 ? "0%" : (r.rawPct > 0 ? "+" : "") + r.rawPct.toFixed(1) + "%"}
+                    </span>
+                  </div>
+                  <p className="text-[10px] text-muted-foreground mt-1 font-mono">
+                    Anterior: {meta.format(r.prev)}
+                  </p>
+                  <p className="text-[11px] text-foreground/80 mt-2 leading-relaxed">
+                    {r.narrative}
+                  </p>
                 </div>
-                <p className="text-xl font-bold font-mono text-foreground tracking-tight">{r.cfg.format(r.cur)}</p>
-                <p className="text-[10px] text-muted-foreground mt-1">
-                  Anterior: <span className="font-mono">{r.cfg.format(r.prev)}</span>
-                </p>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* Gráfico campanha-a-campanha (investimento) */}
-      {breakdownChart.length >= 2 && (
-        <div className="bg-card border border-border rounded-2xl p-5">
-          <h3 className="text-sm font-semibold text-foreground mb-1">Progressão por Campanha · Investimento</h3>
-          <p className="text-[11px] text-muted-foreground mb-3">Comparação direta de quanto cada campanha recebeu agora vs. no período anterior.</p>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={breakdownChart} margin={{ top: 10, right: 16, left: 0, bottom: 5 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
-                <XAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={60} />
-                <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => "R$" + (v >= 1000 ? (v / 1000).toFixed(0) + "K" : v.toFixed(0))} />
-                <Tooltip
-                  contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
-                  formatter={(v: any, n: any) => ["R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n]}
-                />
-                <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
-                <Bar dataKey="Anterior" fill="hsl(220, 15%, 55%)" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="Atual"    fill="hsl(145, 100%, 50%)" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+              );
+            })}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Gráfico campanha-a-campanha */}
+        {breakdownChart.length >= 2 && (
+          <div className="rounded-2xl border border-border bg-secondary/10 p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-1">Progressão por Campanha · Investimento</h3>
+            <p className="text-[11px] text-muted-foreground mb-3">Quanto cada campanha recebeu agora vs. no período anterior.</p>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={breakdownChart} margin={{ top: 10, right: 16, left: 0, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />
+                  <XAxis dataKey="name" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} interval={0} angle={-15} textAnchor="end" height={60} />
+                  <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => "R$" + (v >= 1000 ? (v / 1000).toFixed(0) + "K" : v.toFixed(0))} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }}
+                    formatter={(v: any, n: any) => ["R$ " + Number(v).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }), n]}
+                  />
+                  <Legend wrapperStyle={{ fontSize: 11, paddingTop: 8 }} />
+                  <Bar dataKey="Anterior" fill="hsl(220, 15%, 55%)" radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="Atual"    fill="hsl(145, 100%, 50%)" radius={[6, 6, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </div>
     </section>
   );
 }

@@ -1,125 +1,60 @@
-# Plano: Sistema operacional inteligente (Onboarding + Checklists + Voice conversacional)
+# Comparação de Relatórios — v2
 
-Entrega em 3 frentes integradas, todas visíveis apenas para admin/equipe (clientes não veem).
+Três correções na seção *Comparação com Relatório Anterior* do `ReportDetail`.
 
----
+## 1. Botão "Comparar com anterior" no topo
 
-## 1. Esteira de Onboarding por cliente
+A comparação deixa de aparecer automaticamente. No header do relatório (perto de Imprimir / WhatsApp) entra um toggle:
 
-**Objetivo:** cada cliente novo entra numa esteira estruturada com etapas e checklists por tipo de serviço. Modo **híbrido sugestivo**: alerta no topo, mas não trava.
+- Estado off (padrão): seção escondida, só mostra um chip discreto "Relatório anterior disponível · {data}"
+- Estado on: expande a seção completa de comparação
+- Quando não existe relatório anterior: botão fica desabilitado com tooltip "Primeiro relatório deste projeto"
 
-### Schema (migration)
+Persiste preferência em `localStorage` por relatório (`report-compare-{id}`).
 
-- `service_checklists` — catálogo de templates por tipo de serviço:
-  - `service_type` (meta_ads, google_ads, social_media, video, site, automation, geral)
-  - `phase` (contrato, briefing, acessos, kickoff, producao)
-  - `title`, `description`, `order_index`, `is_required`
-  - itens em `service_checklist_items` (label, hint, order)
-- `client_onboarding` — instância por cliente:
-  - `client_id`, `service_types[]` (array de serviços ativos), `started_at`, `completed_at`
-- `client_onboarding_items` — item check do cliente:
-  - `client_id`, `template_item_id`, `is_done`, `value` (texto opcional p/ ex. "link da BM"), `completed_by`, `completed_at`
+## 2. Leitura robusta dos dados do relatório anterior
 
-RLS: leitura/escrita apenas para `is_staff()`. GRANTS para authenticated e service_role.
+Hoje a comparação lê só `metrics.ad_spend / impressions / clicks` direto. Quando o relatório antigo guardou os dados via `__breakdown` (linhas brutas da planilha) sem mapear pro schema, os totais aparecem zerados — foi o que aconteceu com o anterior do SERB que tinha custo real.
 
-### Seed inicial (templates)
+A nova função `extractTotals(report)` tenta na ordem:
 
-Etapa **Contrato** (geral): enviar minuta → assinatura → arquivar.
-Etapa **Briefing** (geral): enviar link → cliente responder → revisar.
-Etapa **Acessos** (por serviço):
-- Meta Ads: acesso BM, conta de anúncios, pixel instalado, cartão validado, públicos base
-- Google Ads: acesso MCC, conversões configuradas, faturamento, GTM
-- Social Media: acesso IG/FB/TikTok, identidade visual, linha editorial aprovada
-- Vídeo: briefing audiovisual, roteiro, locação, equipamentos
-- Site: domínio, hospedagem, conteúdo base, integrações
-- Automação: ferramentas (n8n/CRM), fluxos mapeados, credenciais APIs
+1. `metrics.ad_spend / impressions / link_clicks / clicks / results / messages / leads / revenue` (caminho atual)
+2. Se vazio, soma a partir de `metrics.__breakdown` detectando as colunas por nome (mesma heurística do `SourceDashboard.pickKey`: "valor usado", "amount spent", "impressões", "cliques no link" etc.)
+3. Aplica o mesmo *auto-heal* de taxas que já existe (CTR/CPC/CPM/ROAS derivados dos totais)
 
-Etapa **Kickoff**: reunião agendada, grupo WhatsApp criado, cronograma compartilhado.
+Resultado: comparação funciona mesmo em relatórios antigos importados antes do parser novo.
 
-### UI
+## 3. Análise contextual (não só seta pra cima/baixo)
 
-- Novo componente `ClientOnboardingPanel` dentro do `EditClientDrawer` (aba "Esteira").
-- Mostra timeline vertical: Contrato → Briefing → Acessos → Kickoff, com % por fase.
-- Banner sugestivo no topo do drawer/dashboard do cliente quando `< 100%`: "Onboarding incompleto: 3 itens pendentes".
-- Ação rápida: checkbox inline + campo "valor" (link/observação).
+Cada métrica recebe uma *interpretação* que considera o contexto, não apenas o sinal do delta. Substitui o atual "subiu/desceu = bom/ruim".
 
----
+Regras principais:
 
-## 2. Biblioteca de checklists prontos para tarefas
+- **Investimento caiu** → não é regressão. Mostra "Investimento -30% (R$X → R$Y) · menos verba alocada no período"
+- **Resultados caíram proporcionalmente ao investimento** → neutro. "Volume acompanhou a redução de verba · eficiência mantida"
+- **Resultados caíram MAIS que o investimento** → atenção real. "Queda de eficiência: -40% em resultados com -10% em verba"
+- **Resultados caíram MENOS que o investimento** → ganho. "Mais eficiente: -10% em resultados com -30% em verba"
+- **CPC/CPM subiu mas CTR também subiu** → contexto positivo. "Custo subiu, mas público mais qualificado (CTR +X%)"
+- **ROAS caiu com receita estável** → investigar. "Receita igual mas com mais investimento"
+- **Período diferente** (ex: 7 dias vs 30 dias) → normaliza para diária e mostra aviso "Períodos de tamanhos diferentes — comparação ajustada para média diária"
 
-**Objetivo:** dentro de qualquer tarefa, equipe seleciona um template pronto e popula os checklist items de uma vez.
+Cada métrica vira um card com:
+- Valor atual e anterior (sem cores alarmantes)
+- Δ absoluto e %
+- Tag de contexto: `Esperado` / `Ganho` / `Atenção` / `Crítico` (não apenas "bom/ruim")
+- Uma frase explicando *por que* aquele delta significa o que significa, considerando as outras métricas
 
-### Schema
-
-- `task_checklist_templates`:
-  - `category` (campanha_meta, campanha_google, reel, post_carrossel, video_curto, landing_page, automacao_n8n, etc.)
-  - `title`, `description`
-  - `items[]` em `task_checklist_template_items` (label, order, is_required)
-
-Seed: ~10 templates cobrindo casos comuns dos serviços listados.
-
-### UI
-
-- No `TaskDetailDrawer`, botão "📋 Aplicar checklist pronto" → popover com lista filtrada por categoria → cria itens em `task_checklist_items` existente.
-
----
-
-## 3. Voice Assistant conversacional
-
-**Objetivo:** transformar o assistente atual em fluxo guiado com perguntas em sequência, sugestões inteligentes e escopo completo.
-
-### Mudanças em `VoiceAssistant.tsx` + `voiceCommands.ts`
-
-Novo state machine no drawer:
-1. **Captura** — usuário fala/digita intenção inicial.
-2. **Parse + Gaps** — `parseCommand` retorna intent + lista de campos faltantes (cliente, prazo, nome, tipo).
-3. **Perguntas em sequência** — para cada gap, mostra card com pergunta + sugestão pré-preenchida:
-   - "Qual cliente?" → autocomplete
-   - "Sugestão de nome: *Campanha Meta Ads — Black Friday*. Aceita?" (gerado por heurística: tipo + cliente + contexto sazonal/data)
-   - "Prazo: 30 dias (até 03/jul). Confirma?"
-   - "Quer aplicar template de tarefas para esse tipo de projeto?" (Sim/Não)
-4. **Preview completo** — mostra escopo final: nome, datas início/fim, descrição gerada, milestones com tasks, cada task com checklist pré-populado dos templates de Item 2.
-5. **Executar** — cria tudo em transação (projeto + milestones + tasks + checklist items).
-
-### Heurísticas profissionais (sem custo de IA)
-
-- **Nome do projeto**: `{tipo} — {cliente} — {mês/ano}` ou `{Objetivo extraído} para {cliente}`.
-- **Datas**: início = hoje; fim = hoje + `deadlineDays` (default por tipo: ads=30, site=45, video=14, automacao=21).
-- **Descrição**: template por tipo (escopo padrão + objetivo do usuário).
-- **Tasks**: usa `projectTemplates.ts` existente; cada task ganha checklist do template correspondente em `task_checklist_templates`.
-- **Conteúdo de entrega por task**: campo `description` enriquecido com bullet points padronizados (Objetivo / Entrega / Critério de aceite).
-
-### Resultados do voice (auditoria)
-
-Já existe `voice_command_log`. Adicionar `clarifications jsonb` (perguntas/respostas) e `preview jsonb` (escopo aprovado).
-
----
+Os cards de "O que melhorou / Pontos de atenção" são reescritos pra usar essa classificação contextual em vez do `LOWER_IS_BETTER` cego.
 
 ## Detalhes técnicos
 
-**Arquivos novos:**
-- `supabase/migrations/<ts>_onboarding_and_checklists.sql`
-- `src/lib/onboardingTemplates.ts` (seed em código + helpers)
-- `src/lib/taskChecklistTemplates.ts`
-- `src/lib/voiceConversation.ts` (state machine + gap detection + sugestões)
-- `src/components/admin/ClientOnboardingPanel.tsx`
-- `src/components/admin/TaskChecklistTemplatePicker.tsx`
+- `ReportComparison.tsx`: extrai `extractTotals()` no topo, refatora `rows` pra incluir `{ context, severity, narrative }` em vez de `{ good, trend }`
+- Período normalizado: calcula `days = (period_end - period_start)` para current e previous; quando diferem >20%, divide volumétricos por dias e marca `normalized: true`
+- `ReportDetail.tsx`: adiciona estado `showComparison`, lê do localStorage, renderiza botão toggle perto do print/WhatsApp e condiciona o `<ReportComparison />`
+- Query do previous report continua igual; só passa pra exibir quando toggle ligado (mantém prefetch pra mostrar a data no chip)
 
-**Arquivos editados:**
-- `src/components/admin/VoiceAssistant.tsx` (fluxo conversacional + preview rico)
-- `src/lib/voiceCommands.ts` (retornar gaps)
-- `src/components/admin/EditClientDrawer.tsx` (nova aba Esteira)
-- `src/components/admin/TaskDetailDrawer.tsx` (botão aplicar template)
-- `src/integrations/supabase/types.ts` (auto-regen após migration)
+## Não muda
 
-**Ordem de execução:**
-1. Migration (schema + grants + RLS + seed via INSERTs).
-2. Templates em TS + helpers.
-3. Voice conversacional + preview.
-4. ClientOnboardingPanel + integração no drawer.
-5. TaskChecklistTemplatePicker no TaskDetailDrawer.
-6. Banner sugestivo de onboarding incompleto.
-
-**Fora de escopo deste release:**
-- Notificações automáticas de onboarding atrasado (próximo release).
-- Integração do onboarding com o briefing público existente (sincronização bidirecional fica para depois).
+- Auditoria de Métricas (`MetricsAudit`) continua igual, sempre visível
+- Auto-heal de taxas no `analysis` useMemo continua igual
+- Parser de importação (`adsParser.ts`) não é alterado
