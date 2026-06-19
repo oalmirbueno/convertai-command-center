@@ -362,7 +362,7 @@ export default function ReportDetail() {
     const periodDays = report.period_start && report.period_end ? daysBetween(report.period_start, report.period_end) : 0;
 
     return { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories, spend, contact, traffic, reach: reachVal };
-  }, [report]);
+  }, [report, previousReport]);
 
   if (isLoading) {
     return (
