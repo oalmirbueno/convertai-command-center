@@ -743,23 +743,55 @@ export default function ReportDetail() {
             Evolução e Análise Visual
           </h2>
 
-          {/* Main chart — agora ocupa largura total para evitar espaço vazio */}
-          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" />
-                Evolução do Período
-              </h3>
+          {/* Main chart — Aceleriq futurist surface */}
+          <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
+            {/* Tech grid backdrop */}
+            <div className="absolute inset-0 opacity-[0.35] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(hsl(145 100% 50% / 0.04) 1px, transparent 1px), linear-gradient(90deg, hsl(145 100% 50% / 0.04) 1px, transparent 1px)",
+                backgroundSize: "28px 28px",
+                maskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
+                WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
+              }}
+            />
+            {/* Soft neon glow */}
+            <div className="absolute -top-32 -right-32 w-72 h-72 rounded-full pointer-events-none"
+              style={{ background: "radial-gradient(circle, hsl(145 100% 50% / 0.10), transparent 70%)" }}
+            />
+            {/* Corner brackets */}
+            {[
+              "top-2 left-2 border-t-2 border-l-2",
+              "top-2 right-2 border-t-2 border-r-2",
+              "bottom-2 left-2 border-b-2 border-l-2",
+              "bottom-2 right-2 border-b-2 border-r-2",
+            ].map((cls, i) => (
+              <span key={i} className={`absolute w-4 h-4 border-primary/40 ${cls} pointer-events-none rounded-[2px]`} />
+            ))}
+
+            <div className="relative flex items-center justify-between mb-5 flex-wrap gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="relative inline-flex w-2 h-2 rounded-full bg-primary">
+                  <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-60" />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Evolução do Período
+                </h3>
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
+                  LIVE · {chartData.length}pts
+                </span>
+              </div>
               <div className="flex items-center gap-3 flex-wrap">
                 {chartColumns.map((col, i) => (
-                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground font-mono">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length], boxShadow: `0 0 8px ${CHART_COLORS[i % CHART_COLORS.length]}99` }} />
                     {col}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="h-72 sm:h-96">
+            <div className="relative h-72 sm:h-96">
               <ResponsiveContainer width="100%" height="100%">
                 {renderMainChart()!}
               </ResponsiveContainer>
