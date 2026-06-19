@@ -380,37 +380,100 @@ export default function ReportDetail() {
 
   const parseLines = (text: string) => text.split("\n").map(l => l.trim()).filter(Boolean);
 
-  /* ── Chart renderer ────────────────────────────── */
+  /* ── Chart renderer · Aceleriq futurist ───────────── */
   const renderMainChart = () => {
     if (chartData.length === 0 || chartColumns.length === 0) return null;
 
     const gradients = chartColumns.map((_, i) => ({
       id: `grad${i}`,
+      lineId: `line${i}`,
+      barId: `bar${i}`,
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
 
-    const commonProps = { data: chartData, margin: { top: 10, right: 20, left: 0, bottom: 5 } };
-    const xAxis = <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />;
-    const yAxis = <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
+    const commonProps = { data: chartData, margin: { top: 16, right: 24, left: 0, bottom: 5 } };
+
+    const sharedDefs = (
+      <defs>
+        {/* Neon glow filter */}
+        <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        {/* Soft glow filter */}
+        <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        {gradients.map(g => (
+          <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={g.color} stopOpacity={0.55} />
+            <stop offset="60%" stopColor={g.color} stopOpacity={0.15} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0} />
+          </linearGradient>
+        ))}
+        {gradients.map(g => (
+          <linearGradient key={g.barId} id={g.barId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={g.color} stopOpacity={1} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0.25} />
+          </linearGradient>
+        ))}
+        {gradients.map(g => (
+          <linearGradient key={g.lineId} id={g.lineId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={g.color} stopOpacity={0.6} />
+            <stop offset="50%" stopColor={g.color} stopOpacity={1} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0.6} />
+          </linearGradient>
+        ))}
+        {/* Grid pattern overlay */}
+        <pattern id="techGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+          <path d="M 32 0 L 0 0 0 32" fill="none" stroke="hsl(145 100% 50% / 0.04)" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+    );
+
+    const xAxis = <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} dy={6} />;
+    const yAxis = <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
     const tooltip = (
       <Tooltip
+        cursor={{ stroke: "hsl(145 100% 50% / 0.4)", strokeWidth: 1, strokeDasharray: "4 4" }}
         contentStyle={{
-          background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
-          borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
+          background: "hsl(0 0% 7% / 0.95)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid hsl(145 100% 50% / 0.35)",
+          borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18), 0 12px 40px rgba(0,0,0,0.6)",
+          fontFamily: "JetBrains Mono, monospace",
         }}
+        labelStyle={{ color: "hsl(145 100% 50%)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}
         formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name]}
       />
     );
-    const grid = <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />;
+    const grid = <CartesianGrid strokeDasharray="2 6" stroke="hsl(145 100% 50%)" opacity={0.08} vertical={false} />;
 
     if (chartType === "bar") {
       return (
         <BarChart {...commonProps}>
+          {sharedDefs}
           {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
           {chartColumns.map((col, i) => (
-            <Bar key={col} dataKey={col} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[8, 8, 0, 0]} />
+            <Bar
+              key={col}
+              dataKey={col}
+              fill={`url(#${gradients[i].barId})`}
+              radius={[6, 6, 0, 0]}
+              stroke={gradients[i].color}
+              strokeWidth={1}
+              animationDuration={1400}
+              animationEasing="ease-out"
+            />
           ))}
         </BarChart>
       );
@@ -418,28 +481,45 @@ export default function ReportDetail() {
     if (chartType === "line") {
       return (
         <LineChart {...commonProps}>
+          {sharedDefs}
           {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
           {chartColumns.map((col, i) => (
-            <Line key={col} type="monotone" dataKey={col} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2.5} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 7 }} />
+            <Line
+              key={col}
+              type="monotone"
+              dataKey={col}
+              stroke={`url(#${gradients[i].lineId})`}
+              strokeWidth={2.5}
+              dot={{ r: 3, strokeWidth: 2, fill: "hsl(var(--background))", stroke: gradients[i].color }}
+              activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
+              animationDuration={1600}
+              animationEasing="ease-out"
+              filter="url(#softGlow)"
+            />
           ))}
         </LineChart>
       );
     }
     return (
       <AreaChart {...commonProps}>
-        <defs>
-          {gradients.map(g => (
-            <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={g.color} stopOpacity={0.4} />
-              <stop offset="95%" stopColor={g.color} stopOpacity={0} />
-            </linearGradient>
-          ))}
-        </defs>
+        {sharedDefs}
         {grid}{xAxis}{yAxis}{tooltip}
-        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
         {chartColumns.map((col, i) => (
-          <Area key={col} type="monotone" dataKey={col} stroke={gradients[i].color} fill={`url(#${gradients[i].id})`} strokeWidth={2.5} />
+          <Area
+            key={col}
+            type="monotone"
+            dataKey={col}
+            stroke={gradients[i].color}
+            fill={`url(#${gradients[i].id})`}
+            strokeWidth={2.5}
+            dot={{ r: 2.5, strokeWidth: 0, fill: gradients[i].color }}
+            activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
+            animationDuration={1600}
+            animationEasing="ease-out"
+            filter="url(#softGlow)"
+          />
         ))}
       </AreaChart>
     );
