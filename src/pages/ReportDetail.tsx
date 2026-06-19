@@ -108,11 +108,30 @@ export default function ReportDetail() {
     enabled: !!id,
   });
 
+  // ── Relatório anterior do MESMO projeto (para comparação de seguidores etc.)
+  const { data: previousReport } = useQuery({
+    queryKey: ["report-detail-previous", id, report?.project_id, report?.created_at],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("reports")
+        .select("id, period_start, period_end, metrics, created_at")
+        .eq("project_id", report!.project_id)
+        .lt("created_at", report!.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!report?.project_id && !!report?.created_at,
+  });
+
   /* ── Derived data ─────────────────────────────── */
   const analysis = useMemo(() => {
     if (!report) return null;
 
     const m = { ...((report.metrics || {}) as Record<string, any>) };
+    const prevM = (previousReport?.metrics || {}) as Record<string, any>;
+    const prevNum = (k: string) => Number(prevM[k]) || 0;
 
     // ── Auto-heal: recalcula taxas/custos derivados a partir dos totais reais ──
     // Reports antigos podem ter CPC/CPM/CTR errados (export do Meta com colunas
@@ -272,38 +291,68 @@ export default function ReportDetail() {
     if (spend > 0 && contact > 0) {
       const v = spend / contact;
       kpis.push({ label: "Custo por Conversa", value: fmtR(v), detail: `${contact} contatos com ${fmtR(spend)} investidos`,
-        icon: MessageCircle, color: "hsl(142, 71%, 45%)", status: v < 15 ? "good" : v < 30 ? "warning" : "bad" });
+        icon: MessageCircle, color: "hsl(142, 71%, 45%)", status: v < 25 ? "good" : v < 60 ? "warning" : "bad" });
     }
     if (spend > 0 && traffic > 0) {
       const v = spend / traffic;
       kpis.push({ label: "Custo por Clique", value: fmtR(v), detail: `${traffic.toLocaleString("pt-BR")} cliques no período`,
-        icon: MousePointerClick, color: "hsl(200, 100%, 50%)", status: v < 2 ? "good" : v < 5 ? "warning" : "bad" });
+        icon: MousePointerClick, color: "hsl(200, 100%, 50%)", status: v < 3.5 ? "good" : v < 8 ? "warning" : "bad" });
     }
     if (reachVal > 0 && spend > 0) {
       const v = (spend / reachVal) * 1000;
       kpis.push({ label: "CPM", value: fmtR(v), detail: `Custo para alcançar 1.000 pessoas`,
-        icon: Eye, color: "hsl(263, 70%, 66%)", status: v < 15 ? "good" : v < 40 ? "warning" : "bad" });
+        icon: Eye, color: "hsl(263, 70%, 66%)", status: v < 25 ? "good" : v < 60 ? "warning" : "bad" });
     }
     if (num("profile_visits") > 0 && reachVal > 0) {
       const r = (num("profile_visits") / reachVal) * 100;
       kpis.push({ label: "Taxa Perfil/Alcance", value: r.toFixed(2) + "%", detail: `${num("profile_visits").toLocaleString("pt-BR")} visitas vs. alcance`,
-        icon: Target, color: "hsl(190, 90%, 50%)", status: r > 2 ? "good" : r > 0.5 ? "warning" : "bad" });
+        icon: Target, color: "hsl(190, 90%, 50%)", status: r > 1 ? "good" : r > 0.3 ? "warning" : "bad" });
     }
     if (num("profile_visits") > 0 && contact > 0) {
       const r = (contact / num("profile_visits")) * 100;
       kpis.push({ label: "Perfil → Conversa", value: r.toFixed(1) + "%", detail: `${contact} de ${num("profile_visits").toLocaleString("pt-BR")} visitantes converteram`,
-        icon: ArrowRight, color: "hsl(145, 100%, 50%)", status: r > 10 ? "good" : r > 3 ? "warning" : "bad" });
+        icon: ArrowRight, color: "hsl(145, 100%, 50%)", status: r > 5 ? "good" : r > 1.5 ? "warning" : "bad" });
     }
     if (spend > 0 && num("purchases") > 0) {
       const v = spend / num("purchases");
       kpis.push({ label: "Custo por Compra", value: fmtR(v), detail: `${num("purchases")} vendas geradas`,
-        icon: Award, color: "hsl(50, 95%, 55%)", status: v < 50 ? "good" : v < 150 ? "warning" : "bad" });
+        icon: Award, color: "hsl(50, 95%, 55%)", status: v < 80 ? "good" : v < 250 ? "warning" : "bad" });
     }
     if (num("roas") > 0) {
       const v = num("roas");
       kpis.push({ label: "ROAS", value: v.toFixed(2) + "x", detail: `Retorno sobre o investimento publicitário`,
-        icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 3 ? "good" : v > 1 ? "warning" : "bad" });
+        icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 2 ? "good" : v > 1 ? "warning" : "bad" });
     }
+    // ── Crescimento de Seguidores (vs período anterior) ──
+    const fg = num("followers_gained");
+    if (fg > 0) {
+      const prevFg = prevNum("followers_gained");
+      const days = report.period_start && report.period_end ? Math.max(1, daysBetween(report.period_start, report.period_end)) : 1;
+      const perDay = fg / days;
+      let detail = `${fg.toLocaleString("pt-BR")} novos seguidores em ${days} ${days === 1 ? "dia" : "dias"} · ${perDay.toFixed(1)}/dia`;
+      if (prevFg > 0) {
+        const mult = fg / prevFg;
+        const deltaPct = ((fg - prevFg) / prevFg) * 100;
+        if (mult >= 2) detail = `${fg} agora vs ${prevFg} no período anterior · crescimento de ${mult.toFixed(1)}x (+${deltaPct.toFixed(0)}%)`;
+        else if (deltaPct >= 0) detail = `${fg} agora vs ${prevFg} no período anterior · +${deltaPct.toFixed(0)}% de aceleração`;
+        else detail = `${fg} agora vs ${prevFg} no período anterior · momento de reativar conteúdo`;
+      } else if (previousReport) {
+        detail = `${fg.toLocaleString("pt-BR")} novos seguidores · primeiro ciclo com captação registrada`;
+      }
+      // Crescimento orgânico é quase sempre positivo: any growth = good, declínio severo = warning
+      const status: "good" | "warning" | "bad" =
+        prevFg > 0 && fg < prevFg * 0.4 ? "warning" : "good";
+      kpis.push({
+        label: "Novos Seguidores",
+        value: "+" + fg.toLocaleString("pt-BR"),
+        detail,
+        icon: Users,
+        color: "hsl(188, 94%, 50%)",
+        status,
+      });
+    }
+
+
 
     // ── Auto insights ──
     const insights: Array<{ text: string; type: "success" | "info" | "warning" }> = [];
@@ -345,7 +394,7 @@ export default function ReportDetail() {
     const periodDays = report.period_start && report.period_end ? daysBetween(report.period_start, report.period_end) : 0;
 
     return { standardMetrics, customMetrics, chartData, chartType, chartColumns, colStats, pieData, radarData, efficiencyData, funnelData, kpis, insights, periodDays, categories, spend, contact, traffic, reach: reachVal };
-  }, [report]);
+  }, [report, previousReport]);
 
   if (isLoading) {
     return (
@@ -648,7 +697,7 @@ export default function ReportDetail() {
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border ${statusColor(kpi.status)}`}>
                       <StatusIcon className="w-3 h-3" />
-                      {kpi.status === "good" ? "Bom" : kpi.status === "warning" ? "Atenção" : "Crítico"}
+                      {kpi.status === "good" ? "Excelente" : kpi.status === "warning" ? "Em otimização" : "Em ajuste"}
                     </div>
                   </div>
                   <p className="text-2xl font-bold font-mono text-foreground tracking-tight">{kpi.value}</p>
