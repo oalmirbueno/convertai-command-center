@@ -282,13 +282,33 @@ export function parseMatrix(matrix: any[][]): ParsedReport {
   const metrics: Record<string, number> = {};
   numericCols.forEach(c => {
     if (!c.metricKey) return;
-    if (RATE_METRICS.has(c.metricKey)) {
-      const vals = rows.map(r => Number(r[c.clean]) || 0).filter(v => v > 0);
-      metrics[c.metricKey] = vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : 0;
-    } else {
-      metrics[c.metricKey] = totals[c.clean];
-    }
+    // Taxas/custos do export NUNCA são confiáveis (somar/mediar dá número errado, e o Meta
+    // às vezes exporta colunas deslocadas). Serão recalculadas dos totais logo abaixo.
+    if (RATE_METRICS.has(c.metricKey)) return;
+    metrics[c.metricKey] = totals[c.clean];
   });
+
+  // ── Recalcula SEMPRE taxas/custos derivados a partir dos totais (fonte da verdade) ──
+  // Exemplo real: spend=44.7, clicks=137, impressões=3313 →
+  // CPC=0.33 (não 183), CPM=13.49 (não 3319), CTR=4.13% (não 0.29%).
+  const safeDiv = (a: number, b: number) => (b > 0 && isFinite(a / b) ? a / b : 0);
+  const spendT = metrics.ad_spend || 0;
+  const imprT  = metrics.impressions || 0;
+  const reachT = metrics.reach || 0;
+  const clickT = metrics.link_clicks || metrics.clicks || 0;
+  const resultsT = metrics.results || metrics.conversions || 0;
+
+  if (imprT > 0 && clickT > 0)  metrics.ctr = safeDiv(clickT, imprT) * 100;
+  if (clickT > 0 && spendT > 0) metrics.cpc = safeDiv(spendT, clickT);
+  if (imprT > 0 && spendT > 0)  metrics.cpm = safeDiv(spendT, imprT) * 1000;
+  if (reachT > 0 && imprT > 0)  metrics.frequency = safeDiv(imprT, reachT);
+  if (resultsT > 0 && spendT > 0) metrics.cost_per_result = safeDiv(spendT, resultsT);
+  if ((metrics.conversions || 0) > 0 && spendT > 0) metrics.cpa = safeDiv(spendT, metrics.conversions);
+  if ((metrics.messages || 0) > 0 && spendT > 0) metrics.cost_per_message = safeDiv(spendT, metrics.messages);
+  if ((metrics.leads || 0) > 0 && spendT > 0) metrics.cost_per_lead = safeDiv(spendT, metrics.leads);
+  if ((metrics.purchases || 0) > 0 && spendT > 0) metrics.cost_per_purchase = safeDiv(spendT, metrics.purchases);
+  if ((metrics.revenue || 0) > 0 && spendT > 0) metrics.roas = safeDiv(metrics.revenue, spendT);
+  if ((metrics.engagement || 0) > 0 && reachT > 0) metrics.engagement_rate = safeDiv(metrics.engagement, reachT) * 100;
 
   // Colunas numéricas SEM mapeamento → viram métricas "personalizadas" (totalizadas)
   const customMetrics: Array<{ label: string; value: number }> = numericCols
