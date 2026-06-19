@@ -380,37 +380,100 @@ export default function ReportDetail() {
 
   const parseLines = (text: string) => text.split("\n").map(l => l.trim()).filter(Boolean);
 
-  /* ── Chart renderer ────────────────────────────── */
+  /* ── Chart renderer · Aceleriq futurist ───────────── */
   const renderMainChart = () => {
     if (chartData.length === 0 || chartColumns.length === 0) return null;
 
     const gradients = chartColumns.map((_, i) => ({
       id: `grad${i}`,
+      lineId: `line${i}`,
+      barId: `bar${i}`,
       color: CHART_COLORS[i % CHART_COLORS.length],
     }));
 
-    const commonProps = { data: chartData, margin: { top: 10, right: 20, left: 0, bottom: 5 } };
-    const xAxis = <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />;
-    const yAxis = <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
+    const commonProps = { data: chartData, margin: { top: 16, right: 24, left: 0, bottom: 5 } };
+
+    const sharedDefs = (
+      <defs>
+        {/* Neon glow filter */}
+        <filter id="neonGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="3" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        {/* Soft glow filter */}
+        <filter id="softGlow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="1.4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        {gradients.map(g => (
+          <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={g.color} stopOpacity={0.55} />
+            <stop offset="60%" stopColor={g.color} stopOpacity={0.15} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0} />
+          </linearGradient>
+        ))}
+        {gradients.map(g => (
+          <linearGradient key={g.barId} id={g.barId} x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={g.color} stopOpacity={1} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0.25} />
+          </linearGradient>
+        ))}
+        {gradients.map(g => (
+          <linearGradient key={g.lineId} id={g.lineId} x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={g.color} stopOpacity={0.6} />
+            <stop offset="50%" stopColor={g.color} stopOpacity={1} />
+            <stop offset="100%" stopColor={g.color} stopOpacity={0.6} />
+          </linearGradient>
+        ))}
+        {/* Grid pattern overlay */}
+        <pattern id="techGrid" width="32" height="32" patternUnits="userSpaceOnUse">
+          <path d="M 32 0 L 0 0 0 32" fill="none" stroke="hsl(145 100% 50% / 0.04)" strokeWidth="0.5" />
+        </pattern>
+      </defs>
+    );
+
+    const xAxis = <XAxis dataKey="label" tick={{ fontSize: 11, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} dy={6} />;
+    const yAxis = <YAxis tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))", fontFamily: "JetBrains Mono, monospace" }} axisLine={false} tickLine={false} width={55} tickFormatter={(v: number) => v >= 1000 ? (v / 1000).toFixed(0) + "K" : String(v)} />;
     const tooltip = (
       <Tooltip
+        cursor={{ stroke: "hsl(145 100% 50% / 0.4)", strokeWidth: 1, strokeDasharray: "4 4" }}
         contentStyle={{
-          background: "hsl(var(--card))", border: "1px solid hsl(var(--border))",
-          borderRadius: 12, fontSize: 12, color: "hsl(var(--foreground))",
-          boxShadow: "0 12px 40px rgba(0,0,0,0.4)",
+          background: "hsl(0 0% 7% / 0.95)",
+          backdropFilter: "blur(12px)",
+          border: "1px solid hsl(145 100% 50% / 0.35)",
+          borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
+          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18), 0 12px 40px rgba(0,0,0,0.6)",
+          fontFamily: "JetBrains Mono, monospace",
         }}
+        labelStyle={{ color: "hsl(145 100% 50%)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}
         formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name]}
       />
     );
-    const grid = <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" opacity={0.3} />;
+    const grid = <CartesianGrid strokeDasharray="2 6" stroke="hsl(145 100% 50%)" opacity={0.08} vertical={false} />;
 
     if (chartType === "bar") {
       return (
         <BarChart {...commonProps}>
+          {sharedDefs}
           {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
           {chartColumns.map((col, i) => (
-            <Bar key={col} dataKey={col} fill={CHART_COLORS[i % CHART_COLORS.length]} radius={[8, 8, 0, 0]} />
+            <Bar
+              key={col}
+              dataKey={col}
+              fill={`url(#${gradients[i].barId})`}
+              radius={[6, 6, 0, 0]}
+              stroke={gradients[i].color}
+              strokeWidth={1}
+              animationDuration={1400}
+              animationEasing="ease-out"
+            />
           ))}
         </BarChart>
       );
@@ -418,28 +481,45 @@ export default function ReportDetail() {
     if (chartType === "line") {
       return (
         <LineChart {...commonProps}>
+          {sharedDefs}
           {grid}{xAxis}{yAxis}{tooltip}
-          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+          <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
           {chartColumns.map((col, i) => (
-            <Line key={col} type="monotone" dataKey={col} stroke={CHART_COLORS[i % CHART_COLORS.length]} strokeWidth={2.5} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 7 }} />
+            <Line
+              key={col}
+              type="monotone"
+              dataKey={col}
+              stroke={`url(#${gradients[i].lineId})`}
+              strokeWidth={2.5}
+              dot={{ r: 3, strokeWidth: 2, fill: "hsl(var(--background))", stroke: gradients[i].color }}
+              activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
+              animationDuration={1600}
+              animationEasing="ease-out"
+              filter="url(#softGlow)"
+            />
           ))}
         </LineChart>
       );
     }
     return (
       <AreaChart {...commonProps}>
-        <defs>
-          {gradients.map(g => (
-            <linearGradient key={g.id} id={g.id} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor={g.color} stopOpacity={0.4} />
-              <stop offset="95%" stopColor={g.color} stopOpacity={0} />
-            </linearGradient>
-          ))}
-        </defs>
+        {sharedDefs}
         {grid}{xAxis}{yAxis}{tooltip}
-        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 12 }} />
+        <Legend wrapperStyle={{ fontSize: 11, paddingTop: 14, fontFamily: "JetBrains Mono, monospace", letterSpacing: "0.04em" }} />
         {chartColumns.map((col, i) => (
-          <Area key={col} type="monotone" dataKey={col} stroke={gradients[i].color} fill={`url(#${gradients[i].id})`} strokeWidth={2.5} />
+          <Area
+            key={col}
+            type="monotone"
+            dataKey={col}
+            stroke={gradients[i].color}
+            fill={`url(#${gradients[i].id})`}
+            strokeWidth={2.5}
+            dot={{ r: 2.5, strokeWidth: 0, fill: gradients[i].color }}
+            activeDot={{ r: 7, strokeWidth: 0, fill: gradients[i].color, filter: "url(#neonGlow)" }}
+            animationDuration={1600}
+            animationEasing="ease-out"
+            filter="url(#softGlow)"
+          />
         ))}
       </AreaChart>
     );
@@ -663,23 +743,55 @@ export default function ReportDetail() {
             Evolução e Análise Visual
           </h2>
 
-          {/* Main chart — agora ocupa largura total para evitar espaço vazio */}
-          <div className="bg-card border border-border rounded-2xl p-5 sm:p-6">
-            <div className="flex items-center justify-between mb-5 flex-wrap gap-3">
-              <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                <Activity className="w-4 h-4 text-primary" />
-                Evolução do Período
-              </h3>
+          {/* Main chart — Aceleriq futurist surface */}
+          <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
+            {/* Tech grid backdrop */}
+            <div className="absolute inset-0 opacity-[0.35] pointer-events-none"
+              style={{
+                backgroundImage:
+                  "linear-gradient(hsl(145 100% 50% / 0.04) 1px, transparent 1px), linear-gradient(90deg, hsl(145 100% 50% / 0.04) 1px, transparent 1px)",
+                backgroundSize: "28px 28px",
+                maskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
+                WebkitMaskImage: "radial-gradient(ellipse at center, black 40%, transparent 100%)",
+              }}
+            />
+            {/* Soft neon glow */}
+            <div className="absolute -top-32 -right-32 w-72 h-72 rounded-full pointer-events-none"
+              style={{ background: "radial-gradient(circle, hsl(145 100% 50% / 0.10), transparent 70%)" }}
+            />
+            {/* Corner brackets */}
+            {[
+              "top-2 left-2 border-t-2 border-l-2",
+              "top-2 right-2 border-t-2 border-r-2",
+              "bottom-2 left-2 border-b-2 border-l-2",
+              "bottom-2 right-2 border-b-2 border-r-2",
+            ].map((cls, i) => (
+              <span key={i} className={`absolute w-4 h-4 border-primary/40 ${cls} pointer-events-none rounded-[2px]`} />
+            ))}
+
+            <div className="relative flex items-center justify-between mb-5 flex-wrap gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="relative inline-flex w-2 h-2 rounded-full bg-primary">
+                  <span className="absolute inset-0 rounded-full bg-primary animate-ping opacity-60" />
+                </span>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Evolução do Período
+                </h3>
+                <span className="font-mono text-[9px] uppercase tracking-[0.2em] text-primary/80 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
+                  LIVE · {chartData.length}pts
+                </span>
+              </div>
               <div className="flex items-center gap-3 flex-wrap">
                 {chartColumns.map((col, i) => (
-                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length] }} />
+                  <span key={col} className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground font-mono">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHART_COLORS[i % CHART_COLORS.length], boxShadow: `0 0 8px ${CHART_COLORS[i % CHART_COLORS.length]}99` }} />
                     {col}
                   </span>
                 ))}
               </div>
             </div>
-            <div className="h-72 sm:h-96">
+            <div className="relative h-72 sm:h-96">
               <ResponsiveContainer width="100%" height="100%">
                 {renderMainChart()!}
               </ResponsiveContainer>
@@ -925,32 +1037,67 @@ export default function ReportDetail() {
                 <p className="text-[11px] text-muted-foreground mb-4">Participação relativa de cada métrica no resultado total.</p>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
                   <div className="lg:col-span-2 h-72 relative">
+                    {/* Radial neon halo */}
+                    <div className="absolute inset-0 pointer-events-none"
+                      style={{ background: "radial-gradient(circle at center, hsl(145 100% 50% / 0.10), transparent 60%)" }}
+                    />
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
+                        <defs>
+                          <filter id="pieGlow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="2.5" result="b" />
+                            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                          </filter>
+                          {pieData.map((d, i) => (
+                            <radialGradient key={i} id={`pieGrad${i}`} cx="50%" cy="50%" r="65%">
+                              <stop offset="0%" stopColor={d.fill} stopOpacity={1} />
+                              <stop offset="100%" stopColor={d.fill} stopOpacity={0.55} />
+                            </radialGradient>
+                          ))}
+                        </defs>
+                        {/* Outer rim ring */}
+                        <Pie
+                          data={[{ v: 1 }]}
+                          dataKey="v"
+                          cx="50%" cy="50%"
+                          innerRadius={116} outerRadius={120}
+                          fill="hsl(145 100% 50% / 0.18)"
+                          stroke="none"
+                          isAnimationActive={false}
+                        />
                         <Pie
                           data={pieData}
                           cx="50%"
                           cy="50%"
                           innerRadius={68}
                           outerRadius={108}
-                          paddingAngle={3}
+                          paddingAngle={4}
                           dataKey="value"
-                          stroke="hsl(var(--card))"
+                          stroke="hsl(0 0% 7%)"
                           strokeWidth={3}
+                          filter="url(#pieGlow)"
+                          animationDuration={1400}
+                          animationEasing="ease-out"
                         >
-                          {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                          {pieData.map((_, i) => <Cell key={i} fill={`url(#pieGrad${i})`} />)}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}
+                          contentStyle={{
+                            background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
+                            border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
+                            fontSize: 12, fontFamily: "JetBrains Mono, monospace",
+                            boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
+                          }}
                           formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Total</p>
-                      <p className="text-2xl font-mono font-bold text-foreground">
+                      <p className="text-[9px] uppercase tracking-[0.25em] text-primary/70 font-mono">Total</p>
+                      <p className="text-2xl font-mono font-bold text-foreground" style={{ textShadow: "0 0 18px hsl(145 100% 50% / 0.45)" }}>
                         {totalPie >= 1000 ? (totalPie / 1000).toFixed(1) + "K" : totalPie.toLocaleString("pt-BR")}
                       </p>
+                      <span className="mt-1 text-[9px] font-mono text-muted-foreground tracking-widest uppercase">{pieData.length} séries</span>
                     </div>
                   </div>
                   <div className="lg:col-span-3 space-y-2">
@@ -987,26 +1134,64 @@ export default function ReportDetail() {
           {/* Radar + Eficiência refinada */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {radarData.length >= 3 && (
-              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
-                <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+              <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid overflow-hidden">
+                <div className="absolute inset-0 pointer-events-none opacity-50"
+                  style={{ background: "radial-gradient(circle at 50% 60%, hsl(145 100% 50% / 0.10), transparent 70%)" }} />
+                <h3 className="relative text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Shield className="w-4 h-4 text-primary" />
                   Diagnóstico de Performance
+                  <span className="ml-auto font-mono text-[9px] uppercase tracking-[0.2em] text-primary/70 px-2 py-0.5 rounded border border-primary/25 bg-primary/5">
+                    {radarData.length} eixos
+                  </span>
                 </h3>
-                <p className="text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
-                <div className="h-64">
+                <p className="relative text-[11px] text-muted-foreground mb-3">Comparativo vs. benchmarks de mercado (100% = referência).</p>
+                <div className="relative h-64">
                   <ResponsiveContainer width="100%" height="100%">
                     <RadarChart data={radarData}>
                       <defs>
                         <radialGradient id="radarFill" cx="50%" cy="50%" r="50%">
-                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.45} />
-                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.08} />
+                          <stop offset="0%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.55} />
+                          <stop offset="60%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.18} />
+                          <stop offset="100%" stopColor="hsl(145, 100%, 50%)" stopOpacity={0.04} />
                         </radialGradient>
+                        <filter id="radarGlow" x="-30%" y="-30%" width="160%" height="160%">
+                          <feGaussianBlur stdDeviation="2.5" result="b" />
+                          <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                        </filter>
                       </defs>
-                      <PolarGrid stroke="hsl(var(--border))" strokeDasharray="3 3" />
-                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600 }} />
+                      <PolarGrid stroke="hsl(145 100% 50%)" strokeOpacity={0.18} strokeDasharray="2 4" />
+                      <PolarAngleAxis dataKey="metric" tick={{ fontSize: 10.5, fill: "hsl(var(--foreground))", fontWeight: 600, fontFamily: "JetBrains Mono, monospace" }} />
                       <PolarRadiusAxis tick={false} axisLine={false} />
-                      <Radar name="Performance" dataKey="value" stroke="hsl(145, 100%, 50%)" fill="url(#radarFill)" strokeWidth={2.5} dot={{ r: 3, fill: "hsl(145, 100%, 50%)", stroke: "hsl(var(--card))", strokeWidth: 2 }} />
-                      <Tooltip contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12 }} formatter={(v: any) => [v + "%", "vs. benchmark"]} />
+                      {/* Benchmark reference radar */}
+                      <Radar
+                        name="Benchmark"
+                        dataKey={() => 100}
+                        stroke="hsl(0 0% 60% / 0.4)"
+                        strokeDasharray="3 4"
+                        fill="transparent"
+                        strokeWidth={1}
+                        isAnimationActive={false}
+                      />
+                      <Radar
+                        name="Performance"
+                        dataKey="value"
+                        stroke="hsl(145, 100%, 50%)"
+                        fill="url(#radarFill)"
+                        strokeWidth={2.5}
+                        dot={{ r: 4, fill: "hsl(145, 100%, 50%)", stroke: "hsl(0 0% 7%)", strokeWidth: 2 }}
+                        filter="url(#radarGlow)"
+                        animationDuration={1600}
+                        animationEasing="ease-out"
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
+                          border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
+                          fontSize: 12, fontFamily: "JetBrains Mono, monospace",
+                          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
+                        }}
+                        formatter={(v: any) => [v + "%", "vs. benchmark"]}
+                      />
                     </RadarChart>
                   </ResponsiveContainer>
                 </div>
