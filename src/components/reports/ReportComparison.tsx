@@ -51,22 +51,58 @@ const NOT_RATE_FOR = {
 };
 function sumFromBreakdown(rows: AnyRec[], kind: keyof typeof COL_HINTS): number {
   if (!rows?.length) return 0;
-  const keys = Object.keys(rows[0]);
+  // Coleta TODAS as chaves possíveis (rows podem ter shapes ligeiramente diferentes)
+  const allKeys = new Set<string>();
+  for (const r of rows) Object.keys(r).forEach(k => allKeys.add(k));
+  const keys = [...allKeys];
   const exclude = NOT_RATE_FOR[kind];
-  const matched: string[] = [];
+  let matchedKey: string | null = null;
   for (const hint of COL_HINTS[kind]) {
     const h = hint.toLowerCase();
     for (const k of keys) {
       const lk = k.toLowerCase();
-      if (lk.includes(h) && !exclude.some(e => lk.includes(e)) && !matched.includes(k)) {
-        matched.push(k);
+      if (lk.includes(h) && !exclude.some(e => lk.includes(e))) {
+        matchedKey = k;
         break;
       }
     }
-    if (matched.length) break;
+    if (matchedKey) break;
   }
-  if (!matched.length) return 0;
-  return rows.reduce((s, r) => s + (Number(r[matched[0]]) || 0), 0);
+  if (!matchedKey) return 0;
+  return rows.reduce((s, r) => s + (Number(r[matchedKey!]) || 0), 0);
+}
+
+function pickFromCustom(custom: AnyRec[] | undefined, kind: keyof typeof COL_HINTS): number {
+  if (!Array.isArray(custom) || !custom.length) return 0;
+  const exclude = NOT_RATE_FOR[kind];
+  for (const hint of COL_HINTS[kind]) {
+    const h = hint.toLowerCase();
+    for (const c of custom) {
+      const lk = String(c?.label || "").toLowerCase();
+      if (lk && lk.includes(h) && !exclude.some(e => lk.includes(e))) {
+        const v = Number(c.value);
+        if (isFinite(v)) return v;
+      }
+    }
+  }
+  return 0;
+}
+
+function pickFromTopLevel(m: AnyRec, kind: keyof typeof COL_HINTS): number {
+  const exclude = NOT_RATE_FOR[kind];
+  for (const hint of COL_HINTS[kind]) {
+    const h = hint.toLowerCase();
+    for (const [k, v] of Object.entries(m)) {
+      if (k.startsWith("__") || k === "custom") continue;
+      if (typeof v !== "number" && typeof v !== "string") continue;
+      const lk = k.toLowerCase();
+      if (lk.includes(h) && !exclude.some(e => lk.includes(e))) {
+        const n = Number(v);
+        if (isFinite(n) && n !== 0) return n;
+      }
+    }
+  }
+  return 0;
 }
 
 interface Totals {
@@ -82,18 +118,27 @@ interface Totals {
 function extractTotals(report: AnyRec | null | undefined): Totals {
   const m = (report?.metrics || {}) as AnyRec;
   const breakdown = Array.isArray(m.__breakdown) ? m.__breakdown as AnyRec[] : [];
-  const pick = (mapped: number, kind: keyof typeof COL_HINTS) =>
-    mapped > 0 ? mapped : sumFromBreakdown(breakdown, kind);
+  const custom = Array.isArray(m.custom) ? m.custom as AnyRec[] : [];
 
-  const spend  = pick(Number(m.ad_spend)    || 0, "spend");
-  const impr   = pick(Number(m.impressions) || 0, "impr");
-  const reach  = pick(Number(m.reach)       || 0, "reach");
-  const click  = pick(Number(m.link_clicks) || Number(m.clicks) || 0, "click");
-  const results= pick(Number(m.results)     || Number(m.conversions) || 0, "results");
-  const messages = pick(Number(m.messages)  || 0, "messages");
-  const leads    = pick(Number(m.leads)     || 0, "leads");
-  const revenue  = pick(Number(m.revenue)   || 0, "revenue");
-  const purchases= pick(Number(m.purchases) || 0, "purchases");
+  // Estratégia em cascata: mapped explícito → breakdown → custom → busca fuzzy no topo
+  const pick = (mapped: number, kind: keyof typeof COL_HINTS): number => {
+    if (mapped > 0) return mapped;
+    const fromBk = sumFromBreakdown(breakdown, kind);
+    if (fromBk > 0) return fromBk;
+    const fromCustom = pickFromCustom(custom, kind);
+    if (fromCustom > 0) return fromCustom;
+    return pickFromTopLevel(m, kind);
+  };
+
+  const spend     = pick(Number(m.ad_spend)    || Number(m.spend) || 0, "spend");
+  const impr      = pick(Number(m.impressions) || 0, "impr");
+  const reach     = pick(Number(m.reach)       || 0, "reach");
+  const click     = pick(Number(m.link_clicks) || Number(m.clicks) || 0, "click");
+  const results   = pick(Number(m.results)     || Number(m.conversions) || 0, "results");
+  const messages  = pick(Number(m.messages)    || 0, "messages");
+  const leads     = pick(Number(m.leads)       || 0, "leads");
+  const revenue   = pick(Number(m.revenue)     || 0, "revenue");
+  const purchases = pick(Number(m.purchases)   || 0, "purchases");
 
   return {
     spend, impr, reach, click, results, messages, leads, revenue, purchases,
