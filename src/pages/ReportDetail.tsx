@@ -923,148 +923,210 @@ export default function ReportDetail() {
             </div>
           )}
 
-          {/* Smart Journey Funnel · adapta-se aos dados disponíveis (alcance → perfil → clique → conversa → venda) */}
+          {/* Smart Journey Funnel · HUD futurista de jornada */}
           {funnelData && funnelData.length >= 2 && (() => {
             const top = funnelData[0].value;
             const bottom = funnelData[funnelData.length - 1].value;
             const globalRate = top > 0 ? (bottom / top) * 100 : 0;
+            const totalDropoff = top - bottom;
             const followers = Number((report.metrics as any)?.followers_gained) || 0;
-            const rowH = 64;
-            const totalH = funnelData.length * rowH + 12;
+            // Localiza o "gargalo" — etapa com maior perda relativa entre passos consecutivos
+            let bottleneckIdx = -1;
+            let bottleneckRate = 1;
+            funnelData.forEach((s, i) => {
+              if (i === 0) return;
+              const prev = funnelData[i - 1].value;
+              const r = prev > 0 ? s.value / prev : 1;
+              if (r < bottleneckRate) { bottleneckRate = r; bottleneckIdx = i; }
+            });
             return (
-              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid relative overflow-hidden">
-                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-primary/5 blur-3xl pointer-events-none" />
-                <div className="relative flex items-center justify-between flex-wrap gap-2 mb-1">
-                  <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                    <Target className="w-4 h-4 text-primary" />
-                    Jornada do Cliente · Funil Inteligente
-                  </h3>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-[10px] px-2.5 py-1 rounded-full bg-primary/10 text-primary border border-primary/20 font-semibold uppercase tracking-wider">
-                      Taxa global {globalRate.toFixed(2)}%
-                    </span>
-                    {followers > 0 && (
-                      <span className="text-[10px] px-2.5 py-1 rounded-full bg-secondary text-foreground border border-border font-semibold uppercase tracking-wider inline-flex items-center gap-1">
-                        <Users className="w-3 h-3" />
-                        +{followers.toLocaleString("pt-BR")} seguidores
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <p className="text-[11px] text-muted-foreground mb-2 relative">
-                  Como cada pessoa avançou da descoberta até a ação final no período analisado.
-                </p>
-                {(() => {
-                  const first = funnelData[0]?.name?.toLowerCase() || "audiência";
-                  const last = funnelData[funnelData.length - 1]?.name?.toLowerCase() || "ação";
-                  return (
-                    <div className="mb-5 inline-flex items-center gap-1.5 text-[10px] px-2.5 py-1 rounded-md bg-secondary/40 border border-border/60 text-muted-foreground">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      <span>
-                        Conversão neste relatório = de <span className="text-foreground font-semibold">{first}</span> até <span className="text-foreground font-semibold">{last}</span>
-                        {" · "}taxa global {globalRate.toFixed(2)}%
-                      </span>
+              <div className="relative bg-[hsl(0_0%_7%)] border border-border rounded-2xl p-5 sm:p-7 page-break-inside-avoid overflow-hidden">
+                {/* Tech grid backdrop */}
+                <div className="absolute inset-0 pointer-events-none opacity-[0.35]"
+                  style={{
+                    backgroundImage:
+                      "linear-gradient(hsl(145 100% 50% / 0.06) 1px, transparent 1px), linear-gradient(90deg, hsl(145 100% 50% / 0.06) 1px, transparent 1px)",
+                    backgroundSize: "32px 32px",
+                    maskImage: "radial-gradient(ellipse at center, black 30%, transparent 90%)",
+                    WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 90%)",
+                  }} />
+                <div className="absolute -top-24 -right-24 w-72 h-72 rounded-full bg-primary/[0.07] blur-3xl pointer-events-none" />
+                {/* Corner brackets */}
+                <span className="absolute top-3 left-3 w-3 h-3 border-t border-l border-primary/40 pointer-events-none" />
+                <span className="absolute top-3 right-3 w-3 h-3 border-t border-r border-primary/40 pointer-events-none" />
+                <span className="absolute bottom-3 left-3 w-3 h-3 border-b border-l border-primary/40 pointer-events-none" />
+                <span className="absolute bottom-3 right-3 w-3 h-3 border-b border-r border-primary/40 pointer-events-none" />
+
+                {/* Header */}
+                <div className="relative flex items-start justify-between flex-wrap gap-3 mb-5">
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="font-mono text-[9px] uppercase tracking-[0.3em] text-primary/70">SYS · journey</span>
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
+                      <span className="font-mono text-[9px] uppercase tracking-[0.25em] text-muted-foreground">live</span>
                     </div>
-                  );
-                })()}
-
-
-                <div className="grid grid-cols-1 lg:grid-cols-5 gap-5 relative">
-                  {/* Trapezoid funnel */}
-                  <div className="lg:col-span-3">
-                    <svg viewBox={`0 0 400 ${totalH}`} className="w-full" style={{ height: totalH }} preserveAspectRatio="none">
-                      <defs>
-                        {funnelData.map((s, i) => (
-                          <linearGradient key={i} id={`fg-${i}`} x1="0" y1="0" x2="1" y2="0">
-                            <stop offset="0%" stopColor={s.fill} stopOpacity={0.95} />
-                            <stop offset="100%" stopColor={s.fill} stopOpacity={0.55} />
-                          </linearGradient>
-                        ))}
-                      </defs>
-                      {funnelData.map((stage, i) => {
-                        const pct = top > 0 ? stage.value / top : 0;
-                        const maxW = 380;
-                        const w = Math.max(64, maxW * (0.25 + 0.75 * pct));
-                        const next = funnelData[i + 1];
-                        const nextPct = next && top > 0 ? next.value / top : pct;
-                        const wNext = next ? Math.max(64, maxW * (0.25 + 0.75 * nextPct)) : w * 0.92;
-                        const cx = 200;
-                        const y = i * rowH + 6;
-                        const h = rowH - 10;
-                        const points = [
-                          [cx - w / 2, y],
-                          [cx + w / 2, y],
-                          [cx + wNext / 2, y + h],
-                          [cx - wNext / 2, y + h],
-                        ].map(p => p.join(",")).join(" ");
-                        return (
-                          <g key={i}>
-                            <polygon
-                              points={points}
-                              fill={`url(#fg-${i})`}
-                              stroke={stage.fill}
-                              strokeWidth={1}
-                              style={{ filter: `drop-shadow(0 4px 12px ${stage.fill}33)` }}
-                            />
-                            <text
-                              x={cx}
-                              y={y + h / 2 + 5}
-                              textAnchor="middle"
-                              fontSize={15}
-                              fontWeight={700}
-                              fill="hsl(var(--background))"
-                              style={{ fontFamily: "JetBrains Mono, monospace" }}
-                            >
-                              {stage.value.toLocaleString("pt-BR")}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </svg>
+                    <h3 className="text-base font-semibold text-foreground flex items-center gap-2">
+                      <Target className="w-4 h-4 text-primary" />
+                      Jornada do Cliente
+                    </h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Da descoberta até a ação final · {funnelData.length} etapas mapeadas
+                    </p>
                   </div>
+                  {followers > 0 && (
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-primary/25 bg-primary/[0.06]">
+                      <Users className="w-4 h-4 text-primary" />
+                      <div className="leading-tight">
+                        <p className="font-mono text-[9px] uppercase tracking-widest text-primary/70">novos seguidores</p>
+                        <p className="font-mono text-sm font-bold text-foreground">+{followers.toLocaleString("pt-BR")}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
 
-                  {/* Stage list */}
-                  <div className="lg:col-span-2 space-y-2">
-                    {funnelData.map((stage, i) => {
-                      const prev = i > 0 ? funnelData[i - 1].value : stage.value;
-                      const rate = prev > 0 ? (stage.value / prev) * 100 : 100;
-                      const dropOff = i > 0 ? prev - stage.value : 0;
-                      return (
-                        <div key={i} className="rounded-xl border border-border/60 bg-secondary/20 p-3 group hover:border-primary/30 transition-colors">
-                          <div className="flex items-center justify-between gap-2 mb-1.5">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="w-7 h-7 rounded-lg flex items-center justify-center text-[10px] font-bold font-mono shrink-0"
-                                style={{ background: `${stage.fill}18`, color: stage.fill, border: `1px solid ${stage.fill}30` }}>
-                                {String(i + 1).padStart(2, "0")}
-                              </span>
-                              <span className="text-[12px] font-semibold text-foreground truncate">{stage.name}</span>
-                            </div>
-                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-card border border-border text-foreground">
-                              {i > 0 ? rate.toFixed(1) + "%" : "100%"}
+                {/* KPI strip */}
+                <div className="relative grid grid-cols-2 sm:grid-cols-4 gap-2 mb-6">
+                  {[
+                    { label: "Entrada", value: top.toLocaleString("pt-BR"), sub: funnelData[0].name },
+                    { label: "Conversão final", value: bottom.toLocaleString("pt-BR"), sub: funnelData[funnelData.length - 1].name },
+                    { label: "Taxa global", value: globalRate.toFixed(2) + "%", sub: "entrada → final", accent: true },
+                    { label: "Perda total", value: totalDropoff.toLocaleString("pt-BR"), sub: "ao longo da jornada" },
+                  ].map((kpi, i) => (
+                    <div key={i} className={`rounded-xl border px-3 py-2.5 ${kpi.accent ? "border-primary/30 bg-primary/[0.06]" : "border-border/60 bg-secondary/20"}`}>
+                      <p className="font-mono text-[9px] uppercase tracking-[0.2em] text-muted-foreground">{kpi.label}</p>
+                      <p className={`font-mono text-lg font-bold leading-tight mt-0.5 ${kpi.accent ? "text-primary" : "text-foreground"}`}
+                        style={kpi.accent ? { textShadow: "0 0 14px hsl(145 100% 50% / 0.5)" } : undefined}>
+                        {kpi.value}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground truncate mt-0.5">{kpi.sub}</p>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Stages */}
+                <div className="relative space-y-2.5">
+                  {funnelData.map((stage, i) => {
+                    const prevVal = i > 0 ? funnelData[i - 1].value : stage.value;
+                    const stepRate = prevVal > 0 ? (stage.value / prevVal) * 100 : 100;
+                    const dropOff = i > 0 ? prevVal - stage.value : 0;
+                    const widthPct = top > 0 ? (stage.value / top) * 100 : 0;
+                    const isBottleneck = i === bottleneckIdx;
+                    const isFinal = i === funnelData.length - 1;
+                    return (
+                      <div key={i}>
+                        {/* Connector / step rate between stages */}
+                        {i > 0 && (
+                          <div className="flex items-center gap-2 pl-12 mb-2">
+                            <span className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
+                            <span className={`font-mono text-[10px] px-2 py-0.5 rounded-md border inline-flex items-center gap-1 ${
+                              isBottleneck
+                                ? "border-warning/40 bg-warning/10 text-warning"
+                                : stepRate >= 30
+                                  ? "border-primary/30 bg-primary/10 text-primary"
+                                  : "border-border bg-secondary/40 text-muted-foreground"
+                            }`}>
+                              <ArrowDownRight className="w-2.5 h-2.5" />
+                              {stepRate.toFixed(1)}%
+                              {isBottleneck && <span className="ml-1 uppercase tracking-wider font-bold">gargalo</span>}
                             </span>
+                            <span className="flex-1 h-px bg-gradient-to-r from-transparent via-border to-transparent" />
                           </div>
-                          <div className="flex items-end justify-between gap-2">
-                            <p className="text-lg font-mono font-bold text-foreground leading-none">
-                              {stage.value.toLocaleString("pt-BR")}
-                            </p>
-                            {dropOff > 0 && (
-                              <span className="text-[9.5px] text-muted-foreground inline-flex items-center gap-0.5">
-                                <ArrowDownRight className="w-2.5 h-2.5 text-destructive" />
-                                {dropOff.toLocaleString("pt-BR")} saíram
-                              </span>
-                            )}
-                          </div>
-                          <div className="mt-2 h-1 rounded-full bg-secondary overflow-hidden">
-                            <div
-                              className="h-full rounded-full transition-all duration-700"
-                              style={{ width: `${Math.min((stage.value / top) * 100, 100)}%`, background: `linear-gradient(90deg, ${stage.fill}, ${stage.fill}99)` }}
-                            />
+                        )}
+
+                        <div className={`relative rounded-xl border overflow-hidden transition-colors ${
+                          isFinal
+                            ? "border-primary/40 bg-primary/[0.05]"
+                            : isBottleneck
+                              ? "border-warning/30 bg-warning/[0.04]"
+                              : "border-border/60 bg-secondary/15"
+                        }`}>
+                          {/* Background fill bar */}
+                          <div
+                            className="absolute inset-y-0 left-0 transition-all duration-1000 ease-out"
+                            style={{
+                              width: `${widthPct}%`,
+                              background: `linear-gradient(90deg, ${stage.fill}22 0%, ${stage.fill}10 60%, transparent 100%)`,
+                              boxShadow: `inset 0 0 30px ${stage.fill}15`,
+                            }}
+                          />
+                          {/* Neon leading edge */}
+                          <div
+                            className="absolute inset-y-0 transition-all duration-1000 ease-out"
+                            style={{
+                              left: `calc(${widthPct}% - 2px)`,
+                              width: "2px",
+                              background: stage.fill,
+                              boxShadow: `0 0 14px ${stage.fill}, 0 0 4px ${stage.fill}`,
+                              opacity: widthPct > 1 && widthPct < 99 ? 1 : 0,
+                            }}
+                          />
+
+                          <div className="relative flex items-center gap-3 px-3 py-3">
+                            {/* Index chip */}
+                            <span
+                              className="w-9 h-9 rounded-lg flex items-center justify-center text-[11px] font-bold font-mono shrink-0 border"
+                              style={{
+                                background: `${stage.fill}14`,
+                                color: stage.fill,
+                                borderColor: `${stage.fill}40`,
+                                boxShadow: `0 0 12px ${stage.fill}33`,
+                              }}
+                            >
+                              {String(i + 1).padStart(2, "0")}
+                            </span>
+
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="text-[12.5px] font-semibold text-foreground truncate">{stage.name}</span>
+                                {isFinal && (
+                                  <span className="font-mono text-[8.5px] px-1.5 py-0.5 rounded uppercase tracking-widest bg-primary/15 text-primary border border-primary/30">
+                                    final
+                                  </span>
+                                )}
+                              </div>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <span className="font-mono text-[10px] text-muted-foreground tracking-wider">
+                                  {widthPct.toFixed(1)}% do topo
+                                </span>
+                                {dropOff > 0 && (
+                                  <span className="font-mono text-[10px] text-muted-foreground inline-flex items-center gap-1">
+                                    <span className="w-1 h-1 rounded-full bg-muted-foreground/50" />
+                                    {dropOff.toLocaleString("pt-BR")} saíram
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Big number */}
+                            <div className="text-right shrink-0">
+                              <p
+                                className="font-mono text-xl sm:text-2xl font-bold text-foreground tabular-nums leading-none"
+                                style={{ textShadow: `0 0 16px ${stage.fill}55` }}
+                              >
+                                {stage.value.toLocaleString("pt-BR")}
+                              </p>
+                              <p className="font-mono text-[9px] uppercase tracking-widest text-muted-foreground mt-1">
+                                {i === 0 ? "entrada" : "permaneceram"}
+                              </p>
+                            </div>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
+
+                {/* Footer insight */}
+                {bottleneckIdx > 0 && (
+                  <div className="relative mt-5 rounded-xl border border-warning/25 bg-warning/[0.05] px-3.5 py-2.5 flex items-start gap-2.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0 animate-pulse" />
+                    <p className="text-[11.5px] text-foreground leading-relaxed">
+                      <span className="font-mono uppercase tracking-wider text-warning text-[10px] font-bold">Gargalo identificado · </span>
+                      maior perda relativa na etapa <span className="font-semibold">{funnelData[bottleneckIdx].name}</span>
+                      {" "}({(bottleneckRate * 100).toFixed(1)}% de aproveitamento). Otimize esse ponto para destravar o resto do funil.
+                    </p>
+                  </div>
+                )}
               </div>
             );
           })()}
