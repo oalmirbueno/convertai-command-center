@@ -541,7 +541,7 @@ export default function ReportDetail() {
           projectId={report.project_id}
           currentReportId={report.id}
           currentCreatedAt={report.created_at}
-          currentMetrics={report.metrics as any}
+          currentReportMetrics={report.metrics as any}
           currentPeriod={{ start: report.period_start, end: report.period_end }}
         />
       )}
