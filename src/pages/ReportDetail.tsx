@@ -697,7 +697,7 @@ export default function ReportDetail() {
                     </div>
                     <div className={`flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold border ${statusColor(kpi.status)}`}>
                       <StatusIcon className="w-3 h-3" />
-                      {kpi.status === "good" ? "Bom" : kpi.status === "warning" ? "Atenção" : "Crítico"}
+                      {kpi.status === "good" ? "Excelente" : kpi.status === "warning" ? "Em otimização" : "Em ajuste"}
                     </div>
                   </div>
                   <p className="text-2xl font-bold font-mono text-foreground tracking-tight">{kpi.value}</p>
