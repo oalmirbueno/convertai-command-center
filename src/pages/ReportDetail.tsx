@@ -1037,32 +1037,67 @@ export default function ReportDetail() {
                 <p className="text-[11px] text-muted-foreground mb-4">Participação relativa de cada métrica no resultado total.</p>
                 <div className="grid grid-cols-1 lg:grid-cols-5 gap-6 items-center">
                   <div className="lg:col-span-2 h-72 relative">
+                    {/* Radial neon halo */}
+                    <div className="absolute inset-0 pointer-events-none"
+                      style={{ background: "radial-gradient(circle at center, hsl(145 100% 50% / 0.10), transparent 60%)" }}
+                    />
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
+                        <defs>
+                          <filter id="pieGlow" x="-20%" y="-20%" width="140%" height="140%">
+                            <feGaussianBlur stdDeviation="2.5" result="b" />
+                            <feMerge><feMergeNode in="b" /><feMergeNode in="SourceGraphic" /></feMerge>
+                          </filter>
+                          {pieData.map((d, i) => (
+                            <radialGradient key={i} id={`pieGrad${i}`} cx="50%" cy="50%" r="65%">
+                              <stop offset="0%" stopColor={d.fill} stopOpacity={1} />
+                              <stop offset="100%" stopColor={d.fill} stopOpacity={0.55} />
+                            </radialGradient>
+                          ))}
+                        </defs>
+                        {/* Outer rim ring */}
+                        <Pie
+                          data={[{ v: 1 }]}
+                          dataKey="v"
+                          cx="50%" cy="50%"
+                          innerRadius={116} outerRadius={120}
+                          fill="hsl(145 100% 50% / 0.18)"
+                          stroke="none"
+                          isAnimationActive={false}
+                        />
                         <Pie
                           data={pieData}
                           cx="50%"
                           cy="50%"
                           innerRadius={68}
                           outerRadius={108}
-                          paddingAngle={3}
+                          paddingAngle={4}
                           dataKey="value"
-                          stroke="hsl(var(--card))"
+                          stroke="hsl(0 0% 7%)"
                           strokeWidth={3}
+                          filter="url(#pieGlow)"
+                          animationDuration={1400}
+                          animationEasing="ease-out"
                         >
-                          {pieData.map((entry, i) => <Cell key={i} fill={entry.fill} />)}
+                          {pieData.map((_, i) => <Cell key={i} fill={`url(#pieGrad${i})`} />)}
                         </Pie>
                         <Tooltip
-                          contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 12, fontSize: 12, boxShadow: "0 12px 40px rgba(0,0,0,0.4)" }}
+                          contentStyle={{
+                            background: "hsl(0 0% 7% / 0.95)", backdropFilter: "blur(12px)",
+                            border: "1px solid hsl(145 100% 50% / 0.35)", borderRadius: 10,
+                            fontSize: 12, fontFamily: "JetBrains Mono, monospace",
+                            boxShadow: "0 0 24px hsl(145 100% 50% / 0.18)",
+                          }}
                           formatter={(v: any, n: any) => [Number(v).toLocaleString("pt-BR"), n]}
                         />
                       </PieChart>
                     </ResponsiveContainer>
                     <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                      <p className="text-[9px] uppercase tracking-widest text-muted-foreground">Total</p>
-                      <p className="text-2xl font-mono font-bold text-foreground">
+                      <p className="text-[9px] uppercase tracking-[0.25em] text-primary/70 font-mono">Total</p>
+                      <p className="text-2xl font-mono font-bold text-foreground" style={{ textShadow: "0 0 18px hsl(145 100% 50% / 0.45)" }}>
                         {totalPie >= 1000 ? (totalPie / 1000).toFixed(1) + "K" : totalPie.toLocaleString("pt-BR")}
                       </p>
+                      <span className="mt-1 text-[9px] font-mono text-muted-foreground tracking-widest uppercase">{pieData.length} séries</span>
                     </div>
                   </div>
                   <div className="lg:col-span-3 space-y-2">
