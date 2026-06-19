@@ -546,6 +546,9 @@ export default function ReportDetail() {
         />
       )}
 
+      {/* ═══════════════ AUDITORIA DE MÉTRICAS ═══════════════ */}
+      <MetricsAudit metrics={report.metrics as any} />
+
       {/* ═══════════════ KPI CARDS ═══════════════ */}
       {kpis.length > 0 && (
         <section className="space-y-3">
