@@ -214,37 +214,28 @@ interface RowAnalysis {
   narrative: string;
 }
 
-/** Classifica cada métrica considerando o contexto investimento × resultado × eficiência. */
+/** Classifica cada métrica considerando o contexto investimento × resultado × eficiência.
+ *  Filosofia: cliente quer ver o trabalho funcionando. Só sinaliza atenção/crítico com
+ *  evidência forte. Movimentações pequenas, estreias de métrica e ajustes de verba
+ *  são "esperado" — não viram alarme. */
 function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number): RowAnalysis[] {
-  // Quando normaliza, divide volumétricas pela razão de dias (cur/prev)
   const v = (kind: keyof Totals, side: "cur" | "prev") => {
     const t = side === "cur" ? curT : prevT;
     const raw = t[kind];
     if (!normalize) return raw;
     const isVol = META[kind]?.volume;
     if (!isVol) return raw;
-    return side === "cur" ? raw / ratio : raw; // current dividido pra mesma base diária do anterior
+    return side === "cur" ? raw / ratio : raw;
   };
 
   const pctOf = (cur: number, prev: number) => prev !== 0 ? ((cur - prev) / prev) * 100 : (cur > 0 ? 100 : 0);
 
-  // Contexto macro
   const spendPct = pctOf(v("spend", "cur"), v("spend", "prev"));
-  const resPct   = pctOf(v("results", "cur"), v("results", "prev"));
-  const clickPct = pctOf(v("click", "cur"), v("click", "prev"));
   const ctrPct   = pctOf(curT.ctr, prevT.ctr);
-  const significant = (p: number, t = 2) => Math.abs(p) >= t;
 
-  const eficiencia = (resPct: number, spendPct: number): Severity => {
-    // resultados acompanharam a verba?
-    if (!significant(spendPct) && !significant(resPct)) return "expected";
-    // mais eficiente: caiu menos que a verba ou subiu mais que ela
-    const delta = resPct - spendPct;
-    if (delta > 10)   return "gain";
-    if (delta < -15)  return "critical";
-    if (delta < -5)   return "attention";
-    return "expected";
-  };
+  const SMALL = 8;
+  const BIG = 20;
+  const significant = (p: number, t = SMALL) => Math.abs(p) >= t;
 
   const out: RowAnalysis[] = [];
   const keys = Object.keys(META) as (keyof Totals)[];
@@ -259,7 +250,29 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
     const meta = META[k];
     const delta = pct;
 
-    let severity: Severity = "neutral";
+    // Estreia: métrica nova no período atual (anterior = 0, atual > 0) → SEMPRE ganho
+    if (prev === 0 && cur > 0) {
+      out.push({
+        key: k, cur: curT[k], prev: prevT[k], pct: 100, rawPct: 100,
+        severity: meta.volume ? "gain" : "expected",
+        narrative: meta.volume
+          ? `Nova entrada de ${meta.label.toLowerCase()} neste período (${meta.format(cur)}). Período anterior não registrou.`
+          : `${meta.label} agora mensurado: ${meta.format(cur)}.`,
+      });
+      continue;
+    }
+
+    // Métrica sumiu (não reportada agora) → neutro, não alarme
+    if (cur === 0 && prev > 0) {
+      out.push({
+        key: k, cur: curT[k], prev: prevT[k], pct: -100, rawPct: -100,
+        severity: "neutral",
+        narrative: `Métrica não reportada neste período (anterior: ${meta.format(prev)}). Verifique se a coluna está no relatório.`,
+      });
+      continue;
+    }
+
+    let severity: Severity = "expected";
     let narrative = "";
 
     switch (k) {
@@ -267,95 +280,106 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (!significant(delta)) { severity = "expected"; narrative = "Investimento estável no período."; break; }
         severity = "expected";
         narrative = delta > 0
-          ? `Mais verba alocada no período (${delta.toFixed(0)}% acima do anterior).`
-          : `Menos verba alocada no período (${Math.abs(delta).toFixed(0)}% abaixo do anterior). Quedas proporcionais em volume são esperadas.`;
+          ? `Mais verba alocada (+${delta.toFixed(0)}%) — escala em andamento.`
+          : `Menos verba alocada (${delta.toFixed(0)}%). Quedas proporcionais em volume são esperadas e não indicam piora.`;
         break;
       }
 
-      case "impr":
-      case "reach":
-      case "click":
-      case "results":
-      case "messages":
-      case "leads":
-      case "purchases":
-      case "revenue": {
+      case "impr": case "reach": case "click": case "results":
+      case "messages": case "leads": case "purchases": case "revenue": {
         if (!significant(delta)) { severity = "expected"; narrative = "Volume estável em relação ao período anterior."; break; }
-        // Compara com a variação de investimento
         const efficiencyDelta = delta - spendPct;
-        if (Math.abs(spendPct) < 2 && delta > 5) {
-          severity = "gain"; narrative = `Crescimento real (+${delta.toFixed(0)}%) sem aumento de verba.`;
-        } else if (Math.abs(spendPct) < 2 && delta < -5) {
-          severity = "attention"; narrative = `Queda de ${Math.abs(delta).toFixed(0)}% sem mudança de verba — vale revisar criativos/segmentação.`;
-        } else if (efficiencyDelta > 10) {
-          severity = "gain"; narrative = `Volume cresceu ${delta > 0 ? "+" : ""}${delta.toFixed(0)}% enquanto a verba variou ${spendPct > 0 ? "+" : ""}${spendPct.toFixed(0)}% — mais eficiente.`;
-        } else if (efficiencyDelta < -15 && delta < 0) {
-          severity = "critical"; narrative = `Queda de ${Math.abs(delta).toFixed(0)}% acima da redução de verba (${spendPct.toFixed(0)}%) — perda real de eficiência.`;
-        } else if (delta < 0 && spendPct < 0 && Math.abs(delta - spendPct) < 8) {
-          severity = "expected"; narrative = `Volume acompanhou a redução de verba (${spendPct.toFixed(0)}%). Eficiência mantida.`;
-        } else if (delta > 0 && spendPct > 0 && Math.abs(delta - spendPct) < 8) {
-          severity = "expected"; narrative = `Volume cresceu junto com a verba — escala linear, sem ganho ou perda de eficiência.`;
-        } else if (efficiencyDelta < -5) {
-          severity = "attention"; narrative = `Volume caiu mais que a verba (${delta.toFixed(0)}% vs ${spendPct.toFixed(0)}%).`;
-        } else {
-          severity = "expected"; narrative = `Variação dentro do esperado para a mudança de verba.`;
+
+        if (Math.abs(spendPct) < SMALL) {
+          if (delta > 0) {
+            severity = "gain";
+            narrative = `Crescimento real de ${delta.toFixed(0)}% com a mesma verba — campanha mais produtiva.`;
+          } else if (delta < -BIG) {
+            severity = "attention";
+            narrative = `Queda de ${Math.abs(delta).toFixed(0)}% sem mudança de verba — vale revisar criativos/segmentação.`;
+          } else {
+            severity = "expected";
+            narrative = `Pequena oscilação dentro da margem natural do leilão.`;
+          }
+          break;
+        }
+
+        if (spendPct > 0) {
+          if (efficiencyDelta > 5) {
+            severity = "gain";
+            narrative = `Volume subiu ${delta.toFixed(0)}% enquanto a verba subiu ${spendPct.toFixed(0)}% — ganho real de eficiência.`;
+          } else if (efficiencyDelta < -BIG) {
+            severity = "attention";
+            narrative = `Aumento de verba (+${spendPct.toFixed(0)}%) sem retorno proporcional em volume (${delta > 0 ? "+" : ""}${delta.toFixed(0)}%).`;
+          } else {
+            severity = "expected";
+            narrative = `Volume cresceu junto com a verba — escala saudável.`;
+          }
+          break;
+        }
+
+        if (spendPct < 0) {
+          if (efficiencyDelta > 5) {
+            severity = "gain";
+            narrative = `Verba caiu ${Math.abs(spendPct).toFixed(0)}% mas volume caiu menos (${delta.toFixed(0)}%) — campanha ficou mais eficiente.`;
+          } else if (efficiencyDelta < -BIG) {
+            severity = "attention";
+            narrative = `Volume caiu além da redução de verba (${delta.toFixed(0)}% vs ${spendPct.toFixed(0)}%).`;
+          } else {
+            severity = "expected";
+            narrative = `Volume acompanhou a redução de verba (${spendPct.toFixed(0)}%). Eficiência mantida.`;
+          }
         }
         break;
       }
 
       case "ctr": {
-        if (!significant(delta)) { severity = "expected"; narrative = "Qualidade do clique estável."; break; }
-        if (delta > 0)  { severity = "gain"; narrative = `Público mais qualificado: CTR +${delta.toFixed(1)}%.`; }
-        else            { severity = "attention"; narrative = `CTR caiu ${Math.abs(delta).toFixed(1)}% — criativos podem estar fatigando.`; }
+        if (!significant(delta, 5)) { severity = "expected"; narrative = "Qualidade do clique estável."; break; }
+        if (delta > 0) { severity = "gain"; narrative = `Público mais qualificado: CTR +${delta.toFixed(1)}%.`; }
+        else if (delta < -BIG) { severity = "attention"; narrative = `CTR caiu ${Math.abs(delta).toFixed(1)}% — vale rodar criativos novos.`; }
+        else { severity = "expected"; narrative = `CTR oscilou ${delta.toFixed(1)}% — dentro da variação natural.`; }
         break;
       }
 
-      case "cpc":
-      case "cpm":
-      case "cost_per_result":
-      case "cost_per_message":
-      case "cost_per_lead":
-      case "cost_per_purchase": {
+      case "cpc": case "cpm":
+      case "cost_per_result": case "cost_per_message":
+      case "cost_per_lead": case "cost_per_purchase": {
         if (!significant(delta)) { severity = "expected"; narrative = "Custo unitário estável."; break; }
         if (delta < 0) {
           severity = "gain";
           narrative = `Custo caiu ${Math.abs(delta).toFixed(0)}% — mídia mais eficiente.`;
+        } else if (k === "cpc" && ctrPct > 5) {
+          severity = "expected";
+          narrative = `CPC subiu ${delta.toFixed(0)}%, mas CTR também (+${ctrPct.toFixed(1)}%) — público mais qualificado custa mais. Saudável.`;
+        } else if (delta < BIG) {
+          severity = "expected";
+          narrative = `Custo subiu ${delta.toFixed(0)}% — variação típica do leilão.`;
         } else {
-          // contexto: subiu o custo, mas CTR também subiu? então é qualidade
-          if (k === "cpc" && ctrPct > 5) {
-            severity = "expected";
-            narrative = `CPC subiu ${delta.toFixed(0)}%, mas CTR também (+${ctrPct.toFixed(1)}%) — público mais qualificado custa mais.`;
-          } else if (k === "cpm" && significant(delta, 15)) {
-            severity = "attention";
-            narrative = `CPM subiu ${delta.toFixed(0)}% — leilão mais disputado ou audiência mais cara.`;
-          } else {
-            severity = "attention";
-            narrative = `Custo unitário subiu ${delta.toFixed(0)}%.`;
-          }
+          severity = "attention";
+          narrative = `Custo subiu ${delta.toFixed(0)}% — considere renovar criativos ou ajustar público.`;
         }
         break;
       }
 
       case "frequency": {
         if (!significant(delta)) { severity = "expected"; narrative = "Frequência estável."; break; }
-        if (cur > 3 && delta > 0) {
+        if (cur > 4 && delta > 0) {
           severity = "attention";
           narrative = `Frequência em ${cur.toFixed(1)}x — risco de fadiga. Considere ampliar o público.`;
         } else if (delta > 0) {
-          severity = "expected";
-          narrative = `Frequência subiu para ${cur.toFixed(1)}x — ainda saudável.`;
+          severity = "expected"; narrative = `Frequência subiu para ${cur.toFixed(1)}x — ainda saudável.`;
         } else {
-          severity = "expected";
-          narrative = `Frequência caiu para ${cur.toFixed(1)}x — público sendo renovado.`;
+          severity = "expected"; narrative = `Frequência caiu para ${cur.toFixed(1)}x — público sendo renovado.`;
         }
         break;
       }
 
       case "roas": {
-        if (!significant(delta)) { severity = "expected"; narrative = "ROAS estável."; break; }
+        if (!significant(delta, 5)) { severity = "expected"; narrative = `ROAS estável em ${cur.toFixed(2)}x.`; break; }
         if (delta > 0) { severity = "gain"; narrative = `ROAS subiu para ${cur.toFixed(2)}x — cada R$ 1 retornou R$ ${cur.toFixed(2)}.`; }
-        else if (cur >= 2) { severity = "attention"; narrative = `ROAS caiu para ${cur.toFixed(2)}x — ainda lucrativo mas merece atenção.`; }
-        else { severity = "critical"; narrative = `ROAS caiu para ${cur.toFixed(2)}x — abaixo do ponto de equilíbrio.`; }
+        else if (cur >= 2) { severity = "expected"; narrative = `ROAS em ${cur.toFixed(2)}x — segue lucrativo.`; }
+        else if (cur >= 1) { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x — acima do ponto de equilíbrio mas merece atenção.`; }
+        else { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x — abaixo do ponto de equilíbrio.`; }
         break;
       }
     }
@@ -363,13 +387,12 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
     out.push({ key: k, cur: curT[k], prev: prevT[k], pct, rawPct, severity, narrative });
   }
 
-  // Override geral: período de queda com volumes proporcionais à verba
-  // (evita alarmar quando o cliente reduziu o investimento)
-  if (spendPct < -10) {
+  // Se a verba caiu, nenhuma volumétrica que acompanhou vira atenção
+  if (spendPct < -SMALL) {
     out.forEach(r => {
-      if (META[r.key]?.volume && r.key !== "spend" && r.severity === "attention") {
+      if (META[r.key]?.volume && r.key !== "spend" && (r.severity === "attention" || r.severity === "critical")) {
         const eff = r.pct - spendPct;
-        if (eff > -8) { // caiu na mesma proporção da verba
+        if (eff > -10) {
           r.severity = "expected";
           r.narrative = `Acompanhou a redução de verba (${spendPct.toFixed(0)}%). Sem perda de eficiência.`;
         }
