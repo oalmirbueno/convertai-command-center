@@ -323,6 +323,36 @@ export default function ReportDetail() {
       kpis.push({ label: "ROAS", value: v.toFixed(2) + "x", detail: `Retorno sobre o investimento publicitário`,
         icon: TrendingUp, color: "hsl(60, 90%, 50%)", status: v > 3 ? "good" : v > 1 ? "warning" : "bad" });
     }
+    // ── Crescimento de Seguidores (vs período anterior) ──
+    const fg = num("followers_gained");
+    if (fg > 0) {
+      const prevFg = prevNum("followers_gained");
+      const days = report.period_start && report.period_end ? Math.max(1, daysBetween(report.period_start, report.period_end)) : 1;
+      const perDay = fg / days;
+      let detail = `${fg.toLocaleString("pt-BR")} novos seguidores em ${days} ${days === 1 ? "dia" : "dias"} · ${perDay.toFixed(1)}/dia`;
+      if (prevFg > 0) {
+        const mult = fg / prevFg;
+        const deltaPct = ((fg - prevFg) / prevFg) * 100;
+        if (mult >= 2) detail = `${fg} agora vs ${prevFg} no período anterior · crescimento de ${mult.toFixed(1)}x (+${deltaPct.toFixed(0)}%)`;
+        else if (deltaPct >= 0) detail = `${fg} agora vs ${prevFg} no período anterior · +${deltaPct.toFixed(0)}% de aceleração`;
+        else detail = `${fg} agora vs ${prevFg} no período anterior · momento de reativar conteúdo`;
+      } else if (previousReport) {
+        detail = `${fg.toLocaleString("pt-BR")} novos seguidores · primeiro ciclo com captação registrada`;
+      }
+      // Crescimento orgânico é quase sempre positivo: any growth = good, declínio severo = warning
+      const status: "good" | "warning" | "bad" =
+        prevFg > 0 && fg < prevFg * 0.4 ? "warning" : "good";
+      kpis.push({
+        label: "Novos Seguidores",
+        value: "+" + fg.toLocaleString("pt-BR"),
+        detail,
+        icon: Users,
+        color: "hsl(188, 94%, 50%)",
+        status,
+      });
+    }
+
+
 
     // ── Auto insights ──
     const insights: Array<{ text: string; type: "success" | "info" | "warning" }> = [];
