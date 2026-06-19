@@ -19,6 +19,7 @@ import {
 } from "recharts";
 import SourceDashboard from "@/components/reports/SourceDashboard";
 import ReportComparison from "@/components/reports/ReportComparison";
+import MetricsAudit from "@/components/reports/MetricsAudit";
 
 const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -544,6 +545,9 @@ export default function ReportDetail() {
           currentPeriod={{ start: report.period_start, end: report.period_end }}
         />
       )}
+
+      {/* ═══════════════ AUDITORIA DE MÉTRICAS ═══════════════ */}
+      <MetricsAudit metrics={report.metrics as any} />
 
       {/* ═══════════════ KPI CARDS ═══════════════ */}
       {kpis.length > 0 && (
