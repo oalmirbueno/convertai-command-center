@@ -18,6 +18,7 @@ import {
   PolarRadiusAxis,
 } from "recharts";
 import SourceDashboard from "@/components/reports/SourceDashboard";
+import ReportComparison from "@/components/reports/ReportComparison";
 
 const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -110,7 +111,27 @@ export default function ReportDetail() {
   const analysis = useMemo(() => {
     if (!report) return null;
 
-    const m = (report.metrics || {}) as Record<string, any>;
+    const m = { ...((report.metrics || {}) as Record<string, any>) };
+
+    // ── Auto-heal: recalcula taxas/custos derivados a partir dos totais reais ──
+    // Reports antigos podem ter CPC/CPM/CTR errados (export do Meta com colunas
+    // deslocadas ou somatórios de taxas). Aqui derivamos sempre que possível.
+    const safeDiv = (a: number, b: number) => (b > 0 && isFinite(a / b) ? a / b : 0);
+    const _spend = Number(m.ad_spend) || 0;
+    const _impr  = Number(m.impressions) || 0;
+    const _reach = Number(m.reach) || 0;
+    const _click = Number(m.link_clicks) || Number(m.clicks) || 0;
+    const _res   = Number(m.results) || Number(m.conversions) || 0;
+    if (_impr > 0 && _click > 0)  m.ctr = safeDiv(_click, _impr) * 100;
+    if (_click > 0 && _spend > 0) m.cpc = safeDiv(_spend, _click);
+    if (_impr > 0 && _spend > 0)  m.cpm = safeDiv(_spend, _impr) * 1000;
+    if (_reach > 0 && _impr > 0)  m.frequency = safeDiv(_impr, _reach);
+    if (_res > 0 && _spend > 0)   m.cost_per_result = safeDiv(_spend, _res);
+    if ((Number(m.messages)  || 0) > 0 && _spend > 0) m.cost_per_message  = safeDiv(_spend, Number(m.messages));
+    if ((Number(m.leads)     || 0) > 0 && _spend > 0) m.cost_per_lead     = safeDiv(_spend, Number(m.leads));
+    if ((Number(m.purchases) || 0) > 0 && _spend > 0) m.cost_per_purchase = safeDiv(_spend, Number(m.purchases));
+    if ((Number(m.revenue)   || 0) > 0 && _spend > 0) m.roas              = safeDiv(Number(m.revenue), _spend);
+
     const customMetrics = ((m.custom || []) as Array<{ label: string; value: number }>)
       .filter(c => c && c.label && Number(c.value) !== 0 && c.value !== null && c.value !== undefined);
 
@@ -512,6 +533,17 @@ export default function ReportDetail() {
         />
       )}
       </div>
+
+      {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR ═══════════════ */}
+      {report.project_id && (
+        <ReportComparison
+          projectId={report.project_id}
+          currentReportId={report.id}
+          currentCreatedAt={report.created_at}
+          currentMetrics={report.metrics as any}
+          currentPeriod={{ start: report.period_start, end: report.period_end }}
+        />
+      )}
 
       {/* ═══════════════ KPI CARDS ═══════════════ */}
       {kpis.length > 0 && (
