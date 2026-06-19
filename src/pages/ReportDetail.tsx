@@ -108,6 +108,23 @@ export default function ReportDetail() {
     enabled: !!id,
   });
 
+  // ── Relatório anterior do MESMO projeto (para comparação de seguidores etc.)
+  const { data: previousReport } = useQuery({
+    queryKey: ["report-detail-previous", id, report?.project_id, report?.created_at],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("reports")
+        .select("id, period_start, period_end, metrics, created_at")
+        .eq("project_id", report!.project_id)
+        .lt("created_at", report!.created_at)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      return data;
+    },
+    enabled: !!report?.project_id && !!report?.created_at,
+  });
+
   /* ── Derived data ─────────────────────────────── */
   const analysis = useMemo(() => {
     if (!report) return null;
