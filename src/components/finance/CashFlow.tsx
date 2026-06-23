@@ -235,7 +235,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
   const accountsReceivable = useMemo(() => {
     const out: any[] = [];
-    (billingFiltered || []).filter((b: any) => b.status !== "paid").forEach((b: any) => {
+    (billingFiltered || []).filter((b: any) => b.status === "pending").forEach((b: any) => {
       const due = parseDate(b.due_date);
       if (!due) return;
       out.push({
@@ -245,12 +245,12 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       });
     });
     (paymentsFiltered || []).forEach((p: any) => {
-      (p.installments || []).filter((i: any) => i.status !== "paid").forEach((i: any) => {
+      (p.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").forEach((i: any) => {
         const due = parseDate(i.due_date);
         if (!due) return;
         out.push({
           id: i.id, source: "installment", description: `${p.project?.name || "Projeto"} — Parcela`,
-          amount: Number(i.amount) || 0, due_date: i.due_date, overdue: due < today,
+          amount: Math.max((Number(i.amount) || 0) - (Number(i.paid_amount) || 0), 0), due_date: i.due_date, overdue: due < today,
           daysUntil: Math.ceil((due.getTime() - today.getTime()) / 86400000),
           client: p.client?.full_name || p.client?.company_name || "—",
         });

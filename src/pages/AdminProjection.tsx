@@ -12,6 +12,14 @@ import { PieChart, Pie, Cell, ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
 
+const receivedOf = (row: any) => {
+  const total = Number(row?.amount) || 0;
+  const paid = Number(row?.paid_amount) || 0;
+  if (row?.status === "partial") return Math.min(paid, total);
+  if (row?.status === "paid") return paid > 0 && paid < total ? paid : total;
+  return 0;
+};
+
 export default function AdminProjection() {
   const navigate = useNavigate();
   const { profile } = useAuth();
@@ -59,7 +67,7 @@ export default function AdminProjection() {
         const d = new Date(b.paid_date || b.due_date);
         return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
       })
-      .reduce((s: number, b: any) => s + Number(b.status === "partial" ? (b.paid_amount || 0) : b.amount), 0);
+      .reduce((s: number, b: any) => s + receivedOf(b), 0);
 
     const instRev = (projectPayments || [])
       .filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter))
@@ -69,7 +77,7 @@ export default function AdminProjection() {
             const d = new Date(i.paid_date || i.due_date);
             return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
           })())
-          .reduce((s: number, i: any) => s + Number(i.status === "partial" ? (i.paid_amount || 0) : i.amount), 0), 0);
+          .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
 
     return (showMonthly ? billingRev : 0) + (showIndiv ? instRev : 0);
   }, [billing, projectPayments, brandFilter, showMonthly, showIndiv, thisMonth, thisYear]);

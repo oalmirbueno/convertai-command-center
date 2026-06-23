@@ -124,7 +124,13 @@ export default function AdminDashboard() {
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
   // Inclui parciais: a fatura original recebida em partes ainda conta no recebido pelo valor já pago.
   const paidBills = (billing || []).filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge");
-  const receivedOf = (b: any) => b.status === "partial" ? (Number(b.paid_amount) || 0) : (Number(b.amount) || 0);
+  const receivedOf = (b: any) => {
+    const total = Number(b?.amount) || 0;
+    const paid = Number(b?.paid_amount) || 0;
+    if (b?.status === "partial") return Math.min(paid, total);
+    if (b?.status === "paid") return paid > 0 && paid < total ? paid : total;
+    return 0;
+  };
   const pendingTotal = pendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
   const receivedTotal = paidBills.reduce((s: number, b: any) => s + receivedOf(b), 0);
   const overdueTotal = pendingBills.filter((b: any) => {
@@ -142,11 +148,11 @@ export default function AdminDashboard() {
   // Individual project payments
   const individualPaidThisMonth = (projectPayments || []).reduce((sum: number, pp: any) => {
     const paidThisMonth = (pp.installments || []).filter((i: any) => {
-      if (i.status !== "paid" || !i.paid_date) return false;
+      if (!['paid', 'partial'].includes(i.status) || !i.paid_date) return false;
       const d = parseAppDate(i.paid_date);
       return !!d && d.getMonth() === thisMonth && d.getFullYear() === thisYear;
     });
-    return sum + paidThisMonth.reduce((s: number, i: any) => s + Number(i.amount), 0);
+    return sum + paidThisMonth.reduce((s: number, i: any) => s + receivedOf(i), 0);
   }, 0);
 
   const pendingBillsThisMonth = pendingBills
@@ -176,8 +182,8 @@ export default function AdminDashboard() {
   }, 0);
 
   const individualPaid = (projectPayments || []).reduce((sum: number, pp: any) => {
-    const paidInstallments = (pp.installments || []).filter((i: any) => i.status === "paid");
-    return sum + paidInstallments.reduce((s: number, i: any) => s + Number(i.amount), 0);
+    const paidInstallments = (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial");
+    return sum + paidInstallments.reduce((s: number, i: any) => s + receivedOf(i), 0);
   }, 0);
   const individualTotal = (projectPayments || []).reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
   const individualPending = individualTotal - individualPaid;
@@ -327,7 +333,9 @@ export default function AdminDashboard() {
           </div>
           <div className="space-y-1">
             {(projectPayments || []).map((pp: any) => {
-              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const paid = (pp.installments || [])
+                .filter((i: any) => i.status === "paid" || i.status === "partial")
+                .reduce((s: number, i: any) => s + receivedOf(i), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const hasOverdue = (pp.installments || []).some((i: any) => i.status === "pending" && new Date(i.due_date) < now);
               return (

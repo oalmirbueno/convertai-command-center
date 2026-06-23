@@ -45,8 +45,10 @@ const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDa
 // respecting partial payments. Use this for any "received" aggregation.
 const receivedOf = (row: any): number => {
   if (!row) return 0;
-  if (row.status === "paid") return Number(row.amount) || 0;
-  if (row.status === "partial") return Number(row.paid_amount) || 0;
+  const total = Number(row.amount) || 0;
+  const paid = Number(row.paid_amount) || 0;
+  if (row.status === "partial") return Math.min(paid, total);
+  if (row.status === "paid") return paid > 0 && paid < total ? paid : total;
   return 0;
 };
 
@@ -871,17 +873,21 @@ export default function AdminFinanceiro() {
         // AcelerIQ received = billing paid (non-ads)
         const aceleriqReceived = paidBills
           .filter((b: any) => b.type !== "ads_recharge")
-          .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          .reduce((s: number, b: any) => s + receivedOf(b), 0);
         // SiteBolt received = individual project installments paid
         const siteboltReceived = allPayments
           .filter((pp: any) => ["site", "landing_page", "event", "other"].includes(pp.project?.project_type))
           .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+            sum + (pp.installments || [])
+              .filter((i: any) => i.status === "paid" || i.status === "partial")
+              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
         // Joint (automation) received
         const jointReceived = allPayments
           .filter((pp: any) => pp.project?.project_type === "automation")
           .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+            sum + (pp.installments || [])
+              .filter((i: any) => i.status === "paid" || i.status === "partial")
+              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
 
         const pieData = [
           { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
@@ -1029,7 +1035,9 @@ export default function AdminFinanceiro() {
                     label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
                     client: b.client?.company_name || b.client?.full_name || "—",
                     brand: "AcelerIQ",
-                    amount: Number(b.amount),
+                    amount: receivedOf(b),
+                    totalAmount: Number(b.amount) || 0,
+                    isPartial: b.status === "partial" || (Number(b.paid_amount) > 0 && Number(b.paid_amount) < Number(b.amount)),
                     date: b.paid_date || b.due_date,
                     icon: typeIcon(b.type),
                   }))
@@ -1045,7 +1053,9 @@ export default function AdminFinanceiro() {
                       label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
                       client: pp.client?.company_name || pp.client?.full_name || "—",
                       brand: getProjectBrand(pp.project?.project_type),
-                      amount: Number(i.status === "partial" ? (i.paid_amount || 0) : (i.paid_amount || i.amount)),
+                      amount: receivedOf(i),
+                      totalAmount: Number(i.amount) || 0,
+                      isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
                       date: i.paid_date || i.due_date,
                       icon: "💼",
                     }))
@@ -1108,6 +1118,7 @@ export default function AdminFinanceiro() {
                             {it.client}
                             <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
                             {" • "}Pago em {formatAppDate(it.date)}
+                            {it.isPartial && <> • recebido {fmt(it.amount)} de {fmt(it.totalAmount)}</>}
                           </p>
                         </div>
                         <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
@@ -1123,7 +1134,9 @@ export default function AdminFinanceiro() {
           {/* Projetos Individuais (SiteBolt / Avulsos) */}
           {filteredPayments.length > 0 && (() => {
             const enriched = filteredPayments.map((pp: any) => {
-              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const paid = (pp.installments || [])
+                .filter((i: any) => i.status === "paid" || i.status === "partial")
+                .reduce((s: number, i: any) => s + receivedOf(i), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const hasOverdue = (pp.installments || []).some((i: any) => {
                 const due = parseAppDate(i.due_date);
@@ -1440,8 +1453,8 @@ export default function AdminFinanceiro() {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   {[
                     { label: "Clientes Avulsos", value: String(avulsoClients.length), color: "text-foreground" },
-                    { label: "Total Faturado", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0)), color: "text-success" },
-                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status !== "paid").reduce((x: number, i: any) => x + Number(i.amount) - Number(i.paid_amount || 0), 0), 0)), color: "text-warning" },
+                    { label: "Total Recebido", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0)), color: "text-success" },
+                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0)), color: "text-warning" },
                   ].map((s) => (
                     <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
@@ -1453,7 +1466,7 @@ export default function AdminFinanceiro() {
                 {avulsoClients.map((c: any) => {
                   const clientProjects = (projectPayments || []).filter((pp: any) => pp.client_id === c.id);
                   const totalFaturado = clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0);
-                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0);
+                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
                   const aberto = totalFaturado - totalPago;
                   return (
                     <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
@@ -1468,7 +1481,7 @@ export default function AdminFinanceiro() {
                       </div>
                       <div className="space-y-1 pt-1">
                         {clientProjects.map((pp: any) => {
-                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0);
+                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0);
                           const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
                           return (
                             <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
