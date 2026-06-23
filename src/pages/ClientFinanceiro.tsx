@@ -29,6 +29,14 @@ function formatCurrency(val: number) {
   return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(val);
 }
 
+function receivedOf(row: any) {
+  const total = Number(row?.amount) || 0;
+  const paid = Number(row?.paid_amount) || 0;
+  if (row?.status === "partial") return Math.min(paid, total);
+  if (row?.status === "paid") return paid > 0 && paid < total ? paid : total;
+  return 0;
+}
+
 function formatDate(d: string) {
   if (!d) return "";
   return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
@@ -529,9 +537,16 @@ export default function ClientFinanceiro() {
                       {formatDate(b.due_date)}
                     </p>
                   </div>
-                  <p className="text-sm font-mono text-foreground whitespace-nowrap">
-                    {formatCurrency(Number(b.amount))}
-                  </p>
+                  <div className="text-right whitespace-nowrap">
+                    <p className={`text-sm font-mono ${b.status === "partial" ? "text-info" : "text-foreground"}`}>
+                      {formatCurrency(b.status === "pending" ? Number(b.amount) : receivedOf(b))}
+                    </p>
+                    {b.status === "partial" && (
+                      <p className="text-[10px] text-muted-foreground">
+                        de {formatCurrency(Number(b.amount))}
+                      </p>
+                    )}
+                  </div>
                   <span
                     className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}
                   >
