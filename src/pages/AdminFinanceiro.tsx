@@ -1134,7 +1134,9 @@ export default function AdminFinanceiro() {
           {/* Projetos Individuais (SiteBolt / Avulsos) */}
           {filteredPayments.length > 0 && (() => {
             const enriched = filteredPayments.map((pp: any) => {
-              const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const paid = (pp.installments || [])
+                .filter((i: any) => i.status === "paid" || i.status === "partial")
+                .reduce((s: number, i: any) => s + receivedOf(i), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const hasOverdue = (pp.installments || []).some((i: any) => {
                 const due = parseAppDate(i.due_date);
@@ -1451,8 +1453,8 @@ export default function AdminFinanceiro() {
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   {[
                     { label: "Clientes Avulsos", value: String(avulsoClients.length), color: "text-foreground" },
-                    { label: "Total Faturado", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0)), color: "text-success" },
-                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status !== "paid").reduce((x: number, i: any) => x + Number(i.amount) - Number(i.paid_amount || 0), 0), 0)), color: "text-warning" },
+                    { label: "Total Recebido", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0)), color: "text-success" },
+                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0)), color: "text-warning" },
                   ].map((s) => (
                     <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
@@ -1464,7 +1466,7 @@ export default function AdminFinanceiro() {
                 {avulsoClients.map((c: any) => {
                   const clientProjects = (projectPayments || []).filter((pp: any) => pp.client_id === c.id);
                   const totalFaturado = clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0);
-                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0), 0);
+                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
                   const aberto = totalFaturado - totalPago;
                   return (
                     <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
@@ -1479,7 +1481,7 @@ export default function AdminFinanceiro() {
                       </div>
                       <div className="space-y-1 pt-1">
                         {clientProjects.map((pp: any) => {
-                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid").reduce((x: number, i: any) => x + Number(i.amount), 0);
+                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0);
                           const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
                           return (
                             <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
