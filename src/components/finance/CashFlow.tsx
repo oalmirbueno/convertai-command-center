@@ -107,9 +107,14 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       const paidAt = parseDate(b.paid_date);
       const due = parseDate(b.due_date);
       const amount = Number(b.amount) || 0;
+      const paidAmount = Number(b.paid_amount) || 0;
       if (b.status === "paid" && paidAt) {
         const k = monthKey(paidAt);
         if (map[k]) map[k].receitas += amount;
+      } else if (b.status === "partial" && paidAt) {
+        const k = monthKey(paidAt);
+        if (map[k]) map[k].receitas += paidAmount;
+        // Saldo restante já é representado por um novo billing pendente.
       } else if (due) {
         const k = monthKey(due);
         if (map[k]) map[k].pendReceita += amount;
@@ -125,6 +130,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         if (i.status === "paid" && paidAt) {
           const k = monthKey(paidAt);
           if (map[k]) map[k].receitas += amount;
+        } else if (i.status === "partial" && paidAt) {
+          const k = monthKey(paidAt);
+          if (map[k]) map[k].receitas += Number(i.paid_amount) || 0;
         } else if (due) {
           const k = monthKey(due);
           if (map[k]) map[k].pendReceita += amount;

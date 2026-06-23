@@ -41,12 +41,22 @@ const toLocalDateKey = (date?: Date) => (date ? _toBRDateKey(date) : _todayBR())
 
 const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
 
+// Returns the amount actually received for a billing/installment record,
+// respecting partial payments. Use this for any "received" aggregation.
+const receivedOf = (row: any): number => {
+  if (!row) return 0;
+  if (row.status === "paid") return Number(row.amount) || 0;
+  if (row.status === "partial") return Number(row.paid_amount) || 0;
+  return 0;
+};
+
 const statusBadge = (status: string, dueDate?: string) => {
   const today = new Date();
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const due = parseAppDate(dueDate);
   const isOverdue = due && due < todayStart && status === "pending";
   if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">✅ Pago</span>;
+  if (status === "partial") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">◐ Parcial</span>;
   if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
   if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
   if (isOverdue) return <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Atrasado</span>;
@@ -184,7 +194,8 @@ export default function AdminFinanceiro() {
   const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
-  const paidBills = (billing || []).filter((b: any) => b.status === "paid");
+  // "Recebido" inclui parcial: o valor recebido vem de paid_amount nesse caso.
+  const paidBills = (billing || []).filter((b: any) => b.status === "paid" || b.status === "partial");
   const overdueBills = pendingBills.filter((b: any) => {
     const due = parseAppDate(b.due_date);
     return due ? due < todayStart : false;
@@ -194,8 +205,8 @@ export default function AdminFinanceiro() {
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
-    // Exclude clients already paid this month (no double counting)
-    !(billing || []).some((b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "paid" && isThisMonth(b.paid_date || b.due_date))
+    // Exclude clients already paid (full ou parcial) este mês (no double counting)
+    !(billing || []).some((b: any) => b.client_id === c.id && b.type === "renewal" && (b.status === "paid" || b.status === "partial") && isThisMonth(b.paid_date || b.due_date))
   );
   const extraPending = clientsWithPlanNotInBilling.reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
@@ -203,7 +214,7 @@ export default function AdminFinanceiro() {
   const monthPendingBills = pendingBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.due_date));
   const monthPaidBills = paidBills.filter((b: any) => b.type !== "ads_recharge" && isThisMonth(b.paid_date || b.due_date));
 
-  const monthlyRevenue = monthPaidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const monthlyRevenue = monthPaidBills.reduce((s: number, b: any) => s + receivedOf(b), 0);
 
   const pendingTotal = periodFilter === "month"
     ? monthPendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0)
@@ -218,7 +229,7 @@ export default function AdminFinanceiro() {
 
   const receivedTotal = periodFilter === "month"
     ? monthlyRevenue
-    : paidBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + Number(b.amount), 0);
+    : paidBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + receivedOf(b), 0);
 
   // Receita Mensal Esperada = soma dos plan_value de clientes ativos
   const expectedMonthlyRevenue = (clients || [])
@@ -279,7 +290,7 @@ export default function AdminFinanceiro() {
   const handleMarkPaid = async (id: string) => {
     const bill = (billing || []).find((b: any) => b.id === id);
     const today = toLocalDateKey();
-    await supabase.from("billing").update({ status: "paid", paid_date: today }).eq("id", id);
+    await supabase.from("billing").update({ status: "paid", paid_date: today, paid_amount: Number(bill?.amount) || null } as any).eq("id", id);
 
     // Registra no histórico de auditoria (caso o pagamento venha do botão direto, não do painel)
     if (bill) {
@@ -482,12 +493,16 @@ export default function AdminFinanceiro() {
         await logAudit("billing", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
         await handleMarkPaid(payModal.id);
       } else {
-        const remaining = payModal.amount - paidAmount;
+        const remaining = Math.max(payModal.amount - paidAmount, 0);
+        const isFullyPaidNow = paidAmount >= payModal.amount;
+        // Marca a fatura ORIGINAL como "partial" (não "paid") quando recebido < total.
+        // Assim "Recebido" considera apenas o valor realmente pago e dashboards param de inflar.
         await supabase.from("billing").update({
-          status: "paid",
+          status: isFullyPaidNow ? "paid" : "partial",
           paid_date: today,
+          paid_amount: paidAmount,
           description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
-        }).eq("id", payModal.id);
+        } as any).eq("id", payModal.id);
         if (remaining > 0 && payModal.clientId) {
           const original = (billing || []).find((b: any) => b.id === payModal.id);
           await supabase.from("billing").insert({
@@ -498,7 +513,7 @@ export default function AdminFinanceiro() {
             description: `Saldo restante — ${fmt(remaining)}`,
           });
         }
-        await logAudit("billing", payModal.id, "paid_partial", "pending", "paid", payModal.amount, paidAmount, `${payModal.label} — restante: ${fmt(remaining)}`);
+        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label} — restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
           await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
         }
@@ -796,9 +811,9 @@ export default function AdminFinanceiro() {
 
           if (showMonthlyChart) {
             received += (billing || [])
-              .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
+              .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
               .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
-              .reduce((s: number, b: any) => s + Number(b.amount), 0);
+              .reduce((s: number, b: any) => s + receivedOf(b), 0);
             pending += (billing || [])
               .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
               .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
