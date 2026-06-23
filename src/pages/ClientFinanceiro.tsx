@@ -463,7 +463,14 @@ export default function ClientFinanceiro() {
                             </p>
                             <p className="text-[11px] text-muted-foreground">{formatDate(inst.due_date)}</p>
                           </div>
-                          <p className="text-sm font-mono text-foreground">{formatCurrency(Number(inst.amount))}</p>
+                          <div className="text-right whitespace-nowrap">
+                            <p className={`text-sm font-mono ${inst.status === "partial" ? "text-info" : "text-foreground"}`}>
+                              {formatCurrency(inst.status === "pending" ? Number(inst.amount) : receivedOf(inst))}
+                            </p>
+                            {inst.status === "partial" && (
+                              <p className="text-[10px] text-muted-foreground">de {formatCurrency(Number(inst.amount))}</p>
+                            )}
+                          </div>
                           <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${badgeColor}`}>
                             {statusLabel}
                           </span>
