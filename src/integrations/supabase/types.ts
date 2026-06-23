@@ -123,6 +123,7 @@ export type Database = {
           description: string | null
           due_date: string
           id: string
+          paid_amount: number | null
           paid_date: string | null
           platform: string | null
           reminder_count: number | null
@@ -136,6 +137,7 @@ export type Database = {
           description?: string | null
           due_date: string
           id?: string
+          paid_amount?: number | null
           paid_date?: string | null
           platform?: string | null
           reminder_count?: number | null
@@ -149,6 +151,7 @@ export type Database = {
           description?: string | null
           due_date?: string
           id?: string
+          paid_amount?: number | null
           paid_date?: string | null
           platform?: string | null
           reminder_count?: number | null

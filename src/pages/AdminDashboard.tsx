@@ -122,9 +122,11 @@ export default function AdminDashboard() {
   });
 
   const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
-  const paidBills = (billing || []).filter((b: any) => b.status === "paid" && b.type !== "ads_recharge");
+  // Inclui parciais: a fatura original recebida em partes ainda conta no recebido pelo valor já pago.
+  const paidBills = (billing || []).filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge");
+  const receivedOf = (b: any) => b.status === "partial" ? (Number(b.paid_amount) || 0) : (Number(b.amount) || 0);
   const pendingTotal = pendingBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
-  const receivedTotal = paidBills.reduce((s: number, b: any) => s + Number(b.amount), 0);
+  const receivedTotal = paidBills.reduce((s: number, b: any) => s + receivedOf(b), 0);
   const overdueTotal = pendingBills.filter((b: any) => {
     const due = parseAppDate(b.due_date);
     return due ? due < todayStart : false;
@@ -134,7 +136,7 @@ export default function AdminDashboard() {
       const paid = parseAppDate(b.paid_date || b.due_date);
       return !!paid && paid.getMonth() === thisMonth && paid.getFullYear() === thisYear;
     })
-    .reduce((s: number, b: any) => s + Number(b.amount), 0);
+    .reduce((s: number, b: any) => s + receivedOf(b), 0);
   const totalAds = (wallets || []).reduce((s: number, w: any) => s + Number(w.balance), 0);
 
   // Individual project payments

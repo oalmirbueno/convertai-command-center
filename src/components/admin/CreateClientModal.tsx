@@ -53,7 +53,20 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
+  // Plano recorrente (mensalidade)
+  const [planValue, setPlanValue] = useState("");
+  const [planRenewalDate, setPlanRenewalDate] = useState("");
+
+  // Projeto avulso (one_off)
+  const [projectValue, setProjectValue] = useState("");
+  const [payMode, setPayMode] = useState<"integral" | "installments">("integral");
+  const [installmentsCount, setInstallmentsCount] = useState("2");
+  const [firstDueDate, setFirstDueDate] = useState("");
+
   if (!open) return null;
+
+  const showRecurring = clientType === "recurring" || clientType === "hybrid";
+  const showOneOff = clientType === "one_off" || clientType === "hybrid";
 
   const toggleService = (key: string) => {
     setServices((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -63,6 +76,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
     setClientType("recurring"); setBrand("");
     setServices({});
+    setPlanValue(""); setPlanRenewalDate("");
+    setProjectValue(""); setPayMode("integral"); setInstallmentsCount("2"); setFirstDueDate("");
     setCreatedSuccess(false);
   };
 
@@ -114,7 +129,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
 
       // Update profile with extra fields + first-access token
       if (newUserId) {
-        await supabase.from("profiles").update({
+        const planValueNum = parseFloat(planValue) || 0;
+        const profileUpdate: any = {
           phone: phone.trim() || null,
           company_name: company.trim(),
           services_config: services,
@@ -123,11 +139,57 @@ export default function CreateClientModal({ open, onClose }: Props) {
           first_access_token: firstAccessToken,
           first_access_used_at: null,
           portal_password: null,
-        } as any).eq("id", newUserId);
+        };
+        if (showRecurring && planValueNum > 0) {
+          profileUpdate.plan_value = planValueNum;
+          profileUpdate.plan_name = "Mensalidade";
+          profileUpdate.plan_status = "active";
+          if (planRenewalDate) profileUpdate.plan_renewal_date = planRenewalDate;
+        }
+        await supabase.from("profiles").update(profileUpdate).eq("id", newUserId);
+
+        // Cria a 1ª fatura recorrente (renewal) na data informada
+        if (showRecurring && planValueNum > 0 && planRenewalDate) {
+          await supabase.from("billing").insert({
+            client_id: newUserId,
+            type: "renewal",
+            amount: planValueNum,
+            due_date: planRenewalDate,
+            description: `Mensalidade — ${company.trim() || fullName.trim()}`,
+            status: "pending",
+          } as any);
+        }
+
+        // Cria as cobranças do projeto avulso (integral ou parcelado)
+        const projValueNum = parseFloat(projectValue) || 0;
+        if (showOneOff && projValueNum > 0 && firstDueDate) {
+          const n = payMode === "integral" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
+          const per = +(projValueNum / n).toFixed(2);
+          const first = new Date(firstDueDate + "T00:00:00");
+          const rows = Array.from({ length: n }, (_, idx) => {
+            const due = new Date(first);
+            due.setMonth(due.getMonth() + idx);
+            const dueStr = due.toISOString().slice(0, 10);
+            // Última parcela acerta arredondamento
+            const amount = idx === n - 1 ? +(projValueNum - per * (n - 1)).toFixed(2) : per;
+            return {
+              client_id: newUserId,
+              type: "one_off",
+              amount,
+              due_date: dueStr,
+              description: n === 1
+                ? `Projeto — ${company.trim() || fullName.trim()}`
+                : `Projeto — Parcela ${idx + 1}/${n}`,
+              status: "pending",
+            };
+          });
+          await supabase.from("billing").insert(rows as any);
+        }
       }
 
       setCreatedSuccess(true);
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
 
       // Send welcome email with first-access link (fire and forget)
       const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
@@ -286,6 +348,90 @@ export default function CreateClientModal({ open, onClose }: Props) {
                   </div>
                 </div>
               </div>
+
+              {/* Plano & Cobrança */}
+              <div className="pt-2 space-y-4">
+                <label className="text-[11px] uppercase tracking-wider text-muted-foreground block">Plano & Cobrança</label>
+
+                {showRecurring && (
+                  <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-3">
+                    <p className="text-[11px] font-semibold text-foreground/80">Mensalidade (recorrente)</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor mensal (R$)</label>
+                        <input value={planValue} onChange={(e) => setPlanValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00"
+                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Próxima renovação</label>
+                        <input value={planRenewalDate} onChange={(e) => setPlanRenewalDate(e.target.value)} type="date"
+                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
+                      </div>
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">Gera a 1ª fatura mensal na data informada. As próximas são criadas automaticamente.</p>
+                  </div>
+                )}
+
+                {showOneOff && (
+                  <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-3">
+                    <p className="text-[11px] font-semibold text-foreground/80">Projeto avulso</p>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total (R$)</label>
+                        <input value={projectValue} onChange={(e) => setProjectValue(e.target.value)} type="number" step="0.01" min="0" placeholder="0,00"
+                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Vencimento 1ª parcela</label>
+                        <input value={firstDueDate} onChange={(e) => setFirstDueDate(e.target.value)} type="date"
+                          className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { v: "integral", label: "Integral", hint: "Pagamento à vista" },
+                        { v: "installments", label: "Parcelado", hint: "Em N vezes" },
+                      ].map((opt) => (
+                        <button
+                          key={opt.v}
+                          type="button"
+                          onClick={() => setPayMode(opt.v as any)}
+                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
+                            payMode === opt.v
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          <p className="font-semibold leading-tight">{opt.label}</p>
+                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
+                        </button>
+                      ))}
+                    </div>
+                    {payMode === "installments" && (
+                      <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nº de parcelas</label>
+                          <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="2" max="36"
+                            className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
+                        </div>
+                        <p className="text-[11px] text-muted-foreground pb-2.5 font-mono">
+                          {(() => {
+                            const v = parseFloat(projectValue) || 0;
+                            const n = Math.max(parseInt(installmentsCount) || 1, 1);
+                            return v > 0 ? `${n}× R$ ${(v / n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+                          })()}
+                        </p>
+                      </div>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">Cria uma cobrança para cada parcela com vencimento mensal a partir da data escolhida.</p>
+                  </div>
+                )}
+
+                {!showRecurring && !showOneOff && (
+                  <p className="text-[11px] text-muted-foreground italic">Defina o tipo de cliente acima para configurar a cobrança.</p>
+                )}
+              </div>
+
 
               <div className="pt-2">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-3 block">Serviços Ativos</label>

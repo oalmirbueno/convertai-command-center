@@ -54,22 +54,22 @@ export default function AdminProjection() {
   // Current month revenue (for comparison)
   const currentMonthRevenue = useMemo(() => {
     const billingRev = (billing || [])
-      .filter((b: any) => b.status === "paid" && b.type !== "ads_recharge")
+      .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge")
       .filter((b: any) => {
         const d = new Date(b.paid_date || b.due_date);
         return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
       })
-      .reduce((s: number, b: any) => s + Number(b.amount), 0);
+      .reduce((s: number, b: any) => s + Number(b.status === "partial" ? (b.paid_amount || 0) : b.amount), 0);
 
     const instRev = (projectPayments || [])
       .filter((pp: any) => matchesBrandFilter(pp.project?.project_type, brandFilter))
       .reduce((sum: number, pp: any) =>
         sum + (pp.installments || [])
-          .filter((i: any) => i.status === "paid" && (() => {
+          .filter((i: any) => (i.status === "paid" || i.status === "partial") && (() => {
             const d = new Date(i.paid_date || i.due_date);
             return d.getMonth() === thisMonth && d.getFullYear() === thisYear;
           })())
-          .reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+          .reduce((s: number, i: any) => s + Number(i.status === "partial" ? (i.paid_amount || 0) : i.amount), 0), 0);
 
     return (showMonthly ? billingRev : 0) + (showIndiv ? instRev : 0);
   }, [billing, projectPayments, brandFilter, showMonthly, showIndiv, thisMonth, thisYear]);

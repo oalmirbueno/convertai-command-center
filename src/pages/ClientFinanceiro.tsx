@@ -413,7 +413,7 @@ export default function ClientFinanceiro() {
           <div className="space-y-3">
             {(myProjectPayments || []).map((pp: any) => {
               const installments = pp.installments || [];
-              const paid = installments.filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0);
+              const paid = installments.reduce((s: number, i: any) => s + (i.status === "paid" ? Number(i.amount) : i.status === "partial" ? Number(i.paid_amount || 0) : 0), 0);
               const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
               const remaining = Number(pp.total_value) - paid;
               const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
@@ -442,9 +442,9 @@ export default function ClientFinanceiro() {
                   <div className="divide-y divide-border">
                     {sortedInstallments.map((inst: any) => {
                       const isOverdue = inst.status === "pending" && new Date(inst.due_date) < today;
-                      const statusLabel = inst.status === "paid" ? "Pago" : isOverdue ? "Atrasado" : "Pendente";
-                      const dotColor = inst.status === "paid" ? "bg-success" : isOverdue ? "bg-destructive" : "bg-warning";
-                      const badgeColor = inst.status === "paid" ? "bg-success/10 text-success" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
+                      const statusLabel = inst.status === "paid" ? "Pago" : inst.status === "partial" ? "Parcial" : isOverdue ? "Atrasado" : "Pendente";
+                      const dotColor = inst.status === "paid" ? "bg-success" : inst.status === "partial" ? "bg-info" : isOverdue ? "bg-destructive" : "bg-warning";
+                      const badgeColor = inst.status === "paid" ? "bg-success/10 text-success" : inst.status === "partial" ? "bg-info/10 text-info" : isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning";
 
                       return (
                         <div key={inst.id} className="flex items-center gap-3 py-2.5">
@@ -491,21 +491,27 @@ export default function ClientFinanceiro() {
               const statusLabel =
                 b.status === "paid"
                   ? "Pago"
-                  : isOverdue
-                    ? "Atrasado"
-                    : "Pendente";
+                  : b.status === "partial"
+                    ? "Parcial"
+                    : isOverdue
+                      ? "Atrasado"
+                      : "Pendente";
               const dotColor =
                 b.status === "paid"
                   ? "bg-success"
-                  : isOverdue
-                    ? "bg-destructive"
-                    : "bg-warning";
+                  : b.status === "partial"
+                    ? "bg-info"
+                    : isOverdue
+                      ? "bg-destructive"
+                      : "bg-warning";
               const badgeColor =
                 b.status === "paid"
                   ? "bg-success/10 text-success"
-                  : isOverdue
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-warning/10 text-warning";
+                  : b.status === "partial"
+                    ? "bg-info/10 text-info"
+                    : isOverdue
+                      ? "bg-destructive/10 text-destructive"
+                      : "bg-warning/10 text-warning";
 
               return (
                 <div

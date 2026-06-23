@@ -1,0 +1,1 @@
+ALTER TABLE public.billing ADD COLUMN IF NOT EXISTS paid_amount numeric;
