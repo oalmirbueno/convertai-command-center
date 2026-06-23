@@ -45,8 +45,10 @@ const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDa
 // respecting partial payments. Use this for any "received" aggregation.
 const receivedOf = (row: any): number => {
   if (!row) return 0;
-  if (row.status === "paid") return Number(row.amount) || 0;
-  if (row.status === "partial") return Number(row.paid_amount) || 0;
+  const total = Number(row.amount) || 0;
+  const paid = Number(row.paid_amount) || 0;
+  if (row.status === "partial") return Math.min(paid, total);
+  if (row.status === "paid") return paid > 0 && paid < total ? paid : total;
   return 0;
 };
 
@@ -871,17 +873,21 @@ export default function AdminFinanceiro() {
         // AcelerIQ received = billing paid (non-ads)
         const aceleriqReceived = paidBills
           .filter((b: any) => b.type !== "ads_recharge")
-          .reduce((s: number, b: any) => s + Number(b.amount), 0);
+          .reduce((s: number, b: any) => s + receivedOf(b), 0);
         // SiteBolt received = individual project installments paid
         const siteboltReceived = allPayments
           .filter((pp: any) => ["site", "landing_page", "event", "other"].includes(pp.project?.project_type))
           .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+            sum + (pp.installments || [])
+              .filter((i: any) => i.status === "paid" || i.status === "partial")
+              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
         // Joint (automation) received
         const jointReceived = allPayments
           .filter((pp: any) => pp.project?.project_type === "automation")
           .reduce((sum: number, pp: any) =>
-            sum + (pp.installments || []).filter((i: any) => i.status === "paid").reduce((s: number, i: any) => s + Number(i.amount), 0), 0);
+            sum + (pp.installments || [])
+              .filter((i: any) => i.status === "paid" || i.status === "partial")
+              .reduce((s: number, i: any) => s + receivedOf(i), 0), 0);
 
         const pieData = [
           { name: "AcelerIQ", value: aceleriqReceived, color: "hsl(var(--success))" },
@@ -1029,7 +1035,9 @@ export default function AdminFinanceiro() {
                     label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
                     client: b.client?.company_name || b.client?.full_name || "—",
                     brand: "AcelerIQ",
-                    amount: Number(b.amount),
+                    amount: receivedOf(b),
+                    totalAmount: Number(b.amount) || 0,
+                    isPartial: b.status === "partial" || (Number(b.paid_amount) > 0 && Number(b.paid_amount) < Number(b.amount)),
                     date: b.paid_date || b.due_date,
                     icon: typeIcon(b.type),
                   }))
@@ -1045,7 +1053,9 @@ export default function AdminFinanceiro() {
                       label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
                       client: pp.client?.company_name || pp.client?.full_name || "—",
                       brand: getProjectBrand(pp.project?.project_type),
-                      amount: Number(i.status === "partial" ? (i.paid_amount || 0) : (i.paid_amount || i.amount)),
+                      amount: receivedOf(i),
+                      totalAmount: Number(i.amount) || 0,
+                      isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
                       date: i.paid_date || i.due_date,
                       icon: "💼",
                     }))
@@ -1108,6 +1118,7 @@ export default function AdminFinanceiro() {
                             {it.client}
                             <span className="ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground">{it.brand}</span>
                             {" • "}Pago em {formatAppDate(it.date)}
+                            {it.isPartial && <> • recebido {fmt(it.amount)} de {fmt(it.totalAmount)}</>}
                           </p>
                         </div>
                         <p className="text-sm font-mono font-medium text-success">{fmt(it.amount)}</p>
