@@ -3,7 +3,7 @@ import { NavLink, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
-import { getAdminId } from "@/lib/notifyHelpers";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
