@@ -113,16 +113,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const name = profile.full_name || profile.email;
     const company = profile.company_name ? ` (${profile.company_name})` : "";
 
-    (async () => {
-      const adminId = await getAdminId();
-      if (!adminId) return;
-      await supabase.from("notifications").insert({
-        user_id: adminId,
-        message: `🔑 ${roleLabel} "${name}"${company} acessou o painel`,
-        notification_type: "update",
-        link: profile.role === "client" ? "/clientes" : "/equipe",
-      });
-    })();
+    // Use notifyAdmin edge fn (service role) so non-staff clients can notify admin (RLS-safe)
+    notifyAdmin(
+      `🔑 ${roleLabel} "${name}"${company} acessou o painel`,
+      "update",
+      profile.role === "client" ? "/clientes" : "/equipe"
+    );
   }, [user, profile]);
 
   const handleTourClose = useCallback(() => {
