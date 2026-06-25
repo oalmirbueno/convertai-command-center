@@ -256,21 +256,50 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     return { total, currentMonth, contributors, monthly, firstDate };
   }, [investorEntries]);
 
-  // ROI: conta apenas o resultado A PARTIR do primeiro aporte (mês do aporte em diante)
+  // ROI: conta a partir da DATA exata do primeiro aporte (não do mês inteiro)
   const periodNet = useMemo(() => {
     if (!investor.firstDate) return 0;
-    const firstKey = monthKey(investor.firstDate);
-    return (series || [])
-      .filter((s) => s.key >= firstKey)
-      .reduce((a, s) => a + (s.receitas - s.despesas), 0);
-  }, [series, investor.firstDate]);
-  const monthsSinceInvest = useMemo(() => {
+    const since = new Date(investor.firstDate);
+    since.setHours(0, 0, 0, 0);
+
+    let receitas = 0;
+    let despesas = 0;
+
+    (billingFiltered || []).forEach((b: any) => {
+      const paidAt = parseDate(b.paid_date);
+      if (!paidAt || paidAt < since) return;
+      if (b.status === "paid") receitas += Number(b.amount) || 0;
+      else if (b.status === "partial") receitas += Number(b.paid_amount) || 0;
+    });
+
+    (paymentsFiltered || []).forEach((p: any) => {
+      (p.installments || []).forEach((i: any) => {
+        const paidAt = parseDate(i.paid_date);
+        if (!paidAt || paidAt < since) return;
+        if (i.status === "paid") receitas += Number(i.amount) || 0;
+        else if (i.status === "partial") receitas += Number(i.paid_amount) || 0;
+      });
+    });
+
+    (expenses || []).forEach((e: any) => {
+      const paidAt = parseDate(e.paid_date);
+      if (!paidAt || paidAt < since) return;
+      if (e.status === "paid") despesas += Number(e.amount) || 0;
+    });
+
+    return receitas - despesas;
+  }, [billingFiltered, paymentsFiltered, expenses, investor.firstDate]);
+
+  const daysSinceInvest = useMemo(() => {
     if (!investor.firstDate) return 0;
-    const firstKey = monthKey(investor.firstDate);
-    const curKey = monthKey(new Date());
-    return (series || []).filter((s) => s.key >= firstKey && s.key <= curKey).length;
-  }, [series, investor.firstDate]);
+    const since = new Date(investor.firstDate);
+    since.setHours(0, 0, 0, 0);
+    const now = new Date(); now.setHours(0, 0, 0, 0);
+    return Math.max(1, Math.ceil((now.getTime() - since.getTime()) / 86400000) + 1);
+  }, [investor.firstDate]);
+
   const roiPct = investor.total > 0 ? (periodNet / investor.total) * 100 : 0;
+
 
 
   // Contas a pagar e receber
@@ -474,7 +503,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Início da contagem</p>
                 <p className="text-[12px] font-mono text-foreground mt-0.5">
-                  {investor.firstDate.toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
+                  {investor.firstDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
               </div>
             )}
@@ -485,7 +514,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             <MiniStat label="Total aportado" value={fmt(investor.total)} tone="primary" />
             <MiniStat label="Aporte deste mês" value={fmt(investor.currentMonth)} tone="primary" />
             <MiniStat
-              label={`Retorno desde o aporte${monthsSinceInvest ? ` (${monthsSinceInvest}m)` : ""}`}
+              label={`Retorno desde o aporte${daysSinceInvest ? ` (${daysSinceInvest}d)` : ""}`}
               value={fmt(periodNet)}
               tone={periodNet >= 0 ? "success" : "danger"}
             />
