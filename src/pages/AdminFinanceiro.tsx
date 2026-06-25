@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CashFlow from "@/components/finance/CashFlow";
+import InvestorCapital from "@/components/finance/InvestorCapital";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 
@@ -953,9 +954,10 @@ export default function AdminFinanceiro() {
       })()}
 
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
+        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex-wrap h-auto">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md">💰 Fluxo de Caixa</TabsTrigger>}
+          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md">🏦 Capital</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
           {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>}
           {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md">📋 Histórico</TabsTrigger>}
@@ -964,6 +966,12 @@ export default function AdminFinanceiro() {
         {(isAdmin || profile?.role === "manager") && (
           <TabsContent value="cashflow" className="space-y-6">
             <CashFlow billing={billing || []} projectPayments={projectPayments || []} />
+          </TabsContent>
+        )}
+
+        {(isAdmin || profile?.role === "manager") && (
+          <TabsContent value="capital" className="space-y-6">
+            <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
