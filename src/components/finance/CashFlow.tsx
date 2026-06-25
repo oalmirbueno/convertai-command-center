@@ -234,6 +234,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     const curKey = monthKey(new Date());
     let total = 0;
     let currentMonth = 0;
+    let firstDate: Date | null = null;
     const byInvestor: Record<string, number> = {};
     const monthly: Record<string, number> = {};
     (investorEntries || []).forEach((e: any) => {
@@ -244,6 +245,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         const k = monthKey(d);
         monthly[k] = (monthly[k] || 0) + v;
         if (k === curKey) currentMonth += v;
+        if (!firstDate || d < firstDate) firstDate = d;
       }
       const name = e.supplier || "Investidor";
       byInvestor[name] = (byInvestor[name] || 0) + v;
@@ -251,15 +253,25 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     const contributors = Object.entries(byInvestor)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-    return { total, currentMonth, contributors, monthly };
+    return { total, currentMonth, contributors, monthly, firstDate };
   }, [investorEntries]);
 
-  // ROI: lucro acumulado do período visível vs total investido
-  const periodNet = useMemo(
-    () => (series || []).reduce((a, s) => a + (s.receitas - s.despesas), 0),
-    [series]
-  );
+  // ROI: conta apenas o resultado A PARTIR do primeiro aporte (mês do aporte em diante)
+  const periodNet = useMemo(() => {
+    if (!investor.firstDate) return 0;
+    const firstKey = monthKey(investor.firstDate);
+    return (series || [])
+      .filter((s) => s.key >= firstKey)
+      .reduce((a, s) => a + (s.receitas - s.despesas), 0);
+  }, [series, investor.firstDate]);
+  const monthsSinceInvest = useMemo(() => {
+    if (!investor.firstDate) return 0;
+    const firstKey = monthKey(investor.firstDate);
+    const curKey = monthKey(new Date());
+    return (series || []).filter((s) => s.key >= firstKey && s.key <= curKey).length;
+  }, [series, investor.firstDate]);
   const roiPct = investor.total > 0 ? (periodNet / investor.total) * 100 : 0;
+
 
   // Contas a pagar e receber
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -432,57 +444,92 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           hint={`Margem ${margem.toFixed(1)}%`} tone={lucroProj >= 0 ? "primary" : "warning"} />
       </div>
 
-      {/* INVESTIDOR — capital separado do fluxo */}
+      {/* CAPITAL DE INVESTIDOR — bloco isolado, fora do fluxo operacional */}
       {(investor.total > 0 || investorEntries.length > 0) && (
-        <div className="relative rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] via-card to-card p-5 overflow-hidden">
-          <div className="absolute inset-0 pointer-events-none opacity-[0.04]"
-               style={{ backgroundImage: "radial-gradient(circle at 20% 20%, hsl(var(--primary)) 0%, transparent 50%)" }} />
-          <div className="relative flex items-start justify-between flex-wrap gap-4">
+        <section className="relative rounded-2xl border border-primary/25 bg-card overflow-hidden">
+          {/* faixa lateral neon para marcar a separação */}
+          <div className="absolute left-0 top-0 bottom-0 w-[3px] bg-primary" />
+          <div className="absolute inset-0 pointer-events-none opacity-[0.05]"
+               style={{ backgroundImage: "radial-gradient(circle at 15% 0%, hsl(var(--primary)) 0%, transparent 55%)" }} />
+
+          {/* Cabeçalho */}
+          <header className="relative flex items-center justify-between gap-4 px-5 pt-5 pb-3 border-b border-border/60">
             <div className="flex items-center gap-3">
               <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
                 <Briefcase className="w-5 h-5" />
               </span>
               <div>
-                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-                  Capital de Investidor
-                  <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
-                    fora do fluxo operacional
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-semibold text-foreground tracking-tight">Capital de Investidor</h3>
+                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/25">
+                    Fora do fluxo operacional
                   </span>
-                </h3>
+                </div>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
-                  Aportes de sócios investidores — não contam como despesa nem como receita. Comparados ao retorno operacional.
+                  Aportes de sócios. Não somam como receita, nem como despesa. Servem apenas de base para medir o retorno.
                 </p>
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3 min-w-[420px]">
-              <MiniStat label="Total investido" value={fmt(investor.total)} tone="primary" />
-              <MiniStat label="Aporte do mês" value={fmt(investor.currentMonth)} tone="primary" />
-              <MiniStat label={`Retorno ${period}m`} value={fmt(periodNet)}
-                hint={investor.total > 0 ? `ROI ${roiPct.toFixed(1)}%` : "—"}
-                tone={periodNet >= 0 ? "success" : "danger"} />
-            </div>
+            {investor.firstDate && (
+              <div className="text-right">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Início da contagem</p>
+                <p className="text-[12px] font-mono text-foreground mt-0.5">
+                  {investor.firstDate.toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
+                </p>
+              </div>
+            )}
+          </header>
+
+          {/* Métricas */}
+          <div className="relative grid grid-cols-2 lg:grid-cols-4 gap-3 p-5">
+            <MiniStat label="Total aportado" value={fmt(investor.total)} tone="primary" />
+            <MiniStat label="Aporte deste mês" value={fmt(investor.currentMonth)} tone="primary" />
+            <MiniStat
+              label={`Retorno desde o aporte${monthsSinceInvest ? ` (${monthsSinceInvest}m)` : ""}`}
+              value={fmt(periodNet)}
+              tone={periodNet >= 0 ? "success" : "danger"}
+            />
+            <MiniStat
+              label="ROI acumulado"
+              value={investor.total > 0 ? `${roiPct.toFixed(1)}%` : "0%"}
+              hint={periodNet >= 0 ? "Retorno positivo" : "Ainda no negativo"}
+              tone={roiPct >= 0 ? "success" : "danger"}
+            />
           </div>
 
+          {/* Investidores */}
           {investor.contributors.length > 0 && (
-            <div className="relative mt-4 pt-4 border-t border-primary/15">
-              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Investidores</p>
-              <div className="flex flex-wrap gap-2">
-                {investor.contributors.map((c, i) => {
-                  const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
-                  return (
-                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/40 border border-border">
-                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
-                      <span className="text-[12px] text-foreground font-medium">{c.name}</span>
-                      <span className="text-[11px] font-mono text-muted-foreground">{fmt(c.value)}</span>
-                      <span className="text-[10px] text-primary">{pct.toFixed(0)}%</span>
-                    </div>
-                  );
-                })}
+            <div className="relative px-5 pb-5">
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-3">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Quem aportou</p>
+                <div className="flex flex-wrap gap-2">
+                  {investor.contributors.map((c, i) => {
+                    const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
+                    return (
+                      <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card border border-border">
+                        <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                        <span className="text-[12px] text-foreground font-medium">{c.name}</span>
+                        <span className="text-[11px] font-mono text-muted-foreground">{fmt(c.value)}</span>
+                        <span className="text-[10px] text-primary font-medium">{pct.toFixed(0)}%</span>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
+        </section>
+      )}
+
+      {/* Divisor visual entre Capital (acima) e Operação (abaixo) */}
+      {(investor.total > 0 || investorEntries.length > 0) && (
+        <div className="flex items-center gap-3">
+          <span className="h-px flex-1 bg-border" />
+          <span className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">Operação</span>
+          <span className="h-px flex-1 bg-border" />
         </div>
       )}
+
 
 
 
