@@ -12,6 +12,7 @@ import {
 import {
   Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Download,
   Edit3, Trash2, Calendar, Filter, Sparkles, ArrowUpRight, ArrowDownRight,
+  Briefcase,
 } from "lucide-react";
 import NewIncomeModal from "./NewIncomeModal";
 
@@ -23,6 +24,8 @@ const fmtCompact = (v: number) => {
 };
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const INVESTOR_CATEGORY = "investidor";
+
 const CATEGORIES = [
   { value: "salarios", label: "Salários & Pró-labore", color: "#a78bfa" },
   { value: "ferramentas", label: "Ferramentas / SaaS", color: "#60a5fa" },
@@ -32,8 +35,10 @@ const CATEGORIES = [
   { value: "infraestrutura", label: "Infraestrutura / Hosting", color: "#34d399" },
   { value: "comissoes", label: "Comissões", color: "#22d3ee" },
   { value: "outros", label: "Outros", color: "#94a3b8" },
+  { value: INVESTOR_CATEGORY, label: "Investidor (Aporte de capital)", color: "#00FF66" },
 ];
 const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || CATEGORIES[CATEGORIES.length - 1];
+const isInvestor = (e: any) => e?.category === INVESTOR_CATEGORY;
 
 const parseDate = (v?: string | null) => {
   if (!v) return null;
@@ -81,7 +86,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     });
   }, [projectPayments, segment]);
 
-  const { data: expenses = [] } = useQuery({
+  const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
@@ -89,6 +94,10 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       return data || [];
     },
   });
+
+  // Separar despesas operacionais de aportes de investidor (capital, não despesa)
+  const expenses = useMemo(() => (allExpenses || []).filter((e: any) => !isInvestor(e)), [allExpenses]);
+  const investorEntries = useMemo(() => (allExpenses || []).filter(isInvestor), [allExpenses]);
 
   // ───────── Build cash flow series ─────────
   const series = useMemo(() => {
@@ -219,6 +228,38 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       .map(([k, v]) => ({ name: catMeta(k).label, value: v, color: catMeta(k).color, cat: k }))
       .sort((a, b) => b.value - a.value);
   }, [expenses]);
+
+  // ───────── Investidor (capital, não despesa) ─────────
+  const investor = useMemo(() => {
+    const curKey = monthKey(new Date());
+    let total = 0;
+    let currentMonth = 0;
+    const byInvestor: Record<string, number> = {};
+    const monthly: Record<string, number> = {};
+    (investorEntries || []).forEach((e: any) => {
+      const v = Number(e.amount) || 0;
+      total += v;
+      const d = parseDate(e.paid_date || e.due_date);
+      if (d) {
+        const k = monthKey(d);
+        monthly[k] = (monthly[k] || 0) + v;
+        if (k === curKey) currentMonth += v;
+      }
+      const name = e.supplier || "Investidor";
+      byInvestor[name] = (byInvestor[name] || 0) + v;
+    });
+    const contributors = Object.entries(byInvestor)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    return { total, currentMonth, contributors, monthly };
+  }, [investorEntries]);
+
+  // ROI: lucro acumulado do período visível vs total investido
+  const periodNet = useMemo(
+    () => (series || []).reduce((a, s) => a + (s.receitas - s.despesas), 0),
+    [series]
+  );
+  const roiPct = investor.total > 0 ? (periodNet / investor.total) * 100 : 0;
 
   // Contas a pagar e receber
   const today = new Date(); today.setHours(0, 0, 0, 0);
@@ -390,6 +431,60 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         <KpiCard icon={<Sparkles className="w-4 h-4" />} label={`Projeção ${period}m`} value={fmt(lucroProj)}
           hint={`Margem ${margem.toFixed(1)}%`} tone={lucroProj >= 0 ? "primary" : "warning"} />
       </div>
+
+      {/* INVESTIDOR — capital separado do fluxo */}
+      {(investor.total > 0 || investorEntries.length > 0) && (
+        <div className="relative rounded-2xl border border-primary/30 bg-gradient-to-br from-primary/[0.08] via-card to-card p-5 overflow-hidden">
+          <div className="absolute inset-0 pointer-events-none opacity-[0.04]"
+               style={{ backgroundImage: "radial-gradient(circle at 20% 20%, hsl(var(--primary)) 0%, transparent 50%)" }} />
+          <div className="relative flex items-start justify-between flex-wrap gap-4">
+            <div className="flex items-center gap-3">
+              <span className="w-10 h-10 rounded-xl bg-primary/15 text-primary flex items-center justify-center">
+                <Briefcase className="w-5 h-5" />
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+                  Capital de Investidor
+                  <span className="text-[10px] font-normal px-2 py-0.5 rounded-full bg-primary/15 text-primary border border-primary/30">
+                    fora do fluxo operacional
+                  </span>
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Aportes de sócios investidores — não contam como despesa nem como receita. Comparados ao retorno operacional.
+                </p>
+              </div>
+            </div>
+            <div className="grid grid-cols-3 gap-3 min-w-[420px]">
+              <MiniStat label="Total investido" value={fmt(investor.total)} tone="primary" />
+              <MiniStat label="Aporte do mês" value={fmt(investor.currentMonth)} tone="primary" />
+              <MiniStat label={`Retorno ${period}m`} value={fmt(periodNet)}
+                hint={investor.total > 0 ? `ROI ${roiPct.toFixed(1)}%` : "—"}
+                tone={periodNet >= 0 ? "success" : "danger"} />
+            </div>
+          </div>
+
+          {investor.contributors.length > 0 && (
+            <div className="relative mt-4 pt-4 border-t border-primary/15">
+              <p className="text-[10px] uppercase tracking-wider text-muted-foreground mb-2">Investidores</p>
+              <div className="flex flex-wrap gap-2">
+                {investor.contributors.map((c, i) => {
+                  const pct = investor.total > 0 ? (c.value / investor.total) * 100 : 0;
+                  return (
+                    <div key={i} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-secondary/40 border border-border">
+                      <span className="w-1.5 h-1.5 rounded-full bg-primary" />
+                      <span className="text-[12px] text-foreground font-medium">{c.name}</span>
+                      <span className="text-[11px] font-mono text-muted-foreground">{fmt(c.value)}</span>
+                      <span className="text-[10px] text-primary">{pct.toFixed(0)}%</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+
 
       {/* CASH FLOW CHART */}
       <div className="rounded-2xl border border-border bg-card p-5">
@@ -766,6 +861,21 @@ function ExpenseForm({ initial, onSave, onCancel }: any) {
           {form.id ? "Salvar" : "Criar"}
         </button>
       </div>
+    </div>
+  );
+}
+
+function MiniStat({ label, value, hint, tone = "primary" }: any) {
+  const toneCls: any = {
+    primary: "text-primary",
+    success: "text-success",
+    danger: "text-destructive",
+  };
+  return (
+    <div className="rounded-xl border border-border bg-card/60 backdrop-blur px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 text-base font-mono font-semibold ${toneCls[tone] || toneCls.primary}`}>{value}</p>
+      {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
     </div>
   );
 }
