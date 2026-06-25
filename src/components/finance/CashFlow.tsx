@@ -820,6 +820,41 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             })}
           </div>
         </TabsContent>
+
+        <TabsContent value="inv">
+          <div className="rounded-2xl border border-primary/25 bg-card divide-y divide-border">
+            {investorEntries.length === 0 && (
+              <div className="p-10 text-center text-[12px] text-muted-foreground">
+                Nenhum investimento registrado. Use "+ Lançamento" e escolha Investimento.
+              </div>
+            )}
+            {investorEntries.map((e: any) => {
+              const cm = catMeta(e.category);
+              return (
+                <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15 text-primary">
+                      <Briefcase className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+                        {e.supplier && ` · ${e.supplier}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary">Capital</span>
+                    <span className="text-[13px] font-mono font-semibold text-primary">{fmt(Number(e.amount))}</span>
+                    <button onClick={() => setExpenseModal({ mode: "investment", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* LAUNCHER — escolha do tipo de lançamento */}
