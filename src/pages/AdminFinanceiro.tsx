@@ -1441,28 +1441,68 @@ export default function AdminFinanceiro() {
           })()}
 
           {renewalsView === "avulsos" && (() => {
-            // Avulsos = clients without plan_value (or =0) that have project_payments
-            const avulsoClientIds = new Set(
-              (projectPayments || [])
-                .map((pp: any) => pp.client_id)
-                .filter((id: string) => {
-                  const c = (clients || []).find((cl: any) => cl.id === id);
-                  return c && (!c.plan_value || Number(c.plan_value) === 0);
-                })
-            );
+            // Avulsos = clientes one_off OU sem plan_value que tenham QUALQUER lançamento
+            // (project_payments ou billing avulso). Antes só considerávamos project_payments,
+            // o que escondia recebimentos como o de Itamar (lançado via billing).
+            const isAvulsoClient = (c: any) =>
+              !!c && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
+
+            const billingByClient = new Map<string, any[]>();
+            (billing || []).forEach((b: any) => {
+              if (!b.client_id) return;
+              const c = (clients || []).find((cl: any) => cl.id === b.client_id);
+              if (!isAvulsoClient(c)) return;
+              const arr = billingByClient.get(b.client_id) || [];
+              arr.push(b);
+              billingByClient.set(b.client_id, arr);
+            });
+            const paymentsByClient = new Map<string, any[]>();
+            (projectPayments || []).forEach((pp: any) => {
+              if (!pp.client_id) return;
+              const c = (clients || []).find((cl: any) => cl.id === pp.client_id);
+              if (!isAvulsoClient(c)) return;
+              const arr = paymentsByClient.get(pp.client_id) || [];
+              arr.push(pp);
+              paymentsByClient.set(pp.client_id, arr);
+            });
+
+            const avulsoClientIds = new Set<string>([
+              ...billingByClient.keys(),
+              ...paymentsByClient.keys(),
+            ]);
             const avulsoClients = (clients || []).filter((c: any) => avulsoClientIds.has(c.id));
 
             if (avulsoClients.length === 0) {
-              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente avulso com histórico de projetos.</p>;
+              return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente avulso com histórico.</p>;
             }
+
+            const sumBillingPaid = (rows: any[]) =>
+              (rows || []).filter((b: any) => b.status === "paid" || b.status === "partial")
+                .reduce((s: number, b: any) => s + receivedOf(b), 0);
+            const sumBillingOpen = (rows: any[]) =>
+              (rows || []).filter((b: any) => b.status === "pending" || b.status === "partial")
+                .reduce((s: number, b: any) => s + Math.max(Number(b.amount) - Number(b.paid_amount || 0), 0), 0);
+            const sumInstallmentsPaid = (pps: any[]) =>
+              (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
+                .filter((i: any) => i.status === "paid" || i.status === "partial")
+                .reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
+            const sumInstallmentsOpen = (pps: any[]) =>
+              (pps || []).reduce((s: number, pp: any) => s + (pp.installments || [])
+                .filter((i: any) => i.status === "pending" || i.status === "partial")
+                .reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0);
+
+            const totalRecebido = avulsoClients.reduce((s, c) =>
+              s + sumBillingPaid(billingByClient.get(c.id) || []) + sumInstallmentsPaid(paymentsByClient.get(c.id) || []), 0);
+            const totalAberto = avulsoClients.reduce((s, c) =>
+              s + sumBillingOpen(billingByClient.get(c.id) || []) + sumInstallmentsOpen(paymentsByClient.get(c.id) || []), 0);
 
             return (
               <div className="space-y-3">
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
                   {[
                     { label: "Clientes Avulsos", value: String(avulsoClients.length), color: "text-foreground" },
-                    { label: "Total Recebido", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0)), color: "text-success" },
-                    { label: "Em aberto", value: fmt((projectPayments || []).filter((pp: any) => avulsoClientIds.has(pp.client_id)).reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").reduce((x: number, i: any) => x + Math.max(Number(i.amount) - Number(i.paid_amount || 0), 0), 0), 0)), color: "text-warning" },
+                    { label: "Total Recebido", value: fmt(totalRecebido), color: "text-success" },
+                    { label: "Em aberto", value: fmt(totalAberto), color: "text-warning" },
                   ].map((s) => (
                     <div key={s.label} className="bg-secondary/30 border border-border rounded-xl p-3">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{s.label}</p>
@@ -1472,15 +1512,21 @@ export default function AdminFinanceiro() {
                 </div>
 
                 {avulsoClients.map((c: any) => {
-                  const clientProjects = (projectPayments || []).filter((pp: any) => pp.client_id === c.id);
-                  const totalFaturado = clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0);
-                  const totalPago = clientProjects.reduce((s: number, pp: any) => s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0), 0);
-                  const aberto = totalFaturado - totalPago;
+                  const clientProjects = paymentsByClient.get(c.id) || [];
+                  const clientBills = billingByClient.get(c.id) || [];
+                  const totalFaturado =
+                    clientProjects.reduce((s: number, pp: any) => s + Number(pp.total_value), 0) +
+                    clientBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
+                  const totalPago = sumInstallmentsPaid(clientProjects) + sumBillingPaid(clientBills);
+                  const aberto = Math.max(totalFaturado - totalPago, 0);
+                  const lineCount = clientProjects.length + clientBills.length;
                   return (
                     <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
                       <div className="flex items-center justify-between flex-wrap gap-2">
                         <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">{clientProjects.length} {clientProjects.length === 1 ? "projeto" : "projetos"}</span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                          {lineCount} {lineCount === 1 ? "lançamento" : "lançamentos"}
+                        </span>
                       </div>
                       <div className="flex items-center gap-4 text-xs flex-wrap">
                         <span className="text-muted-foreground">Faturado: <span className="font-mono text-foreground">{fmt(totalFaturado)}</span></span>
@@ -1489,13 +1535,27 @@ export default function AdminFinanceiro() {
                       </div>
                       <div className="space-y-1 pt-1">
                         {clientProjects.map((pp: any) => {
-                          const paid = (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedOf(i), 0);
+                          const paid = sumInstallmentsPaid([pp]);
                           const pct = pp.total_value > 0 ? Math.round((paid / Number(pp.total_value)) * 100) : 0;
                           return (
                             <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">{pp.project?.name || "Projeto"}</span>
+                              <span className="flex-1 truncate">📦 {pp.project?.name || "Projeto"}</span>
                               <span className="text-[10px] font-mono">{pct}%</span>
                               <span className="font-mono text-foreground">{fmt(Number(pp.total_value))}</span>
+                            </div>
+                          );
+                        })}
+                        {clientBills.map((b: any) => {
+                          const paid = sumBillingPaid([b]);
+                          const total = Number(b.amount) || 0;
+                          const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                          const isPartial = b.status === "partial";
+                          const isPaid = b.status === "paid";
+                          return (
+                            <div key={b.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
+                              <span className="flex-1 truncate">💸 {b.description || "Cobrança avulsa"}</span>
+                              <span className={`text-[10px] font-mono ${isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
+                              <span className="font-mono text-foreground">{fmt(total)}</span>
                             </div>
                           );
                         })}
