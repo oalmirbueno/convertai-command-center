@@ -910,11 +910,16 @@ function KpiCard({ icon, label, value, hint, tone }: any) {
   );
 }
 
-function ExpenseForm({ initial, onSave, onCancel }: any) {
+function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
+  const cats = mode === "investment" ? INVESTMENT_CATEGORIES : EXPENSE_CATEGORIES;
+  const defaultCat = mode === "investment" ? "inv_outros" : "outros";
+  const placeholder = mode === "investment" ? "Ex: Campanha Meta Ads — junho" : "Ex: Aluguel escritório";
+  const supplierLabel = mode === "investment" ? "Plataforma / Origem" : "Fornecedor";
+
   const [form, setForm] = useState({
     id: initial.id || null,
     description: initial.description || "",
-    category: initial.category || "outros",
+    category: initial.category || defaultCat,
     amount: initial.amount?.toString() || "",
     due_date: initial.due_date || new Date().toISOString().slice(0, 10),
     paid_date: initial.paid_date || "",
@@ -927,16 +932,23 @@ function ExpenseForm({ initial, onSave, onCancel }: any) {
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   return (
     <div className="space-y-3">
+      {mode === "investment" && (
+        <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+          <p className="text-[11px] text-foreground">
+            <span className="text-primary font-semibold">Investimento</span> não conta como despesa no DRE. Vai pro bloco de Capital e gera retorno medido contra ele.
+          </p>
+        </div>
+      )}
       <div>
         <label className="text-[11px] text-muted-foreground">Descrição *</label>
-        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder="Ex: Aluguel escritório" />
+        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder={placeholder} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-[11px] text-muted-foreground">Categoria</label>
           <select value={form.category} onChange={e => set("category", e.target.value)}
             className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-            {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            {cats.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
         <div>
