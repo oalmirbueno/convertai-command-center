@@ -864,3 +864,18 @@ function ExpenseForm({ initial, onSave, onCancel }: any) {
     </div>
   );
 }
+
+function MiniStat({ label, value, hint, tone = "primary" }: any) {
+  const toneCls: any = {
+    primary: "text-primary",
+    success: "text-success",
+    danger: "text-destructive",
+  };
+  return (
+    <div className="rounded-xl border border-border bg-card/60 backdrop-blur px-3 py-2">
+      <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
+      <p className={`mt-0.5 text-base font-mono font-semibold ${toneCls[tone] || toneCls.primary}`}>{value}</p>
+      {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
+    </div>
+  );
+}
