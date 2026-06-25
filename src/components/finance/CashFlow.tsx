@@ -229,6 +229,38 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       .sort((a, b) => b.value - a.value);
   }, [expenses]);
 
+  // ───────── Investidor (capital, não despesa) ─────────
+  const investor = useMemo(() => {
+    const curKey = monthKey(new Date());
+    let total = 0;
+    let currentMonth = 0;
+    const byInvestor: Record<string, number> = {};
+    const monthly: Record<string, number> = {};
+    (investorEntries || []).forEach((e: any) => {
+      const v = Number(e.amount) || 0;
+      total += v;
+      const d = parseDate(e.paid_date || e.due_date);
+      if (d) {
+        const k = monthKey(d);
+        monthly[k] = (monthly[k] || 0) + v;
+        if (k === curKey) currentMonth += v;
+      }
+      const name = e.supplier || "Investidor";
+      byInvestor[name] = (byInvestor[name] || 0) + v;
+    });
+    const contributors = Object.entries(byInvestor)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+    return { total, currentMonth, contributors, monthly };
+  }, [investorEntries]);
+
+  // ROI: lucro acumulado do período visível vs total investido
+  const periodNet = useMemo(
+    () => (series || []).reduce((a, s) => a + (s.receitas - s.despesas), 0),
+    [series]
+  );
+  const roiPct = investor.total > 0 ? (periodNet / investor.total) * 100 : 0;
+
   // Contas a pagar e receber
   const today = new Date(); today.setHours(0, 0, 0, 0);
   const accountsPayable = useMemo(() => {
