@@ -361,10 +361,11 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   }, [billingFiltered, paymentsFiltered]);
 
   // ───────── Mutations ─────────
-  const saveExpense = async (form: any) => {
+  const saveExpense = async (form: any, mode: "expense" | "investment") => {
+    const defaultCat = mode === "investment" ? "inv_outros" : "outros";
     const payload = {
       description: form.description,
-      category: form.category || "outros",
+      category: form.category || defaultCat,
       amount: parseFloat(form.amount) || 0,
       due_date: form.due_date,
       paid_date: form.status === "paid" ? (form.paid_date || form.due_date) : null,
@@ -378,14 +379,15 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       toast.error("Preencha descrição e vencimento");
       return;
     }
+    const label = mode === "investment" ? "Investimento" : "Despesa";
     if (form.id) {
       const { error } = await supabase.from("expenses").update(payload).eq("id", form.id);
       if (error) return toast.error(error.message);
-      toast.success("Despesa atualizada");
+      toast.success(`${label} atualizado`);
     } else {
       const { error } = await supabase.from("expenses").insert(payload);
       if (error) return toast.error(error.message);
-      toast.success("Despesa registrada");
+      toast.success(`${label} registrado`);
     }
     setExpenseModal(null);
     qc.invalidateQueries({ queryKey: ["expenses"] });
