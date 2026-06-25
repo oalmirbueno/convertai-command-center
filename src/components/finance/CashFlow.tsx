@@ -736,7 +736,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
                     )}
                     <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
                     <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-success/15 text-success hover:bg-success/25 cursor-pointer border-none">Pagar</button>
-                    <button onClick={() => setExpenseModal(e)} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setExpenseModal({ mode: isInvestor(e) ? "investment" : "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
