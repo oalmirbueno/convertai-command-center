@@ -444,13 +444,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer">
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
-          <button onClick={() => setIncomeModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 cursor-pointer">
-            <ArrowUpRight className="w-3.5 h-3.5" /> Nova Entrada
-          </button>
-          <button onClick={() => setExpenseModal({})}
+          <button onClick={() => setLauncherOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 border-none cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Nova Despesa
+            <Plus className="w-3.5 h-3.5" /> Lançamento
           </button>
         </div>
       </div>
