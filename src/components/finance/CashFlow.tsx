@@ -973,7 +973,7 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] text-muted-foreground">Fornecedor</label>
+          <label className="text-[11px] text-muted-foreground">{supplierLabel}</label>
           <Input value={form.supplier} onChange={e => set("supplier", e.target.value)} className="mt-1" placeholder="Opcional" />
         </div>
         <div>
