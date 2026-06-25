@@ -514,7 +514,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             <MiniStat label="Total aportado" value={fmt(investor.total)} tone="primary" />
             <MiniStat label="Aporte deste mês" value={fmt(investor.currentMonth)} tone="primary" />
             <MiniStat
-              label={`Retorno desde o aporte${monthsSinceInvest ? ` (${monthsSinceInvest}m)` : ""}`}
+              label={`Retorno desde o aporte${daysSinceInvest ? ` (${daysSinceInvest}d)` : ""}`}
               value={fmt(periodNet)}
               tone={periodNet >= 0 ? "success" : "danger"}
             />
