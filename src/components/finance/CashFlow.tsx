@@ -580,6 +580,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
 
 
+      {/* FLUXO DE CAIXA — gráfico */}
+      <SectionHeader title="Fluxo de caixa" subtitle="Entradas, saídas e saldo acumulado projetado" />
       {/* CASH FLOW CHART */}
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
