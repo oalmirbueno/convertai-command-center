@@ -638,7 +638,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <TabsTrigger value="ap" className="text-[12px] rounded-md">A pagar ({accountsPayable.length})</TabsTrigger>
           <TabsTrigger value="ar" className="text-[12px] rounded-md">A receber ({accountsReceivable.length})</TabsTrigger>
           <TabsTrigger value="exp" className="text-[12px] rounded-md">Despesas ({expenses.length})</TabsTrigger>
-          <TabsTrigger value="inv" className="text-[12px] rounded-md">Investimentos ({investorEntries.length})</TabsTrigger>
+          
         </TabsList>
 
         <TabsContent value="ap">
