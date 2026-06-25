@@ -24,9 +24,10 @@ const fmtCompact = (v: number) => {
 };
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-const INVESTOR_CATEGORY = "investidor";
+const INVESTOR_LEGACY = "investidor";
+const INV_PREFIX = "inv_";
 
-const CATEGORIES = [
+const EXPENSE_CATEGORIES = [
   { value: "salarios", label: "Salários & Pró-labore", color: "#a78bfa" },
   { value: "ferramentas", label: "Ferramentas / SaaS", color: "#60a5fa" },
   { value: "marketing", label: "Marketing & Ads próprios", color: "#f472b6" },
@@ -35,10 +36,27 @@ const CATEGORIES = [
   { value: "infraestrutura", label: "Infraestrutura / Hosting", color: "#34d399" },
   { value: "comissoes", label: "Comissões", color: "#22d3ee" },
   { value: "outros", label: "Outros", color: "#94a3b8" },
-  { value: INVESTOR_CATEGORY, label: "Investidor (Aporte de capital)", color: "#00FF66" },
 ];
-const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || CATEGORIES[CATEGORIES.length - 1];
-const isInvestor = (e: any) => e?.category === INVESTOR_CATEGORY;
+
+const INVESTMENT_CATEGORIES = [
+  { value: "inv_trafego", label: "Tráfego pago", color: "#00FF66" },
+  { value: "inv_ferramentas", label: "Ferramentas", color: "#34d399" },
+  { value: "inv_insumos", label: "Insumos", color: "#22d3ee" },
+  { value: "inv_escritorio", label: "Escritório", color: "#60a5fa" },
+  { value: "inv_outros", label: "Outros investimentos", color: "#a78bfa" },
+];
+
+// união (inclui legado "investidor")
+const CATEGORIES = [
+  ...EXPENSE_CATEGORIES,
+  ...INVESTMENT_CATEGORIES,
+  { value: INVESTOR_LEGACY, label: "Investidor (legado)", color: "#00FF66" },
+];
+const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+const isInvestor = (e: any) => {
+  const c = e?.category || "";
+  return c === INVESTOR_LEGACY || c.startsWith(INV_PREFIX);
+};
 
 const parseDate = (v?: string | null) => {
   if (!v) return null;
@@ -62,8 +80,9 @@ interface Props {
 export default function CashFlow({ billing = [], projectPayments = [] }: Props) {
   const qc = useQueryClient();
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
-  const [expenseModal, setExpenseModal] = useState<any | null>(null);
+  const [expenseModal, setExpenseModal] = useState<{ mode: "expense" | "investment"; data: any } | null>(null);
   const [incomeModalOpen, setIncomeModalOpen] = useState(false);
+  const [launcherOpen, setLauncherOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
 
@@ -342,10 +361,11 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   }, [billingFiltered, paymentsFiltered]);
 
   // ───────── Mutations ─────────
-  const saveExpense = async (form: any) => {
+  const saveExpense = async (form: any, mode: "expense" | "investment") => {
+    const defaultCat = mode === "investment" ? "inv_outros" : "outros";
     const payload = {
       description: form.description,
-      category: form.category || "outros",
+      category: form.category || defaultCat,
       amount: parseFloat(form.amount) || 0,
       due_date: form.due_date,
       paid_date: form.status === "paid" ? (form.paid_date || form.due_date) : null,
@@ -359,14 +379,15 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       toast.error("Preencha descrição e vencimento");
       return;
     }
+    const label = mode === "investment" ? "Investimento" : "Despesa";
     if (form.id) {
       const { error } = await supabase.from("expenses").update(payload).eq("id", form.id);
       if (error) return toast.error(error.message);
-      toast.success("Despesa atualizada");
+      toast.success(`${label} atualizado`);
     } else {
       const { error } = await supabase.from("expenses").insert(payload);
       if (error) return toast.error(error.message);
-      toast.success("Despesa registrada");
+      toast.success(`${label} registrado`);
     }
     setExpenseModal(null);
     qc.invalidateQueries({ queryKey: ["expenses"] });
@@ -425,13 +446,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer">
             <Download className="w-3.5 h-3.5" /> CSV
           </button>
-          <button onClick={() => setIncomeModalOpen(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-success/15 text-success border border-success/30 hover:bg-success/25 cursor-pointer">
-            <ArrowUpRight className="w-3.5 h-3.5" /> Nova Entrada
-          </button>
-          <button onClick={() => setExpenseModal({})}
+          <button onClick={() => setLauncherOpen(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 border-none cursor-pointer">
-            <Plus className="w-3.5 h-3.5" /> Nova Despesa
+            <Plus className="w-3.5 h-3.5" /> Lançamento
           </button>
         </div>
       </div>
@@ -461,7 +478,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       </div>
 
 
-      {/* KPI STRIP */}
+      {/* RESUMO DO MÊS */}
+      <SectionHeader title="Resumo do mês" subtitle="Indicadores operacionais. Investimento não entra aqui." />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Receitas do mês" value={fmt(cur.receitas)}
           hint={`+${fmt(cur.pendReceita)} previstas`} tone="success" />
@@ -562,6 +580,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
 
 
+      {/* FLUXO DE CAIXA — gráfico */}
+      <SectionHeader title="Fluxo de caixa" subtitle="Entradas, saídas e saldo acumulado projetado" />
       {/* CASH FLOW CHART */}
       <div className="rounded-2xl border border-border bg-card p-5">
         <div className="flex items-center justify-between mb-4">
@@ -606,6 +626,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
+      {/* ANÁLISE — DRE + distribuição */}
+      <SectionHeader title="Análise" subtitle="DRE mensal e distribuição das despesas por categoria" />
       {/* DRE + DISTRIBUICAO */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div className="lg:col-span-2 rounded-2xl border border-border bg-card p-5">
@@ -682,12 +704,14 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
-      {/* AP / AR / DESPESAS */}
+      {/* MOVIMENTAÇÕES */}
+      <SectionHeader title="Movimentações" subtitle="Pagamentos, recebimentos, despesas e investimentos em listas separadas" />
       <Tabs defaultValue="ap" className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
+        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex-wrap h-auto">
           <TabsTrigger value="ap" className="text-[12px] rounded-md">A pagar ({accountsPayable.length})</TabsTrigger>
           <TabsTrigger value="ar" className="text-[12px] rounded-md">A receber ({accountsReceivable.length})</TabsTrigger>
           <TabsTrigger value="exp" className="text-[12px] rounded-md">Despesas ({expenses.length})</TabsTrigger>
+          <TabsTrigger value="inv" className="text-[12px] rounded-md">Investimentos ({investorEntries.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ap">
@@ -721,7 +745,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
                     )}
                     <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
                     <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-success/15 text-success hover:bg-success/25 cursor-pointer border-none">Pagar</button>
-                    <button onClick={() => setExpenseModal(e)} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setExpenseModal({ mode: isInvestor(e) ? "investment" : "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
@@ -765,7 +789,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <div className="rounded-2xl border border-border bg-card divide-y divide-border">
             {expenses.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
-                Nenhuma despesa cadastrada. Clique em "Nova Despesa" para começar.
+                Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
               </div>
             )}
             {expenses.map((e: any) => {
@@ -793,7 +817,42 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
                     <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground cursor-pointer border border-border">
                       {e.status === "paid" ? "Reabrir" : "Pagar"}
                     </button>
-                    <button onClick={() => setExpenseModal(e)} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setExpenseModal({ mode: "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="inv">
+          <div className="rounded-2xl border border-primary/25 bg-card divide-y divide-border">
+            {investorEntries.length === 0 && (
+              <div className="p-10 text-center text-[12px] text-muted-foreground">
+                Nenhum investimento registrado. Use "+ Lançamento" e escolha Investimento.
+              </div>
+            )}
+            {investorEntries.map((e: any) => {
+              const cm = catMeta(e.category);
+              return (
+                <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-primary/15 text-primary">
+                      <Briefcase className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+                        {e.supplier && ` · ${e.supplier}`}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/15 text-primary">Capital</span>
+                    <span className="text-[13px] font-mono font-semibold text-primary">{fmt(Number(e.amount))}</span>
+                    <button onClick={() => setExpenseModal({ mode: "investment", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
@@ -803,19 +862,64 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </TabsContent>
       </Tabs>
 
-      {/* MODAL DESPESA */}
+      {/* LAUNCHER — escolha do tipo de lançamento */}
+      <Dialog open={launcherOpen} onOpenChange={setLauncherOpen}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Novo lançamento</DialogTitle>
+          </DialogHeader>
+          <p className="text-[12px] text-muted-foreground -mt-1">Escolha onde esse valor entra. Cada tipo é tratado de forma diferente no fluxo.</p>
+          <div className="grid gap-2 mt-3">
+            <LauncherChoice
+              icon={<ArrowUpRight className="w-4 h-4" />}
+              tone="success"
+              title="Entrada"
+              desc="Receita avulsa de projeto. Conta como receita no fluxo."
+              onClick={() => { setLauncherOpen(false); setIncomeModalOpen(true); }}
+            />
+            <LauncherChoice
+              icon={<ArrowDownRight className="w-4 h-4" />}
+              tone="danger"
+              title="Despesa"
+              desc="Custo operacional recorrente ou avulso. Conta como despesa no DRE."
+              onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "expense", data: {} }); }}
+            />
+            <LauncherChoice
+              icon={<Briefcase className="w-4 h-4" />}
+              tone="primary"
+              title="Investimento"
+              desc="Aporte de capital (tráfego pago, ferramentas, insumos, escritório). Não entra no DRE, vai pro bloco de capital."
+              onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "investment", data: {} }); }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DESPESA / INVESTIMENTO */}
       <Dialog open={!!expenseModal} onOpenChange={(o) => !o && setExpenseModal(null)}>
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">{expenseModal?.id ? "Editar despesa" : "Nova despesa"}</DialogTitle>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              {expenseModal?.mode === "investment" ? <Briefcase className="w-4 h-4 text-primary" /> : <ArrowDownRight className="w-4 h-4 text-destructive" />}
+              {expenseModal?.data?.id
+                ? (expenseModal.mode === "investment" ? "Editar investimento" : "Editar despesa")
+                : (expenseModal?.mode === "investment" ? "Novo investimento" : "Nova despesa")}
+            </DialogTitle>
           </DialogHeader>
-          {expenseModal && <ExpenseForm initial={expenseModal} onSave={saveExpense} onCancel={() => setExpenseModal(null)} />}
+          {expenseModal && (
+            <ExpenseForm
+              initial={expenseModal.data}
+              mode={expenseModal.mode}
+              onSave={(form: any) => saveExpense(form, expenseModal.mode)}
+              onCancel={() => setExpenseModal(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
         <DialogContent className="bg-card border-border max-w-sm">
-          <DialogHeader><DialogTitle className="text-foreground">Remover despesa?</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground">Remover lançamento?</DialogTitle></DialogHeader>
           <p className="text-[13px] text-muted-foreground">Essa ação não pode ser desfeita.</p>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setConfirmDel(null)} className="px-3 py-1.5 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
@@ -848,11 +952,16 @@ function KpiCard({ icon, label, value, hint, tone }: any) {
   );
 }
 
-function ExpenseForm({ initial, onSave, onCancel }: any) {
+function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
+  const cats = mode === "investment" ? INVESTMENT_CATEGORIES : EXPENSE_CATEGORIES;
+  const defaultCat = mode === "investment" ? "inv_outros" : "outros";
+  const placeholder = mode === "investment" ? "Ex: Campanha Meta Ads — junho" : "Ex: Aluguel escritório";
+  const supplierLabel = mode === "investment" ? "Plataforma / Origem" : "Fornecedor";
+
   const [form, setForm] = useState({
     id: initial.id || null,
     description: initial.description || "",
-    category: initial.category || "outros",
+    category: initial.category || defaultCat,
     amount: initial.amount?.toString() || "",
     due_date: initial.due_date || new Date().toISOString().slice(0, 10),
     paid_date: initial.paid_date || "",
@@ -865,16 +974,23 @@ function ExpenseForm({ initial, onSave, onCancel }: any) {
   const set = (k: string, v: any) => setForm(f => ({ ...f, [k]: v }));
   return (
     <div className="space-y-3">
+      {mode === "investment" && (
+        <div className="rounded-lg border border-primary/25 bg-primary/5 px-3 py-2">
+          <p className="text-[11px] text-foreground">
+            <span className="text-primary font-semibold">Investimento</span> não conta como despesa no DRE. Vai pro bloco de Capital e gera retorno medido contra ele.
+          </p>
+        </div>
+      )}
       <div>
         <label className="text-[11px] text-muted-foreground">Descrição *</label>
-        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder="Ex: Aluguel escritório" />
+        <Input value={form.description} onChange={e => set("description", e.target.value)} className="mt-1" placeholder={placeholder} />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className="text-[11px] text-muted-foreground">Categoria</label>
           <select value={form.category} onChange={e => set("category", e.target.value)}
             className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-            {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            {cats.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
         <div>
@@ -899,7 +1015,7 @@ function ExpenseForm({ initial, onSave, onCancel }: any) {
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="text-[11px] text-muted-foreground">Fornecedor</label>
+          <label className="text-[11px] text-muted-foreground">{supplierLabel}</label>
           <Input value={form.supplier} onChange={e => set("supplier", e.target.value)} className="mt-1" placeholder="Opcional" />
         </div>
         <div>
@@ -952,6 +1068,49 @@ function MiniStat({ label, value, hint, tone = "primary" }: any) {
       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{label}</p>
       <p className={`mt-0.5 text-base font-mono font-semibold ${toneCls[tone] || toneCls.primary}`}>{value}</p>
       {hint && <p className="text-[10px] text-muted-foreground mt-0.5">{hint}</p>}
+    </div>
+  );
+}
+
+function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
+  const tones: any = {
+    success: "border-success/30 hover:border-success/60 hover:bg-success/5",
+    danger: "border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5",
+    primary: "border-primary/30 hover:border-primary/60 hover:bg-primary/5",
+  };
+  const iconTone: any = {
+    success: "bg-success/15 text-success",
+    danger: "bg-destructive/15 text-destructive",
+    primary: "bg-primary/15 text-primary",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border bg-card transition-colors cursor-pointer ${tones[tone] || tones.primary}`}
+    >
+      <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconTone[tone] || iconTone.primary}`}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-foreground">{title}</p>
+        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{desc}</p>
+      </div>
+    </button>
+  );
+}
+
+function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-end justify-between gap-3 pt-2">
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-primary" />
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight uppercase">{title}</h3>
+        </div>
+        {subtitle && <p className="text-[11px] text-muted-foreground mt-1 ml-3">{subtitle}</p>}
+      </div>
+      {action}
     </div>
   );
 }
