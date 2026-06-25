@@ -234,6 +234,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     const curKey = monthKey(new Date());
     let total = 0;
     let currentMonth = 0;
+    let firstDate: Date | null = null;
     const byInvestor: Record<string, number> = {};
     const monthly: Record<string, number> = {};
     (investorEntries || []).forEach((e: any) => {
@@ -244,6 +245,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         const k = monthKey(d);
         monthly[k] = (monthly[k] || 0) + v;
         if (k === curKey) currentMonth += v;
+        if (!firstDate || d < firstDate) firstDate = d;
       }
       const name = e.supplier || "Investidor";
       byInvestor[name] = (byInvestor[name] || 0) + v;
@@ -251,15 +253,25 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     const contributors = Object.entries(byInvestor)
       .map(([name, value]) => ({ name, value }))
       .sort((a, b) => b.value - a.value);
-    return { total, currentMonth, contributors, monthly };
+    return { total, currentMonth, contributors, monthly, firstDate };
   }, [investorEntries]);
 
-  // ROI: lucro acumulado do período visível vs total investido
-  const periodNet = useMemo(
-    () => (series || []).reduce((a, s) => a + (s.receitas - s.despesas), 0),
-    [series]
-  );
+  // ROI: conta apenas o resultado A PARTIR do primeiro aporte (mês do aporte em diante)
+  const periodNet = useMemo(() => {
+    if (!investor.firstDate) return 0;
+    const firstKey = monthKey(investor.firstDate);
+    return (series || [])
+      .filter((s) => s.key >= firstKey)
+      .reduce((a, s) => a + (s.receitas - s.despesas), 0);
+  }, [series, investor.firstDate]);
+  const monthsSinceInvest = useMemo(() => {
+    if (!investor.firstDate) return 0;
+    const firstKey = monthKey(investor.firstDate);
+    const curKey = monthKey(new Date());
+    return (series || []).filter((s) => s.key >= firstKey && s.key <= curKey).length;
+  }, [series, investor.firstDate]);
   const roiPct = investor.total > 0 ? (periodNet / investor.total) * 100 : 0;
+
 
   // Contas a pagar e receber
   const today = new Date(); today.setHours(0, 0, 0, 0);
