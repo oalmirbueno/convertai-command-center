@@ -40,7 +40,7 @@ const toLocalDateKey = (date?: Date) => (date ? _toBRDateKey(date) : _todayBR())
 
 
 
-const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "—";
+const formatAppDate = (value?: string | null) => parseAppDate(value)?.toLocaleDateString("pt-BR") || "-";
 
 // Returns the amount actually received for a billing/installment record,
 // respecting partial payments. Use this for any "received" aggregation.
@@ -160,7 +160,7 @@ export default function AdminFinanceiro() {
           type: "renewal",
           amount: Number(c.plan_value),
           due_date: c.plan_renewal_date,
-          description: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
+          description: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
         });
         created++;
       }
@@ -187,7 +187,7 @@ export default function AdminFinanceiro() {
     }
   }, [clients, billing, isAdmin]);
 
-  // Computed totals — combine billing + client plan data for accurate stats
+  // Computed totals · combine billing + client plan data for accurate stats
   // "month" period is driven by the selected month/year (month picker)
   const isThisMonth = (d: string) => {
     const date = parseAppDate(d);
@@ -204,7 +204,7 @@ export default function AdminFinanceiro() {
     return due ? due < todayStart : false;
   });
 
-  // "A Receber" — from billing pending + active clients with plan_value not yet in billing
+  // "A Receber" · from billing pending + active clients with plan_value not yet in billing
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
@@ -353,7 +353,7 @@ export default function AdminFinanceiro() {
             type: "renewal",
             amount: Number(client.plan_value || bill.amount),
             due_date: newDate,
-            description: client.plan_name ? `Renovação — ${client.plan_name}` : "Renovação Mensal",
+            description: client.plan_name ? `Renovação · ${client.plan_name}` : "Renovação Mensal",
           });
         }
       }
@@ -513,10 +513,10 @@ export default function AdminFinanceiro() {
             type: original?.type || "renewal",
             amount: remaining,
             due_date: original?.due_date || today,
-            description: `Saldo restante — ${fmt(remaining)}`,
+            description: `Saldo restante · ${fmt(remaining)}`,
           });
         }
-        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label} — restante: ${fmt(remaining)}`);
+        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label} · restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
           await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
         }
@@ -677,14 +677,14 @@ export default function AdminFinanceiro() {
               {s.sub && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
             </div>
           ))}
-          {/* Projeção card — clickable */}
+          {/* Projeção card · clickable */}
           <div
             onClick={() => navigate("/financeiro/projecao")}
             className="bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-info/40 transition-colors group relative"
           >
             <div className="flex items-center gap-2 mb-2">
               <Briefcase className="w-4 h-4 text-info" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção — Próximo Mês</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção · Próximo Mês</span>
             </div>
             <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
             <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
@@ -704,13 +704,13 @@ export default function AdminFinanceiro() {
         const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
           const due = parseAppDate(b.due_date);
-          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "—", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
+          return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
         }) : [];
 
         const indivPendingItems = showIndiv2 ? filteredPayments.flatMap((pp: any) =>
           (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial").map((i: any) => ({
-            id: i.id, label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-            client: pp.client?.company_name || pp.client?.full_name || "—", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
+            id: i.id, label: `${pp.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
+            client: pp.client?.company_name || pp.client?.full_name || "-", amount: Number(i.amount) - Number(i.paid_amount || 0), due: i.due_date,
             brand: getProjectBrand(pp.project?.project_type), isOverdue: (() => { const due = parseAppDate(i.due_date); return due ? due < todayStart : false; })(), itemType: "installment" as const, clientId: pp.client_id, paidSoFar: Number(i.paid_amount || 0), totalAmount: Number(i.amount),
           }))
         ) : [];
@@ -719,7 +719,7 @@ export default function AdminFinanceiro() {
           c.plan_value && c.plan_status === "active" &&
           !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
         ).map((c: any) => ({
-          id: `extra-${c.id}`, label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
+          id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
           brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
         })) : [];
@@ -732,7 +732,7 @@ export default function AdminFinanceiro() {
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <CreditCard className="w-3.5 h-3.5 text-warning" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento — A Receber ({allPending.length})</span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Detalhamento · A Receber ({allPending.length})</span>
             </div>
             <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {allPending.map((item: any) => (
@@ -845,7 +845,7 @@ export default function AdminFinanceiro() {
             <div className="flex items-center justify-between mb-4">
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
                 <TrendingUp className="w-3.5 h-3.5 text-success" />
-                Receita {currentYear} {brandFilter !== "all" ? `— ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""} — Mês a Mês
+                Receita {currentYear} {brandFilter !== "all" ? `- ${brandFilter === "aceleriq" ? "AcelerIQ" : "SiteBolt"}` : ""} · Mês a Mês
               </p>
             </div>
             <div className="h-[220px]">
@@ -903,7 +903,7 @@ export default function AdminFinanceiro() {
           <div className="bg-card border border-border rounded-xl p-5">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2 mb-4">
               <TrendingUp className="w-3.5 h-3.5 text-primary" />
-              Proporção da Receita — AcelerIQ vs SiteBolt
+              Proporção da Receita · AcelerIQ vs SiteBolt
             </p>
             <div className="flex flex-col sm:flex-row items-center gap-6">
               <div className="h-[200px] w-[200px]">
@@ -1029,7 +1029,7 @@ export default function AdminFinanceiro() {
             </div>
           )}
 
-          {/* Já Recebido — histórico unificado (planos + projetos) */}
+          {/* Já Recebido · histórico unificado (planos + projetos) */}
           {(() => {
             const showMonthlyR = brandFilter === "all" || brandFilter === "aceleriq";
             const showIndivR = brandFilter === "all" || brandFilter === "sitebolt";
@@ -1041,7 +1041,7 @@ export default function AdminFinanceiro() {
                   .map((b: any) => ({
                     id: `bill-${b.id}`,
                     label: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço Extra"),
-                    client: b.client?.company_name || b.client?.full_name || "—",
+                    client: b.client?.company_name || b.client?.full_name || "-",
                     brand: "AcelerIQ",
                     amount: receivedOf(b),
                     totalAmount: Number(b.amount) || 0,
@@ -1058,8 +1058,8 @@ export default function AdminFinanceiro() {
                     .filter((i: any) => i.status === "paid" || i.status === "partial")
                     .map((i: any) => ({
                       id: `inst-${i.id}`,
-                      label: `${pp.project?.name || "Projeto"} — Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
-                      client: pp.client?.company_name || pp.client?.full_name || "—",
+                      label: `${pp.project?.name || "Projeto"} · Parcela ${i.installment_number}${i.status === "partial" ? " (parcial)" : ""}`,
+                      client: pp.client?.company_name || pp.client?.full_name || "-",
                       brand: getProjectBrand(pp.project?.project_type),
                       amount: receivedOf(i),
                       totalAmount: Number(i.amount) || 0,
@@ -1093,7 +1093,7 @@ export default function AdminFinanceiro() {
                 >
                   <div className="w-2 h-2 rounded-full bg-success" />
                   <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                    Histórico — Já Recebido ({allReceived.length})
+                    Histórico · Já Recebido ({allReceived.length})
                   </span>
                   <span className="text-xs font-mono text-success ml-auto">{fmt(grandTotal)}</span>
                   <span className="text-[10px] text-muted-foreground ml-2">{receivedCollapsed ? "▸ expandir" : "▾ recolher"}</span>
@@ -1312,7 +1312,7 @@ export default function AdminFinanceiro() {
                 <div key={r.id} className="bg-card border border-border rounded-xl px-5 py-3 flex items-center gap-4 flex-wrap">
                   <Zap className="w-4 h-4 text-warning" />
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-foreground">{fmt(Number(r.amount))} — {r.platform}</p>
+                    <p className="text-sm text-foreground">{fmt(Number(r.amount))} · {r.platform}</p>
                     {r.reason && <p className="text-xs text-muted-foreground">{r.reason}</p>}
                     <p className="text-[11px] text-muted-foreground">Por {r.requester?.full_name} • {new Date(r.created_at).toLocaleDateString("pt-BR")}</p>
                   </div>
@@ -1576,7 +1576,7 @@ export default function AdminFinanceiro() {
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-5 py-3 border-b border-border flex items-center gap-2">
                 <History className="w-3.5 h-3.5 text-info" />
-                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Histórico de Alterações — Últimos 50 registros</span>
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Histórico de Alterações · Últimos 50 registros</span>
               </div>
               {(auditLogs || []).length === 0 ? (
                 <div className="px-5 py-8 text-center text-muted-foreground text-sm">
@@ -1682,10 +1682,10 @@ export default function AdminFinanceiro() {
         </DialogContent>
       </Dialog>
 
-      {/* Recharge Modal — Preset Values */}
+      {/* Recharge Modal · Preset Values */}
       <Dialog open={!!rechargeModal} onOpenChange={() => setRechargeModal(null)}>
         <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Solicitar Recarga — {rechargeModal?.platform}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground">Solicitar Recarga · {rechargeModal?.platform}</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <p className="text-xs text-muted-foreground">Escolha o valor semanal de investimento para o cliente:</p>
             
@@ -1757,7 +1757,7 @@ export default function AdminFinanceiro() {
                 <p className="text-sm text-foreground">
                   <span className="font-mono font-semibold text-primary">{fmt(Number(rechargeForm.amount))}</span>
                   <span className="text-muted-foreground"> / {rechargeForm.period}</span>
-                  <span className="text-muted-foreground"> — {rechargeModal?.platform} Ads</span>
+                  <span className="text-muted-foreground"> · {rechargeModal?.platform} Ads</span>
                 </p>
                 {rechargeForm.period === "mensal" && (
                   <p className="text-[11px] text-muted-foreground mt-1">≈ {fmt(Number(rechargeForm.amount) / 4)}/semana</p>
@@ -1829,7 +1829,7 @@ export default function AdminFinanceiro() {
       {/* Edit Plan Modal */}
       <Dialog open={!!editPlanModal} onOpenChange={() => setEditPlanModal(null)}>
         <DialogContent className="bg-card border-border">
-          <DialogHeader><DialogTitle className="text-foreground">Editar Plano — {editPlanModal?.company_name || editPlanModal?.full_name}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground">Editar Plano · {editPlanModal?.company_name || editPlanModal?.full_name}</DialogTitle></DialogHeader>
           <div className="space-y-3">
             <div>
               <label className="text-xs text-muted-foreground">Valor Mensal (R$)</label>
@@ -1906,7 +1906,7 @@ export default function AdminFinanceiro() {
                 disabled={payType === "partial" && (!payPartialAmount || parseFloat(payPartialAmount) <= 0)}
                 className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-success text-success-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {payType === "full" ? `Confirmar — ${fmt(payModal.amount)}` : `Confirmar — ${fmt(parseFloat(payPartialAmount) || 0)}`}
+                {payType === "full" ? `Confirmar · ${fmt(payModal.amount)}` : `Confirmar · ${fmt(parseFloat(payPartialAmount) || 0)}`}
               </button>
             </div>
           )}
