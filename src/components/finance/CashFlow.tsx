@@ -345,7 +345,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       out.push({
         id: b.id, source: "billing", description: b.description || b.type, amount: Number(b.amount) || 0,
         due_date: b.due_date, overdue: due < today, daysUntil: Math.ceil((due.getTime() - today.getTime()) / 86400000),
-        client: b.client?.full_name || b.client?.company_name || "—",
+        client: b.client?.full_name || b.client?.company_name || "-",
       });
     });
     (paymentsFiltered || []).forEach((p: any) => {
@@ -353,10 +353,10 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         const due = parseDate(i.due_date);
         if (!due) return;
         out.push({
-          id: i.id, source: "installment", description: `${p.project?.name || "Projeto"} — Parcela`,
+          id: i.id, source: "installment", description: `${p.project?.name || "Projeto"} · Parcela`,
           amount: Math.max((Number(i.amount) || 0) - (Number(i.paid_amount) || 0), 0), due_date: i.due_date, overdue: due < today,
           daysUntil: Math.ceil((due.getTime() - today.getTime()) / 86400000),
-          client: p.client?.full_name || p.client?.company_name || "—",
+          client: p.client?.full_name || p.client?.company_name || "-",
         });
       });
     });
@@ -434,7 +434,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h2 className="text-xl font-semibold text-foreground tracking-tight">Fluxo de Caixa</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">Visão financeira completa — entradas, saídas, DRE e projeção</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Visão financeira completa · entradas, saídas, DRE e projeção</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-1">
@@ -456,7 +456,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
-      {/* SEGMENT TOGGLE — Recorrente / Avulso */}
+      {/* SEGMENT TOGGLE · Recorrente / Avulso */}
       <div className="flex items-center gap-2 flex-wrap">
         <span className="text-[11px] uppercase tracking-wider text-muted-foreground">Segmento:</span>
         <div className="flex gap-1 bg-secondary/50 border border-border rounded-lg p-1">
@@ -475,7 +475,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
         {segment !== "all" && (
           <span className="text-[10px] text-muted-foreground italic">
-            {segment === "recurring" ? "Mostrando apenas mensalidades de clientes recorrentes e híbridos" : "Mostrando entradas avulsas — projetos pontuais e billing de clientes one-off (ex.: Armazén do Itamar)"}
+            {segment === "recurring" ? "Mostrando apenas mensalidades de clientes recorrentes e híbridos" : "Mostrando entradas avulsas · projetos pontuais e billing de clientes one-off (ex.: Armazén do Itamar)"}
           </span>
         )}
       </div>
@@ -500,7 +500,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <div className="flex items-center gap-2 min-w-0">
             <Briefcase className="w-4 h-4 text-primary flex-shrink-0" />
             <p className="text-[12px] text-foreground truncate">
-              <span className="text-primary font-semibold">{fmt(investor.total)}</span> em capital de investidor está sendo gerenciado em uma aba dedicada — fora deste fluxo.
+              <span className="text-primary font-semibold">{fmt(investor.total)}</span> em capital de investidor está sendo gerenciado em uma aba dedicada · fora deste fluxo.
             </p>
           </div>
           <span className="text-[10px] uppercase tracking-wider text-primary/80 font-medium hidden sm:inline">Aba "Capital"</span>
@@ -510,7 +510,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
 
 
-      {/* FLUXO DE CAIXA — gráfico */}
+      {/* FLUXO DE CAIXA · gráfico */}
       <SectionHeader title="Fluxo de caixa" subtitle="Entradas, saídas e saldo acumulado projetado" />
       {/* CASH FLOW CHART */}
       <div className="rounded-2xl border border-border bg-card p-5">
@@ -556,7 +556,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
-      {/* ANÁLISE — DRE + distribuição */}
+      {/* ANÁLISE · DRE + distribuição */}
       <SectionHeader title="Análise" subtitle="DRE mensal e distribuição das despesas por categoria" />
       {/* DRE + DISTRIBUICAO */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
@@ -564,7 +564,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <div className="flex items-center justify-between mb-4">
             <div>
               <h3 className="text-sm font-semibold text-foreground">DRE simplificado</h3>
-              <p className="text-[11px] text-muted-foreground">Resultado mensal — receita, custo e margem</p>
+              <p className="text-[11px] text-muted-foreground">Resultado mensal · receita, custo e margem</p>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -792,7 +792,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </TabsContent>
       </Tabs>
 
-      {/* LAUNCHER — escolha do tipo de lançamento */}
+      {/* LAUNCHER · escolha do tipo de lançamento */}
       <Dialog open={launcherOpen} onOpenChange={setLauncherOpen}>
         <DialogContent className="bg-card border-border max-w-md">
           <DialogHeader>
@@ -884,7 +884,7 @@ function KpiCard({ icon, label, value, hint, tone }: any) {
 function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
   const cats = mode === "investment" ? INVESTMENT_CATEGORIES : EXPENSE_CATEGORIES;
   const defaultCat = mode === "investment" ? "inv_outros" : "outros";
-  const placeholder = mode === "investment" ? "Ex: Campanha Meta Ads — junho" : "Ex: Aluguel escritório";
+  const placeholder = mode === "investment" ? "Ex: Campanha Meta Ads · junho" : "Ex: Aluguel escritório";
   const supplierLabel = mode === "investment" ? "Plataforma / Origem" : "Fornecedor";
 
   const [form, setForm] = useState({
@@ -951,7 +951,7 @@ function ExpenseForm({ initial, onSave, onCancel, mode = "expense" }: any) {
           <label className="text-[11px] text-muted-foreground">Forma de pagamento</label>
           <select value={form.payment_method} onChange={e => set("payment_method", e.target.value)}
             className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground">
-            <option value="">—</option>
+            <option value="">-</option>
             <option value="pix">Pix</option>
             <option value="boleto">Boleto</option>
             <option value="cartao">Cartão</option>

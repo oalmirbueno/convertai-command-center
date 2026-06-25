@@ -11,14 +11,14 @@ import { format, addDays } from "date-fns";
 import { Loader2, Sparkles, FolderPlus } from "lucide-react";
 
 const PROJECT_TYPES = [
-  { value: "site", label: "Site", desc: "Desenvolvimento de site institucional/landing — design, código, SEO básico, deploy." },
-  { value: "landing_page", label: "Landing Page", desc: "Landing page focada em conversão — design, copy, formulário e tracking." },
+  { value: "site", label: "Site", desc: "Desenvolvimento de site institucional/landing · design, código, SEO básico, deploy." },
+  { value: "landing_page", label: "Landing Page", desc: "Landing page focada em conversão · design, copy, formulário e tracking." },
   { value: "automation", label: "Automação", desc: "Automação de processos / integrações via APIs e webhooks." },
-  { value: "social_media", label: "Social Media", desc: "Pacote avulso de social media — conteúdo, criativos e publicação." },
+  { value: "social_media", label: "Social Media", desc: "Pacote avulso de social media · conteúdo, criativos e publicação." },
   { value: "trafego", label: "Tráfego pago", desc: "Setup e gestão de campanhas de tráfego pago." },
-  { value: "video", label: "Vídeo", desc: "Produção audiovisual — pré-produção, captação, edição e entrega." },
-  { value: "video_ai", label: "Vídeo IA", desc: "Vídeo gerado com IA — roteiro, prompts, geração, edição e entrega." },
-  { value: "event", label: "Evento", desc: "Cobertura e divulgação de evento — pré, durante e pós." },
+  { value: "video", label: "Vídeo", desc: "Produção audiovisual · pré-produção, captação, edição e entrega." },
+  { value: "video_ai", label: "Vídeo IA", desc: "Vídeo gerado com IA · roteiro, prompts, geração, edição e entrega." },
+  { value: "event", label: "Evento", desc: "Cobertura e divulgação de evento · pré, durante e pós." },
   { value: "other", label: "Outro", desc: "Projeto avulso personalizado." },
 ];
 
@@ -62,7 +62,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     if (projectMode !== "new") return;
     const meta = typeMeta(projectType);
     const cName = selectedClient?.company_name || selectedClient?.full_name || "";
-    setName(cName ? `${meta.label} — ${cName}` : meta.label);
+    setName(cName ? `${meta.label} · ${cName}` : meta.label);
     setDescription(meta.desc);
   }, [projectType, clientId, projectMode]);
 
@@ -272,7 +272,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
             {willBecomeHybrid && (
               <p className="text-[11px] text-primary mt-1.5 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" />
-                Esse cliente é recorrente — ao criar um projeto avulso ele vira <b className="font-semibold">híbrido</b> automaticamente.
+                Esse cliente é recorrente · ao criar um projeto avulso ele vira <b className="font-semibold">híbrido</b> automaticamente.
               </p>
             )}
           </div>
@@ -323,7 +323,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Brand</label>
                   <select value={brand} onChange={(e) => setBrand(e.target.value as any)}
                     className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50">
-                    <option value="">—</option>
+                    <option value="">-</option>
                     <option value="aceleriq">AcelerIQ</option>
                     <option value="sitebolt">SiteBolt</option>
                   </select>

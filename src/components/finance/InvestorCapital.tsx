@@ -299,7 +299,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
           </span>
           <h3 className="text-sm font-semibold text-foreground">Nenhum capital registrado</h3>
           <p className="text-[12px] text-muted-foreground mt-1 max-w-md mx-auto">
-            Quando um sócio investir, registre aqui. O valor não entra no DRE — fica isolado e serve de base para medir o retorno bruto da operação.
+            Quando um sócio investir, registre aqui. O valor não entra no DRE · fica isolado e serve de base para medir o retorno bruto da operação.
           </p>
           <button
             onClick={() => setModal({ data: {} })}
@@ -323,7 +323,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
               icon={<Calendar className="w-4 h-4" />}
               label="Aporte deste mês"
               value={fmt(investor.currentMonth)}
-              hint={investor.firstDate ? `Início ${investor.firstDate.toLocaleDateString("pt-BR")}` : "—"}
+              hint={investor.firstDate ? `Início ${investor.firstDate.toLocaleDateString("pt-BR")}` : "-"}
               tone="primary"
             />
             <StatCard
@@ -336,7 +336,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
             <StatCard
               icon={<TrendingUp className="w-4 h-4" />}
               label="ROI bruto"
-              value={investor.total > 0 ? `${roiBruto.toFixed(1)}%` : "—"}
+              value={investor.total > 0 ? `${roiBruto.toFixed(1)}%` : "-"}
               hint={returns.net >= 0 ? "Antes da divisão de custos" : "Ainda em recuperação"}
               tone={roiBruto >= 0 ? "success" : "danger"}
             />
@@ -364,7 +364,7 @@ export default function InvestorCapital({ billing = [], projectPayments = [] }: 
             <div className="mt-3 flex items-start gap-2 rounded-lg border border-border bg-secondary/40 px-3 py-2">
               <Info className="w-3.5 h-3.5 text-primary mt-0.5 flex-shrink-0" />
               <p className="text-[11px] text-muted-foreground leading-snug">
-                ROI bruto = receitas confirmadas <span className="text-foreground">menos</span> despesas operacionais pagas, divididas pelo total aportado. Não considera ainda a divisão de custo entre sócios — esse rateio acontece em uma etapa posterior.
+                ROI bruto = receitas confirmadas <span className="text-foreground">menos</span> despesas operacionais pagas, divididas pelo total aportado. Não considera ainda a divisão de custo entre sócios · esse rateio acontece em uma etapa posterior.
               </p>
             </div>
           </div>
