@@ -87,12 +87,17 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
 
   // Filter sources by segment
+  // Regra: o segmento decide pelo TIPO DO CLIENTE (não pela natureza do registro).
+  // - Recorrente: billing de clientes recurring/hybrid.
+  // - Avulso: billing E project_payments de clientes one_off/hybrid (inclui entradas avulsas
+  //   lançadas via "Nova entrada" para clientes pontuais, ex.: Armazén do Itamar).
   const billingFiltered = useMemo(() => {
     if (segment === "all") return billing || [];
     return (billing || []).filter((b: any) => {
       const ct = b.client?.client_type || "recurring";
       if (segment === "recurring") return ct === "recurring" || ct === "hybrid";
-      return false; // one_off doesn't generate billing
+      // avulso
+      return ct === "one_off" || ct === "hybrid";
     });
   }, [billing, segment]);
 
