@@ -820,19 +820,64 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </TabsContent>
       </Tabs>
 
-      {/* MODAL DESPESA */}
+      {/* LAUNCHER — escolha do tipo de lançamento */}
+      <Dialog open={launcherOpen} onOpenChange={setLauncherOpen}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">Novo lançamento</DialogTitle>
+          </DialogHeader>
+          <p className="text-[12px] text-muted-foreground -mt-1">Escolha onde esse valor entra. Cada tipo é tratado de forma diferente no fluxo.</p>
+          <div className="grid gap-2 mt-3">
+            <LauncherChoice
+              icon={<ArrowUpRight className="w-4 h-4" />}
+              tone="success"
+              title="Entrada"
+              desc="Receita avulsa de projeto. Conta como receita no fluxo."
+              onClick={() => { setLauncherOpen(false); setIncomeModalOpen(true); }}
+            />
+            <LauncherChoice
+              icon={<ArrowDownRight className="w-4 h-4" />}
+              tone="danger"
+              title="Despesa"
+              desc="Custo operacional recorrente ou avulso. Conta como despesa no DRE."
+              onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "expense", data: {} }); }}
+            />
+            <LauncherChoice
+              icon={<Briefcase className="w-4 h-4" />}
+              tone="primary"
+              title="Investimento"
+              desc="Aporte de capital (tráfego pago, ferramentas, insumos, escritório). Não entra no DRE, vai pro bloco de capital."
+              onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "investment", data: {} }); }}
+            />
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DESPESA / INVESTIMENTO */}
       <Dialog open={!!expenseModal} onOpenChange={(o) => !o && setExpenseModal(null)}>
         <DialogContent className="bg-card border-border max-w-lg">
           <DialogHeader>
-            <DialogTitle className="text-foreground">{expenseModal?.id ? "Editar despesa" : "Nova despesa"}</DialogTitle>
+            <DialogTitle className="text-foreground flex items-center gap-2">
+              {expenseModal?.mode === "investment" ? <Briefcase className="w-4 h-4 text-primary" /> : <ArrowDownRight className="w-4 h-4 text-destructive" />}
+              {expenseModal?.data?.id
+                ? (expenseModal.mode === "investment" ? "Editar investimento" : "Editar despesa")
+                : (expenseModal?.mode === "investment" ? "Novo investimento" : "Nova despesa")}
+            </DialogTitle>
           </DialogHeader>
-          {expenseModal && <ExpenseForm initial={expenseModal} onSave={saveExpense} onCancel={() => setExpenseModal(null)} />}
+          {expenseModal && (
+            <ExpenseForm
+              initial={expenseModal.data}
+              mode={expenseModal.mode}
+              onSave={(form: any) => saveExpense(form, expenseModal.mode)}
+              onCancel={() => setExpenseModal(null)}
+            />
+          )}
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!confirmDel} onOpenChange={(o) => !o && setConfirmDel(null)}>
         <DialogContent className="bg-card border-border max-w-sm">
-          <DialogHeader><DialogTitle className="text-foreground">Remover despesa?</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle className="text-foreground">Remover lançamento?</DialogTitle></DialogHeader>
           <p className="text-[13px] text-muted-foreground">Essa ação não pode ser desfeita.</p>
           <div className="flex justify-end gap-2 mt-3">
             <button onClick={() => setConfirmDel(null)} className="px-3 py-1.5 rounded-lg text-[12px] bg-secondary text-foreground border border-border cursor-pointer">Cancelar</button>
