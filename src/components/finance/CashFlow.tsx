@@ -503,7 +503,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
               <div className="text-right">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Início da contagem</p>
                 <p className="text-[12px] font-mono text-foreground mt-0.5">
-                  {investor.firstDate.toLocaleDateString("pt-BR", { month: "short", year: "numeric" })}
+                  {investor.firstDate.toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" })}
                 </p>
               </div>
             )}
