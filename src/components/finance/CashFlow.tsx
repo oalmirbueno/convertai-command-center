@@ -808,7 +808,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
                     <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground cursor-pointer border border-border">
                       {e.status === "paid" ? "Reabrir" : "Pagar"}
                     </button>
-                    <button onClick={() => setExpenseModal(e)} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                    <button onClick={() => setExpenseModal({ mode: "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
                     <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                   </div>
                 </div>
