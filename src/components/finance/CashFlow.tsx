@@ -699,12 +699,14 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
       </div>
 
-      {/* AP / AR / DESPESAS */}
+      {/* MOVIMENTAÇÕES */}
+      <SectionHeader title="Movimentações" subtitle="Pagamentos, recebimentos, despesas e investimentos em listas separadas" />
       <Tabs defaultValue="ap" className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1">
+        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex-wrap h-auto">
           <TabsTrigger value="ap" className="text-[12px] rounded-md">A pagar ({accountsPayable.length})</TabsTrigger>
           <TabsTrigger value="ar" className="text-[12px] rounded-md">A receber ({accountsReceivable.length})</TabsTrigger>
           <TabsTrigger value="exp" className="text-[12px] rounded-md">Despesas ({expenses.length})</TabsTrigger>
+          <TabsTrigger value="inv" className="text-[12px] rounded-md">Investimentos ({investorEntries.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="ap">
