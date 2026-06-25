@@ -87,22 +87,25 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
 
   // Filter sources by segment
+  // Regra: o segmento decide pelo TIPO DO CLIENTE (não pela natureza do registro).
+  // - Recorrente: billing de clientes recurring/hybrid.
+  // - Avulso: billing E project_payments de clientes one_off/hybrid (inclui entradas avulsas
+  //   lançadas via "Nova entrada" para clientes pontuais, ex.: Armazén do Itamar).
   const billingFiltered = useMemo(() => {
     if (segment === "all") return billing || [];
     return (billing || []).filter((b: any) => {
       const ct = b.client?.client_type || "recurring";
       if (segment === "recurring") return ct === "recurring" || ct === "hybrid";
-      return false; // one_off doesn't generate billing
+      // avulso
+      return ct === "one_off" || ct === "hybrid";
     });
   }, [billing, segment]);
 
   const paymentsFiltered = useMemo(() => {
     if (segment === "all") return projectPayments || [];
-    if (segment === "recurring") return []; // project_payments are one-off by nature
-    return (projectPayments || []).filter((p: any) => {
-      const mode = p.project?.billing_mode || "one_off";
-      return mode === "one_off";
-    });
+    if (segment === "recurring") return []; // project_payments são sempre avulsos
+    // avulso: todos
+    return projectPayments || [];
   }, [projectPayments, segment]);
 
   const { data: allExpenses = [] } = useQuery({
@@ -472,7 +475,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
         {segment !== "all" && (
           <span className="text-[10px] text-muted-foreground italic">
-            {segment === "recurring" ? "Mostrando apenas mensalidades (billing de clientes recorrentes e híbridos)" : "Mostrando apenas contratos avulsos (project payments)"}
+            {segment === "recurring" ? "Mostrando apenas mensalidades de clientes recorrentes e híbridos" : "Mostrando entradas avulsas — projetos pontuais e billing de clientes one-off (ex.: Armazén do Itamar)"}
           </span>
         )}
       </div>
