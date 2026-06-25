@@ -12,6 +12,7 @@ import {
 import {
   Plus, TrendingUp, TrendingDown, Wallet, AlertTriangle, Download,
   Edit3, Trash2, Calendar, Filter, Sparkles, ArrowUpRight, ArrowDownRight,
+  Briefcase,
 } from "lucide-react";
 import NewIncomeModal from "./NewIncomeModal";
 
@@ -23,6 +24,8 @@ const fmtCompact = (v: number) => {
 };
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
+const INVESTOR_CATEGORY = "investidor";
+
 const CATEGORIES = [
   { value: "salarios", label: "Salários & Pró-labore", color: "#a78bfa" },
   { value: "ferramentas", label: "Ferramentas / SaaS", color: "#60a5fa" },
@@ -32,8 +35,10 @@ const CATEGORIES = [
   { value: "infraestrutura", label: "Infraestrutura / Hosting", color: "#34d399" },
   { value: "comissoes", label: "Comissões", color: "#22d3ee" },
   { value: "outros", label: "Outros", color: "#94a3b8" },
+  { value: INVESTOR_CATEGORY, label: "Investidor (Aporte de capital)", color: "#00FF66" },
 ];
 const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || CATEGORIES[CATEGORIES.length - 1];
+const isInvestor = (e: any) => e?.category === INVESTOR_CATEGORY;
 
 const parseDate = (v?: string | null) => {
   if (!v) return null;
