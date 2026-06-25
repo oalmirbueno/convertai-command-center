@@ -475,7 +475,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </div>
         {segment !== "all" && (
           <span className="text-[10px] text-muted-foreground italic">
-            {segment === "recurring" ? "Mostrando apenas mensalidades (billing de clientes recorrentes e híbridos)" : "Mostrando apenas contratos avulsos (project payments)"}
+            {segment === "recurring" ? "Mostrando apenas mensalidades de clientes recorrentes e híbridos" : "Mostrando entradas avulsas — projetos pontuais e billing de clientes one-off (ex.: Armazén do Itamar)"}
           </span>
         )}
       </div>
