@@ -811,13 +811,12 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
               desc="Custo operacional recorrente ou avulso. Conta como despesa no DRE."
               onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "expense", data: {} }); }}
             />
-            <LauncherChoice
-              icon={<Briefcase className="w-4 h-4" />}
-              tone="primary"
-              title="Investimento"
-              desc="Aporte de capital (tráfego pago, ferramentas, insumos, escritório). Não entra no DRE, vai pro bloco de capital."
-              onClick={() => { setLauncherOpen(false); setExpenseModal({ mode: "investment", data: {} }); }}
-            />
+            <div className="rounded-xl border border-primary/20 bg-primary/5 px-3 py-2.5 flex items-start gap-2 mt-1">
+              <Briefcase className="w-4 h-4 text-primary flex-shrink-0 mt-0.5" />
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Para registrar <span className="text-primary font-semibold">capital de investidor</span> (aportes de sócios), use a aba <span className="text-foreground font-medium">Capital</span>. Capital fica isolado do fluxo operacional.
+              </p>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
