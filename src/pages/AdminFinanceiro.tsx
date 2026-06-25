@@ -1545,6 +1545,20 @@ export default function AdminFinanceiro() {
                             </div>
                           );
                         })}
+                        {clientBills.map((b: any) => {
+                          const paid = sumBillingPaid([b]);
+                          const total = Number(b.amount) || 0;
+                          const pct = total > 0 ? Math.round((paid / total) * 100) : 0;
+                          const isPartial = b.status === "partial";
+                          const isPaid = b.status === "paid";
+                          return (
+                            <div key={b.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
+                              <span className="flex-1 truncate">💸 {b.description || "Cobrança avulsa"}</span>
+                              <span className={`text-[10px] font-mono ${isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
+                              <span className="font-mono text-foreground">{fmt(total)}</span>
+                            </div>
+                          );
+                        })}
                       </div>
                     </div>
                   );
