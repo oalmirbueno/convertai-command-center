@@ -478,7 +478,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       </div>
 
 
-      {/* KPI STRIP */}
+      {/* RESUMO DO MÊS */}
+      <SectionHeader title="Resumo do mês" subtitle="Indicadores operacionais. Investimento não entra aqui." />
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Receitas do mês" value={fmt(cur.receitas)}
           hint={`+${fmt(cur.pendReceita)} previstas`} tone="success" />
