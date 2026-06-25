@@ -80,8 +80,9 @@ interface Props {
 export default function CashFlow({ billing = [], projectPayments = [] }: Props) {
   const qc = useQueryClient();
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
-  const [expenseModal, setExpenseModal] = useState<any | null>(null);
+  const [expenseModal, setExpenseModal] = useState<{ mode: "expense" | "investment"; data: any } | null>(null);
   const [incomeModalOpen, setIncomeModalOpen] = useState(false);
+  const [launcherOpen, setLauncherOpen] = useState(false);
   const [confirmDel, setConfirmDel] = useState<string | null>(null);
   const [segment, setSegment] = useState<"all" | "recurring" | "one_off">("all");
 
