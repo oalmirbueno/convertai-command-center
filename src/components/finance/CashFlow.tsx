@@ -103,11 +103,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
   const paymentsFiltered = useMemo(() => {
     if (segment === "all") return projectPayments || [];
-    if (segment === "recurring") return []; // project_payments are one-off by nature
-    return (projectPayments || []).filter((p: any) => {
-      const mode = p.project?.billing_mode || "one_off";
-      return mode === "one_off";
-    });
+    if (segment === "recurring") return []; // project_payments são sempre avulsos
+    // avulso: todos
+    return projectPayments || [];
   }, [projectPayments, segment]);
 
   const { data: allExpenses = [] } = useQuery({
