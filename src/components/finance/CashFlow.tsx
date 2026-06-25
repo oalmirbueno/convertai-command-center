@@ -1094,3 +1094,18 @@ function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
     </button>
   );
 }
+
+function SectionHeader({ title, subtitle, action }: { title: string; subtitle?: string; action?: React.ReactNode }) {
+  return (
+    <div className="flex items-end justify-between gap-3 pt-2">
+      <div>
+        <div className="flex items-center gap-2">
+          <span className="w-1 h-4 rounded-full bg-primary" />
+          <h3 className="text-[13px] font-semibold text-foreground tracking-tight uppercase">{title}</h3>
+        </div>
+        {subtitle && <p className="text-[11px] text-muted-foreground mt-1 ml-3">{subtitle}</p>}
+      </div>
+      {action}
+    </div>
+  );
+}
