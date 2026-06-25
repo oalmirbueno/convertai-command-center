@@ -1029,3 +1029,31 @@ function MiniStat({ label, value, hint, tone = "primary" }: any) {
     </div>
   );
 }
+
+function LauncherChoice({ icon, tone, title, desc, onClick }: any) {
+  const tones: any = {
+    success: "border-success/30 hover:border-success/60 hover:bg-success/5",
+    danger: "border-destructive/30 hover:border-destructive/60 hover:bg-destructive/5",
+    primary: "border-primary/30 hover:border-primary/60 hover:bg-primary/5",
+  };
+  const iconTone: any = {
+    success: "bg-success/15 text-success",
+    danger: "bg-destructive/15 text-destructive",
+    primary: "bg-primary/15 text-primary",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`w-full text-left flex items-start gap-3 p-3 rounded-xl border bg-card transition-colors cursor-pointer ${tones[tone] || tones.primary}`}
+    >
+      <span className={`w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 ${iconTone[tone] || iconTone.primary}`}>
+        {icon}
+      </span>
+      <div className="min-w-0">
+        <p className="text-[13px] font-semibold text-foreground">{title}</p>
+        <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{desc}</p>
+      </div>
+    </button>
+  );
+}
