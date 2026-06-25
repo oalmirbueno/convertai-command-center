@@ -86,7 +86,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     });
   }, [projectPayments, segment]);
 
-  const { data: expenses = [] } = useQuery({
+  const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
     queryFn: async () => {
       const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
@@ -94,6 +94,10 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       return data || [];
     },
   });
+
+  // Separar despesas operacionais de aportes de investidor (capital, não despesa)
+  const expenses = useMemo(() => (allExpenses || []).filter((e: any) => !isInvestor(e)), [allExpenses]);
+  const investorEntries = useMemo(() => (allExpenses || []).filter(isInvestor), [allExpenses]);
 
   // ───────── Build cash flow series ─────────
   const series = useMemo(() => {
