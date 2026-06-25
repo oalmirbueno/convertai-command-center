@@ -789,7 +789,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           <div className="rounded-2xl border border-border bg-card divide-y divide-border">
             {expenses.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
-                Nenhuma despesa cadastrada. Clique em "Nova Despesa" para começar.
+                Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
               </div>
             )}
             {expenses.map((e: any) => {
