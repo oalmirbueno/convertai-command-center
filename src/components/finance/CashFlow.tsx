@@ -24,9 +24,10 @@ const fmtCompact = (v: number) => {
 };
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
 
-const INVESTOR_CATEGORY = "investidor";
+const INVESTOR_LEGACY = "investidor";
+const INV_PREFIX = "inv_";
 
-const CATEGORIES = [
+const EXPENSE_CATEGORIES = [
   { value: "salarios", label: "Salários & Pró-labore", color: "#a78bfa" },
   { value: "ferramentas", label: "Ferramentas / SaaS", color: "#60a5fa" },
   { value: "marketing", label: "Marketing & Ads próprios", color: "#f472b6" },
@@ -35,10 +36,27 @@ const CATEGORIES = [
   { value: "infraestrutura", label: "Infraestrutura / Hosting", color: "#34d399" },
   { value: "comissoes", label: "Comissões", color: "#22d3ee" },
   { value: "outros", label: "Outros", color: "#94a3b8" },
-  { value: INVESTOR_CATEGORY, label: "Investidor (Aporte de capital)", color: "#00FF66" },
 ];
-const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || CATEGORIES[CATEGORIES.length - 1];
-const isInvestor = (e: any) => e?.category === INVESTOR_CATEGORY;
+
+const INVESTMENT_CATEGORIES = [
+  { value: "inv_trafego", label: "Tráfego pago", color: "#00FF66" },
+  { value: "inv_ferramentas", label: "Ferramentas", color: "#34d399" },
+  { value: "inv_insumos", label: "Insumos", color: "#22d3ee" },
+  { value: "inv_escritorio", label: "Escritório", color: "#60a5fa" },
+  { value: "inv_outros", label: "Outros investimentos", color: "#a78bfa" },
+];
+
+// união (inclui legado "investidor")
+const CATEGORIES = [
+  ...EXPENSE_CATEGORIES,
+  ...INVESTMENT_CATEGORIES,
+  { value: INVESTOR_LEGACY, label: "Investidor (legado)", color: "#00FF66" },
+];
+const catMeta = (v: string) => CATEGORIES.find(c => c.value === v) || EXPENSE_CATEGORIES[EXPENSE_CATEGORIES.length - 1];
+const isInvestor = (e: any) => {
+  const c = e?.category || "";
+  return c === INVESTOR_LEGACY || c.startsWith(INV_PREFIX);
+};
 
 const parseDate = (v?: string | null) => {
   if (!v) return null;
