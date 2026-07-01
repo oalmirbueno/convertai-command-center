@@ -196,7 +196,15 @@ export default function AdminFinanceiro() {
   };
   const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
-  const pendingBills = (billing || []).filter((b: any) => b.status === "pending");
+  // Standby/inactive clients: pause their recurring pending charges from the finance view
+  const pausedClientIds = new Set(
+    (clients || [])
+      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive")
+      .map((c: any) => c.id)
+  );
+  const isPausedRenewal = (b: any) => b.type === "renewal" && pausedClientIds.has(b.client_id);
+
+  const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && !isPausedRenewal(b));
   // "Recebido" inclui parcial: o valor recebido vem de paid_amount nesse caso.
   const paidBills = (billing || []).filter((b: any) => b.status === "paid" || b.status === "partial");
   const overdueBills = pendingBills.filter((b: any) => {
