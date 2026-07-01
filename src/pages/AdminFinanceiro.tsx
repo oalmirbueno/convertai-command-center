@@ -225,6 +225,7 @@ export default function AdminFinanceiro() {
   const pendingBillsInActivePeriod = pendingBills.filter((b: any) => isInActivePeriod(b.due_date));
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
+    c.client_type !== "one_off" &&
     isInActivePeriod(c.plan_renewal_date) &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
     !hasPaidRenewalInActiveMonth(c.id)
