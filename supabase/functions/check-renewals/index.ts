@@ -76,14 +76,14 @@ Deno.serve(async (req) => {
       .select("id, email, full_name, company_name, plan_name, plan_renewal_date, plan_value")
       .gte("plan_renewal_date", todayStr)
       .lte("plan_renewal_date", in7Str)
-      .neq("plan_status", "inactive");
+      .not("plan_status", "in", "(inactive,standby)");
 
     // Clients already expired (past due)
     const { data: expired } = await supabase
       .from("profiles")
       .select("id, email, full_name, company_name, plan_name, plan_renewal_date, plan_value, overdue_since")
       .lt("plan_renewal_date", todayStr)
-      .neq("plan_status", "inactive");
+      .not("plan_status", "in", "(inactive,standby)");
 
     // Check existing notifications from today to avoid duplicates
     const { data: existingNotifs } = await supabase
