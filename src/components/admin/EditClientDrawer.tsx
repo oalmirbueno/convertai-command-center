@@ -459,6 +459,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                         setPlanStatus("active");
                         await notifyUser(client.id, "Seu plano foi reativado. Bem-vindo de volta!", "project", "/dashboard");
                         queryClient.invalidateQueries({ queryKey: ["clients"] });
+                        queryClient.invalidateQueries({ queryKey: ["billing"] });
                         toast.success("Cliente reativado. Atualize o valor do plano se necessário.");
                       } catch (e: any) { toast.error(e.message || "Erro ao reativar"); }
                       setSaving(false);
