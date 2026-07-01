@@ -122,7 +122,7 @@ export default function AdminFinanceiro() {
   const [receivedFilter, setReceivedFilter] = useState<string>("month");
   const [brandFilter, setBrandFilter] = useState<BrandFilter>("all");
   const [periodFilter, setPeriodFilter] = useState<"month" | "all">("month");
-  const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string } | null>(null);
+  const [payModal, setPayModal] = useState<{ id: string; type: "billing" | "installment"; label: string; amount: number; clientId?: string; billingType?: string; paidSoFar?: number; totalAmount?: number } | null>(null);
   const [payType, setPayType] = useState<"full" | "partial">("full");
   const [payPartialAmount, setPayPartialAmount] = useState("");
   const [receivedCollapsed, setReceivedCollapsed] = useState(false);
@@ -537,23 +537,45 @@ export default function AdminFinanceiro() {
       if (payType === "full") {
         await handleMarkPaid(payModal.id);
       } else {
+        const { data: currentBill, error: fetchError } = await supabase
+          .from("billing")
+          .select("*")
+          .eq("id", payModal.id)
+          .maybeSingle();
+        if (fetchError) {
+          toast.error(fetchError.message);
+          return;
+        }
+        if (!currentBill || currentBill.status !== "pending") {
+          await queryClient.invalidateQueries({ queryKey: ["billing"] });
+          toast.info("Esse lançamento já saiu dos pendentes");
+          return;
+        }
         const remaining = Math.max(payModal.amount - paidAmount, 0);
         const isFullyPaidNow = paidAmount >= payModal.amount;
         // Marca a fatura ORIGINAL como "partial" (não "paid") quando recebido < total.
         // Assim "Recebido" considera apenas o valor realmente pago e dashboards param de inflar.
-        await supabase.from("billing").update({
+        const { data: updatedRows, error: updateError } = await supabase.from("billing").update({
           status: isFullyPaidNow ? "paid" : "partial",
           paid_date: today,
           paid_amount: paidAmount,
-          description: `${(billing || []).find((b: any) => b.id === payModal.id)?.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
-        } as any).eq("id", payModal.id);
+          description: `${currentBill.description || "Fatura"} (parcial: ${fmt(paidAmount)} de ${fmt(payModal.amount)})`,
+        } as any).eq("id", payModal.id).eq("status", "pending").select();
+        if (updateError) {
+          toast.error(updateError.message);
+          return;
+        }
+        if (!updatedRows || updatedRows.length === 0) {
+          await queryClient.invalidateQueries({ queryKey: ["billing"] });
+          toast.info("Esse lançamento já saiu dos pendentes");
+          return;
+        }
         if (remaining > 0 && payModal.clientId) {
-          const original = (billing || []).find((b: any) => b.id === payModal.id);
           await supabase.from("billing").insert({
             client_id: payModal.clientId,
-            type: original?.type || "renewal",
+            type: currentBill.type || "renewal",
             amount: remaining,
-            due_date: original?.due_date || today,
+            due_date: currentBill.due_date || today,
             description: `Saldo restante · ${fmt(remaining)}`,
           });
         }
@@ -566,21 +588,46 @@ export default function AdminFinanceiro() {
         toast.success("Pagamento parcial registrado!");
       }
     } else if (payModal.type === "installment") {
+      const { data: currentInstallment, error: fetchError } = await supabase
+        .from("payment_installments")
+        .select("*")
+        .eq("id", payModal.id)
+        .maybeSingle();
+      if (fetchError) {
+        toast.error(fetchError.message);
+        return;
+      }
+      if (!currentInstallment || currentInstallment.status === "paid") {
+        await queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+        toast.info("Essa parcela já estava quitada");
+        return;
+      }
+      const total = Number(currentInstallment.amount) || Number(payModal.totalAmount) || payModal.amount;
+      const currentPaid = Number(currentInstallment.paid_amount || 0);
+      const amountDue = Math.max(total - currentPaid, 0);
+      if (amountDue <= 0.01) {
+        await supabase.from("payment_installments").update({ status: "paid", paid_amount: total, paid_date: currentInstallment.paid_date || today } as any).eq("id", payModal.id);
+        await queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+        toast.info("Essa parcela já estava quitada");
+        return;
+      }
+      const paymentValue = payType === "full" ? amountDue : Math.min(paidAmount, amountDue);
+      const newPaidTotal = Math.min(currentPaid + paymentValue, total);
+      const newStatus = newPaidTotal >= total ? "paid" : "partial";
       if (payType === "full") {
         await supabase.from("payment_installments").update({
-          status: "paid",
-          paid_amount: payModal.amount,
+          status: newStatus,
+          paid_amount: newPaidTotal,
           paid_date: today,
-        }).eq("id", payModal.id);
-        await logAudit("installment", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
+        } as any).eq("id", payModal.id).neq("status", "paid");
+        await logAudit("installment", payModal.id, "paid_full", currentInstallment.status || "pending", newStatus, total, paymentValue, payModal.label);
       } else {
-        const newStatus = paidAmount >= payModal.amount ? "paid" : "partial";
         await supabase.from("payment_installments").update({
           status: newStatus,
-          paid_amount: paidAmount,
+          paid_amount: newPaidTotal,
           paid_date: today,
-        }).eq("id", payModal.id);
-        await logAudit("installment", payModal.id, "paid_partial", "pending", newStatus, payModal.amount, paidAmount, payModal.label);
+        } as any).eq("id", payModal.id).neq("status", "paid");
+        await logAudit("installment", payModal.id, "paid_partial", currentInstallment.status || "pending", newStatus, total, paymentValue, payModal.label);
       }
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
       queryClient.invalidateQueries({ queryKey: ["payment-installments"] });
@@ -810,6 +857,8 @@ export default function AdminFinanceiro() {
                         amount: item.itemType === "installment" ? item.totalAmount || item.amount : item.amount,
                         clientId: item.clientId,
                         billingType: item.billingType || "renewal",
+                        paidSoFar: item.paidSoFar || 0,
+                        totalAmount: item.totalAmount || item.amount,
                       });
                       setPayType("full");
                       setPayPartialAmount("");
