@@ -205,11 +205,20 @@ export default function AdminFinanceiro() {
   });
 
   // "A Receber" · from billing pending + active clients with plan_value not yet in billing
+  const isInActivePeriod = (date?: string | null) => periodFilter === "all" || (!!date && isThisMonth(date));
+  const hasPaidRenewalInActiveMonth = (clientId: string) =>
+    periodFilter === "month" && (billing || []).some((b: any) =>
+      b.client_id === clientId &&
+      b.type === "renewal" &&
+      (b.status === "paid" || b.status === "partial") &&
+      isThisMonth(b.paid_date || b.due_date)
+    );
+  const pendingBillsInActivePeriod = pendingBills.filter((b: any) => isInActivePeriod(b.due_date));
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
+    isInActivePeriod(c.plan_renewal_date) &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
-    // Exclude clients already paid (full ou parcial) este mês (no double counting)
-    !(billing || []).some((b: any) => b.client_id === c.id && b.type === "renewal" && (b.status === "paid" || b.status === "partial") && isThisMonth(b.paid_date || b.due_date))
+    !hasPaidRenewalInActiveMonth(c.id)
   );
   const extraPending = clientsWithPlanNotInBilling.reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
@@ -291,9 +300,42 @@ export default function AdminFinanceiro() {
   const indivTotal = filteredPayments.reduce((sum: number, pp: any) => sum + Number(pp.total_value), 0);
 
   const handleMarkPaid = async (id: string) => {
-    const bill = (billing || []).find((b: any) => b.id === id);
+    const localBill = (billing || []).find((b: any) => b.id === id);
+    const { data: currentBill, error: fetchError } = await supabase
+      .from("billing")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle();
+    if (fetchError) {
+      toast.error(fetchError.message);
+      return;
+    }
+    const bill = currentBill || localBill;
+    if (!bill) {
+      toast.error("Cobrança não encontrada");
+      return;
+    }
+    if (bill.status === "paid") {
+      await queryClient.invalidateQueries({ queryKey: ["billing"] });
+      toast.info("Esse pagamento já estava registrado");
+      return;
+    }
     const today = toLocalDateKey();
-    await supabase.from("billing").update({ status: "paid", paid_date: today, paid_amount: Number(bill?.amount) || null } as any).eq("id", id);
+    const { data: updatedRows, error: updateError } = await supabase
+      .from("billing")
+      .update({ status: "paid", paid_date: today, paid_amount: Number(bill.amount) || null } as any)
+      .eq("id", id)
+      .eq("status", "pending")
+      .select();
+    if (updateError) {
+      toast.error(updateError.message);
+      return;
+    }
+    if (!updatedRows || updatedRows.length === 0) {
+      await queryClient.invalidateQueries({ queryKey: ["billing"] });
+      toast.info("Esse lançamento já saiu dos pendentes");
+      return;
+    }
 
     // Registra no histórico de auditoria (caso o pagamento venha do botão direto, não do painel)
     if (bill) {
@@ -493,7 +535,6 @@ export default function AdminFinanceiro() {
 
     if (payModal.type === "billing") {
       if (payType === "full") {
-        await logAudit("billing", payModal.id, "paid_full", "pending", "paid", payModal.amount, payModal.amount, payModal.label);
         await handleMarkPaid(payModal.id);
       } else {
         const remaining = Math.max(payModal.amount - paidAmount, 0);
@@ -701,7 +742,7 @@ export default function AdminFinanceiro() {
         const showMonthly2 = brandFilter === "all" || brandFilter === "aceleriq";
         const showIndiv2 = brandFilter === "all" || brandFilter === "sitebolt";
 
-        const monthlyPendingItems = showMonthly2 ? pendingBills.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
+        const monthlyPendingItems = showMonthly2 ? pendingBillsInActivePeriod.filter((b: any) => b.type !== "ads_recharge").map((b: any) => {
           const client = (clients || []).find((c: any) => c.id === b.client_id);
           const due = parseAppDate(b.due_date);
           return { id: b.id, label: b.description || "Renovação Mensal", client: client?.company_name || client?.full_name || "-", amount: Number(b.amount), due: b.due_date, brand: "AcelerIQ", isOverdue: due ? due < todayStart : false, itemType: "billing" as const, clientId: b.client_id, billingType: b.type };
@@ -715,10 +756,7 @@ export default function AdminFinanceiro() {
           }))
         ) : [];
 
-        const extraItems = showMonthly2 ? (clients || []).filter((c: any) =>
-          c.plan_value && c.plan_status === "active" &&
-          !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal")
-        ).map((c: any) => ({
+        const extraItems = showMonthly2 ? clientsWithPlanNotInBilling.map((c: any) => ({
           id: `extra-${c.id}`, label: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
           client: c.company_name || c.full_name, amount: Number(c.plan_value), due: c.plan_renewal_date || "",
           brand: "AcelerIQ", isOverdue: (() => { const due = parseAppDate(c.plan_renewal_date); return due ? due < todayStart : false; })(), itemType: "extra" as const, clientId: c.id,
@@ -992,16 +1030,16 @@ export default function AdminFinanceiro() {
           </div>
 
           {/* Pendentes a Receber */}
-          {pendingBills.length > 0 && (
+          {pendingBillsInActivePeriod.length > 0 && (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-warning" />
                 <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Pendentes a Receber ({pendingBills.length})
+                  Pendentes a Receber ({pendingBillsInActivePeriod.length})
                 </span>
-                <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingTotal)}</span>
+                <span className="text-xs font-mono text-warning ml-auto">{fmt(pendingBillsInActivePeriod.reduce((s: number, b: any) => s + Number(b.amount || 0), 0))}</span>
               </div>
-              {pendingBills.map((b: any) => {
+              {pendingBillsInActivePeriod.map((b: any) => {
                 const due = parseAppDate(b.due_date);
                 const isOverdue = due ? due < todayStart : false;
                 return (
