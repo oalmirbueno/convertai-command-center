@@ -36,6 +36,7 @@ const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 const CLIENT_STATUS_OPTIONS = [
   { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
   { value: "active", label: "Ativo", color: "bg-success" },
+  { value: "standby", label: "Standby", color: "bg-accent" },
   { value: "inactive", label: "Inativo", color: "bg-muted-foreground" },
 ];
 
