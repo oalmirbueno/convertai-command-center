@@ -151,6 +151,7 @@ export default function AdminFinanceiro() {
     for (const c of clients as any[]) {
       if (!c.plan_value || !c.plan_renewal_date) continue;
       if (c.plan_status !== "active") continue;
+      if (c.client_type === "one_off") continue; // Avulsos nunca geram cobrança recorrente
       const existingBill = (billing || []).find(
         (b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "pending"
       );
@@ -177,7 +178,7 @@ export default function AdminFinanceiro() {
   // Auto-sync on first load when billing is empty but clients have plan data
   useEffect(() => {
     if (autoSyncDone.current || !isAdmin || !clients || !billing) return;
-    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active");
+    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active" && c.client_type !== "one_off");
     const hasPendingRenewals = (billing || []).some((b: any) => b.type === "renewal" && b.status === "pending");
     if (activeWithPlan.length > 0 && !hasPendingRenewals) {
       autoSyncDone.current = true;
@@ -224,6 +225,7 @@ export default function AdminFinanceiro() {
   const pendingBillsInActivePeriod = pendingBills.filter((b: any) => isInActivePeriod(b.due_date));
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
+    c.client_type !== "one_off" &&
     isInActivePeriod(c.plan_renewal_date) &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
     !hasPaidRenewalInActiveMonth(c.id)
@@ -253,7 +255,7 @@ export default function AdminFinanceiro() {
 
   // Receita Mensal Esperada = soma dos plan_value de clientes ativos
   const expectedMonthlyRevenue = (clients || [])
-    .filter((c: any) => c.plan_value && c.plan_status === "active")
+    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   // Projeção próximo mês
