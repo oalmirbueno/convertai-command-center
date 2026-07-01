@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Eye, EyeOff, Copy } from "lucide-react";
+import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Eye, EyeOff, Copy, Pause, Play } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
@@ -36,6 +36,7 @@ const NON_RECURRING_SERVICE_KEYS = ["automacao", "site"];
 const CLIENT_STATUS_OPTIONS = [
   { value: "onboarding", label: "Em Andamento", color: "bg-warning" },
   { value: "active", label: "Ativo", color: "bg-success" },
+  { value: "standby", label: "Standby", color: "bg-accent" },
   { value: "inactive", label: "Inativo", color: "bg-muted-foreground" },
 ];
 
@@ -428,7 +429,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
             {/* Status do Cliente */}
             <div className="space-y-1.5">
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Status do Cliente</label>
-              <div className="flex gap-1.5">
+              <div className="flex gap-1.5 flex-wrap">
                 {CLIENT_STATUS_OPTIONS.map((s) => (
                   <button
                     key={s.value}
@@ -444,6 +445,52 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                   </button>
                 ))}
               </div>
+
+              {/* Quick action: Travar / Retornar (recorrentes e híbridos) */}
+              {isAdmin && (clientType === "recurring" || clientType === "hybrid") && (
+                planStatus === "standby" ? (
+                  <button
+                    onClick={async () => {
+                      setSaving(true);
+                      try {
+                        const { error } = await supabase.from("profiles").update({ plan_status: "active" }).eq("id", client.id);
+                        if (error) throw error;
+                        setPlanStatus("active");
+                        await notifyUser(client.id, "Seu plano foi reativado. Bem-vindo de volta!", "project", "/dashboard");
+                        queryClient.invalidateQueries({ queryKey: ["clients"] });
+                        toast.success("Cliente reativado. Atualize o valor do plano se necessário.");
+                      } catch (e: any) { toast.error(e.message || "Erro ao reativar"); }
+                      setSaving(false);
+                    }}
+                    disabled={saving}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-semibold bg-success/15 text-success border border-success/30 hover:bg-success/25 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Play className="w-4 h-4" />
+                    Retornar cliente
+                  </button>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      if (!confirm("Colocar este cliente em Standby? A cobrança recorrente será pausada até você reativar.")) return;
+                      setSaving(true);
+                      try {
+                        const { error } = await supabase.from("profiles").update({ plan_status: "standby" }).eq("id", client.id);
+                        if (error) throw error;
+                        setPlanStatus("standby");
+                        queryClient.invalidateQueries({ queryKey: ["clients"] });
+                        queryClient.invalidateQueries({ queryKey: ["billing"] });
+                        toast.success("Cliente em Standby. Cobrança recorrente pausada.");
+                      } catch (e: any) { toast.error(e.message || "Erro ao travar"); }
+                      setSaving(false);
+                    }}
+                    disabled={saving}
+                    className="mt-2 w-full inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[10px] text-[13px] font-medium bg-transparent text-foreground border border-border hover:border-muted-foreground/50 transition-colors cursor-pointer disabled:opacity-50"
+                  >
+                    <Pause className="w-4 h-4" />
+                    Travar (Standby)
+                  </button>
+                )
+              )}
             </div>
 
             {/* Tipo de Cliente + Brand */}

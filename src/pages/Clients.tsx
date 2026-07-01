@@ -26,18 +26,21 @@ function getRenewalStatus(dateStr: string | null | undefined) {
 const STATUS_TABS = [
   { value: "active", label: "Ativos" },
   { value: "onboarding", label: "Em Andamento" },
+  { value: "standby", label: "Standby" },
   { value: "inactive", label: "Inativos" },
 ];
 
 const statusDot: Record<string, string> = {
   active: "bg-success pulse-dot",
   onboarding: "bg-warning pulse-dot",
+  standby: "bg-accent",
   inactive: "bg-muted-foreground",
 };
 
 const statusLabel: Record<string, string> = {
   active: "Ativo",
   onboarding: "Em Andamento",
+  standby: "Standby",
   inactive: "Inativo",
 };
 
