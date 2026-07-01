@@ -770,7 +770,15 @@ export default function AdminFinanceiro() {
           ...(!showMonthly ? [] : []),
           { label: `A Receber ${periodLabel}`, value: fmt(pendingVal), sub: subLabel, icon: CreditCard, color: "text-warning" },
           { label: `Atrasado`, value: fmt(overdueVal), sub: ovSub, icon: CreditCard, color: "text-destructive" },
-          ...(periodFilter === "month" && showMonthly ? [{ label: "Receita Esperada", value: fmt(expectedMonthlyRevenue), sub: "Planos ativos AcelerIQ", icon: CheckCircle2, color: "text-info" }] : []),
+          ...(periodFilter === "month" ? [{
+            label: "Receita Esperada",
+            value: fmt((showMonthly ? expectedMonthlyRevenue : 0) + (showIndiv ? indivPendingMonth : 0)),
+            sub: brandFilter === "all"
+              ? `Planos ${fmt(expectedMonthlyRevenue)} · Parcelas ${fmt(indivPendingMonth)}`
+              : (brandFilter === "aceleriq" ? "Planos ativos AcelerIQ" : "Parcelas avulsas do mês"),
+            icon: CheckCircle2,
+            color: "text-info",
+          }] : []),
         ];
         return (
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
