@@ -178,7 +178,7 @@ export default function AdminFinanceiro() {
   // Auto-sync on first load when billing is empty but clients have plan data
   useEffect(() => {
     if (autoSyncDone.current || !isAdmin || !clients || !billing) return;
-    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active");
+    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active" && c.client_type !== "one_off");
     const hasPendingRenewals = (billing || []).some((b: any) => b.type === "renewal" && b.status === "pending");
     if (activeWithPlan.length > 0 && !hasPendingRenewals) {
       autoSyncDone.current = true;
