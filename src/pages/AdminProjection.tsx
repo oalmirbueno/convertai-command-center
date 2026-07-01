@@ -52,7 +52,7 @@ export default function AdminProjection() {
   };
 
   const activeClients = useMemo(() =>
-    (clients || []).filter((c: any) => c.plan_value && c.plan_status === "active"),
+    (clients || []).filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off"),
     [clients]
   );
 
