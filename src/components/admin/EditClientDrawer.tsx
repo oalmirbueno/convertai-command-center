@@ -294,6 +294,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
 
       toast.success("Cliente atualizado!");
       queryClient.invalidateQueries({ queryKey: ["clients"] });
+      queryClient.invalidateQueries({ queryKey: ["billing"] });
       setClientPassword("");
       onClose();
     } catch (err: any) {
