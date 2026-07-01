@@ -614,19 +614,28 @@ export default function AdminFinanceiro() {
       const paymentValue = payType === "full" ? amountDue : Math.min(paidAmount, amountDue);
       const newPaidTotal = Math.min(currentPaid + paymentValue, total);
       const newStatus = newPaidTotal >= total ? "paid" : "partial";
+      const updateInstallment = () => {
+        let q = supabase
+          .from("payment_installments")
+          .update({ status: newStatus, paid_amount: newPaidTotal, paid_date: today } as any)
+          .eq("id", payModal.id)
+          .eq("status", currentInstallment.status || "pending");
+        q = currentPaid > 0 ? q.eq("paid_amount", currentPaid) : q.or("paid_amount.is.null,paid_amount.eq.0");
+        return q.select();
+      };
+      const { data: updatedRows, error: updateError } = await updateInstallment();
+      if (updateError) {
+        toast.error(updateError.message);
+        return;
+      }
+      if (!updatedRows || updatedRows.length === 0) {
+        await queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
+        toast.info("Essa parcela já saiu dos pendentes");
+        return;
+      }
       if (payType === "full") {
-        await supabase.from("payment_installments").update({
-          status: newStatus,
-          paid_amount: newPaidTotal,
-          paid_date: today,
-        } as any).eq("id", payModal.id).neq("status", "paid");
         await logAudit("installment", payModal.id, "paid_full", currentInstallment.status || "pending", newStatus, total, paymentValue, payModal.label);
       } else {
-        await supabase.from("payment_installments").update({
-          status: newStatus,
-          paid_amount: newPaidTotal,
-          paid_date: today,
-        } as any).eq("id", payModal.id).neq("status", "paid");
         await logAudit("installment", payModal.id, "paid_partial", currentInstallment.status || "pending", newStatus, total, paymentValue, payModal.label);
       }
       queryClient.invalidateQueries({ queryKey: ["all-project-payments-finance"] });
