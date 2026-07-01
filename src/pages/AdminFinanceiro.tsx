@@ -255,7 +255,7 @@ export default function AdminFinanceiro() {
 
   // Receita Mensal Esperada = soma dos plan_value de clientes ativos
   const expectedMonthlyRevenue = (clients || [])
-    .filter((c: any) => c.plan_value && c.plan_status === "active")
+    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   // Projeção próximo mês
