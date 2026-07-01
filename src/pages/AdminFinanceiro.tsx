@@ -151,6 +151,7 @@ export default function AdminFinanceiro() {
     for (const c of clients as any[]) {
       if (!c.plan_value || !c.plan_renewal_date) continue;
       if (c.plan_status !== "active") continue;
+      if (c.client_type === "one_off") continue; // Avulsos nunca geram cobrança recorrente
       const existingBill = (billing || []).find(
         (b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "pending"
       );
