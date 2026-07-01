@@ -922,7 +922,7 @@ export default function AdminFinanceiro() {
               .filter((b: any) => { const d = parseAppDate(b.paid_date || b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + receivedOf(b), 0);
             pending += (billing || [])
-              .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge")
+              .filter((b: any) => b.status === "pending" && b.type !== "ads_recharge" && !isPausedRenewal(b))
               .filter((b: any) => { const d = parseAppDate(b.due_date); return !!d && d.getMonth() === m && d.getFullYear() === currentYear; })
               .reduce((s: number, b: any) => s + Number(b.amount), 0);
           }

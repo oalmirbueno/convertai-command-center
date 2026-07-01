@@ -121,7 +121,18 @@ export default function AdminDashboard() {
     return daysSince >= 14 && p.progress < 100;
   });
 
-  const pendingBills = (billing || []).filter((b: any) => b.status === "pending" && b.type !== "ads_recharge");
+  // Ignore renewal charges for clients in Standby/Inactive so pending totals stay in sync with client status
+  const pausedClientIds = new Set(
+    (clients || [])
+      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive")
+      .map((c: any) => c.id)
+  );
+  const pendingBills = (billing || []).filter(
+    (b: any) =>
+      b.status === "pending" &&
+      b.type !== "ads_recharge" &&
+      !(b.type === "renewal" && pausedClientIds.has(b.client_id))
+  );
   // Inclui parciais: a fatura original recebida em partes ainda conta no recebido pelo valor já pago.
   const paidBills = (billing || []).filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge");
   const receivedOf = (b: any) => {
