@@ -509,7 +509,7 @@ export default function Kanban() {
                             e.preventDefault();
                             e.stopPropagation();
                             const position = dragOver?.id === task.id ? dragOver.position : "bottom";
-                            const others = colTasks.filter((t: any) => t.id !== draggedTask);
+                            const others = colTasks.filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
                             const targetIdx = others.findIndex((t: any) => t.id === task.id);
                             const insertAt = position === "top" ? targetIdx : targetIdx + 1;
                             handleDrop(col.id, insertAt);
