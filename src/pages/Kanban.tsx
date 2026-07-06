@@ -54,6 +54,7 @@ export default function Kanban() {
   const { data: projects } = useProjects();
   const { profile } = useAuth();
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
+  const draggedTaskRef = useRef<string | null>(null);
   const [mobileTab, setMobileTab] = useState("backlog");
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
