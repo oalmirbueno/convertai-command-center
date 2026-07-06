@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useTasks, useTeamMembers, useProjects } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,6 +54,7 @@ export default function Kanban() {
   const { data: projects } = useProjects();
   const { profile } = useAuth();
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
+  const draggedTaskRef = useRef<string | null>(null);
   const [mobileTab, setMobileTab] = useState("backlog");
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -128,8 +129,11 @@ export default function Kanban() {
   const [filterPriority, setFilterPriority] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(undefined);
+  const [sortBy, setSortBy] = useState<"manual" | "title_asc" | "title_desc" | "due_asc" | "due_desc" | "priority">("manual");
 
-  const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo;
+  const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
+
+  const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
   const filteredTasks = (tasks || []).filter((t: any) => {
     if (filterProject && t.project_id !== filterProject) return false;
@@ -144,6 +148,17 @@ export default function Kanban() {
     if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
   }).sort((a: any, b: any) => {
+    if (sortBy === "title_asc") return (a.title || "").localeCompare(b.title || "", "pt-BR");
+    if (sortBy === "title_desc") return (b.title || "").localeCompare(a.title || "", "pt-BR");
+    if (sortBy === "due_asc" || sortBy === "due_desc") {
+      const av = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bv = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      return sortBy === "due_asc" ? av - bv : bv - av;
+    }
+    if (sortBy === "priority") {
+      return (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99);
+    }
+    // manual: task_order then due_date
     const ao = a.task_order ?? Number.MAX_SAFE_INTEGER;
     const bo = b.task_order ?? Number.MAX_SAFE_INTEGER;
     if (ao !== bo) return ao - bo;
@@ -166,26 +181,29 @@ export default function Kanban() {
 
   const handleDragStart = (taskId: string) => {
     if (isClient) return;
+    draggedTaskRef.current = taskId;
     setDraggedTask(taskId);
   };
 
   const handleDrop = async (column: string, dropIndex?: number) => {
-    if (isClient || !draggedTask) return;
-    const task = (tasks || []).find((t: any) => t.id === draggedTask);
+    const activeDragId = draggedTaskRef.current || draggedTask;
+    if (isClient || !activeDragId) return;
+    const task = (tasks || []).find((t: any) => t.id === activeDragId);
     if (!task) return;
     const previousStatus = task.status;
 
     // Rebuild destination column ordering
-    const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== draggedTask);
+    const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== activeDragId);
     const insertAt = dropIndex == null ? destTasks.length : Math.min(Math.max(dropIndex, 0), destTasks.length);
     const newDestIds = [
       ...destTasks.slice(0, insertAt).map((t: any) => t.id),
-      draggedTask,
+      activeDragId,
       ...destTasks.slice(insertAt).map((t: any) => t.id),
     ];
 
     setDragOver(null);
     setDraggedTask(null);
+    draggedTaskRef.current = null;
 
     // Persist new order (and status of the moved card)
     await persistColumnOrder(column, newDestIds);
@@ -193,12 +211,12 @@ export default function Kanban() {
     // If moved between columns, also renumber the source column to keep it tidy
     if (previousStatus !== column) {
       const srcIds = filteredTasks
-        .filter((t: any) => t.status === previousStatus && t.id !== draggedTask)
+        .filter((t: any) => t.status === previousStatus && t.id !== activeDragId)
         .map((t: any) => t.id);
       await persistColumnOrder(previousStatus, srcIds);
     }
 
-    notifyOpsTaskUpdated(draggedTask);
+    notifyOpsTaskUpdated(activeDragId);
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
@@ -311,8 +329,18 @@ export default function Kanban() {
             <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} className={cn("p-3 pointer-events-auto")} />
           </PopoverContent>
         </Popover>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
+          title="Ordenar">
+          <option value="manual">Ordem manual</option>
+          <option value="title_asc">Título A→Z</option>
+          <option value="title_desc">Título Z→A</option>
+          <option value="due_asc">Prazo ↑ (mais próximo)</option>
+          <option value="due_desc">Prazo ↓ (mais distante)</option>
+          <option value="priority">Prioridade</option>
+        </select>
         {hasFilters && (
-          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); }}
+          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual"); }}
             className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer bg-transparent border-none">
             <X className="w-3 h-3" /> Limpar
           </button>
@@ -465,11 +493,11 @@ export default function Kanban() {
                         <div
                           draggable={!isClient}
                           onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
-                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); setDragOver(null); }}
+                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                           onDragOver={isClient ? undefined : (e) => {
                             e.preventDefault();
-                            e.stopPropagation();
-                            if (!draggedTask || draggedTask === task.id) return;
+                            const active = draggedTaskRef.current || draggedTask;
+                            if (!active || active === task.id) return;
                             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                             const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
                             setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
@@ -481,7 +509,7 @@ export default function Kanban() {
                             e.preventDefault();
                             e.stopPropagation();
                             const position = dragOver?.id === task.id ? dragOver.position : "bottom";
-                            const others = colTasks.filter((t: any) => t.id !== draggedTask);
+                            const others = colTasks.filter((t: any) => t.id !== (draggedTaskRef.current || draggedTask));
                             const targetIdx = others.findIndex((t: any) => t.id === task.id);
                             const insertAt = position === "top" ? targetIdx : targetIdx + 1;
                             handleDrop(col.id, insertAt);
