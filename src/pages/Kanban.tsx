@@ -422,58 +422,86 @@ export default function Kanban() {
                   )}
                 </div>
                 <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", scrollbarWidth: "none" }}>
-                  {colTasks.map((task: any) => (
-                    <div
-                      key={task.id}
-                      draggable={!isClient}
-                      onDragStart={isClient ? undefined : () => handleDragStart(task.id)}
-                      onClick={() => handleCardClick(task)}
-                      className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
-                    >
-                      <div className="p-3.5 space-y-2.5">
-                        <div>
-                          <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
-                          {task.milestone?.title && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                              {task.milestone.title}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              {formatDate(task.due_date)}
+                  {colTasks.map((task: any, idx: number) => {
+                    const showTopLine = dragOver?.id === task.id && dragOver.position === "top";
+                    const showBottomLine = dragOver?.id === task.id && dragOver.position === "bottom";
+                    return (
+                      <div key={task.id} className="relative">
+                        {showTopLine && <div className="h-0.5 bg-primary rounded-full mb-1 animate-fade-in" />}
+                        <div
+                          draggable={!isClient}
+                          onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                          onDragOver={isClient ? undefined : (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!draggedTask || draggedTask === task.id) return;
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+                            setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
+                          }}
+                          onDragLeave={isClient ? undefined : (e) => {
+                            e.stopPropagation();
+                          }}
+                          onDrop={isClient ? undefined : (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const position = dragOver?.id === task.id ? dragOver.position : "bottom";
+                            const others = colTasks.filter((t: any) => t.id !== draggedTask);
+                            const targetIdx = others.findIndex((t: any) => t.id === task.id);
+                            const insertAt = position === "top" ? targetIdx : targetIdx + 1;
+                            handleDrop(col.id, insertAt);
+                          }}
+                          onClick={() => handleCardClick(task)}
+                          className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${draggedTask === task.id ? "opacity-40" : ""} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
+                        >
+                          <div className="p-3.5 space-y-2.5">
+                            <div>
+                              <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
+                              {task.milestone?.title && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                                  {task.milestone.title}
+                                </span>
+                              )}
                             </div>
-                            {(attachmentCounts || {})[task.id] > 0 && (
-                              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                <Paperclip className="w-3 h-3" />
-                                {(attachmentCounts || {})[task.id]}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {formatDate(task.due_date)}
+                                </div>
+                                {(attachmentCounts || {})[task.id] > 0 && (
+                                  <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                    <Paperclip className="w-3 h-3" />
+                                    {(attachmentCounts || {})[task.id]}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Avatar className="w-6 h-6">
-                              <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                                {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                            {!isClient && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
-                                title="Excluir tarefa"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                              <div className="flex items-center gap-1.5">
+                                <Avatar className="w-6 h-6">
+                                  <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {!isClient && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                                    className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                                    title="Excluir tarefa"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
+                        {showBottomLine && <div className="h-0.5 bg-primary rounded-full mt-1 animate-fade-in" />}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
               </div>
             );
           })}
