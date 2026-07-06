@@ -144,11 +144,25 @@ export default function Kanban() {
     if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
   }).sort((a: any, b: any) => {
+    const ao = a.task_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.task_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
   });
+
+  // Drag-over indicator: which task and which side
+  const [dragOver, setDragOver] = useState<{ id: string; position: "top" | "bottom" } | null>(null);
+
+  const persistColumnOrder = async (columnId: string, orderedIds: string[]) => {
+    await Promise.all(
+      orderedIds.map((id, i) =>
+        supabase.from("tasks").update({ task_order: (i + 1) * 10, status: columnId }).eq("id", id)
+      )
+    );
+  };
 
   const handleDragStart = (taskId: string) => {
     if (isClient) return;
