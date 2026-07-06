@@ -227,6 +227,7 @@ export default function Kanban() {
     });
 
     // ── Persist in background (fire-and-forget) ──
+    suppressRealtimeUntilRef.current = Date.now() + 2500;
     (async () => {
       try {
         await persistColumnOrder(column, newDestIds);
