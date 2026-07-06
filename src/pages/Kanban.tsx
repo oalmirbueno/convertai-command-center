@@ -211,12 +211,12 @@ export default function Kanban() {
     // If moved between columns, also renumber the source column to keep it tidy
     if (previousStatus !== column) {
       const srcIds = filteredTasks
-        .filter((t: any) => t.status === previousStatus && t.id !== draggedTask)
+        .filter((t: any) => t.status === previousStatus && t.id !== activeDragId)
         .map((t: any) => t.id);
       await persistColumnOrder(previousStatus, srcIds);
     }
 
-    notifyOpsTaskUpdated(draggedTask);
+    notifyOpsTaskUpdated(activeDragId);
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
 
