@@ -8,7 +8,7 @@ import { notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2 } from "lucide-react";
+import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2, ChevronUp, ChevronDown } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
@@ -144,23 +144,60 @@ export default function Kanban() {
     if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
   }).sort((a: any, b: any) => {
+    const ao = a.task_order ?? Number.MAX_SAFE_INTEGER;
+    const bo = b.task_order ?? Number.MAX_SAFE_INTEGER;
+    if (ao !== bo) return ao - bo;
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
     if (!b.due_date) return -1;
     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
   });
 
+  // Drag-over indicator: which task and which side
+  const [dragOver, setDragOver] = useState<{ id: string; position: "top" | "bottom" } | null>(null);
+
+  const persistColumnOrder = async (columnId: string, orderedIds: string[]) => {
+    await Promise.all(
+      orderedIds.map((id, i) =>
+        supabase.from("tasks").update({ task_order: (i + 1) * 10, status: columnId }).eq("id", id)
+      )
+    );
+  };
+
   const handleDragStart = (taskId: string) => {
     if (isClient) return;
     setDraggedTask(taskId);
   };
 
-  const handleDrop = async (column: string) => {
+  const handleDrop = async (column: string, dropIndex?: number) => {
     if (isClient || !draggedTask) return;
     const task = (tasks || []).find((t: any) => t.id === draggedTask);
     if (!task) return;
     const previousStatus = task.status;
-    await supabase.from("tasks").update({ status: column }).eq("id", draggedTask);
+
+    // Rebuild destination column ordering
+    const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== draggedTask);
+    const insertAt = dropIndex == null ? destTasks.length : Math.min(Math.max(dropIndex, 0), destTasks.length);
+    const newDestIds = [
+      ...destTasks.slice(0, insertAt).map((t: any) => t.id),
+      draggedTask,
+      ...destTasks.slice(insertAt).map((t: any) => t.id),
+    ];
+
+    setDragOver(null);
+    setDraggedTask(null);
+
+    // Persist new order (and status of the moved card)
+    await persistColumnOrder(column, newDestIds);
+
+    // If moved between columns, also renumber the source column to keep it tidy
+    if (previousStatus !== column) {
+      const srcIds = filteredTasks
+        .filter((t: any) => t.status === previousStatus && t.id !== draggedTask)
+        .map((t: any) => t.id);
+      await persistColumnOrder(previousStatus, srcIds);
+    }
+
     notifyOpsTaskUpdated(draggedTask);
 
     const { data: { user: authUser } } = await supabase.auth.getUser();
@@ -171,7 +208,7 @@ export default function Kanban() {
       queryClient.invalidateQueries({ queryKey: ["files"] });
     }
 
-    if (column === "done" && task.project_id) {
+    if (column === "done" && previousStatus !== column && task.project_id) {
       if (authUser) {
         const { data: upd } = await supabase.from("updates").insert({
           project_id: task.project_id, author_id: authUser.id,
@@ -179,18 +216,15 @@ export default function Kanban() {
         }).select().single();
         notifyOpsUpdate(upd);
       }
-      // Notify assignee that task is done
       if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
         await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
       }
-      // Notify admin about task completion
       const { notifyAdmin } = await import("@/lib/notifyHelpers");
       if (authUser) {
         await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
       }
     }
 
-    // Notify admin about any status change in kanban
     if (previousStatus !== column && column !== "done") {
       const { notifyAdmin } = await import("@/lib/notifyHelpers");
       if (authUser && !profile?.role?.includes("admin")) {
@@ -198,12 +232,10 @@ export default function Kanban() {
       }
     }
 
-    // Notify assignee about status change
     if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
       await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
     }
 
-    setDraggedTask(null);
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
     queryClient.invalidateQueries({ queryKey: ["milestones"] });
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
@@ -313,57 +345,91 @@ export default function Kanban() {
             })}
           </div>
           <div className="space-y-2">
-            {filteredTasks.filter((t: any) => t.status === mobileTab).map((task: any) => (
-              <div
-                key={task.id}
-                onClick={() => handleCardClick(task)}
-                className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} cursor-pointer hover:border-muted-foreground/30 transition-all`}
-              >
-                <div className="p-3.5 space-y-2.5">
-                  <div>
-                    <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
-                    {task.milestone?.title && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                        {task.milestone.title}
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                        <Clock className="w-3 h-3" />
-                        {formatDate(task.due_date)}
-                      </div>
-                      {(attachmentCounts || {})[task.id] > 0 && (
-                        <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                          <Paperclip className="w-3 h-3" />
-                          {(attachmentCounts || {})[task.id]}
-                        </div>
+            {(() => {
+              const mobileTasks = filteredTasks.filter((t: any) => t.status === mobileTab);
+              const moveMobile = async (index: number, dir: -1 | 1) => {
+                const target = index + dir;
+                if (target < 0 || target >= mobileTasks.length) return;
+                const ids = mobileTasks.map((t: any) => t.id);
+                [ids[index], ids[target]] = [ids[target], ids[index]];
+                await persistColumnOrder(mobileTab, ids);
+                queryClient.invalidateQueries({ queryKey: ["tasks"] });
+              };
+              return mobileTasks.map((task: any, idx: number) => (
+                <div
+                  key={task.id}
+                  onClick={() => handleCardClick(task)}
+                  className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} cursor-pointer hover:border-muted-foreground/30 transition-all`}
+                >
+                  <div className="p-3.5 space-y-2.5">
+                    <div>
+                      <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
+                      {task.milestone?.title && (
+                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                          {task.milestone.title}
+                        </span>
                       )}
                     </div>
-                    <Avatar className="w-6 h-6">
-                      <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                        {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                      </AvatarFallback>
-                    </Avatar>
-                    {!isClient && (
-                      <button
-                        onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                        className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
-                        title="Excluir tarefa"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                          <Clock className="w-3 h-3" />
+                          {formatDate(task.due_date)}
+                        </div>
+                        {(attachmentCounts || {})[task.id] > 0 && (
+                          <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                            <Paperclip className="w-3 h-3" />
+                            {(attachmentCounts || {})[task.id]}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {!isClient && (
+                          <>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveMobile(idx, -1); }}
+                              disabled={idx === 0}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                              title="Mover para cima"
+                            >
+                              <ChevronUp className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); moveMobile(idx, 1); }}
+                              disabled={idx === mobileTasks.length - 1}
+                              className="text-muted-foreground hover:text-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                              title="Mover para baixo"
+                            >
+                              <ChevronDown className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        <Avatar className="w-6 h-6">
+                          <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                            {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                          </AvatarFallback>
+                        </Avatar>
+                        {!isClient && (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                            className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                            title="Excluir tarefa"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              ));
+            })()}
             {filteredTasks.filter((t: any) => t.status === mobileTab).length === 0 && (
               <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma tarefa nesta coluna.</p>
             )}
           </div>
+
         </div>
       ) : (
         /* ═══ DESKTOP: Columns layout ═══ */
@@ -390,58 +456,87 @@ export default function Kanban() {
                   )}
                 </div>
                 <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", scrollbarWidth: "none" }}>
-                  {colTasks.map((task: any) => (
-                    <div
-                      key={task.id}
-                      draggable={!isClient}
-                      onDragStart={isClient ? undefined : () => handleDragStart(task.id)}
-                      onClick={() => handleCardClick(task)}
-                      className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
-                    >
-                      <div className="p-3.5 space-y-2.5">
-                        <div>
-                          <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
-                          {task.milestone?.title && (
-                            <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
-                              {task.milestone.title}
-                            </span>
-                          )}
-                        </div>
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
-                              <Clock className="w-3 h-3" />
-                              {formatDate(task.due_date)}
+                  {colTasks.map((task: any, idx: number) => {
+                    const showTopLine = dragOver?.id === task.id && dragOver.position === "top";
+                    const showBottomLine = dragOver?.id === task.id && dragOver.position === "bottom";
+                    return (
+                      <div key={task.id} className="relative">
+                        {showTopLine && <div className="h-0.5 bg-primary rounded-full mb-1 animate-fade-in" />}
+                        <div
+                          draggable={!isClient}
+                          onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); setDragOver(null); }}
+                          onDragOver={isClient ? undefined : (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            if (!draggedTask || draggedTask === task.id) return;
+                            const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+                            const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
+                            setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
+                          }}
+                          onDragLeave={isClient ? undefined : (e) => {
+                            e.stopPropagation();
+                          }}
+                          onDrop={isClient ? undefined : (e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            const position = dragOver?.id === task.id ? dragOver.position : "bottom";
+                            const others = colTasks.filter((t: any) => t.id !== draggedTask);
+                            const targetIdx = others.findIndex((t: any) => t.id === task.id);
+                            const insertAt = position === "top" ? targetIdx : targetIdx + 1;
+                            handleDrop(col.id, insertAt);
+                          }}
+                          onClick={() => handleCardClick(task)}
+                          className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${draggedTask === task.id ? "opacity-40" : ""} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
+                        >
+                          <div className="p-3.5 space-y-2.5">
+                            <div>
+                              <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
+                              <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
+                              {task.milestone?.title && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary inline-block mt-1">
+                                  {task.milestone.title}
+                                </span>
+                              )}
                             </div>
-                            {(attachmentCounts || {})[task.id] > 0 && (
-                              <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
-                                <Paperclip className="w-3 h-3" />
-                                {(attachmentCounts || {})[task.id]}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-1 text-[11px] font-mono text-muted-foreground">
+                                  <Clock className="w-3 h-3" />
+                                  {formatDate(task.due_date)}
+                                </div>
+                                {(attachmentCounts || {})[task.id] > 0 && (
+                                  <div className="flex items-center gap-0.5 text-[10px] text-muted-foreground">
+                                    <Paperclip className="w-3 h-3" />
+                                    {(attachmentCounts || {})[task.id]}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1.5">
-                            <Avatar className="w-6 h-6">
-                              <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
-                                {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
-                              </AvatarFallback>
-                            </Avatar>
-                            {!isClient && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                                className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
-                                title="Excluir tarefa"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
+                              <div className="flex items-center gap-1.5">
+                                <Avatar className="w-6 h-6">
+                                  <AvatarFallback className="text-[9px] bg-secondary text-muted-foreground font-medium">
+                                    {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
+                                  </AvatarFallback>
+                                </Avatar>
+                                {!isClient && (
+                                  <button
+                                    onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                                    className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"
+                                    title="Excluir tarefa"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
+                        {showBottomLine && <div className="h-0.5 bg-primary rounded-full mt-1 animate-fade-in" />}
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
+
               </div>
             );
           })}
