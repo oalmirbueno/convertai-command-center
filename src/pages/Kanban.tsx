@@ -200,64 +200,87 @@ export default function Kanban() {
       activeDragId,
       ...destTasks.slice(insertAt).map((t: any) => t.id),
     ];
+    const srcIds = filteredTasks
+      .filter((t: any) => t.status === previousStatus && t.id !== activeDragId)
+      .map((t: any) => t.id);
 
     setDragOver(null);
     setDraggedTask(null);
     draggedTaskRef.current = null;
 
-    // Persist new order (and status of the moved card)
-    await persistColumnOrder(column, newDestIds);
+    // ── Optimistic update: reorder the cache immediately so UI is instant ──
+    const destOrder: Record<string, number> = {};
+    newDestIds.forEach((id, i) => { destOrder[id] = (i + 1) * 10; });
+    const srcOrder: Record<string, number> = {};
+    srcIds.forEach((id, i) => { srcOrder[id] = (i + 1) * 10; });
 
-    // If moved between columns, also renumber the source column to keep it tidy
-    if (previousStatus !== column) {
-      const srcIds = filteredTasks
-        .filter((t: any) => t.status === previousStatus && t.id !== activeDragId)
-        .map((t: any) => t.id);
-      await persistColumnOrder(previousStatus, srcIds);
-    }
+    queryClient.setQueriesData({ queryKey: ["tasks"] }, (old: any) => {
+      if (!Array.isArray(old)) return old;
+      return old.map((t: any) => {
+        if (t.id === activeDragId) return { ...t, status: column, task_order: destOrder[t.id] };
+        if (destOrder[t.id] != null) return { ...t, task_order: destOrder[t.id] };
+        if (previousStatus !== column && srcOrder[t.id] != null) return { ...t, task_order: srcOrder[t.id] };
+        return t;
+      });
+    });
 
-    notifyOpsTaskUpdated(activeDragId);
+    // ── Persist in background (fire-and-forget) ──
+    (async () => {
+      try {
+        await persistColumnOrder(column, newDestIds);
+        if (previousStatus !== column) {
+          await persistColumnOrder(previousStatus, srcIds);
+        }
 
-    const { data: { user: authUser } } = await supabase.auth.getUser();
+        notifyOpsTaskUpdated(activeDragId);
 
-    if (["review", "done"].includes(column) && task.project_id && authUser && previousStatus !== column) {
-      await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      queryClient.invalidateQueries({ queryKey: ["files"] });
-    }
+        const { data: { user: authUser } } = await supabase.auth.getUser();
 
-    if (column === "done" && previousStatus !== column && task.project_id) {
-      if (authUser) {
-        const { data: upd } = await supabase.from("updates").insert({
-          project_id: task.project_id, author_id: authUser.id,
-          message: `"${task.title}" concluída`, update_type: "task",
-        }).select().single();
-        notifyOpsUpdate(upd);
+        if (["review", "done"].includes(column) && task.project_id && authUser && previousStatus !== column) {
+          await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
+          queryClient.invalidateQueries({ queryKey: ["all-files"] });
+          queryClient.invalidateQueries({ queryKey: ["files"] });
+        }
+
+        if (column === "done" && previousStatus !== column && task.project_id) {
+          if (authUser) {
+            const { data: upd } = await supabase.from("updates").insert({
+              project_id: task.project_id, author_id: authUser.id,
+              message: `"${task.title}" concluída`, update_type: "task",
+            }).select().single();
+            notifyOpsUpdate(upd);
+          }
+          if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
+            await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
+          }
+          const { notifyAdmin } = await import("@/lib/notifyHelpers");
+          if (authUser) {
+            await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
+          }
+        }
+
+        if (previousStatus !== column && column !== "done") {
+          const { notifyAdmin } = await import("@/lib/notifyHelpers");
+          if (authUser && !profile?.role?.includes("admin")) {
+            await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" → ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+          }
+        }
+
+        if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
+          await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+        }
+
+        if (previousStatus !== column) {
+          queryClient.invalidateQueries({ queryKey: ["milestones"] });
+          queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+          queryClient.invalidateQueries({ queryKey: ["projects"] });
+        }
+      } catch (err) {
+        console.error("Drop persist failed", err);
+        toast.error("Erro ao salvar movimentação");
+        queryClient.invalidateQueries({ queryKey: ["tasks"] });
       }
-      if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
-        await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
-      }
-      const { notifyAdmin } = await import("@/lib/notifyHelpers");
-      if (authUser) {
-        await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
-      }
-    }
-
-    if (previousStatus !== column && column !== "done") {
-      const { notifyAdmin } = await import("@/lib/notifyHelpers");
-      if (authUser && !profile?.role?.includes("admin")) {
-        await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" → ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
-      }
-    }
-
-    if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
-      await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
-    }
-
-    queryClient.invalidateQueries({ queryKey: ["tasks"] });
-    queryClient.invalidateQueries({ queryKey: ["milestones"] });
-    queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
-    queryClient.invalidateQueries({ queryKey: ["projects"] });
+    })();
   };
 
   const formatDate = (d: string) => {
