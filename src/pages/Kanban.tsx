@@ -83,6 +83,7 @@ export default function Kanban() {
         "postgres_changes",
         { event: "*", schema: "public", table: "tasks" },
         () => {
+          if (Date.now() < suppressRealtimeUntilRef.current) return;
           queryClient.invalidateQueries({ queryKey: ["tasks"] });
         }
       )
