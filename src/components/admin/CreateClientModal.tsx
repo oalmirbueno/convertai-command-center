@@ -182,21 +182,26 @@ export default function CreateClientModal({ open, onClose }: Props) {
           const n = payMode === "integral" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
           const per = +(projValueNum / n).toFixed(2);
           const first = new Date(firstDueDate + "T00:00:00");
+          const todayIso = new Date().toISOString().slice(0, 10);
           const rows = Array.from({ length: n }, (_, idx) => {
             const due = new Date(first);
             due.setMonth(due.getMonth() + idx);
             const dueStr = due.toISOString().slice(0, 10);
             // Última parcela acerta arredondamento
             const amount = idx === n - 1 ? +(projValueNum - per * (n - 1)).toFixed(2) : per;
+            // 1ª parcela / valor integral → já pago no ato do cadastro
+            const isFirst = idx === 0;
             return {
               client_id: newUserId,
               type: "one_off",
               amount,
-              due_date: dueStr,
+              due_date: isFirst ? todayIso : dueStr,
+              paid_date: isFirst ? todayIso : null,
+              paid_amount: isFirst ? amount : null,
               description: n === 1
-                ? `Projeto — ${company.trim() || fullName.trim()}`
-                : `Projeto — Parcela ${idx + 1}/${n}`,
-              status: "pending",
+                ? `Projeto — ${company.trim() || fullName.trim()} (pago no cadastro)`
+                : `Projeto — Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
+              status: isFirst ? "paid" : "pending",
             };
           });
           await supabase.from("billing").insert(rows as any);
