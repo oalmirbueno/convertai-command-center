@@ -181,26 +181,29 @@ export default function Kanban() {
 
   const handleDragStart = (taskId: string) => {
     if (isClient) return;
+    draggedTaskRef.current = taskId;
     setDraggedTask(taskId);
   };
 
   const handleDrop = async (column: string, dropIndex?: number) => {
-    if (isClient || !draggedTask) return;
-    const task = (tasks || []).find((t: any) => t.id === draggedTask);
+    const activeDragId = draggedTaskRef.current || draggedTask;
+    if (isClient || !activeDragId) return;
+    const task = (tasks || []).find((t: any) => t.id === activeDragId);
     if (!task) return;
     const previousStatus = task.status;
 
     // Rebuild destination column ordering
-    const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== draggedTask);
+    const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== activeDragId);
     const insertAt = dropIndex == null ? destTasks.length : Math.min(Math.max(dropIndex, 0), destTasks.length);
     const newDestIds = [
       ...destTasks.slice(0, insertAt).map((t: any) => t.id),
-      draggedTask,
+      activeDragId,
       ...destTasks.slice(insertAt).map((t: any) => t.id),
     ];
 
     setDragOver(null);
     setDraggedTask(null);
+    draggedTaskRef.current = null;
 
     // Persist new order (and status of the moved card)
     await persistColumnOrder(column, newDestIds);
