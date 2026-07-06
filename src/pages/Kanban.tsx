@@ -329,8 +329,18 @@ export default function Kanban() {
             <Calendar mode="single" selected={filterDateTo} onSelect={setFilterDateTo} className={cn("p-3 pointer-events-auto")} />
           </PopoverContent>
         </Popover>
+        <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
+          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
+          title="Ordenar">
+          <option value="manual">Ordem manual</option>
+          <option value="title_asc">Título A→Z</option>
+          <option value="title_desc">Título Z→A</option>
+          <option value="due_asc">Prazo ↑ (mais próximo)</option>
+          <option value="due_desc">Prazo ↓ (mais distante)</option>
+          <option value="priority">Prioridade</option>
+        </select>
         {hasFilters && (
-          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); }}
+          <button onClick={() => { setFilterProject(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual"); }}
             className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer bg-transparent border-none">
             <X className="w-3 h-3" /> Limpar
           </button>
