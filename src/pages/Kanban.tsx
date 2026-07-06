@@ -493,11 +493,11 @@ export default function Kanban() {
                         <div
                           draggable={!isClient}
                           onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
-                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); setDragOver(null); }}
+                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                           onDragOver={isClient ? undefined : (e) => {
                             e.preventDefault();
-                            e.stopPropagation();
-                            if (!draggedTask || draggedTask === task.id) return;
+                            const active = draggedTaskRef.current || draggedTask;
+                            if (!active || active === task.id) return;
                             const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
                             const position = e.clientY < rect.top + rect.height / 2 ? "top" : "bottom";
                             setDragOver((prev) => (prev?.id === task.id && prev.position === position ? prev : { id: task.id, position }));
