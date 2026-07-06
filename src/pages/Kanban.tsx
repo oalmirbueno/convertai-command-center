@@ -129,8 +129,11 @@ export default function Kanban() {
   const [filterPriority, setFilterPriority] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(undefined);
+  const [sortBy, setSortBy] = useState<"manual" | "title_asc" | "title_desc" | "due_asc" | "due_desc" | "priority">("manual");
 
-  const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo;
+  const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
+
+  const priorityRank: Record<string, number> = { urgent: 0, high: 1, medium: 2, low: 3 };
 
   const filteredTasks = (tasks || []).filter((t: any) => {
     if (filterProject && t.project_id !== filterProject) return false;
@@ -145,6 +148,17 @@ export default function Kanban() {
     if ((filterDateFrom || filterDateTo) && !t.due_date) return false;
     return true;
   }).sort((a: any, b: any) => {
+    if (sortBy === "title_asc") return (a.title || "").localeCompare(b.title || "", "pt-BR");
+    if (sortBy === "title_desc") return (b.title || "").localeCompare(a.title || "", "pt-BR");
+    if (sortBy === "due_asc" || sortBy === "due_desc") {
+      const av = a.due_date ? new Date(a.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      const bv = b.due_date ? new Date(b.due_date).getTime() : Number.MAX_SAFE_INTEGER;
+      return sortBy === "due_asc" ? av - bv : bv - av;
+    }
+    if (sortBy === "priority") {
+      return (priorityRank[a.priority] ?? 99) - (priorityRank[b.priority] ?? 99);
+    }
+    // manual: task_order then due_date
     const ao = a.task_order ?? Number.MAX_SAFE_INTEGER;
     const bo = b.task_order ?? Number.MAX_SAFE_INTEGER;
     if (ao !== bo) return ao - bo;
