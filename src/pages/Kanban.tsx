@@ -465,6 +465,7 @@ export default function Kanban() {
                         <div
                           draggable={!isClient}
                           onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                          onDragEnd={isClient ? undefined : () => { setDraggedTask(null); setDragOver(null); }}
                           onDragOver={isClient ? undefined : (e) => {
                             e.preventDefault();
                             e.stopPropagation();
