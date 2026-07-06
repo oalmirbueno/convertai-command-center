@@ -454,13 +454,47 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                     onClick={async () => {
                       setSaving(true);
                       try {
-                        const { error } = await supabase.from("profiles").update({ plan_status: "active" }).eq("id", client.id);
+                        const todayStr = new Date().toISOString().slice(0, 10);
+                        const nextDate = new Date();
+                        nextDate.setMonth(nextDate.getMonth() + 1);
+                        const nextStr = nextDate.toISOString().slice(0, 10);
+                        const planValNum = Number(client.plan_value) || 0;
+
+                        const { error } = await supabase.from("profiles").update({
+                          plan_status: "active",
+                          plan_renewal_date: planValNum > 0 ? nextStr : (client.plan_renewal_date || null),
+                        }).eq("id", client.id);
                         if (error) throw error;
+
+                        // Retomada = ciclo atual JÁ pago + próxima renovação pendente
+                        if (planValNum > 0) {
+                          await supabase.from("billing").insert([
+                            {
+                              client_id: client.id,
+                              type: "renewal",
+                              amount: planValNum,
+                              due_date: todayStr,
+                              paid_date: todayStr,
+                              paid_amount: planValNum,
+                              description: "Mensalidade — Retomada de Standby (pago)",
+                              status: "paid",
+                            },
+                            {
+                              client_id: client.id,
+                              type: "renewal",
+                              amount: planValNum,
+                              due_date: nextStr,
+                              description: "Mensalidade",
+                              status: "pending",
+                            },
+                          ] as any);
+                        }
+
                         setPlanStatus("active");
                         await notifyUser(client.id, "Seu plano foi reativado. Bem-vindo de volta!", "project", "/dashboard");
                         queryClient.invalidateQueries({ queryKey: ["clients"] });
                         queryClient.invalidateQueries({ queryKey: ["billing"] });
-                        toast.success("Cliente reativado. Atualize o valor do plano se necessário.");
+                        toast.success(planValNum > 0 ? "Cliente reativado. Pagamento do ciclo registrado e próxima renovação agendada." : "Cliente reativado.");
                       } catch (e: any) { toast.error(e.message || "Erro ao reativar"); }
                       setSaving(false);
                     }}
