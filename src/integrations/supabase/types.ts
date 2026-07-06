@@ -1677,6 +1677,7 @@ export type Database = {
           priority: string
           progress: number | null
           project_id: string
+          sort_order: number | null
           source: string | null
           status: string
           sync_error: string | null
@@ -1700,6 +1701,7 @@ export type Database = {
           priority?: string
           progress?: number | null
           project_id: string
+          sort_order?: number | null
           source?: string | null
           status?: string
           sync_error?: string | null
@@ -1723,6 +1725,7 @@ export type Database = {
           priority?: string
           progress?: number | null
           project_id?: string
+          sort_order?: number | null
           source?: string | null
           status?: string
           sync_error?: string | null
