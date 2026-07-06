@@ -148,16 +148,32 @@ export default function CreateClientModal({ open, onClose }: Props) {
         }
         await supabase.from("profiles").update(profileUpdate).eq("id", newUserId);
 
-        // Cria a 1ª fatura recorrente (renewal) na data informada
-        if (showRecurring && planValueNum > 0 && planRenewalDate) {
-          await supabase.from("billing").insert({
+        // Ao cadastrar um cliente recorrente, o pagamento do ciclo atual JÁ está pago
+        // (motivo do cadastro). Registramos a entrada paga de hoje e a próxima
+        // renovação como pendente na data informada.
+        if (showRecurring && planValueNum > 0) {
+          const todayStr = new Date().toISOString().slice(0, 10);
+          const rowsRec: any[] = [{
             client_id: newUserId,
             type: "renewal",
             amount: planValueNum,
-            due_date: planRenewalDate,
-            description: `Mensalidade — ${company.trim() || fullName.trim()}`,
-            status: "pending",
-          } as any);
+            due_date: todayStr,
+            paid_date: todayStr,
+            paid_amount: planValueNum,
+            description: `Mensalidade — ${company.trim() || fullName.trim()} (pago no cadastro)`,
+            status: "paid",
+          }];
+          if (planRenewalDate && planRenewalDate > todayStr) {
+            rowsRec.push({
+              client_id: newUserId,
+              type: "renewal",
+              amount: planValueNum,
+              due_date: planRenewalDate,
+              description: `Mensalidade — ${company.trim() || fullName.trim()}`,
+              status: "pending",
+            });
+          }
+          await supabase.from("billing").insert(rowsRec as any);
         }
 
         // Cria as cobranças do projeto avulso (integral ou parcelado)
