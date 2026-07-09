@@ -337,6 +337,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 availableFiles={availableFiles}
                 notes={state.notes}
                 script={state.script}
+                boardLog={state.boardLog}
               />
             )}
             {mode === "notes" && (
