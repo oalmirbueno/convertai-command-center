@@ -739,7 +739,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const isFull = dock === "full";
 
   const dockPos = isFull
-    ? "inset-3"
+    ? "top-[72px] left-3 right-3 bottom-3"
     : dock === "br" ? "right-4 bottom-4"
     : dock === "bl" ? "left-4 bottom-4"
     :                 "left-1/2 -translate-x-1/2 bottom-4";
