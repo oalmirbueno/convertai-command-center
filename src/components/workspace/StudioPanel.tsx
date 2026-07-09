@@ -601,8 +601,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       const { data: sess } = await supabase.auth.getUser();
       if (!sess.user) return;
       const { data } = await supabase.from("workspace_agent_threads")
-        .insert({ user_id: sess.user.id, client_id: clientId, title: text.slice(0, 60) })
-        .select("id,title,updated_at,client_id").single();
+        .insert({ user_id: sess.user.id, client_id: clientId, folder_path: folderPath || null, title: text.slice(0, 60) })
+        .select("id,title,updated_at,client_id,folder_path").single();
+
       if (!data) return;
       tid = data.id;
       setThreads(t => [data as AgentThread, ...t]);
