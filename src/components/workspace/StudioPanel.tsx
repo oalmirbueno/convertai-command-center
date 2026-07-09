@@ -367,10 +367,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     <Button size="sm" variant="outline" onClick={copyBriefingForGPT} className="h-7 gap-1 text-[10px]">
                       <Copy className="w-3 h-3" /> Copiar p/ GPT
                     </Button>
-                    <a href={PREPRO_GPT} target="_blank" rel="noopener noreferrer"
-                       className="inline-flex items-center gap-1 h-7 px-2 rounded-md bg-primary text-primary-foreground text-[10px] font-medium hover:opacity-90">
-                      <Wand2 className="w-3 h-3" /> Prepro GPT <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
+                    <Button size="sm" onClick={() => setMode("agent")} className="h-7 gap-1 text-[10px]">
+                      <Wand2 className="w-3 h-3" /> Abrir no Prepro
+                    </Button>
+
                   </div>
                 </div>
                 <div className="relative flex-1 min-h-0">
