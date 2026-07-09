@@ -801,6 +801,29 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     ))}
                   </div>
                 )}
+                {(enrichBusy || enrichData) && (
+                  <div className="border border-dashed border-primary/40 rounded-lg p-2 space-y-1.5 bg-primary/5">
+                    <div className="text-[10px] uppercase tracking-wider text-primary flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Enriquecimento{enrichBusy && "…"}
+                    </div>
+                    {enrichData?.suggestion && <div className="text-[11px] text-foreground/80">{enrichData.suggestion}</div>}
+                    <div className="flex flex-wrap gap-1">
+                      {enrichData?.checklist?.length ? (
+                        <button onClick={acceptEnrichChecklist} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                          + Checklist ({enrichData.checklist.length})
+                        </button>
+                      ) : null}
+                      {enrichData?.next_actions?.length ? (
+                        <button onClick={acceptEnrichActions} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                          + Próximas ações ({enrichData.next_actions.length})
+                        </button>
+                      ) : null}
+                      {enrichData && !enrichData.checklist?.length && !enrichData.next_actions?.length && (
+                        <span className="text-[10px] text-muted-foreground">sem sugestões novas</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
