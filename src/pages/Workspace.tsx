@@ -16,7 +16,9 @@ import {
   Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
   Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
   Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
+  ChevronDown, Check, X as XIcon,
 } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
