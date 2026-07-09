@@ -1152,7 +1152,18 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
       });
       if (!res.ok || !res.body) {
         const t = await res.text().catch(() => "");
-        throw new Error(t || `HTTP ${res.status}`);
+        let msg = t || `HTTP ${res.status}`;
+        try {
+          const j = JSON.parse(t);
+          if (j?.error === "PAYMENT_REQUIRED" || res.status === 402) {
+            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos em Settings → Workspace → Usage.";
+          } else if (j?.error === "RATE_LIMITED" || res.status === 429) {
+            msg = j?.message || "Muitas requisições. Tente novamente em instantes.";
+          } else if (j?.message || j?.error) {
+            msg = j.message || j.error;
+          }
+        } catch { /* not json */ }
+        throw new Error(msg);
       }
       const reader = res.body.getReader();
       const decoder = new TextDecoder();

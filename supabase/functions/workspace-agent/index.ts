@@ -155,7 +155,16 @@ Deno.serve(async (req) => {
 
     if (!aiRes.ok || !aiRes.body) {
       const t = await aiRes.text().catch(() => "");
-      return json({ error: `AI falhou: ${aiRes.status} ${t.slice(0, 200)}` }, aiRes.status === 429 ? 429 : 500);
+      if (aiRes.status === 402) {
+        return json({
+          error: "PAYMENT_REQUIRED",
+          message: "Créditos do Lovable AI esgotados. Adicione créditos em Settings → Workspace → Usage para continuar usando o Agente.",
+        }, 402);
+      }
+      if (aiRes.status === 429) {
+        return json({ error: "RATE_LIMITED", message: "Muitas requisições. Tente novamente em instantes." }, 429);
+      }
+      return json({ error: `AI falhou: ${aiRes.status} ${t.slice(0, 200)}` }, 500);
     }
 
     // Proxy do stream + captura para persistir
