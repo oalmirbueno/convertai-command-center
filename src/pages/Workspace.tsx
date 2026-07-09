@@ -1499,6 +1499,7 @@ export default function Workspace() {
         availableFiles={(filtered || []).map(n => ({
           id: n.id, name: n.name, kind: n.kind,
           url: n.__virtual ? n.__external_url : (n.storage_path ? signedUrls[n.storage_path] : null),
+          meta: n.__virtual ? "sistema" : n.mime || null,
         }))}
         onOpenFile={(id) => {
           const found = (filtered || []).find(n => n.id === id);

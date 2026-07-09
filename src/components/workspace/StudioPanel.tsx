@@ -25,7 +25,7 @@ import remarkGfm from "remark-gfm";
 
 const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-prepro-director-gpt";
 
-type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
+type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null; meta?: string | null };
 
 type Mode = "context" | "notes" | "gpt";
 
@@ -804,7 +804,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       {!minimized && (
         <>
           {/* Tabs */}
-          <div className="flex items-center justify-center gap-1 px-2 pt-2 border-b border-border shrink-0">
+          <div className="flex items-center justify-center gap-2 px-3 pt-2 border-b border-border shrink-0 bg-background/40">
             {[
               { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
@@ -814,22 +814,22 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               const Icon = t.icon;
               return (
                 <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                  className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-t-md text-[11px] font-medium border-b-2 -mb-px transition-colors",
-                    active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
-                  <Icon className="w-3.5 h-3.5" /> {t.label}
+                  className={cn("flex items-center gap-2 px-5 py-2 rounded-t-lg text-[12.5px] font-medium border-b-2 -mb-px transition-colors",
+                    active ? "border-primary text-foreground bg-secondary/30" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/20")}>
+                  <Icon className="w-4 h-4" /> {t.label}
                 </button>
               );
             })}
           </div>
 
           {/* Fordista bar: Projeto · Publicar · PDF */}
-          <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 text-[11px]">
+          <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 border-b border-border bg-muted/25 shrink-0 text-[12px]">
 
             <span className="text-muted-foreground shrink-0">Projeto</span>
             <select
               value={projectId ?? ""}
               onChange={e => setProjectId(e.target.value || null)}
-              className="bg-background border border-border rounded px-1.5 py-0.5 text-[11px] max-w-[180px]"
+              className="bg-background border border-border rounded-md px-2 py-1 text-[12px] w-[min(360px,52vw)]"
               title="Vincule um projeto para publicar/espelhar ao cliente"
             >
               <option value="">sem projeto</option>
@@ -856,7 +856,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               {reflowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
               Auto-fix {autoFix ? "on" : "off"}
             </button>
-            <div className="ml-auto flex items-center gap-1 shrink-0">
+              <div className="flex items-center gap-1 shrink-0 sm:ml-2">
               <button onClick={togglePublish}
                 className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
                   docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
@@ -874,112 +874,165 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
 
             {mode === "context" && (
-              <AgentChat
-                clientId={clientId ?? null}
-                clientName={clientName ?? null}
-                folderId={folderId ?? null}
-                folderPath={folderPath ?? contextLabel}
-                availableFiles={availableFiles}
-                notes={state.notes}
-                script={state.script}
-                boardLog={state.boardLog}
-                label="Contexto"
-                showExternalTools={false}
-                onStructureToNotes={async () => {
-                  try {
-                    const { data: sess } = await supabase.auth.getSession();
-                    const tok = sess?.session?.access_token; if (!tok) return;
-                    toast({ title: "Estruturando…", description: "O agente está montando o documento executivo." });
-                    const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
-                      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-                      body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
-                    });
-                    if (!r.ok) throw new Error(String(r.status));
-                    const j = await r.json();
-                    const md = j?.markdown || "";
-                    if (md) { setState(s => ({ ...s, notes: md })); setMode("notes"); toast({ title: "Notas atualizadas", description: "Documento pronto pra você complementar." }); }
-                  } catch (e: any) { toast({ title: "Falha ao estruturar", description: e?.message || "erro", variant: "destructive" }); }
-                }}
-              />
+              <div className="grid h-full min-h-0 gap-3 p-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
+                <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-background/65">
+                  <AgentChat
+                    clientId={clientId ?? null}
+                    clientName={clientName ?? null}
+                    projectId={projectId}
+                    folderId={folderId ?? null}
+                    folderPath={folderPath ?? contextLabel}
+                    availableFiles={availableFiles}
+                    notes={state.notes}
+                    script={state.script}
+                    boardLog={state.boardLog}
+                    label="Contexto"
+                    showExternalTools={false}
+                    onStructureToNotes={async () => {
+                      try {
+                        const { data: sess } = await supabase.auth.getSession();
+                        const tok = sess?.session?.access_token; if (!tok) return;
+                        toast({ title: "Estruturando", description: "O agente está montando o documento executivo." });
+                        const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
+                          method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+                          body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
+                        });
+                        if (!r.ok) throw new Error(String(r.status));
+                        const j = await r.json();
+                        const md = j?.markdown || "";
+                        if (md) { setState(s => ({ ...s, notes: md })); toast({ title: "Notas atualizadas", description: "Documento pronto para complementar." }); }
+                      } catch (e: any) { toast({ title: "Falha ao estruturar", description: e?.message || "erro", variant: "destructive" }); }
+                    }}
+                  />
+                </section>
+
+                <aside className="min-h-0 hidden lg:flex flex-col overflow-hidden rounded-xl border border-border bg-card/45">
+                  <div className="flex items-center gap-2 border-b border-border px-4 py-3">
+                    <NotebookPen className="h-4 w-4 text-primary" />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] font-medium text-foreground">Notas do projeto</p>
+                      <p className="truncate text-[11px] text-muted-foreground">O agente usa este conteúdo como memória de trabalho.</p>
+                    </div>
+                    <button onClick={() => setMode("notes")} className="rounded-md border border-border px-2 py-1 text-[11px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+                      Abrir editor
+                    </button>
+                  </div>
+                  <div className="relative min-h-0 flex-1 p-3">
+                    <textarea
+                      ref={notesRef}
+                      value={state.notes}
+                      onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
+                      onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+                      onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+                      onPaste={onNotesPaste}
+                      placeholder="Anote decisões, respostas e próximos passos. Use / para estruturar e @ para anexar arquivos."
+                      className="h-full min-h-[280px] w-full resize-none rounded-lg border border-border bg-background/75 p-5 font-sans text-[14px] leading-[1.85] text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                    />
+                    {mentionQuery?.where === "notes" && mentionMatches.length > 0 && <MentionList items={mentionMatches} onPick={insertMention} />}
+                    {slashMenu?.where === "notes" && (
+                      <SlashList
+                        items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                        onPick={insertSlash}
+                      />
+                    )}
+                  </div>
+                </aside>
+              </div>
             )}
             {mode === "notes" && (
-              <div className="p-4 sm:p-6 gap-3 h-full min-h-0 flex flex-col overflow-y-auto">
-                <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
-                  <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
-                  <button
-                    onClick={() => setState(s => ({ ...s, notes: (s.notes ? s.notes.replace(/\n?@help\n?/g, "") : "") + "\n@help\n" }))}
-                    className="ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
-                    title="Mostrar guia de comandos inline"
-                  >? ajuda</button>
-                  {ocrBusy && <span className="text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR…</span>}
-                </div>
-
+              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
-                <div className="relative flex-1 min-h-0 flex flex-col gap-3">
-                  <textarea
-                    ref={notesRef}
-                    value={state.notes}
-                    onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
-                    onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    onPaste={onNotesPaste}
-                    placeholder="Comece a escrever…  /  para comandos  ·  @  para arquivos  ·  cole imagem ou link de vídeo"
-                    className="w-full flex-1 min-h-[280px] resize-none bg-background border border-border rounded-xl p-5 text-[14.5px] leading-[1.75] font-sans text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-colors"
-                  />
-                  {state.notes.trim().length > 0 && (
-                    <details className="border-t border-border pt-3 group">
-                      <summary className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground mb-2 cursor-pointer hover:text-foreground select-none">
-                        Preview do documento
-                      </summary>
-                      <div className="max-h-[320px] overflow-y-auto mt-2">
-                        <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
-                      </div>
-                    </details>
-                  )}
-                  {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
-                    <MentionList items={mentionMatches} onPick={insertMention} />
-                  )}
-                  {slashMenu?.where === "notes" && (
-                    <SlashList
-                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
-                      onPick={insertSlash}
-                    />
-                  )}
-                </div>
-                {!!state.mentions.length && (
-                  <div className="flex flex-wrap gap-1 pt-1 border-t border-border">
-                    {state.mentions.map(m => (
-                      <button key={m.id} onClick={() => onOpenFile?.(m.id)}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1">
-                        <Link2 className="w-2.5 h-2.5" /> {m.name}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {(enrichBusy || enrichData) && (
-                  <div className="border border-dashed border-primary/40 rounded-lg p-2 space-y-1.5 bg-primary/5">
-                    <div className="text-[10px] uppercase tracking-wider text-primary flex items-center gap-1">
-                      <Zap className="w-3 h-3" /> Enriquecimento{enrichBusy && "…"}
+
+                <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+                  <section className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
+                      <NotebookPen className="h-3.5 w-3.5 text-primary" />
+                      <span className="font-medium text-foreground/80">Notas de trabalho</span>
+                      <span className="hidden sm:inline">/ comandos · @ arquivos · imagem ou link de vídeo</span>
+                      {ocrBusy && <span className="ml-auto text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR</span>}
+                      <button
+                        onClick={() => setState(s => ({ ...s, notes: (s.notes ? s.notes.replace(/\n?@help\n?/g, "") : "") + "\n@help\n" }))}
+                        className="ml-auto text-[10px] px-2 py-1 rounded-md border border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
+                        title="Mostrar guia de comandos inline"
+                      >Ajuda</button>
                     </div>
-                    {enrichData?.suggestion && <div className="text-[11px] text-foreground/80">{enrichData.suggestion}</div>}
-                    <div className="flex flex-wrap gap-1">
-                      {enrichData?.checklist?.length ? (
-                        <button onClick={acceptEnrichChecklist} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
-                          + Checklist ({enrichData.checklist.length})
-                        </button>
-                      ) : null}
-                      {enrichData?.next_actions?.length ? (
-                        <button onClick={acceptEnrichActions} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
-                          + Próximas ações ({enrichData.next_actions.length})
-                        </button>
-                      ) : null}
-                      {enrichData && !enrichData.checklist?.length && !enrichData.next_actions?.length && (
-                        <span className="text-[10px] text-muted-foreground">sem sugestões novas</span>
+                    <div className="relative flex-1 min-h-0 p-3">
+                      <textarea
+                        ref={notesRef}
+                        value={state.notes}
+                        onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
+                        onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+                        onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+                        onPaste={onNotesPaste}
+                        placeholder="Escreva ou cole o material aqui. Use / para estruturar e @ para anexar arquivos."
+                        className="h-full min-h-[360px] w-full resize-none rounded-lg border border-border bg-card/70 p-5 font-sans text-[14px] leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                      />
+                      {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
+                        <MentionList items={mentionMatches} onPick={insertMention} />
+                      )}
+                      {slashMenu?.where === "notes" && (
+                        <SlashList
+                          items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                          onPick={insertSlash}
+                        />
                       )}
                     </div>
-                  </div>
-                )}
+                  </section>
+
+                  <aside className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                      <FileText className="h-3.5 w-3.5 text-primary" />
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[11px] font-medium text-foreground/85">Documento estruturado</p>
+                        <p className="truncate text-[10px] text-muted-foreground">Preview, chips e publicação no mesmo fluxo.</p>
+                      </div>
+                    </div>
+                    <div className="flex-1 min-h-0 overflow-y-auto p-4">
+                      {state.notes.trim().length > 0 ? (
+                        <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
+                      ) : (
+                        <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border text-center text-[12px] leading-relaxed text-muted-foreground">
+                          O preview aparece aqui conforme você escreve.
+                        </div>
+                      )}
+                    </div>
+
+                    {!!state.mentions.length && (
+                      <div className="flex flex-wrap gap-1 border-t border-border px-3 py-2">
+                        {state.mentions.map(m => (
+                          <button key={m.id} onClick={() => onOpenFile?.(m.id)}
+                            className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary hover:bg-primary/20 flex items-center gap-1">
+                            <Link2 className="w-2.5 h-2.5" /> {m.name}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                    {(enrichBusy || enrichData) && (
+                      <div className="border-t border-border bg-background/60 p-3 space-y-2">
+                        <div className="text-[10px] uppercase tracking-wider text-primary flex items-center gap-1">
+                          <Zap className="w-3 h-3" /> Enriquecimento{enrichBusy && " em andamento"}
+                        </div>
+                        {enrichData?.suggestion && <div className="text-[11px] leading-relaxed text-foreground/80">{enrichData.suggestion}</div>}
+                        <div className="flex flex-wrap gap-1">
+                          {enrichData?.checklist?.length ? (
+                            <button onClick={acceptEnrichChecklist} className="text-[10px] px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                              Adicionar checklist ({enrichData.checklist.length})
+                            </button>
+                          ) : null}
+                          {enrichData?.next_actions?.length ? (
+                            <button onClick={acceptEnrichActions} className="text-[10px] px-2 py-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                              Adicionar ações ({enrichData.next_actions.length})
+                            </button>
+                          ) : null}
+                          {enrichData && !enrichData.checklist?.length && !enrichData.next_actions?.length && (
+                            <span className="text-[10px] text-muted-foreground">sem sugestões novas</span>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </aside>
+                </div>
               </div>
             )}
 
@@ -1879,8 +1932,8 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
   );
 }
 
-function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
-  clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
+function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
+  clientId: string | null; clientName: string | null; projectId?: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
   onStructureToNotes?: () => void | Promise<void>;
   label?: string;
@@ -2158,6 +2211,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   }
 
   const [pulling, setPulling] = useState(false);
+  const [contextStats, setContextStats] = useState<{ systemFiles: number; workspaceFiles: number; projects: number; tasks: number } | null>(null);
   const autoPulledRef = useRef<Set<string>>(new Set());
   async function pullDeepContext(opts: { silent?: boolean } = {}) {
     if (streaming || pulling) return;
@@ -2165,40 +2219,75 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     if (!opts.silent) toast({ title: "Preparando contexto", description: "Reunindo dados do cliente, projetos e pasta." });
     try {
       const chunks: string[] = [];
+      const stats = { systemFiles: 0, workspaceFiles: 0, projects: 0, tasks: 0 };
       if (clientId) {
-        const [profRes, projRes, briefRes, contractRes] = await Promise.all([
-          supabase.from("profiles").select("full_name,company,phone,email,plan_type,plan_value,status,segment").eq("id", clientId).maybeSingle(),
-          supabase.from("projects").select("id,name,status,progress,description,brand,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(10),
-          supabase.from("briefings").select("id,status,answers,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
-          supabase.from("contracts").select("id,status,total_value,installments,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(3),
+        const [profRes, projRes, briefRes, contractRes, fileRes, workspaceRes, reportRes, updateRes, docRes, vaultRes] = await Promise.all([
+          supabase.from("profiles").select("full_name,company_name,phone,email,plan_name,plan_value,plan_status,brand,client_type").eq("id", clientId).maybeSingle(),
+          supabase.from("projects").select("id,name,status,progress,description,brand,scope,objectives,deadline,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(12),
+          supabase.from("briefings").select("id,responses,submitted,required,created_at,project_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(3),
+          supabase.from("contracts").select("id,title,description,status,original_file_name,project_id,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(5),
+          supabase.from("files").select("id,file_name,file_url,file_type,folder,approval_status,caption,carousel_text,description,created_at,project_id,parent_file_id").eq("client_id", clientId).order("created_at", { ascending: false }).limit(180),
+          supabase.from("workspace_nodes").select("id,name,kind,mime,size_bytes,storage_path,parent_id,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(180),
+          supabase.from("reports").select("title,summary,highlights,next_steps,status,period_start,period_end,project_id,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(6),
+          supabase.from("updates").select("message,update_type,project_id,created_at").in("project_id", projectId ? [projectId] : ["00000000-0000-0000-0000-000000000000"]).limit(projectId ? 25 : 0),
+          projectId ? supabase.from("studio_docs").select("notes,published,updated_at").eq("project_id", projectId).maybeSingle() : Promise.resolve({ data: null } as any),
+          supabase.from("client_vault").select("category,title,url,username,notes,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(20),
         ]);
         const prof = profRes.data as any;
-        if (prof) chunks.push(`## Cliente\n- Nome: ${prof.full_name || "-"}\n- Empresa: ${prof.company || "-"}\n- Segmento: ${prof.segment || "-"}\n- Plano: ${prof.plan_type || "-"} · R$ ${prof.plan_value || 0}\n- Status: ${prof.status || "-"}\n- Contato: ${prof.email || "-"} · ${prof.phone || "-"}`);
+        if (prof) chunks.push(`## Cliente\n- Nome: ${prof.full_name || "-"}\n- Empresa: ${prof.company_name || "-"}\n- Tipo: ${prof.client_type || "-"}\n- Marca: ${prof.brand || "-"}\n- Plano: ${prof.plan_name || "-"} · R$ ${prof.plan_value || 0}\n- Status: ${prof.plan_status || "-"}\n- Contato: ${prof.email || "-"} · ${prof.phone || "-"}`);
         const projects = (projRes.data as any[]) || [];
+        stats.projects = projects.length;
+        const activeProject = projectId ? projects.find(p => p.id === projectId) : null;
+        if (activeProject) chunks.push(`## Projeto selecionado\n- Nome: ${activeProject.name}\n- Status: ${activeProject.status || "-"}\n- Progresso: ${activeProject.progress ?? 0}%\n- Prazo: ${activeProject.deadline || "-"}\n- Escopo: ${activeProject.scope || "-"}\n- Objetivos: ${activeProject.objectives || "-"}\n- Descrição: ${activeProject.description || "-"}`);
         if (projects.length) {
-          chunks.push(`## Projetos (${projects.length})\n${projects.map(p => `- ${p.name} · ${p.status} · ${p.progress ?? 0}% · ${p.brand || "-"}${p.description ? ` — ${String(p.description).slice(0, 120)}` : ""}`).join("\n")}`);
-          const ids = projects.map(p => p.id);
+          chunks.push(`## Projetos do cliente (${projects.length})\n${projects.map(p => `- ${p.name} · ${p.status || "-"} · ${p.progress ?? 0}% · ${p.brand || "-"}${p.deadline ? ` · prazo ${p.deadline}` : ""}${p.description ? ` — ${String(p.description).slice(0, 140)}` : ""}`).join("\n")}`);
+          const ids = projectId ? [projectId] : projects.map(p => p.id);
           const [taskRes, milRes] = await Promise.all([
-            supabase.from("tasks").select("title,status,priority,due_date").in("project_id", ids).limit(60),
-            supabase.from("milestones").select("title,status,due_date").in("project_id", ids).limit(30),
+            supabase.from("tasks").select("title,status,priority,due_date,description,project_id").in("project_id", ids).order("updated_at", { ascending: false }).limit(80),
+            supabase.from("milestones").select("title,status,target_date,description,project_id").in("project_id", ids).order("milestone_order", { ascending: true }).limit(40),
           ]);
           const tasks = (taskRes.data as any[]) || [];
+          stats.tasks = tasks.length;
           const opened = tasks.filter(t => t.status !== "done" && t.status !== "concluido").slice(0, 25);
-          if (opened.length) chunks.push(`## Tasks abertas (${opened.length})\n${opened.map(t => `- [${t.status}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · vence ${t.due_date}` : ""}`).join("\n")}`);
+          if (opened.length) chunks.push(`## Tarefas abertas (${opened.length})\n${opened.map(t => `- [${t.status || "-"}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · vence ${t.due_date}` : ""}${t.description ? ` — ${String(t.description).slice(0, 120)}` : ""}`).join("\n")}`);
           const mils = (milRes.data as any[]) || [];
-          if (mils.length) chunks.push(`## Milestones\n${mils.map(m => `- [${m.status}] ${m.title}${m.due_date ? ` · ${m.due_date}` : ""}`).join("\n")}`);
+          if (mils.length) chunks.push(`## Marcos do projeto\n${mils.map(m => `- [${m.status || "-"}] ${m.title}${m.target_date ? ` · ${m.target_date}` : ""}${m.description ? ` — ${String(m.description).slice(0, 120)}` : ""}`).join("\n")}`);
         }
-        const brief = briefRes.data as any;
-        if (brief?.answers) {
-          const ansStr = typeof brief.answers === "string" ? brief.answers : JSON.stringify(brief.answers);
-          chunks.push(`## Briefing (${brief.status || "?"})\n${ansStr.slice(0, 2200)}`);
+        const briefs = (briefRes.data as any[]) || [];
+        briefs.forEach((brief, idx) => {
+          if (!brief?.responses) return;
+          const ansStr = typeof brief.responses === "string" ? brief.responses : JSON.stringify(brief.responses, null, 2);
+          chunks.push(`## Briefing ${idx + 1}${brief.project_id === projectId ? " do projeto" : ""}\n- Enviado: ${brief.submitted ? "sim" : "não"}\n- Obrigatório: ${brief.required ? "sim" : "não"}\n${ansStr.slice(0, 2600)}`);
+        });
+        const systemFiles = ((fileRes.data as any[]) || []).filter(f => !projectId || !f.project_id || f.project_id === projectId);
+        stats.systemFiles = systemFiles.length;
+        if (systemFiles.length) {
+          const grouped = systemFiles.slice(0, 120).map(f => `- ${f.file_name}${f.folder ? ` · pasta ${f.folder}` : ""}${f.file_type ? ` · ${f.file_type}` : ""}${f.approval_status ? ` · ${f.approval_status}` : ""}${f.caption ? ` · legenda: ${String(f.caption).slice(0, 100)}` : ""}${f.description ? ` · descrição: ${String(f.description).slice(0, 100)}` : ""}${f.carousel_text ? ` · carrossel: ${String(f.carousel_text).slice(0, 140)}` : ""}`).join("\n");
+          chunks.push(`## Arquivos do cliente no sistema (${systemFiles.length})\n${grouped}`);
+        }
+        const workspaceNodes = ((workspaceRes.data as any[]) || []);
+        stats.workspaceFiles = workspaceNodes.filter(n => n.kind === "file").length;
+        if (workspaceNodes.length) {
+          chunks.push(`## Arquivos do Workspace (${workspaceNodes.length})\n${workspaceNodes.slice(0, 120).map(n => `- ${n.kind === "folder" ? "Pasta" : "Arquivo"}: ${n.name}${n.mime ? ` · ${n.mime}` : ""}${n.size_bytes ? ` · ${Math.round(Number(n.size_bytes) / 1024)}KB` : ""}`).join("\n")}`);
+        }
+        const reports = (reportRes.data as any[]) || [];
+        if (reports.length) chunks.push(`## Relatórios e aprendizados\n${reports.map(r => `- ${r.title || "Relatório"} · ${r.status || "-"}${r.period_start ? ` · ${r.period_start} a ${r.period_end || "-"}` : ""}${r.summary ? ` — ${String(r.summary).slice(0, 180)}` : ""}${r.next_steps ? ` · próximos: ${String(r.next_steps).slice(0, 140)}` : ""}`).join("\n")}`);
+        const updates = (updateRes.data as any[]) || [];
+        if (updates.length) chunks.push(`## Atualizações recentes do projeto\n${updates.map(u => `- ${u.created_at?.slice(0, 10) || ""} · ${u.update_type || "update"}: ${u.message}`).join("\n")}`);
+        const doc = docRes.data as any;
+        if (doc?.notes) chunks.push(`## Notas publicadas/Studio do projeto\n${String(doc.notes).slice(0, 3000)}`);
+        const vault = (vaultRes.data as any[]) || [];
+        if (vault.length) chunks.push(`## Links e sistemas do cliente\n${vault.map(v => `- ${v.category || "item"}: ${v.title}${v.url ? ` · ${v.url}` : ""}${v.username ? ` · usuário: ${v.username}` : ""}${v.notes ? ` — ${String(v.notes).slice(0, 100)}` : ""}`).join("\n")}`);
+        setContextStats(stats);
+        if (!systemFiles.length && !workspaceNodes.length) {
+          chunks.push("## Observação de contexto\nNenhum arquivo foi encontrado para este cliente/projeto nas bases de arquivos do sistema e do Workspace.");
         }
         const contracts = (contractRes.data as any[]) || [];
-        if (contracts.length) chunks.push(`## Contratos\n${contracts.map(c => `- ${c.status} · R$ ${c.total_value || 0} · ${c.installments || 1}x`).join("\n")}`);
+        if (contracts.length) chunks.push(`## Contratos\n${contracts.map(c => `- ${c.title || c.original_file_name || "Contrato"} · ${c.status || "-"}${c.description ? ` — ${String(c.description).slice(0, 120)}` : ""}`).join("\n")}`);
       }
       if (folderId) {
         const { data: nodes } = await supabase.from("workspace_nodes").select("name,kind,mime").eq("parent_id", folderId).limit(60);
-        if (nodes?.length) chunks.push(`## Pasta atual /${folderPath}\n${nodes.map((n: any) => `- ${n.kind === "folder" ? "[pasta]" : "[arquivo]"} ${n.name}${n.mime ? ` (${n.mime})` : ""}`).join("\n")}`);
+        if (nodes?.length) chunks.push(`## Pasta aberta agora /${folderPath}\n${nodes.map((n: any) => `- ${n.kind === "folder" ? "Pasta" : "Arquivo"}: ${n.name}${n.mime ? ` (${n.mime})` : ""}`).join("\n")}`);
       }
       if (notes?.trim()) chunks.push(`## Notas em construção\n${notes.slice(0, 2000)}`);
       if (script?.trim()) chunks.push(`## Roteiro em construção\n${script.slice(0, 2000)}`);
@@ -2235,7 +2324,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         "----- DOSSIÊ -----",
         dossier,
       ].join("\n");
-      await send(prompt);
+      await send(prompt, { displayText: "Analisar contexto completo do cliente e do projeto" });
 
     } catch (e: any) {
       if (!opts.silent) toast({ title: "Falha ao preparar contexto", description: e?.message || "erro", variant: "destructive" });
@@ -2268,7 +2357,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
 
 
-  async function send(override?: string) {
+  async function send(override?: string, options?: { displayText?: string }) {
     const text = (override ?? input).trim();
     if (!text || streaming) return;
 
@@ -2291,10 +2380,11 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
       ? `\n\n---\nAnexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
       : "";
     const finalText = text + attachBlock;
+    const visibleText = (options?.displayText?.trim() || text) + attachBlock;
     const currentAttachments = attached;
     setInput("");
     setAttached([]);
-    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: finalText, created_at: new Date().toISOString() }]);
+    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: visibleText, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamBuf("");
 
     try {
@@ -2311,10 +2401,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         body: JSON.stringify({
           thread_id: tid,
           message: finalText,
+          display_message: visibleText,
           persona_id: persona.forcedId || undefined,
           context: {
             client_id: clientId,
             client_name: clientName,
+            project_id: projectId,
             folder_id: folderId,
             folder_path: folderPath,
             notes: boardLog && boardLog.length
@@ -2552,8 +2644,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         {/* Chip de contexto auto por pasta */}
         <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
           <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />/{folderPath || "raiz"}</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="file").length} arq</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileIcon className="w-2.5 h-2.5" />{contextStats ? contextStats.systemFiles + contextStats.workspaceFiles : availableFiles.filter(f=>f.kind==="file").length} arq</span>
           <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="folder").length} sub</span>
+          {contextStats && <span className="px-1.5 py-0.5 rounded bg-primary/10 text-primary flex items-center gap-1"><Brain className="w-2.5 h-2.5" />base completa</span>}
           {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><NotebookPen className="w-2.5 h-2.5" />notas</span>}
           {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileText className="w-2.5 h-2.5" />roteiro</span>}
           <span className="ml-auto opacity-60">contexto auto</span>
@@ -2596,6 +2689,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 "prose-strong:font-semibold prose-strong:text-foreground",
                 "prose-code:text-[11.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-secondary/60 prose-code:before:content-none prose-code:after:content-none",
                 "prose-pre:bg-secondary/60 prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:text-[11.5px]",
+                "prose-table:my-4 prose-table:text-[12px] prose-th:border prose-th:border-border prose-th:bg-secondary/50 prose-th:px-3 prose-th:py-2 prose-td:border prose-td:border-border prose-td:px-3 prose-td:py-2",
                 "prose-hr:my-4 prose-hr:border-border/50",
                 "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
                 "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"

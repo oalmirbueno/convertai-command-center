@@ -127,11 +127,13 @@ Regras absolutas:
 
 
     const body = await req.json();
-    const { thread_id, message, context } = body as {
+    const { thread_id, message, display_message, context } = body as {
       thread_id: string;
       message: string;
+      display_message?: string;
       context?: {
         client_id?: string | null;
+        project_id?: string | null;
         client_name?: string; folder_id?: string | null; folder_path?: string; notes?: string; script?: string;
         files?: { name: string; url?: string | null }[];
         attachments?: { id: string; name: string; kind?: string; url?: string | null }[];
@@ -159,14 +161,63 @@ Regras absolutas:
     let fc = context?.folder_contents;
     if ((!fc || (!fc.files?.length && !fc.subfolders?.length)) && context?.folder_id) {
       const { data: nodes } = await admin.from("workspace_nodes")
-        .select("id,name,kind,mime,external_url").eq("parent_id", context.folder_id).limit(80);
+        .select("id,name,kind,mime,storage_path").eq("parent_id", context.folder_id).limit(80);
       if (nodes?.length) {
         fc = {
           subfolders: nodes.filter(n => n.kind === "folder").map(n => ({ id: n.id, name: n.name })),
-          files: nodes.filter(n => n.kind === "file").map(n => ({ id: n.id, name: n.name, url: n.external_url })),
+          files: nodes.filter(n => n.kind === "file").map(n => ({ id: n.id, name: n.name, url: n.storage_path })),
           total: nodes.length,
         };
       }
+    }
+
+    // Contexto profundo server-side: o agente sempre lê a base do cliente/projeto,
+    // não apenas a pasta aberta no Workspace.
+    const deepLines: string[] = [];
+    if (context?.client_id) {
+      const cidDeep = context.client_id;
+      const pidDeep = context.project_id || null;
+      const [profRes, projRes, fileRes, wsRes, briefRes, reportRes, docRes] = await Promise.all([
+        admin.from("profiles").select("full_name,company_name,email,phone,plan_name,plan_value,plan_status,brand,client_type").eq("id", cidDeep).maybeSingle(),
+        admin.from("projects").select("id,name,status,progress,description,scope,objectives,deadline,brand,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(12),
+        admin.from("files").select("id,file_name,file_type,folder,approval_status,caption,carousel_text,description,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(160),
+        admin.from("workspace_nodes").select("id,name,kind,mime,size_bytes,parent_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(160),
+        admin.from("briefings").select("responses,submitted,required,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(3),
+        admin.from("reports").select("title,summary,highlights,next_steps,status,period_start,period_end,project_id,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(5),
+        pidDeep ? admin.from("studio_docs").select("notes,published,updated_at").eq("project_id", pidDeep).maybeSingle() : Promise.resolve({ data: null } as any),
+      ]);
+      const prof = profRes.data as any;
+      if (prof) deepLines.push(`\nCLIENTE NA BASE:\n- Nome: ${prof.full_name || "-"}\n- Empresa: ${prof.company_name || "-"}\n- Plano: ${prof.plan_name || "-"} · R$ ${prof.plan_value || 0}\n- Status: ${prof.plan_status || "-"}\n- Marca/tipo: ${prof.brand || "-"} · ${prof.client_type || "-"}`);
+      const projects = (projRes.data as any[]) || [];
+      const selected = pidDeep ? projects.find(p => p.id === pidDeep) : null;
+      if (selected) deepLines.push(`\nPROJETO SELECIONADO:\n- ${selected.name}\n- Status: ${selected.status || "-"} · ${selected.progress ?? 0}% · prazo ${selected.deadline || "-"}\n- Escopo: ${selected.scope || "-"}\n- Objetivos: ${selected.objectives || "-"}\n- Descrição: ${selected.description || "-"}`);
+      if (projects.length) {
+        deepLines.push(`\nPROJETOS DO CLIENTE (${projects.length}):\n${projects.map(p => `- ${p.name} · ${p.status || "-"} · ${p.progress ?? 0}%${p.deadline ? ` · ${p.deadline}` : ""}${p.description ? ` — ${String(p.description).slice(0, 140)}` : ""}`).join("\n")}`);
+        const ids = pidDeep ? [pidDeep] : projects.map(p => p.id);
+        const [tasksRes, milsRes] = await Promise.all([
+          admin.from("tasks").select("title,status,priority,due_date,description,project_id").in("project_id", ids).order("updated_at", { ascending: false }).limit(80),
+          admin.from("milestones").select("title,status,target_date,description,project_id").in("project_id", ids).order("milestone_order", { ascending: true }).limit(40),
+        ]);
+        const tasks = (tasksRes.data as any[]) || [];
+        if (tasks.length) deepLines.push(`\nTAREFAS DO ESCOPO (${tasks.length}):\n${tasks.slice(0, 45).map(t => `- [${t.status || "-"}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · ${t.due_date}` : ""}${t.description ? ` — ${String(t.description).slice(0, 100)}` : ""}`).join("\n")}`);
+        const mils = (milsRes.data as any[]) || [];
+        if (mils.length) deepLines.push(`\nMARCOS DO ESCOPO:\n${mils.map(m => `- [${m.status || "-"}] ${m.title}${m.target_date ? ` · ${m.target_date}` : ""}${m.description ? ` — ${String(m.description).slice(0, 100)}` : ""}`).join("\n")}`);
+      }
+      const sysFiles = ((fileRes.data as any[]) || []).filter(f => !pidDeep || !f.project_id || f.project_id === pidDeep);
+      if (sysFiles.length) deepLines.push(`\nARQUIVOS DO CLIENTE NO SISTEMA (${sysFiles.length}):\n${sysFiles.slice(0, 90).map(f => `- ${f.file_name}${f.folder ? ` · pasta ${f.folder}` : ""}${f.file_type ? ` · ${f.file_type}` : ""}${f.approval_status ? ` · ${f.approval_status}` : ""}${f.caption ? ` · legenda: ${String(f.caption).slice(0, 80)}` : ""}${f.description ? ` · descrição: ${String(f.description).slice(0, 80)}` : ""}${f.carousel_text ? ` · carrossel: ${String(f.carousel_text).slice(0, 100)}` : ""}`).join("\n")}`);
+      const wsNodes = (wsRes.data as any[]) || [];
+      if (wsNodes.length) deepLines.push(`\nARQUIVOS E PASTAS DO WORKSPACE (${wsNodes.length}):\n${wsNodes.slice(0, 90).map(n => `- ${n.kind === "folder" ? "Pasta" : "Arquivo"}: ${n.name}${n.mime ? ` · ${n.mime}` : ""}`).join("\n")}`);
+      const briefs = (briefRes.data as any[]) || [];
+      briefs.forEach((b, i) => {
+        if (!b?.responses) return;
+        const raw = typeof b.responses === "string" ? b.responses : JSON.stringify(b.responses);
+        deepLines.push(`\nBRIEFING ${i + 1}:\n${raw.slice(0, 1800)}`);
+      });
+      const reports = (reportRes.data as any[]) || [];
+      if (reports.length) deepLines.push(`\nRELATÓRIOS E APRENDIZADOS:\n${reports.map(r => `- ${r.title || "Relatório"} · ${r.status || "-"}${r.summary ? ` — ${String(r.summary).slice(0, 140)}` : ""}${r.next_steps ? ` · próximos: ${String(r.next_steps).slice(0, 100)}` : ""}`).join("\n")}`);
+      const doc = docRes.data as any;
+      if (doc?.notes) deepLines.push(`\nNOTAS PUBLICADAS DO PROJETO:\n${String(doc.notes).slice(0, 2200)}`);
+      if (!sysFiles.length && !wsNodes.length) deepLines.push("\nOBSERVAÇÃO: nenhuma base de arquivos foi encontrada para este cliente/projeto.");
     }
 
     // monta contexto
@@ -181,11 +232,11 @@ Regras absolutas:
     }
     if (fc?.subfolders?.length) {
       ctxLines.push(`\nSUBPASTAS DA PASTA ATUAL (${fc.subfolders.length}):`);
-      fc.subfolders.slice(0, 30).forEach(s => ctxLines.push(`- 🗂 ${s.name}`));
+      fc.subfolders.slice(0, 30).forEach(s => ctxLines.push(`- Pasta: ${s.name}`));
     }
     if (fc?.files?.length) {
       ctxLines.push(`\nARQUIVOS DA PASTA ATUAL (${fc.files.length}) — use como material real de referência:`);
-      fc.files.slice(0, 40).forEach(f => ctxLines.push(`- 📎 ${f.name}${f.url ? ` (${f.url})` : ""} · ref=wsfile:${f.id}`));
+      fc.files.slice(0, 40).forEach(f => ctxLines.push(`- Arquivo: ${f.name}${f.url ? ` (${f.url})` : ""} · ref=wsfile:${f.id}`));
     } else if (context?.files?.length) {
       ctxLines.push("\nArquivos disponíveis no diretório:");
       context.files.slice(0, 20).forEach(f => ctxLines.push(`- ${f.name}${f.url ? ` (${f.url})` : ""}`));
@@ -290,7 +341,8 @@ Regras:
       baseIdentity,
       thread.system_prompt || "",
       preparoBlock,
-      ctxLines.length ? `\n---CONTEXTO---\n${ctxLines.join("\n")}` : "",
+      deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
+      ctxLines.length ? `\n---CONTEXTO DA SESSÃO---\n${ctxLines.join("\n")}` : "",
     ].filter(Boolean).join("\n\n");
 
     const messages = [
@@ -299,7 +351,8 @@ Regras:
       { role: "user", content: message },
     ];
 
-    await admin.from("workspace_agent_messages").insert({ thread_id, role: "user", content: message });
+    const userMessageToStore = String(display_message || message).slice(0, 12000);
+    await admin.from("workspace_agent_messages").insert({ thread_id, role: "user", content: userMessageToStore });
     if (persona?.id) {
       await admin.from("workspace_agent_personas")
         .update({ usage_count: (persona.usage_count || 0) + 1, last_used_at: new Date().toISOString() })
@@ -373,7 +426,7 @@ Regras:
             await admin.from("workspace_agent_messages").insert({ thread_id, role: "assistant", content: full });
             // atualiza título se ainda for default
             if (thread.title === "Nova conversa") {
-              const title = message.slice(0, 60).replace(/\n/g, " ");
+              const title = userMessageToStore.slice(0, 60).replace(/\n/g, " ");
               await admin.from("workspace_agent_threads").update({ title, updated_at: new Date().toISOString() }).eq("id", thread_id);
             } else {
               await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
