@@ -1222,8 +1222,9 @@ export default function Workspace() {
                   const isFolder = n.kind === "folder";
                   const dragActive = dragOverId === n.id && isFolder;
                   return (
+                    <div key={n.id}>
+                    {renderContextMenu(n, (
                     <div
-                      key={n.id}
                       draggable
                       onDragStart={(e) => onDragStartNode(e, n)}
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
@@ -1238,6 +1239,8 @@ export default function Workspace() {
                       {!isFolder && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
                       {n.sent_for_approval_file_id && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">aprovação</span>}
                       {renderActionsMenu(n)}
+                    </div>
+                    ))}
                     </div>
                   );
                 })}
