@@ -242,7 +242,18 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           </div>
 
           <div className="flex-1 min-h-0 overflow-y-auto">
+            {mode === "agent" && (
+              <AgentChat
+                clientId={clientId ?? null}
+                clientName={clientName ?? null}
+                folderPath={folderPath ?? contextLabel}
+                availableFiles={availableFiles}
+                notes={state.notes}
+                script={state.script}
+              />
+            )}
             {mode === "notes" && (
+
               <div className="p-3 space-y-2 h-full flex flex-col">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2">
                   <MessageSquare className="w-3 h-3" /> Digite <b>@</b> para vincular arquivos do painel atual.
