@@ -1896,6 +1896,7 @@ export type Database = {
         Row: {
           client_id: string | null
           created_at: string
+          folder_path: string | null
           id: string
           parent_node_id: string | null
           scope: string
@@ -1907,6 +1908,7 @@ export type Database = {
         Insert: {
           client_id?: string | null
           created_at?: string
+          folder_path?: string | null
           id?: string
           parent_node_id?: string | null
           scope?: string
@@ -1918,6 +1920,7 @@ export type Database = {
         Update: {
           client_id?: string | null
           created_at?: string
+          folder_path?: string | null
           id?: string
           parent_node_id?: string | null
           scope?: string

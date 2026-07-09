@@ -535,7 +535,7 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 // AGENT CHAT (persistente por cliente)
 // =========================
 
-type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null };
+type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
 function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, script }: {
@@ -552,15 +552,18 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Carrega threads do contexto (cliente)
-  useEffect(() => { void loadThreads(); }, [clientId]);
+  // Threads escopadas por cliente + pasta — cada diretório tem seu contexto isolado
+  useEffect(() => { void loadThreads(); setActiveId(null); }, [clientId, folderPath]);
   async function loadThreads() {
-    const q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id")
+    let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
       .order("updated_at", { ascending: false }).limit(30);
-    const { data } = clientId ? await q.eq("client_id", clientId) : await q.is("client_id", null);
+    q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
+    q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    const { data } = await q;
     setThreads((data as AgentThread[]) || []);
-    if (data && data.length && !activeId) setActiveId(data[0].id);
+    if (data && data.length) setActiveId(data[0].id);
   }
+
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
   async function loadMsgs(id: string) {
@@ -575,8 +578,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
     const { data: sess } = await supabase.auth.getUser();
     if (!sess.user) return;
     const { data, error } = await supabase.from("workspace_agent_threads")
-      .insert({ user_id: sess.user.id, client_id: clientId, title: "Nova conversa" })
-      .select("id,title,updated_at,client_id").single();
+      .insert({ user_id: sess.user.id, client_id: clientId, folder_path: folderPath || null, title: "Nova conversa" })
+      .select("id,title,updated_at,client_id,folder_path").single();
+
     if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
     setThreads(t => [data as AgentThread, ...t]);
     setActiveId(data.id);
@@ -597,8 +601,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       const { data: sess } = await supabase.auth.getUser();
       if (!sess.user) return;
       const { data } = await supabase.from("workspace_agent_threads")
-        .insert({ user_id: sess.user.id, client_id: clientId, title: text.slice(0, 60) })
-        .select("id,title,updated_at,client_id").single();
+        .insert({ user_id: sess.user.id, client_id: clientId, folder_path: folderPath || null, title: text.slice(0, 60) })
+        .select("id,title,updated_at,client_id,folder_path").single();
+
       if (!data) return;
       tid = data.id;
       setThreads(t => [data as AgentThread, ...t]);
@@ -659,7 +664,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
         <Bot className="w-3.5 h-3.5 text-primary" />
         <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
           {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+          {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
         </span>
+
         <button onClick={() => setShowHistory(v => !v)}
           className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Histórico">
           <History className="w-3 h-3" />

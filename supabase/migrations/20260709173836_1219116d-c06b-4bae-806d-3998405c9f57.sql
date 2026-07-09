@@ -1,0 +1,2 @@
+ALTER TABLE public.workspace_agent_threads ADD COLUMN IF NOT EXISTS folder_path text;
+CREATE INDEX IF NOT EXISTS workspace_agent_threads_scope_idx ON public.workspace_agent_threads(client_id, folder_path, updated_at DESC);
