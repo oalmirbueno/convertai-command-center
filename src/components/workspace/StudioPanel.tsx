@@ -1042,23 +1042,29 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
 
   .content { max-width: 178mm; margin: 0 auto; }
 
-  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid; }
+  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid; }
   h2 {
     font-size: 17px; margin: 28px 0 10px; font-weight: 600; letter-spacing: -0.01em;
     padding: 6px 0 6px 12px; border-left: 3px solid #00FF66;
-    page-break-after: avoid; break-after: avoid;
+    page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid;
   }
-  h3 { font-size: 13.5px; margin: 18px 0 6px; font-weight: 600; color: #171717; page-break-after: avoid; break-after: avoid; }
-  p { margin: 6px 0; orphans: 3; widows: 3; }
+  h3 { font-size: 13.5px; margin: 18px 0 6px; font-weight: 600; color: #171717; page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid; }
+  /* truque: puxa o primeiro bloco após o heading para não ficar heading sozinho no fim da página */
+  h2 + *, h3 + * { page-break-before: avoid; break-before: avoid; }
+  p { margin: 6px 0; orphans: 3; widows: 3; word-wrap: break-word; overflow-wrap: anywhere; }
   strong { font-weight: 600; }
   em { color: #404040; }
 
-  .section { page-break-inside: avoid; break-inside: avoid-page; margin-bottom: 6px; }
-  ul, ol { padding-left: 20px; margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
-  li { margin: 3px 0; }
+  /* Sessão longa: pode quebrar; apenas pequenas caixas (.keep) resistem à quebra */
+  .section { margin-bottom: 6px; }
+  .keep { page-break-inside: avoid; break-inside: avoid; }
+
+  ul, ol { padding-left: 20px; margin: 6px 0; }
+  li { margin: 3px 0; page-break-inside: avoid; break-inside: avoid; }
   li > p { margin: 0; }
 
   ul.check { list-style: none; padding-left: 0; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 14px; background: #fafafa; page-break-inside: avoid; break-inside: avoid; }
+  ul.check.long { page-break-inside: auto; break-inside: auto; }
   ul.check li { padding: 3px 0; display: flex; gap: 8px; align-items: flex-start; }
   ul.check li::before {
     content: ""; display: inline-block; width: 12px; height: 12px; min-width: 12px;
@@ -1067,8 +1073,8 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
   ul.check li.done::before { background: #00FF66; border-color: #00FF66; }
   ul.check li.done { color: #737373; text-decoration: line-through; }
 
-  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
-  pre { background: #0D0D0D; color: #fafafa; padding: 12px 14px; border-radius: 6px; font-size: 11px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; word-break: break-all; }
+  pre { background: #0D0D0D; color: #fafafa; padding: 12px 14px; border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-break: break-word; page-break-inside: auto; break-inside: auto; }
   pre code { background: transparent; color: inherit; padding: 0; }
   blockquote {
     margin: 10px 0; padding: 8px 14px; border-left: 3px solid #d4d4d8;
@@ -1076,13 +1082,19 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
   }
   hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 22px 0; }
 
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11.5px; page-break-inside: avoid; break-inside: avoid; }
-  th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; vertical-align: top; }
+  /* Tabelas fluidas com cabeçalho repetido em cada página */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11.5px; page-break-inside: auto; break-inside: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
   th { background: #f4f4f5; font-weight: 600; }
+  table.compact th, table.compact td { padding: 4px 6px; font-size: 10.5px; }
 
   @media print {
     .doc-footer { position: fixed; bottom: 8mm; left: 16mm; right: 16mm; font-size: 9.5px; color: #737373; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #e5e5e5; padding-top: 5px; }
     body { -webkit-print-color-adjust: exact; }
+    a { color: inherit; text-decoration: none; }
   }
 </style></head><body>
 
@@ -1121,12 +1133,9 @@ function mdToHtml(md: string): string {
   const lines = md.split("\n");
   const out: string[] = [];
   let inList: "ul" | "ol" | "check" | null = null;
-  let inSection = false;
+  let checkBuf: string[] = [];
   let inCode = false;
   let codeBuf: string[] = [];
-  const openSection = () => { if (!inSection) { out.push(`<div class="section">`); inSection = true; } };
-  const closeSection = () => { if (inSection) { out.push(`</div>`); inSection = false; } };
-  const closeList = () => { if (inList) { out.push(`</${inList === "check" ? "ul" : inList}>`); inList = null; } };
 
   const inline = (s: string) => s
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
@@ -1135,68 +1144,104 @@ function mdToHtml(md: string): string {
     .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>')
     .replace(/\[@([^\]]+)\]\(wsfile:[^)]+\)/g, '<strong>@$1</strong>');
 
-  for (const raw of lines) {
+  const flushChecklist = () => {
+    if (!checkBuf.length) return;
+    // Checklist grande (>8 itens) libera quebra pra evitar overflow numa página
+    const cls = checkBuf.length > 8 ? "check long" : "check";
+    out.push(`<ul class="${cls}">${checkBuf.join("")}</ul>`);
+    checkBuf = [];
+  };
+  const closeList = () => {
+    if (inList === "check") { flushChecklist(); inList = null; return; }
+    if (inList) { out.push(`</${inList}>`); inList = null; }
+  };
+
+  // Detecta e consome tabela GFM começando em i. Retorna [html, linhasConsumidas].
+  const tryTable = (i: number): [string, number] | null => {
+    const head = lines[i];
+    const sep = lines[i + 1];
+    if (!head || !sep) return null;
+    if (!/^\s*\|.+\|\s*$/.test(head)) return null;
+    if (!/^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/.test(sep)) return null;
+    const parseRow = (row: string) =>
+      row.trim().replace(/^\|/, "").replace(/\|$/, "").split("|").map(c => c.trim());
+    const cols = parseRow(head);
+    const aligns = parseRow(sep).map(s => s.startsWith(":") && s.endsWith(":") ? "center" : s.endsWith(":") ? "right" : "left");
+    const rows: string[][] = [];
+    let j = i + 2;
+    while (j < lines.length && /^\s*\|.+\|\s*$/.test(lines[j])) {
+      rows.push(parseRow(lines[j]));
+      j++;
+    }
+    const compact = cols.length >= 5 ? " compact" : "";
+    const thead = `<thead><tr>${cols.map((c, k) => `<th style="text-align:${aligns[k] || "left"}">${inline(escapeHtml(c))}</th>`).join("")}</tr></thead>`;
+    const tbody = `<tbody>${rows.map(r => `<tr>${r.map((c, k) => `<td style="text-align:${aligns[k] || "left"}">${inline(escapeHtml(c))}</td>`).join("")}</tr>`).join("")}</tbody>`;
+    return [`<table class="doc-table${compact}">${thead}${tbody}</table>`, j - i];
+  };
+
+  for (let i = 0; i < lines.length; i++) {
+    const raw = lines[i];
+
+    // fenced code
     if (/^```/.test(raw)) {
-      if (inCode) { out.push(`<pre><code>${codeBuf.map(c => c.replace(/</g,"&lt;")).join("\n")}</code></pre>`); codeBuf = []; inCode = false; }
-      else { closeList(); closeSection(); inCode = true; }
+      if (inCode) {
+        out.push(`<pre><code>${codeBuf.map(c => c.replace(/</g,"&lt;")).join("\n")}</code></pre>`);
+        codeBuf = []; inCode = false;
+      } else {
+        closeList(); inCode = true;
+      }
       continue;
     }
     if (inCode) { codeBuf.push(raw); continue; }
 
+    // tabelas
+    const tbl = tryTable(i);
+    if (tbl) { closeList(); out.push(tbl[0]); i += tbl[1] - 1; continue; }
+
     const l = raw;
     if (/^#\s+/.test(l)) {
-      closeList(); closeSection();
+      closeList();
       out.push(`<h1>${inline(escapeHtml(l.replace(/^#\s+/, "")))}</h1>`);
-      openSection();
     } else if (/^##\s+/.test(l)) {
-      closeList(); closeSection();
+      closeList();
       out.push(`<h2>${inline(escapeHtml(l.replace(/^##\s+/, "")))}</h2>`);
-      openSection();
     } else if (/^###\s+/.test(l)) {
       closeList();
-      if (!inSection) openSection();
       out.push(`<h3>${inline(escapeHtml(l.replace(/^###\s+/, "")))}</h3>`);
     } else if (/^\s*-\s+\[( |x|X)\]\s+/.test(l)) {
-      if (!inSection) openSection();
-      if (inList !== "check") { closeList(); out.push(`<ul class="check">`); inList = "check"; }
+      if (inList && inList !== "check") closeList();
+      inList = "check";
       const done = /\[(x|X)\]/.test(l);
       const text = l.replace(/^\s*-\s+\[( |x|X)\]\s+/, "");
-      out.push(`<li class="${done ? "done" : ""}"><span>${inline(escapeHtml(text))}</span></li>`);
+      checkBuf.push(`<li class="${done ? "done" : ""}"><span>${inline(escapeHtml(text))}</span></li>`);
     } else if (/^\s*-\s+/.test(l)) {
-      if (!inSection) openSection();
       if (inList !== "ul") { closeList(); out.push("<ul>"); inList = "ul"; }
       out.push(`<li>${inline(escapeHtml(l.replace(/^\s*-\s+/, "")))}</li>`);
     } else if (/^\s*\d+\.\s+/.test(l)) {
-      if (!inSection) openSection();
       if (inList !== "ol") { closeList(); out.push("<ol>"); inList = "ol"; }
       out.push(`<li>${inline(escapeHtml(l.replace(/^\s*\d+\.\s+/, "")))}</li>`);
     } else if (/^>\s?/.test(l)) {
       closeList();
-      if (!inSection) openSection();
       out.push(`<blockquote>${inline(escapeHtml(l.replace(/^>\s?/, "")))}</blockquote>`);
     } else if (/^---+$/.test(l.trim())) {
-      closeList(); closeSection();
+      closeList();
       out.push("<hr/>");
     } else if (l.trim() === "") {
       closeList();
       out.push("");
     } else if (/^@kanban\s*$/.test(l.trim())) {
       closeList();
-      if (!inSection) openSection();
       out.push(`<blockquote><strong>Kanban vivo</strong> disponível na versão online do documento.</blockquote>`);
     } else if (/^@video\[([^\]]*)\]\((https?:[^)]+)\)/.test(l.trim())) {
       const m = l.trim().match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)/)!;
       closeList();
-      if (!inSection) openSection();
       out.push(`<blockquote><strong>Vídeo:</strong> ${escapeHtml(m[1] || "assistir")} · <a href="${m[2]}">${escapeHtml(m[2])}</a></blockquote>`);
     } else {
       closeList();
-      if (!inSection) openSection();
       out.push(`<p>${inline(escapeHtml(l))}</p>`);
     }
   }
   closeList();
-  closeSection();
   if (inCode) out.push(`<pre><code>${codeBuf.map(c => c.replace(/</g,"&lt;")).join("\n")}</code></pre>`);
   return out.join("\n");
 }
