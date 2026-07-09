@@ -15,6 +15,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import remarkBreaks from "remark-breaks";
 
 
 /**
@@ -2721,14 +2722,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
               )}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.content}</ReactMarkdown>
             </article>
           )
         ))}
 
         {streaming && streamBuf && (
           <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words prose prose-sm prose-invert max-w-none prose-p:my-2.5 prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-ol:pl-5 prose-ol:space-y-1.5 prose-ul:pl-5 prose-ul:space-y-1.5 prose-li:leading-[1.65] prose-li:marker:text-primary/60">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamBuf}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{streamBuf}</ReactMarkdown>
             <span className="inline-block w-[3px] h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
           </article>
         )}
