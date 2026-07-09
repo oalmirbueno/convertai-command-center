@@ -318,8 +318,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const lastSavedNotesRef = useRef<string>("");     // último conteúdo confirmado no servidor
   const lastRemoteAtRef = useRef<string>("");        // updated_at do último snapshot remoto aplicado
   const isTypingRef = useRef<boolean>(false);        // true enquanto usuário digita (limpo após debounce)
-  const notesRef = useRef<string>(state.notes);
-  useEffect(() => { notesRef.current = state.notes; }, [state.notes]);
+  const notesContentRef = useRef<string>(state.notes);
+  useEffect(() => { notesContentRef.current = state.notes; }, [state.notes]);
   useEffect(() => {
     (async () => {
       const { data } = await supabase.auth.getUser();
@@ -346,7 +346,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       lastSavedNotesRef.current = remoteNotes;
       lastRemoteAtRef.current = (data as any).updated_at || "";
       // Hidrata local quando ele estiver vazio ou o remoto for mais recente e local ainda não foi tocado
-      if (remoteNotes && (!notesRef.current.trim() || notesRef.current === "")) {
+      if (remoteNotes && (!notesContentRef.current.trim() || notesContentRef.current === "")) {
         setState(s => ({ ...s, notes: remoteNotes }));
       }
     })();
@@ -371,11 +371,11 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           setDocPublished(!!row.published);
           const remoteNotes = (row.notes || "") as string;
           // Preserva edições locais não salvas: só sobrescreve se local == último salvo
-          if (remoteNotes && remoteNotes !== notesRef.current && !isTypingRef.current
-              && notesRef.current === lastSavedNotesRef.current) {
+          if (remoteNotes && remoteNotes !== notesContentRef.current && !isTypingRef.current
+              && notesContentRef.current === lastSavedNotesRef.current) {
             lastSavedNotesRef.current = remoteNotes;
             setState(s => ({ ...s, notes: remoteNotes }));
-          } else if (remoteNotes && remoteNotes !== notesRef.current && notesRef.current !== lastSavedNotesRef.current) {
+          } else if (remoteNotes && remoteNotes !== notesContentRef.current && notesContentRef.current !== lastSavedNotesRef.current) {
             // Conflito: mantém edição local, avisa
             toast({ title: "Edição remota detectada", description: "Sua versão local foi preservada. Recarregue para ver a remota." });
           }
@@ -439,7 +439,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     const next = !docPublished;
     setDocPublished(next);
     // Persistência imediata (não espera debounce) — garante que o cliente veja na hora
-    const notesNow = notesRef.current;
+    const notesNow = notesContentRef.current;
     const { data, error } = await supabase.from("studio_docs").upsert({
       project_id: projectId,
       notes: notesNow,
