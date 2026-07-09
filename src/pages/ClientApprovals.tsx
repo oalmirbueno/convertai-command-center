@@ -105,6 +105,28 @@ export default function ClientApprovals() {
   const [previewIdx, setPreviewIdx] = useState(0);
   const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
 
+  // Prefetch every carousel sibling as soon as the preview opens.
+  useEffect(() => {
+    if (!previewFile) return;
+    const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
+    const urls = [previewFile, ...children].map((f: any) => f?.file_url).filter(Boolean);
+    prefetchImages(urls);
+  }, [previewFile]);
+
+  // Keyboard arrows for carousel navigation inside preview.
+  useEffect(() => {
+    if (!previewFile) return;
+    const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
+    const len = 1 + children.length;
+    if (len <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setPreviewIdx((i) => (i - 1 + len) % len);
+      if (e.key === "ArrowRight") setPreviewIdx((i) => (i + 1) % len);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewFile]);
+
   const allFilesList = files || [];
 
   // Build carousel children map
