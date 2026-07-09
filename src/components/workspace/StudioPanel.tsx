@@ -888,6 +888,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     boardLog={state.boardLog}
                     label="Contexto"
                     showExternalTools={false}
+                    onAttachToNotes={(picks) => {
+                      if (!picks?.length) return;
+                      setState(s => {
+                        const cur = s.notes || "";
+                        const heading = "## Links e anexos";
+                        const newLines = picks
+                          .map(p => `- [${p.name}](wsfile:${p.id})`)
+                          .filter(line => !cur.includes(line));
+                        if (!newLines.length) return s;
+                        let next: string;
+                        if (cur.includes(heading)) {
+                          const idx = cur.indexOf(heading);
+                          const after = cur.indexOf("\n## ", idx + heading.length);
+                          const insertAt = after === -1 ? cur.length : after;
+                          const block = cur.slice(idx, insertAt).replace(/\s+$/, "") + "\n" + newLines.join("\n") + "\n";
+                          next = cur.slice(0, idx) + block + cur.slice(insertAt);
+                        } else {
+                          const sep = cur ? (cur.endsWith("\n") ? "\n" : "\n\n") : "";
+                          next = cur + sep + heading + "\n" + newLines.join("\n") + "\n";
+                        }
+                        return { ...s, notes: next };
+                      });
+                      toast({ title: "Anexos adicionados", description: `${picks.length} item(ns) enviado(s) para contexto e Notas.` });
+                    }}
                     onStructureToNotes={async () => {
                       try {
                         const { data: sess } = await supabase.auth.getSession();
