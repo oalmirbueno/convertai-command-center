@@ -705,30 +705,37 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
   ];
 
-  // Threads escopadas por cliente + pasta. Restaura a última thread ativa do cliente ao reabrir.
-  const lastThreadKey = (cid?: string | null, fp?: string | null) =>
-    `studio:lastThread:${cid || "_global"}:${fp || "_root"}`;
-  useEffect(() => { void loadThreads(); }, [clientId, folderPath]);
+  // Threads escopadas por cliente. Filtro opcional: "cliente" (todas as pastas) ou "pasta" (apenas a atual).
+  const [threadScope, setThreadScope] = useState<"client" | "folder">(() => {
+    try { return (localStorage.getItem("studio:threadScope") as any) || "client"; } catch { return "client"; }
+  });
+  useEffect(() => { try { localStorage.setItem("studio:threadScope", threadScope); } catch {} }, [threadScope]);
+  const lastThreadKey = (cid?: string | null, fp?: string | null, scope?: string) =>
+    `studio:lastThread:${scope || threadScope}:${cid || "_global"}:${scope === "folder" ? (fp || "_root") : "_any"}`;
+  useEffect(() => { void loadThreads(); }, [clientId, folderPath, threadScope]);
   async function loadThreads() {
     let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
-      .order("updated_at", { ascending: false }).limit(30);
+      .order("updated_at", { ascending: false }).limit(50);
     q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
-    q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    if (threadScope === "folder") {
+      q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    }
     const { data } = await q;
     const list = (data as AgentThread[]) || [];
     setThreads(list);
     if (!list.length) { setActiveId(null); return; }
     let restored: string | null = null;
-    try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath)); } catch {}
+    try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath, threadScope)); } catch {}
     const pick = (restored && list.find(t => t.id === restored)?.id) || list[0].id;
     setActiveId(pick);
   }
 
-  // Persiste a última thread ativa por (cliente, pasta) para restaurar ao reabrir
+  // Persiste a última thread ativa por (escopo, cliente, pasta) para restaurar ao reabrir
   useEffect(() => {
     if (!activeId) return;
-    try { localStorage.setItem(lastThreadKey(clientId, folderPath), activeId); } catch {}
-  }, [activeId, clientId, folderPath]);
+    try { localStorage.setItem(lastThreadKey(clientId, folderPath, threadScope), activeId); } catch {}
+  }, [activeId, clientId, folderPath, threadScope]);
+
 
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
@@ -904,7 +911,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         <aside className="w-[180px] shrink-0 border-r border-border bg-background/60 flex flex-col min-h-0">
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
             <MessageSquare className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">Conversas</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1 truncate">
+              {clientName ? clientName : "Global"}
+            </span>
             <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
               <Plus className="w-3 h-3" />
             </button>
@@ -912,24 +921,42 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <X className="w-3 h-3" />
             </button>
           </div>
+          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border bg-background/40">
+            <button onClick={() => setThreadScope("client")}
+              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
+                threadScope === "client" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
+              Cliente
+            </button>
+            <button onClick={() => setThreadScope("folder")}
+              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
+                threadScope === "folder" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
+              Pasta
+            </button>
+          </div>
           <div className="flex-1 min-h-0 overflow-y-auto">
             {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
             {threads.map(t => (
               <div key={t.id}
-                className={cn("group flex items-center gap-1 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
+                className={cn("group flex flex-col gap-0.5 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
                   activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
                 onClick={() => setActiveId(t.id)}>
-                <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="text-[11px] truncate flex-1">{t.title}</span>
-                <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span className="text-[11px] truncate flex-1">{t.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+                {threadScope === "client" && t.folder_path && (
+                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">📁 {t.folder_path}</span>
+                )}
               </div>
             ))}
           </div>
         </aside>
       )}
+
 
       <div className="flex flex-col h-full flex-1 min-w-0">
         {/* Header: cliente + toggle sidebar + nova */}
