@@ -107,29 +107,33 @@ Máximo 5 checklist, 4 next_actions. Sem markdown fora do JSON.`;
       // conteúdo do usuário — só reordena, corrige headline/subheadline, completa
       // itens óbvios de checklist e ajusta racional/ações. Devolve markdown final
       // já no layout canônico do documento executivo.
-      const sysReflow = `Você é um EDITOR EXECUTIVO. Recebe um rascunho e devolve a versão CORRIGIDA e REORGANIZADA em markdown, seguindo EXATAMENTE este layout:
+      const sysReflow = `Você é um EDITOR EXECUTIVO. Recebe um rascunho de nota e devolve a versão CORRIGIDA e REORGANIZADA em markdown, seguindo EXATAMENTE este layout:
 
-# {Headline curta, sem clichê, no imperativo/afirmativa}
-_{Subheadline em 1 linha, complementa a headline sem repetir}_
+# {Título curto}
+_{Subtítulo em 1 linha}_
 
-## Racional
-{2–5 linhas de contexto do porquê / diagnóstico}
+## Resumo
+{3–5 linhas de contexto e tese central}
 
-## Checklist
-- [ ] {item executável}
-- [ ] {item executável}
+## Hipóteses
+- {hipótese verificável}
 
-## Ações
-1. {ação} — responsável: {quem} · prazo: {relativo}
-2. {ação} — responsável: {quem} · prazo: {relativo}
+## Plano
+1. {passo} — entrega: {o que sai}
+
+## Próximos passos
+- [ ] {ação} · responsável: {quem} · prazo: {relativo}
+
+## Links e anexos
+- [{nome}]({url}) — {para que serve}
 
 Regras absolutas:
 - NUNCA remova informação do usuário. Só reorganize, corrija ortografia/gramática e conecte frases soltas.
-- Se o usuário já escreveu uma seção, mantenha o conteúdo dela; só ajuste forma.
-- Se faltar seção, complete com base no que existe (não invente dados novos: use {{campo}} para lacunas).
-- Máximo 8 itens no checklist, 6 em ações.
-- Sem emoji decorativo. Sem "vamos", "juntos", "incrível". Tom direto e técnico.
-- Devolva APENAS o markdown final, sem cercas \`\`\` e sem comentários.
+- Mapeie conteúdo antigo para a nova estrutura (ex.: "Racional" → Resumo; "Checklist"/"Ações" → Próximos passos; links soltos → Links e anexos).
+- Se faltar seção, mantenha o título com "{{a definir}}". Não invente dados.
+- Máximo 5 hipóteses, 6 no plano, 8 próximos passos, 8 links.
+- Sem emoji decorativo, sem clichê motivacional, sem asterisco de enfeite.
+- Devolva APENAS o markdown final, sem cercas \`\`\`.
 - Cliente: ${ctxName}. Pasta: /${folderP}.`;
 
       const sysMap: Record<string, string> = { structure: sysStructure, enrich: sysEnrich, reflow: sysReflow };
