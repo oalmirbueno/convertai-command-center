@@ -28,7 +28,16 @@ type Node = {
   mime: string | null; size_bytes: number | null; storage_path: string | null;
   duration_sec: number | null; sort_index: number; sent_for_approval_file_id: string | null;
   created_by: string | null; created_at: string;
+  // virtual nodes derived from public.files (linked, not stored in workspace_nodes)
+  __virtual?: boolean;
+  __external_url?: string | null;
+  __file_id?: string | null;
+  __approval_status?: string | null;
 };
+
+const VIRT_PREFIX = "virt:";
+const isVirt = (id: string | null | undefined) => !!id && id.startsWith(VIRT_PREFIX);
+
 
 const iconFor = (n: Node) => {
   if (n.kind === "folder") return Folder;
@@ -38,6 +47,20 @@ const iconFor = (n: Node) => {
   if (m.includes("zip") || m.includes("rar")) return Archive;
   return FileText;
 };
+
+function virtFileNode(f: any, clientId: string): Node {
+  return {
+    id: `${VIRT_PREFIX}file:${f.id}`,
+    parent_id: null, scope: "client", client_id: clientId,
+    kind: "file", name: f.file_name,
+    mime: f.file_type || null, size_bytes: null, storage_path: null,
+    duration_sec: null, sort_index: 0,
+    sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
+    created_by: f.uploaded_by || null, created_at: f.created_at,
+    __virtual: true, __external_url: f.file_url, __file_id: f.id,
+    __approval_status: f.approval_status,
+  };
+}
 
 const fmtSize = (n: number | null) => {
   if (!n) return "";
@@ -126,11 +149,80 @@ export default function Workspace() {
 
   useEffect(() => { setParentStack([]); setSelected(null); }, [scope, clientId]);
 
+  // Existing client files (from public.files) — merged as virtual folders/files
+  const { data: clientFiles } = useQuery({
+    queryKey: ["workspace-client-files", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data } = await (supabase as any)
+        .from("files")
+        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by")
+        .eq("client_id", clientId)
+        .is("parent_file_id", null)
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: isStaff && scope === "client" && !!clientId,
+  });
+
+  // Build virtual nodes for current view (root or inside a virtual folder)
+  const virtualNodes: Node[] = useMemo(() => {
+    if (scope !== "client" || !clientId || !clientFiles?.length) return [];
+    const currentVirtId = parent?.id;
+    const insideVirtFolder = currentVirtId && currentVirtId.startsWith(VIRT_PREFIX + "folder:");
+    // At root of client scope → show virtual folders per distinct `folder` value + orphan files
+    if (!parent) {
+      const folders = new Map<string, number>();
+      const orphans: any[] = [];
+      for (const f of clientFiles as any[]) {
+        const fld = (f.folder || "").trim();
+        if (fld) folders.set(fld, (folders.get(fld) || 0) + 1);
+        else orphans.push(f);
+      }
+      const nodes: Node[] = [];
+      Array.from(folders.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([name, count]) => {
+        nodes.push({
+          id: `${VIRT_PREFIX}folder:${name}`,
+          parent_id: null, scope: "client", client_id: clientId,
+          kind: "folder", name: `${name} (${count})`,
+          mime: null, size_bytes: null, storage_path: null, duration_sec: null,
+          sort_index: 0, sent_for_approval_file_id: null,
+          created_by: null, created_at: new Date().toISOString(),
+          __virtual: true,
+        });
+      });
+      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId)));
+      return nodes;
+    }
+    if (insideVirtFolder) {
+      const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
+      return (clientFiles as any[])
+        .filter((f) => (f.folder || "").trim() === folderName)
+        .map((f) => virtFileNode(f, clientId));
+    }
+    return [];
+  }, [clientFiles, scope, clientId, parent]);
+
   const filtered = useMemo(() => {
+    const merged: Node[] = [
+      ...(virtualNodes || []),
+      ...((nodes || []).filter((n) => !(parent?.id && parent.id.startsWith(VIRT_PREFIX)))),
+    ];
+    // Dedup by name (real workspace_nodes win over virtual with same name)
+    const seen = new Set<string>();
+    const out: Node[] = [];
+    for (const n of [...(nodes || []), ...virtualNodes]) {
+      const key = `${n.kind}:${n.name.replace(/ \(\d+\)$/, "")}`;
+      if (parent?.id?.startsWith(VIRT_PREFIX)) { out.push(n); continue; }
+      if (seen.has(key) && n.__virtual) continue;
+      seen.add(key); out.push(n);
+    }
+    const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
-    if (!s) return nodes || [];
-    return (nodes || []).filter(n => n.name.toLowerCase().includes(s));
-  }, [nodes, search]);
+    if (!s) return base;
+    return base.filter(n => n.name.toLowerCase().includes(s));
+  }, [nodes, virtualNodes, search, parent]);
+
 
   async function signedUrl(path: string) {
     if (signedUrls[path]) return signedUrls[path];
@@ -145,6 +237,14 @@ export default function Workspace() {
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
     qc.invalidateQueries({ queryKey: ["workspace-folders"] });
+    qc.invalidateQueries({ queryKey: ["workspace-client-files"] });
+    qc.invalidateQueries({ queryKey: ["files"] });
+  }
+
+  async function urlFor(n: Node): Promise<string> {
+    if (n.__virtual) return n.__external_url || "";
+    if (n.storage_path) return signedUrl(n.storage_path);
+    return "";
   }
 
   async function createFolder() {
@@ -175,10 +275,23 @@ export default function Workspace() {
 
 
   async function performDelete(n: Node) {
-    // Recursively collect child files' storage paths if folder
+    // Virtual folder (grouping of files.folder) — clear folder field on those files
+    if (n.__virtual && n.kind === "folder") {
+      const folderName = n.id.substring((VIRT_PREFIX + "folder:").length);
+      await (supabase as any).from("files").update({ folder: null })
+        .eq("client_id", clientId).eq("folder", folderName);
+      setSelected(null); setConfirmDelete(null);
+      toast({ title: "Pasta virtual removida", description: "Os arquivos permanecem em Arquivos." });
+      invalidate(); return;
+    }
+    // Virtual file — delete from public.files
+    if (n.__virtual && n.kind === "file" && n.__file_id) {
+      await (supabase as any).from("files").delete().eq("id", n.__file_id);
+      setSelected(null); setConfirmDelete(null);
+      toast({ title: "Excluído" });
+      invalidate(); return;
+    }
     if (n.kind === "folder") {
-      const { data: descendants } = await (supabase as any).rpc("noop"); // placeholder if RPC exists
-      // Fallback: iterative walk
       const collected: string[] = [];
       const stack = [n.id];
       while (stack.length) {
@@ -191,7 +304,6 @@ export default function Workspace() {
         }
       }
       if (collected.length) await supabase.storage.from("workspace").remove(collected);
-      void descendants;
     } else if (n.storage_path) {
       await supabase.storage.from("workspace").remove([n.storage_path]);
     }
@@ -203,6 +315,16 @@ export default function Workspace() {
 
   async function renameNode() {
     if (!renaming || !renameValue.trim()) return;
+    if (renaming.__virtual) {
+      if (renaming.kind === "file" && renaming.__file_id) {
+        await (supabase as any).from("files").update({ file_name: renameValue.trim() }).eq("id", renaming.__file_id);
+      } else if (renaming.kind === "folder") {
+        const oldName = renaming.id.substring((VIRT_PREFIX + "folder:").length);
+        await (supabase as any).from("files").update({ folder: renameValue.trim() })
+          .eq("client_id", clientId).eq("folder", oldName);
+      }
+      setRaming(null); setRenameValue(""); invalidate(); return;
+    }
     const { error } = await supabase.from("workspace_nodes")
       .update({ name: renameValue.trim() }).eq("id", renaming.id);
     if (error) { toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" }); return; }
@@ -224,6 +346,23 @@ export default function Workspace() {
   }
 
   async function moveNode(n: Node, targetParentId: string | null) {
+    if (n.__virtual) {
+      // Virtual file: change files.folder to match target virtual folder or clear
+      if (n.kind === "file" && n.__file_id) {
+        let newFolder: string | null = null;
+        if (targetParentId && targetParentId.startsWith(VIRT_PREFIX + "folder:")) {
+          newFolder = targetParentId.substring((VIRT_PREFIX + "folder:").length);
+        }
+        await (supabase as any).from("files").update({ folder: newFolder }).eq("id", n.__file_id);
+        toast({ title: "Movido" }); invalidate(); return;
+      }
+      toast({ title: "Ação não suportada", description: "Pastas virtuais não podem ser movidas.", variant: "destructive" });
+      return;
+    }
+    if (targetParentId && isVirt(targetParentId)) {
+      toast({ title: "Destino inválido", description: "Não é possível mover para pastas de Arquivos.", variant: "destructive" });
+      return;
+    }
     if (n.kind === "folder" && isDescendant(n.id, targetParentId)) {
       toast({ title: "Movimento inválido", description: "Não pode mover para dentro de si mesma.", variant: "destructive" });
       return;
@@ -555,21 +694,24 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <FilePreview node={selected} getUrl={signedUrl} />
+              <FilePreview node={selected} getUrl={urlFor} />
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={async () => openFile(await signedUrl(selected.storage_path!))} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={async () => openFile(await urlFor(selected))} className="gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button size="sm" variant="outline" onClick={async () => downloadFile(await signedUrl(selected.storage_path!), selected.name)} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={async () => downloadFile(await urlFor(selected), selected.name)} className="gap-1.5">
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
-                {scope === "client" && !selected.sent_for_approval_file_id && (
+                {scope === "client" && !selected.__virtual && !selected.sent_for_approval_file_id && (
                   <Button size="sm" onClick={() => sendToApproval(selected)} className="gap-1.5 bg-primary">
                     <Send className="w-3.5 h-3.5" /> Enviar para aprovação
                   </Button>
+                )}
+                {selected.__virtual && (
+                  <span className="text-[11px] text-muted-foreground">📎 De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
                 )}
                 {selected.sent_for_approval_file_id && (
                   <span className="text-[11px] text-warning">Já enviado para aprovação</span>
@@ -644,9 +786,9 @@ export default function Workspace() {
   );
 }
 
-function FilePreview({ node, getUrl }: { node: Node; getUrl: (p: string) => Promise<string> }) {
+function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promise<string> }) {
   const [url, setUrl] = useState("");
-  useEffect(() => { if (node.storage_path) getUrl(node.storage_path).then(setUrl); }, [node.id]);
+  useEffect(() => { getUrl(node).then(setUrl); }, [node.id]);
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
   const m = node.mime || "";
   if (m.startsWith("image/")) return <img src={url} alt={node.name} className="max-h-[60vh] mx-auto rounded-lg" />;
