@@ -990,7 +990,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
             {mode === "notes" && (
-              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2">
+              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
