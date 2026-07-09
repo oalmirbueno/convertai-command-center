@@ -950,6 +950,15 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             <Plus className="w-3 h-3" />
           </button>
         </div>
+        {/* Chip de contexto auto por pasta */}
+        <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
+          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40">📎 {availableFiles.filter(f=>f.kind==="file").length} arq</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40">🗂 {availableFiles.filter(f=>f.kind==="folder").length} sub</span>
+          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">📝 notas</span>}
+          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">🎬 roteiro</span>}
+          <span className="ml-auto opacity-60">contexto auto</span>
+        </div>
 
 
       {/* Mensagens */}
