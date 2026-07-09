@@ -312,6 +312,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               { k: "notes",   icon: NotebookPen, label: "Notas" },
               { k: "map",     icon: Brain,       label: "Mapa" },
               { k: "script",  icon: FileText,    label: "Roteiro" },
+              { k: "board",   icon: Columns3,    label: "Kanban" },
               { k: "process", icon: GitBranch,   label: "Processo" },
 
             ].map(t => {
