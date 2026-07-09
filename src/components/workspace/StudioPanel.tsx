@@ -1094,7 +1094,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           </button>
         </div>
         <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
-          persona={persona} onSaved={(p) => setPersona(p)} />
+          active={persona.active} scopeLevel={persona.scopeLevel}
+          clientId={clientId} clientName={clientName} folderPath={folderPath}
+          onSaved={reloadPersona} />
         {/* Chip de contexto auto por pasta */}
         <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
           <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
