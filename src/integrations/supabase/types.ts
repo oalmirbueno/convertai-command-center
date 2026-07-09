@@ -1857,6 +1857,92 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_agent_messages: {
+        Row: {
+          content: string
+          created_at: string
+          id: string
+          meta: Json | null
+          role: string
+          thread_id: string
+        }
+        Insert: {
+          content: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          role: string
+          thread_id: string
+        }
+        Update: {
+          content?: string
+          created_at?: string
+          id?: string
+          meta?: Json | null
+          role?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_agent_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_agent_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      workspace_agent_threads: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          id: string
+          parent_node_id: string | null
+          scope: string
+          system_prompt: string | null
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          parent_node_id?: string | null
+          scope?: string
+          system_prompt?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          id?: string
+          parent_node_id?: string | null
+          scope?: string
+          system_prompt?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_agent_threads_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_agent_threads_parent_node_id_fkey"
+            columns: ["parent_node_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_nodes: {
         Row: {
           client_id: string | null
