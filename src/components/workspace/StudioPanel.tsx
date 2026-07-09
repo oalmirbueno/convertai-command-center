@@ -2189,26 +2189,22 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
   );
 }
 
-function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clientName, folderPath, onSaved }: {
+function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderPath, onSaved }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  active: { gpt_url: string | null; gpt_name: string | null; client_id: string | null; folder_path: string | null } | null;
-  scopeLevel: "folder" | "client" | "global" | "none";
+  list: { id: string; gpt_url: string | null; gpt_name: string | null; gpt_description?: string | null; client_id: string | null; folder_path: string | null }[];
   clientId: string | null;
   clientName: string | null;
   folderPath: string;
   onSaved: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
-  const [url, setUrl] = useState(active?.gpt_url || "");
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   type Scope = "global" | "client" | "folder";
   const defaultScope: Scope = clientId ? (folderPath ? "folder" : "client") : "global";
   const [scope, setScope] = useState<Scope>(defaultScope);
-  useEffect(() => {
-    setUrl(active?.gpt_url || "");
-    setScope(clientId ? (folderPath ? "folder" : "client") : "global");
-  }, [active, open, clientId, folderPath]);
+  useEffect(() => { setScope(clientId ? (folderPath ? "folder" : "client") : "global"); }, [open, clientId, folderPath]);
 
   const bodyScope = () => ({
     client_id: scope === "global" ? null : clientId,
@@ -2229,50 +2225,66 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
       }
       const d = data as any;
       await onSaved();
-      toast({ title: "Persona salva", description: d.name ? `"${d.name}" ativa neste escopo.` : "Persona salva." });
-      onOpenChange(false);
+      setUrl("");
+      toast({ title: "Persona adicionada", description: d.name ? `"${d.name}" pronta pro roteador.` : "Persona salva." });
     } finally { setLoading(false); }
   }
 
-  async function clearPersona() {
+  async function deleteOne(id: string, name: string | null) {
     setLoading(true);
     try {
-      await supabase.functions.invoke("workspace-agent-import", { body: { clear: true, ...bodyScope() } });
+      await supabase.functions.invoke("workspace-agent-import", { body: { delete_id: id } });
       await onSaved();
-      setUrl("");
-      toast({ title: "Persona removida", description: "Voltando ao escopo superior." });
-      onOpenChange(false);
+      toast({ title: "Persona removida", description: name || undefined });
     } finally { setLoading(false); }
   }
 
-  const scopeLabel = scope === "folder" ? `Pasta atual · /${folderPath || "raiz"}`
-    : scope === "client" ? `Cliente · ${clientName || "atual"}`
-    : "Global (todos os workspaces)";
-  const activeScopeLabel = scopeLevel === "folder" ? "pasta atual"
-    : scopeLevel === "client" ? "cliente atual"
-    : scopeLevel === "global" ? "global" : "nenhum";
+  const scopeIcon = (p: { client_id: string | null; folder_path: string | null }) =>
+    p.folder_path ? "📁" : p.client_id ? "👤" : "🌐";
+  const scopeText = (p: { client_id: string | null; folder_path: string | null }) =>
+    p.folder_path ? `/${p.folder_path}` : p.client_id ? "cliente" : "global";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
-            <Bot className="w-4 h-4 text-primary" /> Persona do agente
+            <Bot className="w-4 h-4 text-primary" /> Personas do agente ({list.length})
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-[11px] text-muted-foreground">
-            Cole o link público do <b>Custom GPT</b>. A persona é salva no <b>escopo escolhido</b> e sobrescreve os mais amplos: pasta &gt; cliente &gt; global.
+            Adicione quantos Custom GPTs quiser. O <b>roteador interno</b> escolhe qual usar em cada mensagem, ou você trava manualmente pelo seletor no cabeçalho.
           </p>
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Aplicar em</label>
+          {/* Lista */}
+          {list.length > 0 && (
+            <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-md border border-border bg-background/40 p-2">
+              {list.map(p => (
+                <div key={p.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded hover:bg-secondary/40">
+                  <span className="text-sm leading-none pt-0.5">{scopeIcon(p)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground/90 truncate">{p.gpt_name || "Sem nome"}</div>
+                    <div className="text-muted-foreground text-[10px] truncate">{scopeText(p)} · {p.gpt_description || p.gpt_url}</div>
+                  </div>
+                  <button onClick={() => deleteOne(p.id, p.gpt_name)}
+                    disabled={loading}
+                    className="text-[10px] text-destructive/70 hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10">
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Nova */}
+          <div className="space-y-2 pt-1 border-t border-border">
+            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Adicionar nova persona</label>
             <div className="grid grid-cols-3 gap-1">
               {(["folder", "client", "global"] as Scope[]).map(s => {
                 const disabled = (s !== "global" && !clientId) || (s === "folder" && !folderPath);
                 return (
-                  <button key={s} type="button" disabled={disabled}
-                    onClick={() => setScope(s)}
+                  <button key={s} type="button" disabled={disabled} onClick={() => setScope(s)}
                     className={cn("text-[10px] px-2 py-1.5 rounded border transition",
                       scope === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/40 border-border hover:bg-secondary",
                       disabled && "opacity-40 cursor-not-allowed")}>
@@ -2281,30 +2293,14 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
                 );
               })}
             </div>
-            <div className="text-[10px] text-muted-foreground pt-0.5">{scopeLabel}</div>
+            <Input value={url} onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
           </div>
-
-          <Input value={url} onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
-
-          {active?.gpt_name && (
-            <div className="text-[11px] flex items-center gap-1.5 text-primary">
-              <Check className="w-3 h-3" /> Em uso agora: <b>{active.gpt_name}</b>
-              <span className="text-muted-foreground">({activeScopeLabel})</span>
-            </div>
-          )}
         </div>
-        <DialogFooter className="gap-2">
-          {active && ((scope === "folder" && active.folder_path === folderPath && active.client_id === clientId)
-            || (scope === "client" && active.client_id === clientId && !active.folder_path)
-            || (scope === "global" && !active.client_id && !active.folder_path)) && (
-            <Button variant="ghost" size="sm" onClick={clearPersona} disabled={loading}>
-              Remover deste escopo
-            </Button>
-          )}
+        <DialogFooter>
           <Button size="sm" onClick={importGpt} disabled={loading || !url}>
             {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
-            Carregar persona
+            Adicionar persona
           </Button>
         </DialogFooter>
       </DialogContent>
