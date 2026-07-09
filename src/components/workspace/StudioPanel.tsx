@@ -584,6 +584,13 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("studio_agent_sidebar") !== "0";
+  });
+  useEffect(() => {
+    try { localStorage.setItem("studio_agent_sidebar", sidebarOpen ? "1" : "0"); } catch {}
+  }, [sidebarOpen]);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
