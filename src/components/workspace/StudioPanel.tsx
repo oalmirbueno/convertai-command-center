@@ -195,6 +195,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const scriptRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
+  const [taskDraft, setTaskDraft] = useState<{ raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number } | null>(null);
 
   // reload state when context changes
   useEffect(() => { setState(loadState(contextKey)); }, [contextKey]);
