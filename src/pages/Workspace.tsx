@@ -77,16 +77,13 @@ export default function Workspace() {
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["workspace-nodes", scope, clientId, parent?.id || null],
     queryFn: async () => {
-      let q = supabase.from("workspace_nodes").select("*")
-        .eq("scope", scope)
-        .order("kind", { ascending: true })
-        .order("sort_index", { ascending: true })
-        .order("name", { ascending: true });
+      let q: any = (supabase as any).from("workspace_nodes").select("*").eq("scope", scope);
       if (scope === "client") q = q.eq("client_id", clientId!);
       q = parent ? q.eq("parent_id", parent.id) : q.is("parent_id", null);
+      q = q.order("kind", { ascending: true }).order("sort_index", { ascending: true }).order("name", { ascending: true });
       const { data, error } = await q;
       if (error) throw error;
-      return data as Node[];
+      return (data || []) as Node[];
     },
     enabled: isStaff && (scope === "global" || !!clientId),
   });
