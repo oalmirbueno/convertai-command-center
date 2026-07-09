@@ -1493,7 +1493,8 @@ export default function Workspace() {
         contextLabel={`${contextLabel}${parent ? ` › ${parent.name}` : ""}`}
         clientId={clientId || null}
         clientName={contextLabel}
-        folderPath={parent ? parent.name : "raiz"}
+        folderId={parent?.id || null}
+        folderPath={parentStack.length ? parentStack.map(n => n.name).join("/") : "raiz"}
 
         availableFiles={(filtered || []).map(n => ({
           id: n.id, name: n.name, kind: n.kind,
