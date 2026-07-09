@@ -1140,6 +1140,14 @@ export default function Workspace() {
         </DialogContent>
       </Dialog>
 
+      <TemplatePicker
+        open={templateOpen}
+        onOpenChange={setTemplateOpen}
+        scope={scope}
+        onApply={applyTemplate}
+        applying={applyingTpl}
+      />
+
       <UploadProgressPanel
         items={uploads.items}
         onCancel={uploads.cancel}
