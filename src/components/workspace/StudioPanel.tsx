@@ -273,6 +273,126 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
   useEffect(() => { localStorage.setItem("studio_dock_v2", dock); }, [dock]);
 
+  // ── Fordista: linkagem com projeto + publicação + PDF ──
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(() => {
+    try { return localStorage.getItem(`studio_project_v1:${contextKey}`) || null; } catch { return null; }
+  });
+  const [docPublished, setDocPublished] = useState(false);
+  const [docSyncing, setDocSyncing] = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [enrichData, setEnrichData] = useState<{ checklist: string[]; next_actions: string[]; suggestion: string } | null>(null);
+
+  useEffect(() => { setProjectId(localStorage.getItem(`studio_project_v1:${contextKey}`) || null); }, [contextKey]);
+  useEffect(() => {
+    try {
+      if (projectId) localStorage.setItem(`studio_project_v1:${contextKey}`, projectId);
+      else localStorage.removeItem(`studio_project_v1:${contextKey}`);
+    } catch {}
+  }, [projectId, contextKey]);
+
+  // Lista de projetos do cliente atual (ou todos se global)
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      let q = supabase.from("projects").select("id, name").order("created_at", { ascending: false }).limit(50);
+      if (clientId) q = q.eq("client_id", clientId);
+      const { data } = await q;
+      if (!cancel) setProjects((data as any) || []);
+    })();
+    return () => { cancel = true; };
+  }, [clientId]);
+
+  // Carrega doc do projeto atual + realtime
+  useEffect(() => {
+    if (!projectId) { setDocPublished(false); return; }
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase.from("studio_docs").select("notes, published").eq("project_id", projectId).maybeSingle();
+      if (cancel) return;
+      if (data) {
+        setDocPublished(!!(data as any).published);
+        // Se o doc remoto tem conteúdo e local está vazio, hidrata local
+        const remote = ((data as any).notes || "").trim();
+        if (remote && !state.notes.trim()) setState(s => ({ ...s, notes: remote }));
+      }
+    })();
+    return () => { cancel = true; };
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced upsert das notas -> studio_docs
+  useEffect(() => {
+    if (!projectId) return;
+    setDocSyncing("saving");
+    const t = setTimeout(async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      const { error } = await supabase.from("studio_docs").upsert({
+        project_id: projectId,
+        notes: state.notes,
+        published: docPublished,
+        updated_by: uid,
+        updated_at: new Date().toISOString(),
+      } as any, { onConflict: "project_id" });
+      setDocSyncing(error ? "error" : "saved");
+      if (!error) setTimeout(() => setDocSyncing("idle"), 1200);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [state.notes, projectId, docPublished]);
+
+  // Auto-enrich (debounce 2.5s após parar de digitar; só se tiver >120 chars)
+  useEffect(() => {
+    if (!state.notes || state.notes.trim().length < 120) { setEnrichData(null); return; }
+    const t = setTimeout(async () => {
+      setEnrichBusy(true);
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const tok = sess?.session?.access_token;
+        if (!tok) return;
+        const url = `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`;
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+          body: JSON.stringify({ mode: "enrich", text: state.notes.slice(-4000), context: { client_name: clientName, folder_path: folderPath } }),
+        });
+        if (r.ok) {
+          const j = await r.json();
+          setEnrichData(j?.data || null);
+        }
+      } finally { setEnrichBusy(false); }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [state.notes, clientName, folderPath]);
+
+  async function togglePublish() {
+    if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
+    const next = !docPublished;
+    setDocPublished(next);
+    toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
+  }
+
+  function downloadPDF() {
+    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel);
+    const w = window.open("", "_blank", "width=900,height=1000");
+    if (!w) { toast({ title: "Bloqueado", description: "Habilite pop-ups pra imprimir o PDF." }); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 500);
+  }
+
+  function acceptEnrichChecklist() {
+    if (!enrichData?.checklist?.length) return;
+    const block = "\n\n## Checklist sugerido\n" + enrichData.checklist.map(i => `- [ ] ${i}`).join("\n") + "\n";
+    setState(s => ({ ...s, notes: (s.notes || "") + block }));
+    setEnrichData(null);
+  }
+  function acceptEnrichActions() {
+    if (!enrichData?.next_actions?.length) return;
+    const block = "\n\n## Próximas ações\n" + enrichData.next_actions.map((i, idx) => `${idx + 1}. ${i}`).join("\n") + "\n";
+    setState(s => ({ ...s, notes: (s.notes || "") + block }));
+    setEnrichData(null);
+  }
+
+
 
   const mentionMatches = useMemo(() => {
     if (!mentionQuery) return [] as FileRef[];
