@@ -1035,7 +1035,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                         onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                         onPaste={onNotesPaste}
                         placeholder="Escreva ou cole o material aqui. Use / para estruturar e @ para anexar arquivos."
-                        className="h-full min-h-[360px] w-full resize-none rounded-lg border border-border bg-card/70 p-5 font-sans text-[14px] leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                        className="h-full w-full resize-none overflow-y-auto rounded-lg border border-border bg-card/70 p-4 sm:p-5 font-sans text-[14px] leading-[1.7] sm:leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 sm:min-h-[360px]"
                       />
                       {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                         <MentionList items={mentionMatches} onPick={insertMention} />
