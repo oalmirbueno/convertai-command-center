@@ -888,6 +888,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     boardLog={state.boardLog}
                     label="Contexto"
                     showExternalTools={false}
+                    onAttachToNotes={(picks) => {
+                      if (!picks?.length) return;
+                      setState(s => {
+                        const cur = s.notes || "";
+                        const heading = "## Links e anexos";
+                        const newLines = picks
+                          .map(p => `- [${p.name}](wsfile:${p.id})`)
+                          .filter(line => !cur.includes(line));
+                        if (!newLines.length) return s;
+                        let next: string;
+                        if (cur.includes(heading)) {
+                          const idx = cur.indexOf(heading);
+                          const after = cur.indexOf("\n## ", idx + heading.length);
+                          const insertAt = after === -1 ? cur.length : after;
+                          const block = cur.slice(idx, insertAt).replace(/\s+$/, "") + "\n" + newLines.join("\n") + "\n";
+                          next = cur.slice(0, idx) + block + cur.slice(insertAt);
+                        } else {
+                          const sep = cur ? (cur.endsWith("\n") ? "\n" : "\n\n") : "";
+                          next = cur + sep + heading + "\n" + newLines.join("\n") + "\n";
+                        }
+                        return { ...s, notes: next };
+                      });
+                      toast({ title: "Anexos adicionados", description: `${picks.length} item(ns) enviado(s) para contexto e Notas.` });
+                    }}
                     onStructureToNotes={async () => {
                       try {
                         const { data: sess } = await supabase.auth.getSession();
@@ -1932,10 +1956,11 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
   );
 }
 
-function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
+function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, onAttachToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; projectId?: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
   onStructureToNotes?: () => void | Promise<void>;
+  onAttachToNotes?: (picks: FileRef[]) => void;
   label?: string;
   showExternalTools?: boolean;
 }) {
@@ -2867,6 +2892,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         rootLabel={clientName ? `${clientName}${folderPath ? ` / ${folderPath}` : ""}` : "Workspace"}
         alreadyAttachedIds={new Set(attached.map(a => a.id))}
         onConfirm={(picks) => {
+          // 1) Contexto do agente: mescla anexos sem duplicar.
           setAttached(prev => {
             const seen = new Set(prev.map(p => p.id));
             const merged = [...prev];
@@ -2874,6 +2900,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             return merged;
           });
           picks.forEach(p => pushRecent(p.id));
+
+          // 2) Notas: delega ao parent para injetar refs em "## Links e anexos".
+          if (picks.length) onAttachToNotes?.(picks);
         }}
       />
     </div>
