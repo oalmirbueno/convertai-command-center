@@ -93,7 +93,7 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
     { key: "ajuda",    label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
     { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
-    { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
+    { key: "imagem",   label: "Imagem OCR",                      hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
     { key: "video",    label: "Embed de vídeo",                  hint: "YouTube / Vimeo / Drive", insert: "", action: "insertVideo" },
     { key: "mapa",     label: "Mapa mental (ASCII)",             hint: "insere estrutura hierárquica", insert: "", action: "insertMindmap" },
     { key: "checklist",label: "Checklist",                       hint: "lista com checkboxes", insert: `\n- [ ] \n- [ ] \n- [ ] \n` },
@@ -130,7 +130,7 @@ const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
 const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
   { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome: busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
   { cmd: "@kanban",   label: "Kanban",   desc: "Bloco vivo do Kanban do projeto renderizado dentro da nota." },
-  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed) — colar link gera automaticamente." },
+  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed). Colar link gera automaticamente." },
   { cmd: "@help",     label: "Ajuda",    desc: "Renderiza este painel de ajuda inline no ponto onde estiver escrito." },
 ];
 
@@ -165,7 +165,7 @@ function highlightRanges(text: string, ranges: [number, number][]): React.ReactN
 
 
 
-// Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
+// Parser inline: "Editar hook !alta @maria 15/07" para { title, priority, assigneeName, dueISO }
 export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
   let s = " " + raw.trim() + " ";
   let priority: "low"|"medium"|"high"|"urgent" = "medium";
@@ -314,7 +314,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }, [clientId]);
 
   // ── Sincronização bidirecional em tempo real ──
-  // Refs internas para evitar loops (save→realtime→save) e preservar edições locais
+  // Refs internas para evitar loops entre save e realtime e preservar edições locais
   // quando um enrich/publish/edição remota chega no meio do fluxo.
   const uidRef = useRef<string | null>(null);
   const lastSavedNotesRef = useRef<string>("");     // último conteúdo confirmado no servidor
@@ -1323,7 +1323,7 @@ export function NotesPreview({ src, clientId, clientName }: { src: string; clien
   return <div className="space-y-0.5">{out}</div>;
 }
 
-// Guia inline de comandos / e @ — renderizado dentro das notas quando existir "@help" numa linha.
+// Guia inline de comandos / e @ renderizado dentro das notas quando existir "@help" numa linha.
 function InlineHelpBlock() {
   const [tab, setTab] = useState<"slash" | "at">("slash");
   const items = tab === "slash" ? SLASH_HELP : MENTION_HELP;
@@ -1431,7 +1431,7 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
                       {cols.filter(c => c.key !== t.status).map(c => (
                         <button key={c.key} onClick={() => move(t.id, c.key)}
                           className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
-                          → {c.title}
+                          Mover para {c.title}
                         </button>
                       ))}
                     </div>
@@ -1446,7 +1446,7 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
   );
 }
 
-// Bloco Kanban vivo embutido no fluxo das Notas (não é modal — renderiza como parte do documento)
+// Bloco Kanban vivo embutido no fluxo das Notas.
 function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
   type Task = { id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string };
   const { toast } = useToast();
@@ -1950,7 +1950,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     { key: "storyboard",label: "Storyboard",          hint: "cena a cena",             prompt: "Monte um storyboard cena a cena (visual + fala + duração) usando os arquivos anexados." },
     { key: "resumir",   label: "Resumir arquivos",    hint: "insights + próximos passos", prompt: "Analise e resuma os arquivos anexados. Traga insights e próximos passos." },
     { key: "brief",     label: "Extrair briefing",    hint: "objetivo + público + tom", prompt: "Extraia um briefing (objetivo, público, canal, duração, tom, referências) dos anexos." },
-    { key: "checklist", label: "Checklist de pipeline", hint: "brutos → publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos → Trilhas/SFX → Edição → Final → Publicado)." },
+    { key: "checklist", label: "Checklist de pipeline", hint: "brutos até publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos, Trilhas/SFX, Edição, Final e Publicado)." },
     { key: "hooks",     label: "5 hooks",              hint: "aberturas 0-3s",         prompt: "Sugira 5 opções de hook (0-3s) alinhadas ao contexto e materiais anexados." },
     { key: "cta",       label: "Variações de CTA",     hint: "3 opções",               prompt: "Escreva 3 variações de CTA para este roteiro/contexto." },
     { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
@@ -2043,7 +2043,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
 
 
-  // Fuzzy: retorna { score, ranges } — score maior = melhor. Prioriza: exato > prefixo > subsequência.
+  // Fuzzy: retorna { score, ranges }. Score maior = melhor.
   function fuzzyScore(name: string, q: string): { score: number; ranges: [number, number][] } | null {
     if (!q) return { score: 0, ranges: [] };
     const n = name.toLowerCase(); const s = q.toLowerCase();
@@ -2166,7 +2166,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
       setThreads(t => [data as AgentThread, ...t]);
       setActiveId(tid);
     }
-    // Preserva anexos no conteúdo da mensagem — histórico da thread mantém as referências
+    // Preserva anexos no conteúdo da mensagem e mantém referências no histórico da thread
     const attachBlock = attached.length
       ? `\n\n---\nAnexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
       : "";
@@ -2222,7 +2222,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         try {
           const j = JSON.parse(t);
           if (j?.error === "PAYMENT_REQUIRED" || res.status === 402) {
-            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos em Settings → Workspace → Usage.";
+            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos nas configurações de uso.";
           } else if (j?.error === "RATE_LIMITED" || res.status === 429) {
             msg = j?.message || "Muitas requisições. Tente novamente em instantes.";
           } else if (j?.message || j?.error) {
@@ -2335,7 +2335,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
 
-          {/* Seletor de persona (Auto ou manual) — mostra TODAS as personas do escopo */}
+          {/* Seletor de persona: Auto ou manual */}
           <div className="flex-1 flex items-center justify-end gap-1">
             {showExternalTools && (
               <select
@@ -2477,7 +2477,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           </div>
         )}
         <div className="relative p-2 flex items-end gap-1">
-          {/* Popover @ arquivos — busca fuzzy + navegação por teclado */}
+          {/* Popover @ arquivos: busca fuzzy + navegação por teclado */}
           {mention && (
             <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
               <div className="px-3 py-1 flex items-center gap-2 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
@@ -2596,7 +2596,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
     });
     const fromT = board.find(b => b.id === fromCol)?.title || fromCol;
     const toT = board.find(b => b.id === toCol)?.title || toCol;
-    onChange(next, `[${now()}] "${title}" movido de ${fromT} → ${toT}`);
+    onChange(next, `[${now()}] "${title}" movido de ${fromT} para ${toT}`);
   }
 
   function addCard(colId: string) {
@@ -2620,7 +2620,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
           return k;
         }) }
       : c);
-    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" → "${t}"` : undefined);
+    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" para "${t}"` : undefined);
     setEditing(null);
   }
 
@@ -2638,7 +2638,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
     if (!t) return;
     let old = "";
     const next = board.map(c => { if (c.id === colId) { old = c.title; return { ...c, title: t }; } return c; });
-    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" → "${t}"` : undefined);
+    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" para "${t}"` : undefined);
   }
 
   return (
@@ -2750,7 +2750,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
 }
 
 // =========================
-// QuickTaskDialog — cria tarefa no Kanban do cliente via slash /tarefa
+// QuickTaskDialog cria tarefa no Kanban do cliente via slash /tarefa
 // =========================
 function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
   draft: { raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number };
@@ -2870,7 +2870,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</label>
               <select value={projectId} onChange={e => setProjectId(e.target.value)}
                 className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                {projects.length === 0 && <option value="">— sem projeto —</option>}
+                {projects.length === 0 && <option value="">sem projeto</option>}
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
@@ -2888,7 +2888,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</label>
               <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
                 className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                <option value="">— ninguém —</option>
+                <option value="">ninguém</option>
                 {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
               </select>
             </div>
