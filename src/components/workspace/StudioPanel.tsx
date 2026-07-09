@@ -2235,16 +2235,28 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     }
   }
 
-  // Auto-puxa contexto quando abrir uma conversa nova com cliente definido
+  // Auto-puxa contexto quando abrir o painel com cliente definido: se a thread
+  // ativa está vazia, ou se ainda nem existe thread nesse escopo, o Orquestrador
+  // assume, monta o contexto e devolve as perguntas certas.
   useEffect(() => {
-    if (!clientId || !activeId) return;
-    if (msgs.length > 0) return;
+    if (!clientId) return;
     if (streaming || pulling) return;
-    if (autoPulledRef.current.has(activeId)) return;
-    autoPulledRef.current.add(activeId);
+    if (activeId) {
+      if (msgs.length > 0) return;
+      if (autoPulledRef.current.has(activeId)) return;
+      autoPulledRef.current.add(activeId);
+      void pullDeepContext({ silent: true });
+      return;
+    }
+    // Sem thread ainda: cria uma via pullDeepContext (send cria a thread)
+    const scopeKey = `new:${clientId}:${threadScope}:${folderPath || "_root"}`;
+    if (autoPulledRef.current.has(scopeKey)) return;
+    if (threads.length > 0) return; // aguarda seleção automática de thread existente
+    autoPulledRef.current.add(scopeKey);
     void pullDeepContext({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, activeId, msgs.length]);
+  }, [clientId, activeId, msgs.length, threads.length, folderPath, threadScope]);
+
 
 
   async function send(override?: string) {
