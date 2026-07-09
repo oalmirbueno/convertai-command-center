@@ -2,11 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
+  Bot, Send, Loader2, History,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
+
 
 /**
  * Studio flutuante — Notas, Mapa Mental, Roteiro (Prepro Director GPT), Processo.
