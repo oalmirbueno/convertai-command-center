@@ -1059,11 +1059,17 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             {clientName ? `Agente · ${clientName}` : "Agente · Global"}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
+          <button onClick={() => setPersonaOpen(true)}
+            className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Configurar GPT persona">
+            <Settings className="w-3 h-3" />
+          </button>
           <button onClick={newThread}
             className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
             <Plus className="w-3 h-3" />
           </button>
         </div>
+        <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
+          persona={persona} onSaved={(p) => setPersona(p)} />
         {/* Chip de contexto auto por pasta */}
         <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
           <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
