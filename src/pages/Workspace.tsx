@@ -237,6 +237,14 @@ export default function Workspace() {
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
     qc.invalidateQueries({ queryKey: ["workspace-folders"] });
+    qc.invalidateQueries({ queryKey: ["workspace-client-files"] });
+    qc.invalidateQueries({ queryKey: ["files"] });
+  }
+
+  async function urlFor(n: Node): Promise<string> {
+    if (n.__virtual) return n.__external_url || "";
+    if (n.storage_path) return signedUrl(n.storage_path);
+    return "";
   }
 
   async function createFolder() {
