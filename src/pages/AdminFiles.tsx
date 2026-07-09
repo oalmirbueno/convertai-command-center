@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -21,7 +21,7 @@ import {
   Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import AdminContracts from "@/pages/AdminContracts";
 
 const FOLDERS = [
@@ -54,6 +54,21 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
 function CarouselSlider({ files }: { files: any[] }) {
   const [idx, setIdx] = useState(0);
   const current = files[idx];
+
+  useEffect(() => {
+    prefetchImages(files.map((f) => f?.file_url).filter(Boolean));
+    setIdx(0);
+  }, [files]);
+
+  useEffect(() => {
+    if (files.length <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + files.length) % files.length);
+      if (e.key === "ArrowRight") setIdx((i) => (i + 1) % files.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [files.length]);
 
   if (!current) return null;
   if (files.length === 1) {

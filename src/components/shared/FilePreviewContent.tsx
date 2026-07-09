@@ -1,6 +1,84 @@
-import { ExternalLink, FileText, Download, Eye } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
+
+/**
+ * Prefetch images into browser cache so carousel navigation is instantaneous.
+ * Call with the full sibling URL list when a preview modal opens.
+ */
+export function prefetchImages(urls: string[]) {
+  if (typeof window === "undefined") return;
+  urls.forEach((u) => {
+    if (!u) return;
+    const ext = u.split("?")[0].split("#")[0].split(".").pop()?.toLowerCase() || "";
+    if (!["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"].includes(ext)) return;
+    const img = new Image();
+    img.decoding = "async";
+    img.src = u;
+  });
+}
+
+function InlineImage({ fileName, fileUrl }: { fileName: string; fileUrl: string }) {
+  const [zoomed, setZoomed] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [errored, setErrored] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setLoaded(false);
+    setErrored(false);
+    setZoomed(false);
+  }, [fileUrl]);
+
+  if (errored) {
+    return (
+      <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3">
+        <FileText className="w-10 h-10 text-muted-foreground/40" />
+        <p className="text-xs text-muted-foreground">Não foi possível carregar. Tente novamente.</p>
+        <Button size="sm" variant="outline" onClick={() => { setErrored(false); setLoaded(false); }}>
+          Recarregar
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      className={`relative bg-secondary rounded-xl overflow-auto flex items-center justify-center ${zoomed ? "max-h-[80vh]" : "p-2"}`}
+    >
+      {!loaded && (
+        <div className="absolute inset-0 flex items-center justify-center bg-secondary/60 z-10">
+          <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+      <img
+        src={fileUrl}
+        alt={fileName}
+        onLoad={() => setLoaded(true)}
+        onError={() => setErrored(true)}
+        onClick={() => setZoomed((z) => !z)}
+        decoding="async"
+        // @ts-expect-error fetchpriority is valid HTML but not yet in React typings
+        fetchpriority="high"
+        className={
+          zoomed
+            ? "w-auto max-w-none cursor-zoom-out select-none"
+            : "max-w-full max-h-[70vh] object-contain rounded-lg cursor-zoom-in select-none"
+        }
+      />
+      <button
+        type="button"
+        onClick={(e) => { e.stopPropagation(); setZoomed((z) => !z); }}
+        className="absolute top-2 right-2 z-20 bg-background/80 hover:bg-background border border-border rounded-full p-1.5 shadow-sm"
+        title={zoomed ? "Reduzir" : "Ampliar"}
+      >
+        {zoomed ? <ZoomOut className="w-3.5 h-3.5" /> : <ZoomIn className="w-3.5 h-3.5" />}
+      </button>
+    </div>
+  );
+}
 
 const getFileExtension = (value?: string) => {
   if (!value) return "";
@@ -99,17 +177,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
   }
 
   if (isImage(fileName, fileUrl)) {
-    return (
-      <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center p-2">
-        <img
-          src={fileUrl}
-          alt={fileName}
-          className="max-w-full max-h-[70vh] object-contain rounded-lg cursor-zoom-in"
-          loading="lazy"
-          onClick={() => openFile(fileUrl)}
-        />
-      </div>
-    );
+    return <InlineImage fileName={fileName} fileUrl={fileUrl} />;
   }
 
   if (isPdf(fileName, fileUrl)) {

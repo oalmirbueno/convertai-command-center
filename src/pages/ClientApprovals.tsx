@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
@@ -15,7 +15,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import { FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight } from "lucide-react";
-import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
@@ -104,6 +104,28 @@ export default function ClientApprovals() {
   const [previewFile, setPreviewFileRaw] = useState<any>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
   const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
+
+  // Prefetch every carousel sibling as soon as the preview opens.
+  useEffect(() => {
+    if (!previewFile) return;
+    const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
+    const urls = [previewFile, ...children].map((f: any) => f?.file_url).filter(Boolean);
+    prefetchImages(urls);
+  }, [previewFile]);
+
+  // Keyboard arrows for carousel navigation inside preview.
+  useEffect(() => {
+    if (!previewFile) return;
+    const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
+    const len = 1 + children.length;
+    if (len <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setPreviewIdx((i) => (i - 1 + len) % len);
+      if (e.key === "ArrowRight") setPreviewIdx((i) => (i + 1) % len);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [previewFile]);
 
   const allFilesList = files || [];
 
