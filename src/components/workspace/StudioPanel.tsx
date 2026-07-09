@@ -2602,8 +2602,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         ))}
 
         {streaming && streamBuf && (
-          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] whitespace-pre-wrap break-words">
-            {streamBuf}
+          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words prose prose-sm prose-invert max-w-none prose-p:my-2.5 prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-ol:pl-5 prose-ol:space-y-1.5 prose-ul:pl-5 prose-ul:space-y-1.5 prose-li:leading-[1.65] prose-li:marker:text-primary/60">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamBuf}</ReactMarkdown>
             <span className="inline-block w-[3px] h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
           </article>
         )}
