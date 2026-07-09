@@ -729,6 +729,105 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
   );
 }
 
+// Bloco Kanban vivo embutido no fluxo das Notas (não é modal — renderiza como parte do documento)
+function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
+  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string }>>([]);
+  const [projectName, setProjectName] = useState<string>("");
+  const [projectId, setProjectId] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+
+  const load = React.useCallback(async () => {
+    if (!clientId) return;
+    setLoading(true);
+    const { data: projs } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1);
+    const pid = projs?.[0]?.id ?? null;
+    setProjectId(pid); setProjectName(projs?.[0]?.name || "");
+    if (!pid) { setTasks([]); setLoading(false); return; }
+    const { data: ts } = await supabase.from("tasks").select("id, title, status, priority, due_date, project_id").eq("project_id", pid).order("created_at", { ascending: false });
+    setTasks((ts as any) || []);
+    setLoading(false);
+  }, [clientId]);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const cols: Array<{ key: string; title: string }> = [
+    { key: "todo", title: "A fazer" },
+    { key: "doing", title: "Em andamento" },
+    { key: "review", title: "Revisão" },
+    { key: "done", title: "Feito" },
+  ];
+
+  async function move(taskId: string, next: string) {
+    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, status: next } : t));
+    await supabase.from("tasks").update({ status: next }).eq("id", taskId);
+  }
+
+  async function quickAdd() {
+    const title = newTitle.trim();
+    if (!title || !projectId) return;
+    const { data, error } = await supabase.from("tasks").insert({ project_id: projectId, title, status: "todo", priority: "medium" }).select("id, title, status, priority, due_date, project_id").single();
+    if (!error && data) { setTasks(cur => [data as any, ...cur]); setNewTitle(""); }
+  }
+
+  return (
+    <div className="my-3 border border-border rounded-lg bg-secondary/20 overflow-hidden">
+      <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
+        <Columns3 className="w-3.5 h-3.5 text-primary" />
+        <span className="font-semibold">Kanban</span>
+        <span className="text-muted-foreground truncate">· {clientName || "cliente"}{projectName && ` / ${projectName}`}</span>
+        <button onClick={() => void load()} className="ml-auto text-[10px] px-2 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground">↻</button>
+      </div>
+      {!clientId ? (
+        <p className="p-3 text-[11px] text-muted-foreground">Selecione um cliente no Workspace para ver o Kanban.</p>
+      ) : loading ? (
+        <div className="p-4 flex items-center justify-center text-muted-foreground text-[11px]"><Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> carregando…</div>
+      ) : !projectId ? (
+        <p className="p-3 text-[11px] text-muted-foreground">Este cliente ainda não tem projeto ativo.</p>
+      ) : (
+        <>
+          <div className="flex items-center gap-1 px-2 pt-2">
+            <input value={newTitle} onChange={e => setNewTitle(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void quickAdd(); } }}
+              placeholder="+ nova tarefa (Enter)"
+              className="flex-1 h-7 px-2 rounded border border-border bg-background text-[11px] focus:outline-none focus:border-primary/50" />
+            <button onClick={() => void quickAdd()} disabled={!newTitle.trim()} className="h-7 px-2 rounded bg-primary text-primary-foreground text-[10px] disabled:opacity-40">Add</button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-2">
+            {cols.map(col => (
+              <div key={col.key} className="bg-background/60 rounded-md p-1.5 space-y-1">
+                <div className="text-[9px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
+                  <span>{col.title}</span>
+                  <span className="opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
+                </div>
+                {tasks.filter(t => t.status === col.key).map(t => (
+                  <div key={t.id} className="bg-card rounded p-1.5 border border-border text-[10.5px] space-y-1">
+                    <div className="font-medium leading-snug">{t.title}</div>
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      {t.priority && <span className={cn("px-1 py-0.5 rounded",
+                        t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
+                        t.priority === "high" ? "bg-amber-500/20 text-amber-600" : "bg-secondary")}>{t.priority}</span>}
+                      {t.due_date && <span>· {t.due_date}</span>}
+                    </div>
+                    <div className="flex flex-wrap gap-1 pt-0.5">
+                      {cols.filter(c => c.key !== t.status).map(c => (
+                        <button key={c.key} onClick={() => move(t.id, c.key)}
+                          className="text-[8.5px] px-1 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
+                          → {c.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
   return (
