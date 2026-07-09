@@ -445,7 +445,6 @@ export default function Workspace() {
                 <Upload className="w-3.5 h-3.5" />
                 Upload
               </Button>
-              </Button>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleUpload(e.target.files)} />
             </div>
           </div>
