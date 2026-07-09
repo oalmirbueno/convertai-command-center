@@ -122,6 +122,33 @@ function tagOf(n: Node, siblings?: Node[]): SmartTag {
   return "other";
 }
 
+const SUGGEST_BY_TAG: Record<SmartTag, string> = {
+  carrossel: "Carrossel",
+  "video-ready": "Vídeos prontos",
+  material: "Brutos",
+  static: "Estáticos",
+  doc: "Documentos",
+  audio: "Áudios",
+  other: "Novos arquivos",
+};
+function suggestFolderName(n: Node): string {
+  if (n.kind === "folder") return `${n.name} (grupo)`;
+  const tag = tagOf(n);
+  const base = SUGGEST_BY_TAG[tag] || "Novos arquivos";
+  // Try to enrich with a filename stem: "Reels_Marca_01.mp4" → "Reels Marca"
+  const raw = (n.name || "").replace(/\.[a-z0-9]{1,5}$/i, "");
+  const stem = raw
+    .replace(/[-_]+/g, " ")
+    .replace(/\s?\(?\d{1,3}\)?\s*$/,"")
+    .trim();
+  if (stem && stem.length >= 3 && stem.length <= 32 && !/^[0-9\s]+$/.test(stem)) {
+    return `${base} — ${stem}`;
+  }
+  return base;
+}
+
+
+
 
 function virtFileNode(f: any, clientId: string): Node {
   return {
@@ -807,11 +834,11 @@ export default function Workspace() {
             <DropdownMenuSubContent className="max-h-72 overflow-y-auto w-64">
               {!n.__virtual && (
                 <>
-                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
                     <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
                   </DropdownMenuItem>
                   {parent && (
-                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
                       <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
                     </DropdownMenuItem>
                   )}
@@ -891,11 +918,11 @@ export default function Workspace() {
             <ContextMenuSubContent className="max-h-72 overflow-y-auto w-64">
               {!n.__virtual && (
                 <>
-                  <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                  <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
                     <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
                   </ContextMenuItem>
                   {parent && (
-                    <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                    <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
                       <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
                     </ContextMenuItem>
                   )}
@@ -1371,7 +1398,9 @@ export default function Workspace() {
             </DialogDescription>
           </DialogHeader>
           <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
+            onFocus={e => e.currentTarget.select()}
             placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
+          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática — edite à vontade.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
             <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>
