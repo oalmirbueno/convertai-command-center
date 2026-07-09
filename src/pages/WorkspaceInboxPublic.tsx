@@ -11,11 +11,12 @@ type Row = { name: string; size: number; status: "queued" | "up" | "done" | "err
 export default function WorkspaceInboxPublic() {
   const token = new URLSearchParams(window.location.search).get("t")
     || window.location.pathname.split("/").pop() || "";
-  const { toast } = useToast();
   const [folder, setFolder] = useState<{ name: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [sender, setSender] = useState("");
   const [rows, setRows] = useState<Row[]>([]);
+  const [isDragActive, setDragActive] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
   const senderRef = useRef(sender); useEffect(() => { senderRef.current = sender; }, [sender]);
 
   useEffect(() => {
@@ -46,12 +47,15 @@ export default function WorkspaceInboxPublic() {
     }
   }
 
-  const onDrop = (files: File[]) => {
+  function onFiles(list: FileList | File[] | null) {
+    if (!list) return;
+    const files = Array.from(list);
+    if (!files.length) return;
     const start = rows.length;
     setRows(prev => [...prev, ...files.map(f => ({ name: f.name, size: f.size, status: "queued" as const }))]);
     files.forEach((f, i) => uploadFile(start + i, f));
-  };
-  const { getRootProps, getInputProps, isDragActive } = useDropzone({ onDrop, multiple: true });
+  }
+
 
   if (error) return (
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
