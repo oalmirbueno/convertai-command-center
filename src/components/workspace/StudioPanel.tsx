@@ -819,25 +819,66 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
 
 // Bloco Kanban vivo embutido no fluxo das Notas (não é modal — renderiza como parte do documento)
 function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
+  type Task = { id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string };
   const [loading, setLoading] = useState(false);
-  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string }>>([]);
-  const [projectName, setProjectName] = useState<string>("");
+  const [tasks, setTasks] = useState<Task[]>([]);
+  const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
   const [newTitle, setNewTitle] = useState("");
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dropCol, setDropCol] = useState<string | null>(null);
+  const [editing, setEditing] = useState<{ id: string; field: "priority" | "due" } | null>(null);
 
-  const load = React.useCallback(async () => {
-    if (!clientId) return;
-    setLoading(true);
-    const { data: projs } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1);
-    const pid = projs?.[0]?.id ?? null;
-    setProjectId(pid); setProjectName(projs?.[0]?.name || "");
-    if (!pid) { setTasks([]); setLoading(false); return; }
-    const { data: ts } = await supabase.from("tasks").select("id, title, status, priority, due_date, project_id").eq("project_id", pid).order("created_at", { ascending: false });
-    setTasks((ts as any) || []);
-    setLoading(false);
-  }, [clientId]);
+  // Persistência da escolha de projeto por cliente
+  const projStorageKey = clientId ? `studio.kanban.pid.${clientId}` : null;
 
-  useEffect(() => { void load(); }, [load]);
+  // 1) Carrega projetos do cliente
+  useEffect(() => {
+    if (!clientId) { setProjects([]); setProjectId(null); setTasks([]); return; }
+    (async () => {
+      const { data } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false });
+      const list = (data || []) as Array<{ id: string; name: string }>;
+      setProjects(list);
+      const saved = projStorageKey ? localStorage.getItem(projStorageKey) : null;
+      const nextPid = list.find(p => p.id === saved)?.id || list[0]?.id || null;
+      setProjectId(nextPid);
+    })();
+  }, [clientId, projStorageKey]);
+
+  // 2) Carrega tasks + realtime do projeto ativo
+  useEffect(() => {
+    if (!projectId) { setTasks([]); return; }
+    let cancel = false;
+    (async () => {
+      setLoading(true);
+      const { data } = await supabase.from("tasks")
+        .select("id, title, status, priority, due_date, project_id")
+        .eq("project_id", projectId)
+        .order("created_at", { ascending: false });
+      if (!cancel) { setTasks((data || []) as Task[]); setLoading(false); }
+    })();
+    const ch = supabase.channel(`ws-kanban-${projectId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "tasks", filter: `project_id=eq.${projectId}` }, (payload) => {
+        setTasks(cur => {
+          if (payload.eventType === "INSERT") {
+            const row = payload.new as Task;
+            if (cur.some(t => t.id === row.id)) return cur;
+            return [row, ...cur];
+          }
+          if (payload.eventType === "UPDATE") {
+            const row = payload.new as Task;
+            return cur.map(t => t.id === row.id ? { ...t, ...row } : t);
+          }
+          if (payload.eventType === "DELETE") {
+            const row = payload.old as Task;
+            return cur.filter(t => t.id !== row.id);
+          }
+          return cur;
+        });
+      })
+      .subscribe();
+    return () => { cancel = true; supabase.removeChannel(ch); };
+  }, [projectId]);
 
   const cols: Array<{ key: string; title: string }> = [
     { key: "todo", title: "A fazer" },
@@ -846,16 +887,38 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
     { key: "done", title: "Feito" },
   ];
 
-  async function move(taskId: string, next: string) {
-    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, status: next } : t));
-    await supabase.from("tasks").update({ status: next }).eq("id", taskId);
+  async function patch(taskId: string, changes: Partial<Task>) {
+    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, ...changes } : t));
+    const { error } = await supabase.from("tasks").update(changes as any).eq("id", taskId);
+    if (error) { toast({ title: "Falha ao salvar", description: error.message, variant: "destructive" }); void reload(); }
+  }
+
+  async function reload() {
+    if (!projectId) return;
+    const { data } = await supabase.from("tasks")
+      .select("id, title, status, priority, due_date, project_id")
+      .eq("project_id", projectId)
+      .order("created_at", { ascending: false });
+    setTasks((data || []) as Task[]);
   }
 
   async function quickAdd() {
     const title = newTitle.trim();
     if (!title || !projectId) return;
-    const { data, error } = await supabase.from("tasks").insert({ project_id: projectId, title, status: "todo", priority: "medium" }).select("id, title, status, priority, due_date, project_id").single();
-    if (!error && data) { setTasks(cur => [data as any, ...cur]); setNewTitle(""); }
+    const { data, error } = await supabase.from("tasks")
+      .insert({ project_id: projectId, title, status: "todo", priority: "medium" })
+      .select("id, title, status, priority, due_date, project_id")
+      .single();
+    if (!error && data) { setTasks(cur => [data as Task, ...cur]); setNewTitle(""); }
+    else if (error) toast({ title: "Erro ao criar tarefa", description: error.message, variant: "destructive" });
+  }
+
+  function onDrop(colKey: string) {
+    if (!dragId) return;
+    const t = tasks.find(x => x.id === dragId);
+    setDragId(null); setDropCol(null);
+    if (!t || t.status === colKey) return;
+    void patch(dragId, { status: colKey });
   }
 
   return (
@@ -863,8 +926,19 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
         <Columns3 className="w-3.5 h-3.5 text-primary" />
         <span className="font-semibold">Kanban</span>
-        <span className="text-muted-foreground truncate">· {clientName || "cliente"}{projectName && ` / ${projectName}`}</span>
-        <button onClick={() => void load()} className="ml-auto text-[10px] px-2 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground">↻</button>
+        <span className="text-muted-foreground truncate">· {clientName || "cliente"}</span>
+        {projects.length > 1 ? (
+          <select
+            value={projectId ?? ""}
+            onChange={e => { const v = e.target.value || null; setProjectId(v); if (v && projStorageKey) localStorage.setItem(projStorageKey, v); }}
+            className="ml-1 h-6 px-1.5 rounded border border-border bg-background text-[10.5px] max-w-[160px]"
+          >
+            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        ) : projects[0] && (
+          <span className="text-muted-foreground truncate">/ {projects[0].name}</span>
+        )}
+        <button onClick={() => void reload()} className="ml-auto text-[10px] px-2 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground" title="Recarregar">↻</button>
       </div>
       {!clientId ? (
         <p className="p-3 text-[11px] text-muted-foreground">Selecione um cliente no Workspace para ver o Kanban.</p>
@@ -883,38 +957,87 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-2 p-2">
             {cols.map(col => (
-              <div key={col.key} className="bg-background/60 rounded-md p-1.5 space-y-1">
+              <div
+                key={col.key}
+                onDragOver={e => { e.preventDefault(); setDropCol(col.key); }}
+                onDragLeave={() => setDropCol(cur => cur === col.key ? null : cur)}
+                onDrop={() => onDrop(col.key)}
+                className={cn(
+                  "rounded-md p-1.5 space-y-1 transition-colors min-h-[80px]",
+                  dropCol === col.key ? "bg-primary/10 ring-1 ring-primary/40" : "bg-background/60"
+                )}
+              >
                 <div className="text-[9px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
                   <span>{col.title}</span>
                   <span className="opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
                 </div>
                 {tasks.filter(t => t.status === col.key).map(t => (
-                  <div key={t.id} className="bg-card rounded p-1.5 border border-border text-[10.5px] space-y-1">
+                  <div
+                    key={t.id}
+                    draggable
+                    onDragStart={() => setDragId(t.id)}
+                    onDragEnd={() => { setDragId(null); setDropCol(null); }}
+                    className={cn(
+                      "bg-card rounded p-1.5 border border-border text-[10.5px] space-y-1 cursor-grab active:cursor-grabbing",
+                      dragId === t.id && "opacity-50"
+                    )}
+                  >
                     <div className="font-medium leading-snug">{t.title}</div>
-                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
-                      {t.priority && <span className={cn("px-1 py-0.5 rounded",
-                        t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
-                        t.priority === "high" ? "bg-amber-500/20 text-amber-600" : "bg-secondary")}>{t.priority}</span>}
-                      {t.due_date && <span>· {t.due_date}</span>}
-                    </div>
-                    <div className="flex flex-wrap gap-1 pt-0.5">
-                      {cols.filter(c => c.key !== t.status).map(c => (
-                        <button key={c.key} onClick={() => move(t.id, c.key)}
-                          className="text-[8.5px] px-1 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
-                          → {c.title}
-                        </button>
-                      ))}
+                    <div className="flex items-center gap-1 flex-wrap text-[9px] text-muted-foreground">
+                      {editing?.id === t.id && editing.field === "priority" ? (
+                        <select
+                          autoFocus
+                          value={t.priority ?? "medium"}
+                          onChange={e => { void patch(t.id, { priority: e.target.value }); setEditing(null); }}
+                          onBlur={() => setEditing(null)}
+                          className="h-5 px-1 rounded border border-border bg-background text-[9px]"
+                        >
+                          <option value="low">low</option>
+                          <option value="medium">medium</option>
+                          <option value="high">high</option>
+                          <option value="urgent">urgent</option>
+                        </select>
+                      ) : (
+                        <button
+                          onClick={() => setEditing({ id: t.id, field: "priority" })}
+                          className={cn("px-1 py-0.5 rounded hover:opacity-80",
+                            t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
+                            t.priority === "high" ? "bg-amber-500/20 text-amber-600" :
+                            t.priority === "low" ? "bg-secondary" : "bg-secondary")}
+                          title="Alterar prioridade"
+                        >{t.priority || "medium"}</button>
+                      )}
+                      {editing?.id === t.id && editing.field === "due" ? (
+                        <input
+                          autoFocus
+                          type="date"
+                          defaultValue={t.due_date ?? ""}
+                          onBlur={e => { const v = e.target.value || null; if (v !== t.due_date) void patch(t.id, { due_date: v }); setEditing(null); }}
+                          onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") setEditing(null); }}
+                          className="h-5 px-1 rounded border border-border bg-background text-[9px]"
+                        />
+                      ) : (
+                        <button
+                          onClick={() => setEditing({ id: t.id, field: "due" })}
+                          className="px-1 py-0.5 rounded border border-dashed border-border/60 hover:bg-secondary"
+                          title="Definir prazo"
+                        >{t.due_date ? `📅 ${t.due_date}` : "📅 prazo"}</button>
+                      )}
                     </div>
                   </div>
                 ))}
               </div>
             ))}
           </div>
+          <div className="px-3 py-1.5 border-t border-border bg-secondary/30 text-[9.5px] text-muted-foreground">
+            Arraste os cards entre colunas · clique em prioridade/prazo para editar · alterações salvas em tempo real
+          </div>
         </>
       )}
     </div>
   );
 }
+
 
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
