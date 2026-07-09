@@ -252,6 +252,38 @@ Regras absolutas:
     if (context?.script) ctxLines.push(`\nROTEIRO EM CONSTRUÇÃO (pasta atual):\n${context.script.slice(0, 4000)}`);
     if (context?.notes) ctxLines.push(`\nNOTAS DO PROJETO (pasta atual):\n${context.notes.slice(0, 3000)}`);
 
+    // ─── LINK READER: extrai texto de URLs anexadas ou coladas na mensagem
+    try {
+      const urlSet = new Set<string>();
+      (context?.attachments ?? []).forEach(a => {
+        if (a.url && /^https?:\/\//i.test(a.url)) urlSet.add(a.url);
+      });
+      const inMsg = message.match(/https?:\/\/[^\s)]+/g) ?? [];
+      inMsg.forEach(u => urlSet.add(u));
+      const urls = Array.from(urlSet).slice(0, 3);
+      if (urls.length) {
+        const fetched = await Promise.all(urls.map(async (u) => {
+          try {
+            const rr = await fetch(u, { headers: { "User-Agent": "AcelerIQ-Studio/1.0" }, signal: AbortSignal.timeout(6000) });
+            const ct = rr.headers.get("content-type") || "";
+            if (!rr.ok || !/text|html|json|xml/i.test(ct)) return `- ${u} (${rr.status} ${ct || "binário"})`;
+            const raw = await rr.text();
+            const clean = raw
+              .replace(/<script[\s\S]*?<\/script>/gi, " ")
+              .replace(/<style[\s\S]*?<\/style>/gi, " ")
+              .replace(/<[^>]+>/g, " ")
+              .replace(/\s+/g, " ")
+              .trim()
+              .slice(0, 2500);
+            return `\n### ${u}\n${clean}`;
+          } catch (e) {
+            return `- ${u} (falha ao carregar)`;
+          }
+        }));
+        ctxLines.push(`\nCONTEÚDO DE LINKS (leitura automática):\n${fetched.join("\n")}`);
+      }
+    } catch { /* silencia falhas de rede */ }
+
     // ─── PIPELINE FIXO: Orquestrador → Preparo → Notas ───
     // 1) ORQUESTRADOR: LLM leve analisa mensagem+contexto e devolve plano JSON
     //    { intent, plan[], needs_extra_agent, recommended_persona_id, reason }
