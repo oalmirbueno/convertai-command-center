@@ -103,6 +103,23 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
   ];
 }
 
+// Destaca trechos [start,end) do texto com <mark> para busca fuzzy.
+function highlightRanges(text: string, ranges: [number, number][]): React.ReactNode {
+  if (!ranges?.length) return text;
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const out: React.ReactNode[] = [];
+  let cur = 0;
+  sorted.forEach(([s, e], i) => {
+    if (s > cur) out.push(text.slice(cur, s));
+    out.push(<mark key={i} className="bg-primary/25 text-primary rounded-sm px-0.5">{text.slice(s, e)}</mark>);
+    cur = e;
+  });
+  if (cur < text.length) out.push(text.slice(cur));
+  return <>{out}</>;
+}
+
+
+
 // Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
 export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
   let s = " " + raw.trim() + " ";
@@ -690,9 +707,22 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
   // @ e / no composer do agente
   const [mention, setMention] = useState<{ q: string; start: number } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
   const [slash, setSlash] = useState<{ q: string; start: number } | null>(null);
+  const [slashIdx, setSlashIdx] = useState(0);
   // arquivos anexados à próxima mensagem (sincronizam com @ do input)
   const [attached, setAttached] = useState<FileRef[]>([]);
+  // recentes globais por usuário (top 8)
+  const RECENT_KEY = "studio:recentMentions";
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; }
+  });
+  const pushRecent = (id: string) => setRecentIds(prev => {
+    const next = [id, ...prev.filter(x => x !== id)].slice(0, 8);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+
 
   const AGENT_SLASH: { key: string; label: string; hint: string; prompt: string }[] = [
     { key: "roteiro",   label: "Gerar roteiro",       hint: "Prepro 6 passos",         prompt: "Gere um roteiro completo seguindo os 6 passos do Prepro Director com base nos materiais anexados." },
@@ -766,11 +796,65 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     if (activeId === id) { setActiveId(null); setMsgs([]); }
   }
 
-  const mentionMatches = useMemo(() => {
-    if (!mention) return [] as FileRef[];
-    const q = mention.q.toLowerCase();
-    return availableFiles.filter(f => f.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [mention, availableFiles]);
+
+
+
+  // Fuzzy: retorna { score, ranges } — score maior = melhor. Prioriza: exato > prefixo > subsequência.
+  function fuzzyScore(name: string, q: string): { score: number; ranges: [number, number][] } | null {
+    if (!q) return { score: 0, ranges: [] };
+    const n = name.toLowerCase(); const s = q.toLowerCase();
+    if (n === s) return { score: 1000, ranges: [[0, s.length]] };
+    if (n.startsWith(s)) return { score: 800, ranges: [[0, s.length]] };
+    const idx = n.indexOf(s);
+    if (idx >= 0) return { score: 600 - idx, ranges: [[idx, idx + s.length]] };
+    // subsequência
+    let si = 0, score = 0, streak = 0;
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < n.length && si < s.length; i++) {
+      if (n[i] === s[si]) {
+        ranges.push([i, i + 1]);
+        streak++; score += 10 + streak * 2;
+        si++;
+      } else { streak = 0; }
+    }
+    if (si < s.length) return null;
+    // merge ranges contíguos
+    const merged: [number, number][] = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && last[1] === r[0]) last[1] = r[1]; else merged.push([r[0], r[1]]);
+    }
+    return { score, ranges: merged };
+  }
+  type ScoredFile = FileRef & { _score: number; _ranges: [number, number][]; _recent?: boolean };
+  const mentionMatches = useMemo<ScoredFile[]>(() => {
+    if (!mention) return [];
+    const q = mention.q.trim();
+    if (!q) {
+      // sem query: recentes primeiro, depois pastas, depois arquivos
+      const recents = recentIds
+        .map(id => availableFiles.find(f => f.id === id))
+        .filter(Boolean) as FileRef[];
+      const rest = availableFiles.filter(f => !recentIds.includes(f.id));
+      return [
+        ...recents.map(f => ({ ...f, _score: 999, _ranges: [] as [number, number][], _recent: true })),
+        ...rest.map(f => ({ ...f, _score: f.kind === "folder" ? 1 : 0, _ranges: [] as [number, number][] })),
+      ].slice(0, 10);
+    }
+    const scored = availableFiles
+      .map(f => {
+        const r = fuzzyScore(f.name, q);
+        if (!r) return null;
+        const bonus = f.kind === "folder" ? 5 : 0;
+        const rec = recentIds.includes(f.id) ? 50 : 0;
+        return { ...f, _score: r.score + bonus + rec, _ranges: r.ranges, _recent: rec > 0 } as ScoredFile;
+      })
+      .filter(Boolean) as ScoredFile[];
+    return scored.sort((a, b) => b._score - a._score).slice(0, 10);
+  }, [mention, availableFiles, recentIds]);
+
+  useEffect(() => { setMentionIdx(0); }, [mention?.q]);
+  useEffect(() => { setSlashIdx(0); }, [slash?.q]);
 
   const slashMatches = useMemo(() => {
     if (!slash) return [] as typeof AGENT_SLASH;
@@ -788,6 +872,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     else { setMention(null); setSlash(null); }
   }
 
+
   function pickMention(f: FileRef) {
     if (!mention) return;
     const insert = `[@${f.name}](wsfile:${f.id})`;
@@ -796,7 +881,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     const next = before + insert + " " + after;
     setInput(next);
     setAttached(prev => prev.some(x => x.id === f.id) ? prev : [...prev, f]);
+    pushRecent(f.id);
     setMention(null);
+
     setTimeout(() => {
       const el = inputRef.current;
       if (el) { el.focus(); const p = before.length + insert.length + 1; el.setSelectionRange(p, p); }
@@ -1037,17 +1124,31 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           </div>
         )}
         <div className="relative p-2 flex items-end gap-1">
-          {/* Popover @ arquivos */}
-          {mention && mentionMatches.length > 0 && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[220px] overflow-y-auto">
-              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
-                Anexar do workspace
+          {/* Popover @ arquivos — busca fuzzy + navegação por teclado */}
+          {mention && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
+              <div className="px-3 py-1 flex items-center gap-2 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                <span>Anexar do workspace</span>
+                <span className="ml-auto normal-case tracking-normal text-[10px] text-muted-foreground/70">
+                  {mention.q ? `"${mention.q}"` : "digite para filtrar"} · ↑↓ ⏎
+                </span>
               </div>
-              {mentionMatches.map(f => (
-                <button key={f.id} onClick={() => pickMention(f)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
-                  {f.kind === "folder" ? <FolderIcon className="w-3 h-3 text-amber-400 shrink-0" /> : <FileIcon className="w-3 h-3 text-primary shrink-0" />}
-                  <span className="truncate">{f.name}</span>
+              {mentionMatches.length === 0 ? (
+                <div className="px-3 py-3 text-[11px] text-muted-foreground text-center">Nenhum arquivo encontrado</div>
+              ) : mentionMatches.map((f, i) => (
+                <button key={f.id}
+                  onMouseEnter={() => setMentionIdx(i)}
+                  onClick={() => pickMention(f)}
+                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
+                    i === mentionIdx ? "bg-primary/15 text-foreground" : "hover:bg-secondary")}>
+                  {f.kind === "folder"
+                    ? <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    : <FileIcon className="w-3.5 h-3.5 text-primary shrink-0" />}
+                  <span className="truncate flex-1">{highlightRanges(f.name, f._ranges)}</span>
+                  {f._recent && <span className="text-[9px] uppercase tracking-wider text-primary/70 shrink-0">recente</span>}
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 shrink-0">
+                    {f.kind === "folder" ? "pasta" : "arquivo"}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1058,9 +1159,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
                 Ações do agente
               </div>
-              {slashMatches.map(c => (
-                <button key={c.key} onClick={() => pickSlash(c)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+              {slashMatches.map((c, i) => (
+                <button key={c.key}
+                  onMouseEnter={() => setSlashIdx(i)}
+                  onClick={() => pickSlash(c)}
+                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
+                    i === slashIdx ? "bg-primary/15" : "hover:bg-secondary")}>
                   <Sparkles className="w-3 h-3 text-primary shrink-0" />
                   <span className="font-medium">{c.label}</span>
                   <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
@@ -1075,12 +1179,23 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={e => {
               if (e.key === "Escape") { setMention(null); setSlash(null); return; }
+              if (mention && mentionMatches.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setMentionIdx(i => (i + 1) % mentionMatches.length); return; }
+                if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIdx(i => (i - 1 + mentionMatches.length) % mentionMatches.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionMatches[mentionIdx]); return; }
+              }
+              if (slash && slashMatches.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx(i => (i + 1) % slashMatches.length); return; }
+                if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIdx(i => (i - 1 + slashMatches.length) % slashMatches.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickSlash(slashMatches[slashIdx]); return; }
+              }
               if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
             }}
             placeholder="Pergunte ao agente... @ anexa arquivos · / dispara ações"
             rows={2}
             className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
           />
+
           <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
