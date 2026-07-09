@@ -1900,8 +1900,10 @@ export type Database = {
           gpt_name: string | null
           gpt_url: string | null
           id: string
+          last_used_at: string | null
           persona_prompt: string | null
           updated_at: string
+          usage_count: number
           user_id: string
         }
         Insert: {
@@ -1911,8 +1913,10 @@ export type Database = {
           gpt_name?: string | null
           gpt_url?: string | null
           id?: string
+          last_used_at?: string | null
           persona_prompt?: string | null
           updated_at?: string
+          usage_count?: number
           user_id: string
         }
         Update: {
@@ -1922,8 +1926,10 @@ export type Database = {
           gpt_name?: string | null
           gpt_url?: string | null
           id?: string
+          last_used_at?: string | null
           persona_prompt?: string | null
           updated_at?: string
+          usage_count?: number
           user_id?: string
         }
         Relationships: [
