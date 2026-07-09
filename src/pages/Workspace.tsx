@@ -786,9 +786,9 @@ export default function Workspace() {
   );
 }
 
-function FilePreview({ node, getUrl }: { node: Node; getUrl: (p: string) => Promise<string> }) {
+function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promise<string> }) {
   const [url, setUrl] = useState("");
-  useEffect(() => { if (node.storage_path) getUrl(node.storage_path).then(setUrl); }, [node.id]);
+  useEffect(() => { getUrl(node).then(setUrl); }, [node.id]);
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
   const m = node.mime || "";
   if (m.startsWith("image/")) return <img src={url} alt={node.name} className="max-h-[60vh] mx-auto rounded-lg" />;
