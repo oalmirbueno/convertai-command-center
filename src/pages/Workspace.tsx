@@ -730,7 +730,7 @@ export default function Workspace() {
     const { node, parentId } = moveCreate;
     if (node.__virtual) {
       toast({ title: "Ação não suportada", description: "Itens de Arquivos não podem ser movidos para novas pastas.", variant: "destructive" });
-      setMoveCreate(null); setMoveCreateName(""); return;
+      setMoveCreate(null); setMoveCreateName(suggestFolderName(n)); return;
     }
     const { data, error } = await supabase.from("workspace_nodes").insert({
       name: moveCreateName.trim(), kind: "folder", scope,
@@ -746,7 +746,7 @@ export default function Workspace() {
       .update({ parent_id: newId }).eq("id", node.id);
     if (mvErr) { toast({ title: "Pasta criada, mas falhou ao mover", description: mvErr.message, variant: "destructive" }); }
     else toast({ title: "Pasta criada e item movido" });
-    setMoveCreate(null); setMoveCreateName("");
+    setMoveCreate(null); setMoveCreateName(suggestFolderName(n));
     invalidate();
   }
 
@@ -834,11 +834,11 @@ export default function Workspace() {
             <DropdownMenuSubContent className="max-h-72 overflow-y-auto w-64">
               {!n.__virtual && (
                 <>
-                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
                     <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
                   </DropdownMenuItem>
                   {parent && (
-                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
                       <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
                     </DropdownMenuItem>
                   )}
@@ -918,11 +918,11 @@ export default function Workspace() {
             <ContextMenuSubContent className="max-h-72 overflow-y-auto w-64">
               {!n.__virtual && (
                 <>
-                  <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                  <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(suggestFolderName(n)); }}>
                     <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
                   </ContextMenuItem>
                   {parent && (
-                    <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                    <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(suggestFolderName(n)); }}>
                       <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
                     </ContextMenuItem>
                   )}
@@ -1389,7 +1389,7 @@ export default function Workspace() {
       </Dialog>
 
       {/* New folder + move */}
-      <Dialog open={!!moveCreate} onOpenChange={(o) => { if (!o) { setMoveCreate(null); setMoveCreateName(""); } }}>
+      <Dialog open={!!moveCreate} onOpenChange={(o) => { if (!o) { setMoveCreate(null); setMoveCreateName(suggestFolderName(n)); } }}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Nova pasta e mover</DialogTitle>
@@ -1400,7 +1400,7 @@ export default function Workspace() {
           <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
             placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
           <DialogFooter>
-            <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
+            <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(suggestFolderName(n)); }}>Cancelar</Button>
             <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>
           </DialogFooter>
         </DialogContent>
