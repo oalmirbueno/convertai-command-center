@@ -2360,27 +2360,23 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     }
   }
 
-  // Auto-puxa contexto quando abrir o painel com cliente definido: se a thread
-  // ativa está vazia, ou se ainda nem existe thread nesse escopo, o Orquestrador
-  // assume, monta o contexto e devolve as perguntas certas.
+  // Auto-puxa contexto UMA vez por escopo (persistido em localStorage), somente quando
+  // já existe uma thread ativa vazia. Sem thread ainda, aguardamos ação explícita do
+  // usuário no botão "Puxar contexto" — evita loop de criação de conversas ao alternar abas.
   useEffect(() => {
     if (!clientId) return;
     if (streaming || pulling) return;
-    if (activeId) {
-      if (msgs.length > 0) return;
-      if (autoPulledRef.current.has(activeId)) return;
-      autoPulledRef.current.add(activeId);
-      void pullDeepContext({ silent: true });
-      return;
-    }
-    // Sem thread ainda: cria uma via pullDeepContext (send cria a thread)
-    const scopeKey = `new:${clientId}:${threadScope}:${folderPath || "_root"}`;
-    if (autoPulledRef.current.has(scopeKey)) return;
-    if (threads.length > 0) return; // aguarda seleção automática de thread existente
-    autoPulledRef.current.add(scopeKey);
+    if (!activeId) return;
+    if (msgs.length > 0) return;
+    const key = `studio:autoPulled:${clientId}:${threadScope}:${folderPath || "_root"}:${activeId}`;
+    try { if (localStorage.getItem(key)) return; } catch {}
+    if (autoPulledRef.current.has(activeId)) return;
+    autoPulledRef.current.add(activeId);
+    try { localStorage.setItem(key, "1"); } catch {}
     void pullDeepContext({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, activeId, msgs.length, threads.length, folderPath, threadScope]);
+  }, [clientId, activeId, msgs.length, folderPath, threadScope]);
+
 
 
 
