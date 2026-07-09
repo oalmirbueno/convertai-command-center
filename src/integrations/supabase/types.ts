@@ -1051,6 +1051,7 @@ export type Database = {
           name: string
           objectives: string | null
           ops_workspace_id: string | null
+          pipeline: Json | null
           progress: number
           project_type: string
           scope: string | null
@@ -1074,6 +1075,7 @@ export type Database = {
           name: string
           objectives?: string | null
           ops_workspace_id?: string | null
+          pipeline?: Json | null
           progress?: number
           project_type: string
           scope?: string | null
@@ -1097,6 +1099,7 @@ export type Database = {
           name?: string
           objectives?: string | null
           ops_workspace_id?: string | null
+          pipeline?: Json | null
           progress?: number
           project_type?: string
           scope?: string | null

@@ -17,6 +17,7 @@ import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
+import { PipelineBar } from "@/components/admin/ProjectPipeline";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -469,7 +470,10 @@ export default function AdminDashboard() {
                       <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
                         <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
                       </div>
-                      <p className="text-xs font-mono text-muted-foreground mt-1 text-right">{p.progress}%</p>
+                      <div className="flex items-center justify-end gap-2 mt-1">
+                        <PipelineBar pipeline={p.pipeline} />
+                        <p className="text-xs font-mono text-muted-foreground">{p.progress}%</p>
+                      </div>
                     </div>
                     <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
                       <Clock className="w-3 h-3" />
