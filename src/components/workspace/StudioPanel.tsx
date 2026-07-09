@@ -664,7 +664,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
         <Bot className="w-3.5 h-3.5 text-primary" />
         <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
           {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+          {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
         </span>
+
         <button onClick={() => setShowHistory(v => !v)}
           className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Histórico">
           <History className="w-3 h-3" />
