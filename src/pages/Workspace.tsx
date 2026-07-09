@@ -48,6 +48,20 @@ const iconFor = (n: Node) => {
   return FileText;
 };
 
+function virtFileNode(f: any, clientId: string): Node {
+  return {
+    id: `${VIRT_PREFIX}file:${f.id}`,
+    parent_id: null, scope: "client", client_id: clientId,
+    kind: "file", name: f.file_name,
+    mime: f.file_type || null, size_bytes: null, storage_path: null,
+    duration_sec: null, sort_index: 0,
+    sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
+    created_by: f.uploaded_by || null, created_at: f.created_at,
+    __virtual: true, __external_url: f.file_url, __file_id: f.id,
+    __approval_status: f.approval_status,
+  };
+}
+
 const fmtSize = (n: number | null) => {
   if (!n) return "";
   if (n < 1024) return `${n} B`;
