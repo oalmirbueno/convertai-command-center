@@ -116,11 +116,7 @@ Deno.serve(async (req) => {
       } catch { /* usa fallback */ }
     }
 
-    // upsert manual: unique (user_id, coalesce(client_id::text,''), coalesce(folder_path,''))
-    let sel = admin.from("workspace_agent_personas").select("id").eq("user_id", user.id);
-    sel = cid ? sel.eq("client_id", cid) : sel.is("client_id", null);
-    sel = fpath ? sel.eq("folder_path", fpath) : sel.is("folder_path", null);
-    const { data: existing } = await sel.maybeSingle();
+    // Múltiplas personas por escopo. Se persona_id vier, atualiza aquela; senão insere nova.
     const row = {
       user_id: user.id,
       client_id: cid,
@@ -131,13 +127,19 @@ Deno.serve(async (req) => {
       persona_prompt: persona,
       updated_at: new Date().toISOString(),
     };
-    if (existing?.id) {
-      await admin.from("workspace_agent_personas").update(row).eq("id", existing.id);
-    } else {
-      await admin.from("workspace_agent_personas").insert(row);
+    let savedId: string | null = null;
+    if (persona_id) {
+      const { data: upd } = await admin.from("workspace_agent_personas")
+        .update(row).eq("id", persona_id).eq("user_id", user.id).select("id").maybeSingle();
+      savedId = upd?.id || null;
+    }
+    if (!savedId) {
+      const { data: ins } = await admin.from("workspace_agent_personas")
+        .insert(row).select("id").maybeSingle();
+      savedId = ins?.id || null;
     }
 
-    return json({ ok: true, name: title, description, starters, persona, scope: { client_id: cid, folder_path: fpath } });
+    return json({ ok: true, id: savedId, name: title, description, starters, persona, scope: { client_id: cid, folder_path: fpath } });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "erro" }, 500);
   }
