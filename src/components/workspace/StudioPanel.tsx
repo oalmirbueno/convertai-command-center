@@ -114,9 +114,9 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
 const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
   { cmd: "/help",      label: "Ajuda",              desc: "Abre este guia inline com todos os comandos." },
   { cmd: "/tarefa",    label: "Nova tarefa",        desc: "Cria tarefa no Kanban do projeto. Aceita !alta !urgente @nome 15/07 hoje +3d." },
-  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo — lista, cria e move tasks reais do projeto sem sair da nota." },
-  { cmd: "/imagem",    label: "Imagem → OCR",       desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
-  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive → renderiza o player inline." },
+  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo: lista, cria e move tasks reais do projeto sem sair da nota." },
+  { cmd: "/imagem",    label: "Imagem OCR",         desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
+  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive e renderiza o player inline." },
   { cmd: "/mapa",      label: "Mapa mental",        desc: "Insere estrutura hierárquica em texto (edite os ramos)." },
   { cmd: "/checklist", label: "Checklist",          desc: "Lista com caixinhas [ ] clicáveis no preview." },
   { cmd: "/hook",      label: "Bloco HOOK",         desc: "Template de roteiro 0–3s (fala, imagem, texto em tela)." },
@@ -128,7 +128,7 @@ const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
 ];
 
 const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
-  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome — busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
+  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome: busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
   { cmd: "@kanban",   label: "Kanban",   desc: "Bloco vivo do Kanban do projeto renderizado dentro da nota." },
   { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed) — colar link gera automaticamente." },
   { cmd: "@help",     label: "Ajuda",    desc: "Renderiza este painel de ajuda inline no ponto onde estiver escrito." },
@@ -491,7 +491,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
     const next = !docPublished;
     setDocPublished(next);
-    // Persistência imediata (não espera debounce) — garante que o cliente veja na hora
+    // Persistência imediata: garante que o cliente veja na hora
     const notesNow = notesContentRef.current;
     const { data, error } = await supabase.from("studio_docs").upsert({
       project_id: projectId,
@@ -694,7 +694,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       state.notes || "(vazio)",
       "",
       "## Arquivos vinculados",
-      ...state.mentions.map(m => `- ${m.name}${m.url ? ` — ${m.url}` : ""}`),
+      ...state.mentions.map(m => `- ${m.name}${m.url ? `: ${m.url}` : ""}`),
     ].join("\n");
     navigator.clipboard.writeText(parts);
     toast({ title: "Contexto copiado", description: "Cole no Prepro Director GPT." });
@@ -1653,7 +1653,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                           onClick={() => setEditing({ id: t.id, field: "due" })}
                           className="px-1 py-0.5 rounded border border-dashed border-border/60 hover:bg-secondary"
                           title="Definir prazo"
-                        >{t.due_date ? `📅 ${t.due_date}` : "📅 prazo"}</button>
+                        >{t.due_date ? `Prazo ${t.due_date}` : "Prazo"}</button>
                       )}
                     </div>
                   </div>
