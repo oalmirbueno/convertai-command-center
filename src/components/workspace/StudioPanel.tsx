@@ -227,6 +227,19 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     const cur = where === "notes" ? state.notes : state.script;
     const before = cur.slice(0, start);
     const after = cur.slice(start + 1 + q.length);
+
+    // Ação especial: abre dialog de nova tarefa (prefill com texto do início da linha corrente)
+    if (cmd.action === "createTask") {
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const currentLine = cur.slice(lineStart, start).trim();
+      setTaskDraft({
+        raw: currentLine,
+        where, insertAt: start, tokenLen: 1 + q.length,
+      });
+      setSlashMenu(null);
+      return;
+    }
+
     const next = before + cmd.insert + after;
     if (where === "notes") setState(s => ({ ...s, notes: next }));
     else setState(s => ({ ...s, script: next }));
@@ -236,6 +249,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       if (el) { el.focus(); const p = before.length + cmd.insert.length; el.setSelectionRange(p, p); }
     }, 10);
   }
+
 
 
   function insertMention(f: FileRef) {
