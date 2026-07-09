@@ -369,6 +369,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       setSlashMenu(null);
       return;
     }
+    if (cmd.action === "insertHelp") {
+      const block = `\n@help\n`;
+      if (where === "notes") setState(s => ({ ...s, notes: before + block + after }));
+      else setState(s => ({ ...s, script: before + block + after }));
+      setSlashMenu(null);
+      return;
+    }
+
     if (cmd.action === "uploadImage") { applyCleaned(); setTimeout(() => imageInputRef.current?.click(), 30); return; }
     if (cmd.action === "insertVideo") {
       applyCleaned();
