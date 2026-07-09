@@ -2150,9 +2150,65 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     setInput(prev => prev.replace(new RegExp(`\\s?\\[@[^\\]]+\\]\\(wsfile:${id}\\)`, "g"), "").trim());
   }
 
+  const [pulling, setPulling] = useState(false);
+  async function pullDeepContext() {
+    if (streaming || pulling) return;
+    setPulling(true);
+    toast({ title: "Puxando contexto…", description: "Reunindo dados do cliente, projetos e pasta." });
+    try {
+      const chunks: string[] = [];
+      if (clientId) {
+        const [profRes, projRes, briefRes, contractRes] = await Promise.all([
+          supabase.from("profiles").select("full_name,company,phone,email,plan_type,plan_value,status,segment").eq("id", clientId).maybeSingle(),
+          supabase.from("projects").select("id,name,status,progress,description,brand,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(10),
+          supabase.from("briefings").select("id,status,answers,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+          supabase.from("contracts").select("id,status,total_value,installments,created_at").eq("client_id", clientId).order("created_at", { ascending: false }).limit(3),
+        ]);
+        const prof = profRes.data as any;
+        if (prof) chunks.push(`## Cliente\n- Nome: ${prof.full_name || "-"}\n- Empresa: ${prof.company || "-"}\n- Segmento: ${prof.segment || "-"}\n- Plano: ${prof.plan_type || "-"} · R$ ${prof.plan_value || 0}\n- Status: ${prof.status || "-"}\n- Contato: ${prof.email || "-"} · ${prof.phone || "-"}`);
+        const projects = (projRes.data as any[]) || [];
+        if (projects.length) {
+          chunks.push(`## Projetos (${projects.length})\n${projects.map(p => `- ${p.name} · ${p.status} · ${p.progress ?? 0}% · ${p.brand || "-"}${p.description ? ` — ${String(p.description).slice(0, 120)}` : ""}`).join("\n")}`);
+          const ids = projects.map(p => p.id);
+          const [taskRes, milRes] = await Promise.all([
+            supabase.from("tasks").select("title,status,priority,due_date").in("project_id", ids).limit(60),
+            supabase.from("milestones").select("title,status,due_date").in("project_id", ids).limit(30),
+          ]);
+          const tasks = (taskRes.data as any[]) || [];
+          const opened = tasks.filter(t => t.status !== "done" && t.status !== "concluido").slice(0, 25);
+          if (opened.length) chunks.push(`## Tasks abertas (${opened.length})\n${opened.map(t => `- [${t.status}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · vence ${t.due_date}` : ""}`).join("\n")}`);
+          const mils = (milRes.data as any[]) || [];
+          if (mils.length) chunks.push(`## Milestones\n${mils.map(m => `- [${m.status}] ${m.title}${m.due_date ? ` · ${m.due_date}` : ""}`).join("\n")}`);
+        }
+        const brief = briefRes.data as any;
+        if (brief?.answers) {
+          const ansStr = typeof brief.answers === "string" ? brief.answers : JSON.stringify(brief.answers);
+          chunks.push(`## Briefing (${brief.status || "?"})\n${ansStr.slice(0, 2200)}`);
+        }
+        const contracts = (contractRes.data as any[]) || [];
+        if (contracts.length) chunks.push(`## Contratos\n${contracts.map(c => `- ${c.status} · R$ ${c.total_value || 0} · ${c.installments || 1}x`).join("\n")}`);
+      }
+      if (folderId) {
+        const { data: nodes } = await supabase.from("workspace_nodes").select("name,kind,mime").eq("parent_id", folderId).limit(60);
+        if (nodes?.length) chunks.push(`## Pasta atual /${folderPath}\n${nodes.map((n: any) => `- ${n.kind === "folder" ? "[pasta]" : "[arquivo]"} ${n.name}${n.mime ? ` (${n.mime})` : ""}`).join("\n")}`);
+      }
+      if (notes?.trim()) chunks.push(`## Notas em construção\n${notes.slice(0, 2000)}`);
+      if (script?.trim()) chunks.push(`## Roteiro em construção\n${script.slice(0, 2000)}`);
+
+      const dossier = chunks.join("\n\n") || "(sem dados disponíveis)";
+      const prompt = `Puxei o contexto completo abaixo. Aja como diretor de pré-produção sênior:\n\n1. Diagnóstico curto (3-5 linhas) do estado atual do cliente/projeto.\n2. Aponte as lacunas críticas de informação que estão travando o avanço.\n3. Me faça de 3 a 5 PERGUNTAS DIRETAS, numeradas e priorizadas — cada uma pensada para destravar o próximo passo concreto. Sem enrolação.\n4. Sugira o próximo entregável (roteiro, checklist, briefing revisado, plano de gravação, etc).\n\nConforme eu responder cada pergunta, avance para a próxima etapa e refine o plano.\n\n---\n${dossier}`;
+      await send(prompt);
+    } catch (e: any) {
+      toast({ title: "Falha ao puxar contexto", description: e?.message || "erro", variant: "destructive" });
+    } finally {
+      setPulling(false);
+    }
+  }
+
   async function send(override?: string) {
     const text = (override ?? input).trim();
     if (!text || streaming) return;
+
 
     let tid = activeId;
     if (!tid) {
