@@ -427,3 +427,211 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
     </div>
   );
 }
+
+// =========================
+// AGENT CHAT (persistente por cliente)
+// =========================
+
+type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null };
+type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
+
+function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, script }: {
+  clientId: string | null; clientName: string | null; folderPath: string;
+  availableFiles: FileRef[]; notes: string; script: string;
+}) {
+  const { toast } = useToast();
+  const [threads, setThreads] = useState<AgentThread[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [msgs, setMsgs] = useState<AgentMsg[]>([]);
+  const [input, setInput] = useState("");
+  const [streaming, setStreaming] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
+  const [streamBuf, setStreamBuf] = useState("");
+  const scrollRef = useRef<HTMLDivElement>(null);
+
+  // Carrega threads do contexto (cliente)
+  useEffect(() => { void loadThreads(); }, [clientId]);
+  async function loadThreads() {
+    const q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id")
+      .order("updated_at", { ascending: false }).limit(30);
+    const { data } = clientId ? await q.eq("client_id", clientId) : await q.is("client_id", null);
+    setThreads((data as AgentThread[]) || []);
+    if (data && data.length && !activeId) setActiveId(data[0].id);
+  }
+
+  useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
+  async function loadMsgs(id: string) {
+    const { data } = await supabase.from("workspace_agent_messages")
+      .select("id,role,content,created_at").eq("thread_id", id).order("created_at", { ascending: true });
+    setMsgs((data as AgentMsg[]) || []);
+  }
+
+  useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, streamBuf]);
+
+  async function newThread() {
+    const { data: sess } = await supabase.auth.getUser();
+    if (!sess.user) return;
+    const { data, error } = await supabase.from("workspace_agent_threads")
+      .insert({ user_id: sess.user.id, client_id: clientId, title: "Nova conversa" })
+      .select("id,title,updated_at,client_id").single();
+    if (error) { toast({ title: "Erro", description: error.message, variant: "destructive" }); return; }
+    setThreads(t => [data as AgentThread, ...t]);
+    setActiveId(data.id);
+    setMsgs([]);
+  }
+
+  async function deleteThread(id: string) {
+    await supabase.from("workspace_agent_threads").delete().eq("id", id);
+    setThreads(t => t.filter(x => x.id !== id));
+    if (activeId === id) { setActiveId(null); setMsgs([]); }
+  }
+
+  async function send() {
+    const text = input.trim();
+    if (!text || streaming) return;
+    let tid = activeId;
+    if (!tid) {
+      const { data: sess } = await supabase.auth.getUser();
+      if (!sess.user) return;
+      const { data } = await supabase.from("workspace_agent_threads")
+        .insert({ user_id: sess.user.id, client_id: clientId, title: text.slice(0, 60) })
+        .select("id,title,updated_at,client_id").single();
+      if (!data) return;
+      tid = data.id;
+      setThreads(t => [data as AgentThread, ...t]);
+      setActiveId(tid);
+    }
+    setInput("");
+    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: text, created_at: new Date().toISOString() }]);
+    setStreaming(true); setStreamBuf("");
+
+    try {
+      const { data: sess } = await supabase.auth.getSession();
+      const token = sess.session?.access_token;
+      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/workspace-agent`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+          apikey: import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY,
+        },
+        body: JSON.stringify({
+          thread_id: tid,
+          message: text,
+          context: {
+            client_name: clientName,
+            folder_path: folderPath,
+            notes, script,
+            files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
+          },
+        }),
+      });
+      if (!res.ok || !res.body) {
+        const t = await res.text().catch(() => "");
+        throw new Error(t || `HTTP ${res.status}`);
+      }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let full = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        full += chunk;
+        setStreamBuf(full);
+      }
+      setMsgs(m => [...m, { id: crypto.randomUUID(), role: "assistant", content: full, created_at: new Date().toISOString() }]);
+      setStreamBuf("");
+      void loadThreads();
+    } catch (e: any) {
+      toast({ title: "Falha no agente", description: e?.message?.slice(0, 200), variant: "destructive" });
+    } finally { setStreaming(false); }
+  }
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Header: cliente + histórico + nova */}
+      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
+        <Bot className="w-3.5 h-3.5 text-primary" />
+        <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
+          {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+        </span>
+        <button onClick={() => setShowHistory(v => !v)}
+          className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Histórico">
+          <History className="w-3 h-3" />
+        </button>
+        <button onClick={newThread}
+          className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+          <Plus className="w-3 h-3" />
+        </button>
+      </div>
+
+      {showHistory && (
+        <div className="max-h-[140px] overflow-y-auto border-b border-border bg-background/60">
+          {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
+          {threads.map(t => (
+            <div key={t.id} className={cn("group flex items-center gap-1 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer",
+              activeId === t.id && "bg-secondary")}
+              onClick={() => { setActiveId(t.id); setShowHistory(false); }}>
+              <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
+              <span className="text-[11px] truncate flex-1">{t.title}</span>
+              <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                <Trash2 className="w-3 h-3" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Mensagens */}
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+        {msgs.length === 0 && !streaming && (
+          <div className="text-center py-8 space-y-2">
+            <Bot className="w-8 h-8 text-primary/40 mx-auto" />
+            <p className="text-[11px] text-muted-foreground">
+              Peça roteiro, plano de gravação, storyboard, ideias.<br/>
+              O agente já conhece <b>{clientName || "este contexto"}</b>.
+            </p>
+          </div>
+        )}
+        {msgs.map(m => (
+          <div key={m.id} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
+            <div className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words",
+              m.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {streaming && streamBuf && (
+          <div className="flex justify-start">
+            <div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words bg-secondary text-foreground">
+              {streamBuf}<span className="inline-block w-1.5 h-3 bg-primary/60 ml-0.5 animate-pulse" />
+            </div>
+          </div>
+        )}
+        {streaming && !streamBuf && (
+          <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
+            <Loader2 className="w-3 h-3 animate-spin" /> pensando...
+          </div>
+        )}
+      </div>
+
+      {/* Composer */}
+      <div className="border-t border-border p-2 flex items-end gap-1 bg-secondary/30">
+        <textarea
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
+          placeholder="Pergunte ao agente... (Enter envia, Shift+Enter quebra linha)"
+          rows={2}
+          className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
+        />
+        <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
+          {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+        </Button>
+      </div>
+    </div>
+  );
+}
