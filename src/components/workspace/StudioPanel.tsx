@@ -96,18 +96,22 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
+  const [dock, setDock] = useState<"br" | "bl" | "bc">(() => (localStorage.getItem("studio_dock") as any) || "br");
   const [mode, setMode] = useState<Mode>("agent");
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const scriptRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
+  const [slashMenu, setSlashMenu] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
 
   // reload state when context changes
   useEffect(() => { setState(loadState(contextKey)); }, [contextKey]);
   useEffect(() => { saveState(contextKey, state); }, [contextKey, state]);
   useEffect(() => { localStorage.setItem("studio_open", open ? "1" : "0"); }, [open]);
   useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
+  useEffect(() => { localStorage.setItem("studio_dock", dock); }, [dock]);
+
 
   const mentionMatches = useMemo(() => {
     if (!mentionQuery) return [] as FileRef[];
