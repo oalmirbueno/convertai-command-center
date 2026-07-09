@@ -708,6 +708,33 @@ export default function Workspace() {
             </div>
           </div>
 
+          {/* Smart category chips */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {([
+              ["all", "Todos", (nodes?.length || 0) + (virtualNodes?.length || 0)],
+              ["image", KIND_META.image.label, kindCounts.image],
+              ["video", KIND_META.video.label, kindCounts.video],
+              ["doc", KIND_META.doc.label, kindCounts.doc],
+              ["audio", KIND_META.audio.label, kindCounts.audio],
+              ["other", KIND_META.other.label, kindCounts.other],
+            ] as const).map(([k, label, count]) => (
+              <button
+                key={k}
+                onClick={() => setKindFilter(k as any)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                  kindFilter === k
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                )}
+              >
+                {label} <span className="opacity-60">{count}</span>
+              </button>
+            ))}
+          </div>
+
+
+
           {/* Drop zone wrapper */}
           <div
             onDragEnter={(e) => { if (e.dataTransfer.types.includes("Files")) { setDragOverArea(true); } }}
