@@ -22,7 +22,7 @@ const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-pre
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
 
-type Mode = "agent" | "notes" | "map" | "script" | "process";
+type Mode = "agent" | "notes" | "map" | "script" | "board" | "process";
 
 
 type StudioState = {
@@ -30,9 +30,21 @@ type StudioState = {
   script: string;
   mapRoot: MapNode;
   mentions: { id: string; name: string; url?: string | null }[];
+  board: BoardCol[];
+  boardLog: string[];
 };
 
 type MapNode = { id: string; label: string; children: MapNode[] };
+
+type BoardCard = { id: string; title: string; desc?: string };
+type BoardCol = { id: string; title: string; cards: BoardCard[] };
+
+const DEFAULT_BOARD: BoardCol[] = [
+  { id: "todo", title: "A fazer",     cards: [] },
+  { id: "doing", title: "Em andamento", cards: [] },
+  { id: "review", title: "Revisão",     cards: [] },
+  { id: "done",  title: "Feito",        cards: [] },
+];
 
 const DEFAULT_MAP: MapNode = {
   id: "root",
