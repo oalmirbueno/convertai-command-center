@@ -683,6 +683,45 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             })}
           </div>
 
+          {/* Fordista bar: Projeto · Publicar · PDF */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 text-[11px] overflow-x-auto">
+            <span className="text-muted-foreground shrink-0">Projeto</span>
+            <select
+              value={projectId ?? ""}
+              onChange={e => setProjectId(e.target.value || null)}
+              className="bg-background border border-border rounded px-1.5 py-0.5 text-[11px] max-w-[180px]"
+              title="Vincule um projeto para publicar/espelhar ao cliente"
+            >
+              <option value="">— nenhum —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {projectId && (
+              <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
+                docSyncing === "saving" && "text-amber-500",
+                docSyncing === "saved" && "text-primary",
+                docSyncing === "error" && "text-destructive",
+                docSyncing === "idle" && "text-muted-foreground")}>
+                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {docSyncing === "saved" && <Check className="w-3 h-3" />}
+                {docSyncing === "error" && <X className="w-3 h-3" />}
+                {docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              <button onClick={togglePublish}
+                className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
+                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
+                title={docPublished ? "Publicado — cliente vê ao vivo" : "Publicar para o cliente"}>
+                <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
+              </button>
+              <button onClick={downloadPDF}
+                className="px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
+                title="Exportar PDF com marca AcelerIQ">
+                <Download className="w-3 h-3" /> PDF
+              </button>
+            </div>
+          </div>
+
           <div className="flex-1 min-h-0 overflow-y-auto">
             {mode === "agent" && (
               <AgentChat
@@ -694,6 +733,21 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 notes={state.notes}
                 script={state.script}
                 boardLog={state.boardLog}
+                onStructureToNotes={async () => {
+                  try {
+                    const { data: sess } = await supabase.auth.getSession();
+                    const tok = sess?.session?.access_token; if (!tok) return;
+                    toast({ title: "Estruturando…", description: "O agente está montando o documento executivo." });
+                    const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
+                      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+                      body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
+                    });
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const md = j?.markdown || "";
+                    if (md) { setState(s => ({ ...s, notes: md })); setMode("notes"); toast({ title: "Notas atualizadas", description: "Documento pronto pra você complementar." }); }
+                  } catch (e: any) { toast({ title: "Falha ao estruturar", description: e?.message || "erro", variant: "destructive" }); }
+                }}
               />
             )}
             {mode === "notes" && (
