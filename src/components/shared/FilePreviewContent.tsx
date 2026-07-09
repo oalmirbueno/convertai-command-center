@@ -177,17 +177,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
   }
 
   if (isImage(fileName, fileUrl)) {
-    return (
-      <div className="bg-secondary rounded-xl overflow-hidden flex items-center justify-center p-2">
-        <img
-          src={fileUrl}
-          alt={fileName}
-          className="max-w-full max-h-[70vh] object-contain rounded-lg cursor-zoom-in"
-          loading="lazy"
-          onClick={() => openFile(fileUrl)}
-        />
-      </div>
-    );
+    return <InlineImage fileName={fileName} fileUrl={fileUrl} />;
   }
 
   if (isPdf(fileName, fileUrl)) {
