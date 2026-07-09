@@ -461,9 +461,6 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           </div>
         </>
       )}
-      {/* removidos: script, map, board, process — agora tudo via comandos / e @ nas Notas */}
-        </>
-      )}
 
       {taskDraft && (
         <QuickTaskDialog
