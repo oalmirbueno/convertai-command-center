@@ -902,7 +902,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               />
             )}
             {mode === "notes" && (
-              <div className="p-3 space-y-2 h-full min-h-0 flex flex-col overflow-y-auto">
+              <div className="p-4 sm:p-6 gap-3 h-full min-h-0 flex flex-col overflow-y-auto">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
                   <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
                   <button
@@ -915,7 +915,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
-                <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
+                <div className="relative flex-1 min-h-0 flex flex-col gap-3">
                   <textarea
                     ref={notesRef}
                     value={state.notes}
@@ -923,14 +923,18 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onPaste={onNotesPaste}
-                    placeholder="/ para comandos · @ para arquivos · cole imagem/vídeo…"
-                    className="w-full h-full min-h-[180px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
+                    placeholder="Comece a escrever…  /  para comandos  ·  @  para arquivos  ·  cole imagem ou link de vídeo"
+                    className="w-full flex-1 min-h-[280px] resize-none bg-background border border-border rounded-xl p-5 text-[14.5px] leading-[1.75] font-sans text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-colors"
                   />
                   {state.notes.trim().length > 0 && (
-                    <div className="mt-2 border-t border-border pt-2 max-h-[240px] overflow-y-auto">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Preview</div>
-                      <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
-                    </div>
+                    <details className="border-t border-border pt-3 group">
+                      <summary className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground mb-2 cursor-pointer hover:text-foreground select-none">
+                        Preview do documento
+                      </summary>
+                      <div className="max-h-[320px] overflow-y-auto mt-2">
+                        <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
+                      </div>
+                    </details>
                   )}
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
