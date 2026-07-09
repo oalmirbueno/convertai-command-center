@@ -927,3 +927,193 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
     </div>
   );
 }
+
+// =========================
+// MINI KANBAN (drag-drop entre colunas + log de contexto)
+// =========================
+function MiniKanban({ board, onChange, onReset, log }: {
+  board: BoardCol[];
+  onChange: (next: BoardCol[], logEntry?: string) => void;
+  onReset: () => void;
+  log: string[];
+}) {
+  const [drag, setDrag] = useState<{ cardId: string; fromCol: string } | null>(null);
+  const [editing, setEditing] = useState<{ colId: string; cardId: string } | null>(null);
+  const [editVal, setEditVal] = useState("");
+  const [addingIn, setAddingIn] = useState<string | null>(null);
+  const [newTitle, setNewTitle] = useState("");
+  const [showLog, setShowLog] = useState(false);
+
+  const now = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+
+  function moveCard(cardId: string, fromCol: string, toCol: string) {
+    if (fromCol === toCol) return;
+    let title = "";
+    const next = board.map(c => {
+      if (c.id === fromCol) {
+        const card = c.cards.find(k => k.id === cardId);
+        if (card) title = card.title;
+        return { ...c, cards: c.cards.filter(k => k.id !== cardId) };
+      }
+      return c;
+    }).map(c => {
+      if (c.id === toCol) {
+        const card = board.find(b => b.id === fromCol)?.cards.find(k => k.id === cardId);
+        return card ? { ...c, cards: [...c.cards, card] } : c;
+      }
+      return c;
+    });
+    const fromT = board.find(b => b.id === fromCol)?.title || fromCol;
+    const toT = board.find(b => b.id === toCol)?.title || toCol;
+    onChange(next, `[${now()}] "${title}" movido de ${fromT} → ${toT}`);
+  }
+
+  function addCard(colId: string) {
+    const t = newTitle.trim();
+    if (!t) { setAddingIn(null); return; }
+    const card: BoardCard = { id: crypto.randomUUID(), title: t };
+    const next = board.map(c => c.id === colId ? { ...c, cards: [...c.cards, card] } : c);
+    const colT = board.find(b => b.id === colId)?.title || colId;
+    onChange(next, `[${now()}] card criado "${t}" em ${colT}`);
+    setNewTitle(""); setAddingIn(null);
+  }
+
+  function saveEdit() {
+    if (!editing) return;
+    const t = editVal.trim();
+    if (!t) { setEditing(null); return; }
+    let old = "";
+    const next = board.map(c => c.id === editing.colId
+      ? { ...c, cards: c.cards.map(k => {
+          if (k.id === editing.cardId) { old = k.title; return { ...k, title: t }; }
+          return k;
+        }) }
+      : c);
+    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" → "${t}"` : undefined);
+    setEditing(null);
+  }
+
+  function delCard(colId: string, cardId: string) {
+    let title = "";
+    const next = board.map(c => c.id === colId
+      ? { ...c, cards: c.cards.filter(k => { if (k.id === cardId) title = k.title; return k.id !== cardId; }) }
+      : c);
+    const colT = board.find(b => b.id === colId)?.title || colId;
+    onChange(next, `[${now()}] card removido "${title}" de ${colT}`);
+  }
+
+  function renameColumn(colId: string, title: string) {
+    const t = title.trim();
+    if (!t) return;
+    let old = "";
+    const next = board.map(c => { if (c.id === colId) { old = c.title; return { ...c, title: t }; } return c; });
+    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" → "${t}"` : undefined);
+  }
+
+  return (
+    <div className="p-2 h-full flex flex-col gap-2">
+      <div className="flex items-center gap-2 px-1">
+        <p className="text-[10px] text-muted-foreground flex-1">
+          Arraste cards entre colunas. Cada movimento vira contexto do agente.
+        </p>
+        <button onClick={() => setShowLog(v => !v)}
+          className="text-[10px] flex items-center gap-1 px-1.5 py-0.5 rounded hover:bg-secondary text-muted-foreground">
+          <History className="w-3 h-3" /> Log ({log.length})
+        </button>
+        <button onClick={onReset} className="text-[10px] text-muted-foreground hover:text-destructive">Reset</button>
+      </div>
+
+      {showLog && (
+        <div className="bg-secondary/40 border border-border rounded-md p-2 max-h-[110px] overflow-y-auto text-[10px] font-mono space-y-0.5">
+          {log.length === 0 && <p className="text-muted-foreground">Sem atividade ainda.</p>}
+          {[...log].reverse().map((l, i) => <p key={i} className="text-foreground/80">{l}</p>)}
+        </div>
+      )}
+
+      <div className="flex-1 min-h-0 flex gap-2 overflow-x-auto pb-2">
+        {board.map(col => (
+          <div
+            key={col.id}
+            onDragOver={e => e.preventDefault()}
+            onDrop={() => { if (drag) { moveCard(drag.cardId, drag.fromCol, col.id); setDrag(null); } }}
+            className="min-w-[180px] w-[180px] shrink-0 bg-secondary/30 border border-border rounded-lg flex flex-col"
+          >
+            <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border">
+              <input
+                defaultValue={col.title}
+                onBlur={e => renameColumn(col.id, e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                className="flex-1 text-[11px] font-semibold bg-transparent focus:outline-none focus:bg-background/60 rounded px-1"
+              />
+              <span className="text-[10px] text-muted-foreground">{col.cards.length}</span>
+            </div>
+            <div className="flex-1 overflow-y-auto p-1.5 space-y-1.5">
+              {col.cards.map(card => (
+                <div
+                  key={card.id}
+                  draggable
+                  onDragStart={() => setDrag({ cardId: card.id, fromCol: col.id })}
+                  onDragEnd={() => setDrag(null)}
+                  className="group bg-card border border-border rounded-md p-1.5 cursor-grab active:cursor-grabbing hover:border-primary/40 transition-colors"
+                >
+                  {editing?.cardId === card.id ? (
+                    <Input
+                      autoFocus value={editVal}
+                      onChange={e => setEditVal(e.target.value)}
+                      onBlur={saveEdit}
+                      onKeyDown={e => { if (e.key === "Enter") saveEdit(); if (e.key === "Escape") setEditing(null); }}
+                      className="h-6 text-[11px] py-0"
+                    />
+                  ) : (
+                    <div className="flex items-start gap-1">
+                      <GripVertical className="w-3 h-3 text-muted-foreground shrink-0 mt-0.5" />
+                      <p className="text-[11px] leading-snug flex-1 break-words">{card.title}</p>
+                      <button onClick={() => { setEditing({ colId: col.id, cardId: card.id }); setEditVal(card.title); }}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-foreground">
+                        <Pencil className="w-2.5 h-2.5" />
+                      </button>
+                      <button onClick={() => delCard(col.id, card.id)}
+                        className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive">
+                        <Trash2 className="w-2.5 h-2.5" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {addingIn === col.id ? (
+                <div className="space-y-1">
+                  <Input
+                    autoFocus value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                    onBlur={() => addCard(col.id)}
+                    onKeyDown={e => { if (e.key === "Enter") addCard(col.id); if (e.key === "Escape") { setNewTitle(""); setAddingIn(null); } }}
+                    placeholder="Título do card…"
+                    className="h-7 text-[11px]"
+                  />
+                </div>
+              ) : (
+                <button onClick={() => setAddingIn(col.id)}
+                  className="w-full flex items-center gap-1 px-1.5 py-1 rounded text-[10px] text-muted-foreground hover:bg-secondary hover:text-foreground">
+                  <Plus className="w-3 h-3" /> Novo card
+                </button>
+              )}
+            </div>
+          </div>
+        ))}
+
+        <button
+          onClick={() => {
+            const t = window.prompt("Nome da coluna");
+            if (!t?.trim()) return;
+            const next = [...board, { id: crypto.randomUUID(), title: t.trim(), cards: [] }];
+            onChange(next, `[${now()}] coluna criada "${t.trim()}"`);
+          }}
+          className="min-w-[140px] w-[140px] shrink-0 border border-dashed border-border rounded-lg flex items-center justify-center text-[11px] text-muted-foreground hover:bg-secondary/40 hover:text-foreground"
+        >
+          <Plus className="w-3.5 h-3.5 mr-1" /> Coluna
+        </button>
+      </div>
+    </div>
+  );
+}
