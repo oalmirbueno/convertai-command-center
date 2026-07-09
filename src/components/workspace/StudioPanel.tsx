@@ -2203,31 +2203,35 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         "[MODO ORQUESTRADOR · AUTO-CONTEXTO]",
         "Você é o Orquestrador de Pré-Produção da AcelerIQ. O sistema já leu tudo do cliente, projetos, tasks, briefing, contratos e pasta atual. Assuma o comando.",
         "",
-        "Regras de resposta (obrigatórias):",
-        "- Nada de asteriscos, negritos, itálicos ou emojis. Texto limpo.",
-        "- Use apenas títulos curtos em MAIÚSCULAS seguidos de dois-pontos e listas numeradas.",
-        "- Sem enrolação, sem cumprimento, sem repetir o dossiê. Vá direto ao ponto.",
+        "Regras de formatação (obrigatórias):",
+        "- Responda em Markdown limpo, com hierarquia clara.",
+        "- Use títulos de seção com '## ' (exatamente como abaixo). Nada de MAIÚSCULAS soltas nem asteriscos avulsos.",
+        "- Sem emojis, sem cumprimento, sem repetir o dossiê, sem enrolação.",
+        "- Frases curtas. Uma ideia por linha. Deixe uma linha em branco entre parágrafos e antes/depois de cada lista.",
+        "- Listas numeradas com '1. ', '2. ', '3. '. Listas simples com '- '.",
+        "- Pode usar **negrito** só para destacar 1 a 2 termos por seção. Nada de itálico decorativo.",
         "",
-        "Entregue exatamente nesta ordem:",
+        "Entregue exatamente esta estrutura, nesta ordem:",
         "",
-        "DIAGNÓSTICO:",
-        "Três linhas, no máximo, sobre onde o cliente está e o que trava o avanço.",
+        "## Diagnóstico",
+        "Até 3 linhas sobre onde o cliente está e o que trava o avanço.",
         "",
-        "LACUNAS CRÍTICAS:",
-        "Lista numerada (1., 2., 3.) das informações que estão faltando para destravar o próximo entregável.",
+        "## Lacunas críticas",
+        "Lista numerada das informações que faltam para destravar o próximo entregável.",
         "",
-        "PERGUNTAS PARA VOCÊ RESPONDER:",
-        "Entre 3 e 5 perguntas numeradas (1., 2., 3., ...), diretas, uma frase cada, priorizadas pelo impacto no próximo passo.",
+        "## Perguntas para você responder",
+        "Entre 3 e 5 perguntas numeradas, diretas, uma frase cada, priorizadas pelo impacto no próximo passo.",
         "",
-        "PRÓXIMO ENTREGÁVEL SUGERIDO:",
+        "## Próximo entregável sugerido",
         "Uma linha nomeando o artefato concreto (roteiro, checklist, briefing revisado, plano de gravação, storyboard, etc.).",
         "",
-        "A cada resposta minha, refine o plano e avance para a próxima etapa.",
+        "A cada resposta minha, refine o plano e avance para a próxima etapa mantendo essa mesma estrutura.",
         "",
         "----- DOSSIÊ -----",
         dossier,
       ].join("\n");
       await send(prompt);
+
     } catch (e: any) {
       if (!opts.silent) toast({ title: "Falha ao preparar contexto", description: e?.message || "erro", variant: "destructive" });
     } finally {
@@ -2543,44 +2547,68 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
 
       {/* Mensagens */}
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
         {msgs.length === 0 && !streaming && (
-          <div className="text-center py-8 space-y-2">
-            <Bot className="w-8 h-8 text-primary/40 mx-auto" />
-            <p className="text-[11px] text-muted-foreground">
-              Use este agente para organizar o contexto antes das notas e do GPT externo.<br/>
-              Ele já conhece <b>{clientName || "este contexto"}</b>.
+          <div className="max-w-md mx-auto text-center py-10 space-y-3">
+            <div className="w-10 h-10 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center mx-auto">
+              <Bot className="w-4 h-4 text-primary" />
+            </div>
+            <p className="text-[12px] leading-relaxed text-muted-foreground">
+              O orquestrador vai reunir contexto de <span className="text-foreground font-medium">{clientName || "este escopo"}</span> e devolver diagnóstico e perguntas.
             </p>
           </div>
         )}
         {msgs.map(m => (
-          <div key={m.id} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
-            <div className={cn(
-              "max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed break-words",
-              m.role === "user"
-                ? "bg-primary text-primary-foreground whitespace-pre-wrap"
-                : "bg-secondary text-foreground prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:mt-2 prose-headings:mb-1 prose-headings:text-primary prose-headings:text-[11px] prose-headings:uppercase prose-headings:tracking-wider prose-headings:font-semibold prose-ol:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:font-medium prose-strong:text-foreground"
-            )}>
-              {m.role === "assistant"
-                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
-                : m.content}
+          m.role === "user" ? (
+            <div key={m.id} className="flex justify-end">
+              <div className="max-w-[80%] rounded-2xl rounded-br-md px-3.5 py-2 text-[12.5px] leading-[1.55] bg-primary text-primary-foreground whitespace-pre-wrap break-words shadow-sm">
+                {m.content}
+              </div>
             </div>
-          </div>
+          ) : (
+            <article
+              key={m.id}
+              className={cn(
+                "max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words",
+                "prose prose-sm prose-invert max-w-none",
+                "prose-p:my-2.5 prose-p:leading-[1.7]",
+                "prose-headings:font-semibold prose-headings:tracking-tight prose-headings:text-foreground",
+                "prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h1:mt-5 prose-h1:mb-2 prose-h1:first:mt-0",
+                "prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-h2:mt-5 prose-h2:mb-2 prose-h2:first:mt-0",
+                "prose-h3:text-[12px] prose-h3:uppercase prose-h3:tracking-[0.12em] prose-h3:text-muted-foreground prose-h3:mt-4 prose-h3:mb-1.5",
+                "prose-ol:my-2.5 prose-ol:pl-5 prose-ol:space-y-1.5",
+                "prose-ul:my-2.5 prose-ul:pl-5 prose-ul:space-y-1.5",
+                "prose-li:my-0 prose-li:leading-[1.65] prose-li:marker:text-primary/60",
+                "prose-strong:font-semibold prose-strong:text-foreground",
+                "prose-code:text-[11.5px] prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:bg-secondary/60 prose-code:before:content-none prose-code:after:content-none",
+                "prose-pre:bg-secondary/60 prose-pre:border prose-pre:border-border prose-pre:rounded-lg prose-pre:text-[11.5px]",
+                "prose-hr:my-4 prose-hr:border-border/50",
+                "prose-a:text-primary prose-a:no-underline hover:prose-a:underline",
+                "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
+              )}
+            >
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+            </article>
+          )
         ))}
 
         {streaming && streamBuf && (
-          <div className="flex justify-start">
-            <div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words bg-secondary text-foreground">
-              {streamBuf}<span className="inline-block w-1.5 h-3 bg-primary/60 ml-0.5 animate-pulse" />
-            </div>
-          </div>
+          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] whitespace-pre-wrap break-words">
+            {streamBuf}
+            <span className="inline-block w-[3px] h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
+          </article>
         )}
         {streaming && !streamBuf && (
-          <div className="flex items-center gap-2 text-muted-foreground text-[11px]">
-            <Loader2 className="w-3 h-3 animate-spin" /> pensando...
+          <div className="flex items-center gap-2 text-muted-foreground text-[11.5px]">
+            <span className="relative flex h-1.5 w-1.5">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/50 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+            </span>
+            reunindo contexto
           </div>
         )}
       </div>
+
 
       {/* Composer */}
       <div className="border-t border-border bg-secondary/30">
