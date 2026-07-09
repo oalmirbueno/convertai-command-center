@@ -756,7 +756,10 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
           context: {
             client_name: clientName,
             folder_path: folderPath,
-            notes, script,
+            notes: boardLog && boardLog.length
+              ? `${notes}\n\n---\n## Atividade do Kanban (últimas ${boardLog.length})\n${boardLog.map(l => `- ${l}`).join("\n")}`
+              : notes,
+            script,
             // arquivos citados via @ ganham prioridade e vão marcados
             attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
