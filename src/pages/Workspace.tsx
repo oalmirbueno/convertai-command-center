@@ -306,19 +306,30 @@ export default function Workspace() {
     const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
     let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
-    if (kindFilter !== "all") res = res.filter(n => n.kind === "folder" || kindOf(n) === kindFilter);
+    if (tagFilter !== "all") res = res.filter(n => n.kind === "folder" || tagOf(n, base) === tagFilter);
+    // Sort: folders always pinned first
+    const key = (n: Node) => (n.name || "").toLowerCase();
+    const t = (n: Node) => new Date(n.created_at || 0).getTime();
+    res = [...res].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
+      if (sortBy === "az") return key(a).localeCompare(key(b));
+      if (sortBy === "za") return key(b).localeCompare(key(a));
+      if (sortBy === "old") return t(a) - t(b);
+      return t(b) - t(a); // recent
+    });
     return res;
-  }, [nodes, virtualNodes, search, parent, kindFilter]);
+  }, [nodes, virtualNodes, search, parent, tagFilter, sortBy]);
 
-  // Category counts for smart chips
-  const kindCounts = useMemo(() => {
+  // Category counts for smart chips (by SmartTag)
+  const tagCounts = useMemo(() => {
     const src = parent?.id?.startsWith(VIRT_PREFIX)
       ? [...(virtualNodes || [])]
       : [...(nodes || []), ...(virtualNodes || [])];
-    const c: Record<MediaKind, number> = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
-    for (const n of src) if (n.kind === "file") c[kindOf(n)]++;
+    const c: Record<SmartTag, number> = { carrossel: 0, static: 0, "video-ready": 0, material: 0, doc: 0, audio: 0, other: 0 };
+    for (const n of src) if (n.kind === "file") c[tagOf(n, src)]++;
     return c;
   }, [nodes, virtualNodes, parent]);
+
 
   // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
