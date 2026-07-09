@@ -220,12 +220,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       {!minimized && (
         <>
           {/* Tabs */}
-          <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0">
+          <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0 overflow-x-auto">
             {[
+              { k: "agent",   icon: Bot,         label: "Agente" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
               { k: "map",     icon: Brain,       label: "Mapa" },
               { k: "script",  icon: FileText,    label: "Roteiro" },
               { k: "process", icon: GitBranch,   label: "Processo" },
+
             ].map(t => {
               const active = mode === t.k;
               const Icon = t.icon;
