@@ -346,6 +346,23 @@ export default function Workspace() {
   }
 
   async function moveNode(n: Node, targetParentId: string | null) {
+    if (n.__virtual) {
+      // Virtual file: change files.folder to match target virtual folder or clear
+      if (n.kind === "file" && n.__file_id) {
+        let newFolder: string | null = null;
+        if (targetParentId && targetParentId.startsWith(VIRT_PREFIX + "folder:")) {
+          newFolder = targetParentId.substring((VIRT_PREFIX + "folder:").length);
+        }
+        await (supabase as any).from("files").update({ folder: newFolder }).eq("id", n.__file_id);
+        toast({ title: "Movido" }); invalidate(); return;
+      }
+      toast({ title: "Ação não suportada", description: "Pastas virtuais não podem ser movidas.", variant: "destructive" });
+      return;
+    }
+    if (targetParentId && isVirt(targetParentId)) {
+      toast({ title: "Destino inválido", description: "Não é possível mover para pastas de Arquivos.", variant: "destructive" });
+      return;
+    }
     if (n.kind === "folder" && isDescendant(n.id, targetParentId)) {
       toast({ title: "Movimento inválido", description: "Não pode mover para dentro de si mesma.", variant: "destructive" });
       return;
