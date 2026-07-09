@@ -250,8 +250,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
-  const [dock, setDock] = useState<"br" | "bl" | "bc">(() => (localStorage.getItem("studio_dock") as any) || "br");
+  const [dock, setDock] = useState<"br" | "bl" | "bc" | "full">(() => (localStorage.getItem("studio_dock") as any) || "br");
   const [mode, setMode] = useState<Mode>("agent");
+  useEffect(() => { try { localStorage.setItem("studio_dock", dock); } catch {} }, [dock]);
+  useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
