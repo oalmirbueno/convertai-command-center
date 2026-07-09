@@ -65,6 +65,30 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
+type SlashCmd = { key: string; label: string; hint: string; insert: string };
+
+function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
+  const c = ctx.clientName || ctx.contextLabel || "cliente";
+  const pasta = ctx.folderPath || "raiz";
+  return [
+    { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
+    { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
+    { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
+      insert: `\n### HOOK (0-3s)\nFALA: \nIMAGEM: \nTEXTO EM TELA: \n` },
+    { key: "desenv",  label: "Bloco DESENVOLVIMENTO", hint: "proof/argumento",
+      insert: `\n### DESENVOLVIMENTO (3-25s)\nFALA: \nB-ROLL: \nSFX/TRILHA: \n` },
+    { key: "cta",     label: "Bloco CTA",      hint: "chamada final",
+      insert: `\n### CTA\nFALA: \nTEXTO: \nDESTINO: \n` },
+    { key: "brief",   label: "Template BRIEFING", hint: "objetivo + público + canal",
+      insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
+    { key: "check",   label: "Checklist de entrega", hint: "pipeline pastas",
+      insert: `\n## Checklist entrega\n- [ ] 1. Brutos\n- [ ] 2. Trilhas/SFX\n- [ ] 3. Edição\n- [ ] 4. Final aprovado\n- [ ] 5. Publicado\n` },
+    { key: "kanban",  label: "Ver Kanban do cliente", hint: "abre em nova aba",
+      insert: `[Kanban do cliente](#kanban)` },
+  ];
+}
+
+
 const STORAGE_PREFIX = "workspace_studio_v1:";
 
 function makeEmpty(): StudioState {
@@ -96,18 +120,22 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
+  const [dock, setDock] = useState<"br" | "bl" | "bc">(() => (localStorage.getItem("studio_dock") as any) || "br");
   const [mode, setMode] = useState<Mode>("agent");
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const scriptRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
+  const [slashMenu, setSlashMenu] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
 
   // reload state when context changes
   useEffect(() => { setState(loadState(contextKey)); }, [contextKey]);
   useEffect(() => { saveState(contextKey, state); }, [contextKey, state]);
   useEffect(() => { localStorage.setItem("studio_open", open ? "1" : "0"); }, [open]);
   useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
+  useEffect(() => { localStorage.setItem("studio_dock", dock); }, [dock]);
+
 
   const mentionMatches = useMemo(() => {
     if (!mentionQuery) return [] as FileRef[];
@@ -118,12 +146,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   function handleTextChange(where: "notes" | "script", val: string, caret: number) {
     if (where === "notes") setState(s => ({ ...s, notes: val }));
     else setState(s => ({ ...s, script: val }));
-    // detect @token
     const before = val.slice(0, caret);
-    const m = /@([^\s@]{0,40})$/.exec(before);
-    if (m) setMentionQuery({ where, q: m[1], start: caret - m[0].length });
-    else setMentionQuery(null);
+    const mAt = /@([^\s@]{0,40})$/.exec(before);
+    const mSlash = /(^|\s)\/([^\s/]{0,20})$/.exec(before);
+    if (mAt) { setMentionQuery({ where, q: mAt[1], start: caret - mAt[0].length }); setSlashMenu(null); }
+    else if (mSlash) { setSlashMenu({ where, q: mSlash[2], start: caret - (mSlash[2].length + 1) }); setMentionQuery(null); }
+    else { setMentionQuery(null); setSlashMenu(null); }
   }
+
+  function insertSlash(cmd: SlashCmd) {
+    if (!slashMenu) return;
+    const { where, start, q } = slashMenu;
+    const cur = where === "notes" ? state.notes : state.script;
+    const before = cur.slice(0, start);
+    const after = cur.slice(start + 1 + q.length);
+    const next = before + cmd.insert + after;
+    if (where === "notes") setState(s => ({ ...s, notes: next }));
+    else setState(s => ({ ...s, script: next }));
+    setSlashMenu(null);
+    setTimeout(() => {
+      const el = where === "notes" ? notesRef.current : scriptRef.current;
+      if (el) { el.focus(); const p = before.length + cmd.insert.length; el.setSelectionRange(p, p); }
+    }, 10);
+  }
+
 
   function insertMention(f: FileRef) {
     if (!mentionQuery) return;
@@ -197,21 +243,42 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     );
   }
 
+  const dockPos =
+    dock === "br" ? "right-4 bottom-4" :
+    dock === "bl" ? "left-4 bottom-4" :
+                    "left-1/2 -translate-x-1/2 bottom-4";
+  const dockSize = minimized
+    ? "w-[280px] h-[52px]"
+    : dock === "bc"
+      ? "w-[min(96vw,880px)] h-[min(72vh,620px)]"
+      : "w-[min(96vw,480px)] h-[min(78vh,680px)]";
+
   return (
     <div className={cn(
-      "fixed z-40 right-4 bottom-4 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all",
-      minimized ? "w-[280px] h-[52px]" : "w-[min(96vw,480px)] h-[min(78vh,680px)]"
+      "fixed z-40 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all",
+      dockPos, dockSize
     )}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 h-[52px] border-b border-border shrink-0 bg-secondary/40">
+      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-secondary/40">
         <Sparkles className="w-4 h-4 text-primary" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
         </div>
+        {!minimized && (
+          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
+            <button onClick={() => setDock("bl")} title="Dock esquerda"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+            <button onClick={() => setDock("br")} title="Dock direita"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+          </div>
+        )}
         <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
           {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
         </button>
+
         <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Fechar">
           <X className="w-3.5 h-3.5" />
         </button>
@@ -256,7 +323,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
               <div className="p-3 space-y-2 h-full flex flex-col">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                  <MessageSquare className="w-3 h-3" /> Digite <b>@</b> para vincular arquivos do painel atual.
+                  <MessageSquare className="w-3 h-3" /> <b>@</b> vincula arquivos · <b>/</b> insere blocos (hook, CTA, briefing, cliente…)
                 </div>
                 <div className="relative flex-1 min-h-0">
                   <textarea
@@ -271,6 +338,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
+                  {slashMenu?.where === "notes" && (
+                    <SlashList
+                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                      onPick={insertSlash}
+                    />
+                  )}
+
                 </div>
                 {!!state.mentions.length && (
                   <div className="flex flex-wrap gap-1 pt-1 border-t border-border">
@@ -312,6 +386,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   {mentionQuery?.where === "script" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
+                  {slashMenu?.where === "script" && (
+                    <SlashList
+                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                      onPick={insertSlash}
+                    />
+                  )}
+
                 </div>
               </div>
             )}
@@ -375,6 +456,28 @@ function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef)
     </div>
   );
 }
+
+function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="absolute bottom-2 left-2 right-2 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-10 max-h-[240px] overflow-y-auto">
+      <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+        Comandos
+      </div>
+      {items.map(c => (
+        <button key={c.key} onClick={() => onPick(c)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+          <Sparkles className="w-3 h-3 text-primary shrink-0" />
+          <span className="font-medium">{c.label}</span>
+          <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+
+
 
 function MindMapView({ root, onRename, onAdd, onDelete }:
   { root: MapNode; onRename: (id: string, l: string) => void; onAdd: (id: string) => void; onDelete: (id: string) => void; }) {
