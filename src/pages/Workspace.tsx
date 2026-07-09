@@ -889,9 +889,16 @@ export default function Workspace() {
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
           {isFolder ? (
-            <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
-              <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+                <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
+              </ContextMenuItem>
+              {!n.__virtual && (
+                <ContextMenuItem onSelect={() => shareInbox(n)}>
+                  <Link2 className="w-3.5 h-3.5 mr-2" /> Compartilhar link de upload
+                </ContextMenuItem>
+              )}
+            </>
           ) : (
             <>
               <ContextMenuItem onSelect={() => setSelected(n)}>
