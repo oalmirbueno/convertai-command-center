@@ -820,7 +820,9 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
 // Bloco Kanban vivo embutido no fluxo das Notas (não é modal — renderiza como parte do documento)
 function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
   type Task = { id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string };
+  const { toast } = useToast();
   const [loading, setLoading] = useState(false);
+
   const [tasks, setTasks] = useState<Task[]>([]);
   const [projects, setProjects] = useState<Array<{ id: string; name: string }>>([]);
   const [projectId, setProjectId] = useState<string | null>(null);
