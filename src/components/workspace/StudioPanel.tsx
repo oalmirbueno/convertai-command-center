@@ -694,6 +694,47 @@ function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: s
   return <div className="space-y-0.5">{out}</div>;
 }
 
+// Guia inline de comandos / e @ — renderizado dentro das notas quando existir "@help" numa linha.
+function InlineHelpBlock() {
+  const [tab, setTab] = useState<"slash" | "at">("slash");
+  const items = tab === "slash" ? SLASH_HELP : MENTION_HELP;
+  return (
+    <div className="my-2 rounded-lg border border-primary/30 bg-primary/5 overflow-hidden">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-primary/20 bg-primary/10">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+          <Sparkles className="w-3 h-3" /> Guia de comandos
+        </div>
+        <div className="flex items-center gap-0.5 border border-border rounded p-0.5 bg-background/60">
+          <button
+            onClick={() => setTab("slash")}
+            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "slash" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
+          >/ comandos</button>
+          <button
+            onClick={() => setTab("at")}
+            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "at" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
+          >@ menções</button>
+        </div>
+      </div>
+      <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[260px] overflow-y-auto">
+        {items.map(it => (
+          <div key={it.cmd} className="rounded-md border border-border bg-background/60 p-2">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <code className="text-[11px] font-mono font-semibold text-primary">{it.cmd}</code>
+              <span className="text-[10px] text-muted-foreground">{it.label}</span>
+            </div>
+            <p className="text-[10.5px] leading-snug text-muted-foreground">{it.desc}</p>
+          </div>
+        ))}
+      </div>
+      <div className="px-2.5 py-1.5 border-t border-primary/20 bg-primary/5 text-[10px] text-muted-foreground">
+        Dica: cole imagens (OCR automático) e links de vídeo (embed automático). Use <b>Alt+↑/↓</b> para alternar conversas do agente.
+      </div>
+    </div>
+  );
+}
+
+
+
 // Kanban inline: mostra as tasks reais do projeto ativo do cliente (tabela tasks via projects)
 function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: string | null; clientName: string | null }) {
   const [loading, setLoading] = useState(false);
