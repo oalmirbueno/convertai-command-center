@@ -990,12 +990,31 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
             {mode === "notes" && (
-              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4">
+              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
-                <div className="grid h-full min-h-0 gap-3 grid-cols-1 md:grid-cols-2">
-                  <section className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70">
+                {isMobile && (
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background/60 p-1 text-[12px]">
+                    <button
+                      onClick={() => setMobileNotesTab("editor")}
+                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                    >Notas</button>
+                    <button
+                      onClick={() => setMobileNotesTab("preview")}
+                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                    >Preview</button>
+                  </div>
+                )}
+
+                <div className={cn(
+                  "grid flex-1 min-h-0 gap-3",
+                  isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
+                )}>
+                  <section className={cn(
+                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70",
+                    isMobile && mobileNotesTab !== "editor" && "hidden"
+                  )}>
                     <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
                       <NotebookPen className="h-3.5 w-3.5 text-primary" />
                       <span className="font-medium text-foreground/80">Notas de trabalho</span>
