@@ -1568,3 +1568,80 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
     </Dialog>
   );
 }
+
+function PersonaDialog({ open, onOpenChange, persona, onSaved }: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  persona: { gpt_url: string | null; gpt_name: string | null } | null;
+  onSaved: (p: { gpt_url: string | null; gpt_name: string | null } | null) => void;
+}) {
+  const { toast } = useToast();
+  const [url, setUrl] = useState(persona?.gpt_url || "");
+  const [loading, setLoading] = useState(false);
+  useEffect(() => { setUrl(persona?.gpt_url || ""); }, [persona, open]);
+
+  async function importGpt() {
+    if (!/^https?:\/\/.+/i.test(url)) {
+      toast({ title: "Link inválido", description: "Cole o link público do seu GPT (chatgpt.com/g/...).", variant: "destructive" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("workspace-agent-import", { body: { url } });
+      if (error || (data as any)?.error) {
+        toast({ title: "Falhou", description: (data as any)?.error || error?.message || "erro", variant: "destructive" });
+        return;
+      }
+      const d = data as any;
+      onSaved({ gpt_url: url, gpt_name: d.name || null });
+      toast({ title: "Persona carregada", description: d.name ? `Agente agora responde como "${d.name}".` : "Persona salva." });
+      onOpenChange(false);
+    } finally { setLoading(false); }
+  }
+
+  async function clearPersona() {
+    setLoading(true);
+    try {
+      await supabase.functions.invoke("workspace-agent-import", { body: { clear: true } });
+      onSaved(null);
+      setUrl("");
+      toast({ title: "Persona removida", description: "Voltando ao Prepro Director padrão." });
+      onOpenChange(false);
+    } finally { setLoading(false); }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-sm">
+            <Bot className="w-4 h-4 text-primary" /> Configurar persona do agente
+          </DialogTitle>
+        </DialogHeader>
+        <div className="space-y-3">
+          <p className="text-[11px] text-muted-foreground">
+            Cole o link público do seu <b>Custom GPT</b>. O sistema lê nome, descrição e exemplos, sintetiza a persona e passa a operar exatamente como esse GPT dentro do Studio.
+          </p>
+          <Input value={url} onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
+          {persona?.gpt_name && (
+            <div className="text-[11px] flex items-center gap-1.5 text-primary">
+              <Check className="w-3 h-3" /> Ativo: <b>{persona.gpt_name}</b>
+            </div>
+          )}
+        </div>
+        <DialogFooter className="gap-2">
+          {persona?.gpt_url && (
+            <Button variant="ghost" size="sm" onClick={clearPersona} disabled={loading}>
+              Remover
+            </Button>
+          )}
+          <Button size="sm" onClick={importGpt} disabled={loading || !url}>
+            {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
+            Carregar persona
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
