@@ -367,10 +367,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     <Button size="sm" variant="outline" onClick={copyBriefingForGPT} className="h-7 gap-1 text-[10px]">
                       <Copy className="w-3 h-3" /> Copiar p/ GPT
                     </Button>
-                    <a href={PREPRO_GPT} target="_blank" rel="noopener noreferrer"
-                       className="inline-flex items-center gap-1 h-7 px-2 rounded-md bg-primary text-primary-foreground text-[10px] font-medium hover:opacity-90">
-                      <Wand2 className="w-3 h-3" /> Prepro GPT <ExternalLink className="w-2.5 h-2.5" />
-                    </a>
+                    <Button size="sm" onClick={() => setMode("agent")} className="h-7 gap-1 text-[10px]">
+                      <Wand2 className="w-3 h-3" /> Abrir no Prepro
+                    </Button>
+
                   </div>
                 </div>
                 <div className="relative flex-1 min-h-0">
@@ -427,13 +427,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   ))}
                 </ol>
                 <div className="pt-3 border-t border-border mt-4">
-                  <a href={PREPRO_GPT} target="_blank" rel="noopener noreferrer"
-                     className="flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 hover:bg-primary/15 border border-primary/30 text-primary text-[12px] font-medium">
+                  <button onClick={() => setMode("agent")}
+                     className="w-full flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 hover:bg-primary/15 border border-primary/30 text-primary text-[12px] font-medium">
                     <Wand2 className="w-4 h-4" />
-                    <span className="flex-1">Consultar Prepro Director GPT</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
+                    <span className="flex-1 text-left">Abrir o Prepro Director aqui</span>
+                  </button>
                 </div>
+
               </div>
             )}
           </div>
