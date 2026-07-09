@@ -817,6 +817,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
 }) {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<AgentMsg[]>([]);
@@ -825,11 +826,13 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
+    if (window.innerWidth < 768) return false;
     return localStorage.getItem("studio_agent_sidebar") !== "0";
   });
   useEffect(() => {
+    if (isMobile) return;
     try { localStorage.setItem("studio_agent_sidebar", sidebarOpen ? "1" : "0"); } catch {}
-  }, [sidebarOpen]);
+  }, [sidebarOpen, isMobile]);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
