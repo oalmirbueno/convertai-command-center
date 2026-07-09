@@ -79,28 +79,43 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: "createTask" };
+type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap";
+type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: SlashAction };
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
-    { key: "tarefa",  label: "Nova tarefa no Kanban", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
-    { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
-    { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
-    { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
+    { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
+    { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
+    { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
+    { key: "video",    label: "Embed de vídeo",                  hint: "YouTube / Vimeo / Drive", insert: "", action: "insertVideo" },
+    { key: "mapa",     label: "Mapa mental (ASCII)",             hint: "insere estrutura hierárquica", insert: "", action: "insertMindmap" },
+    { key: "checklist",label: "Checklist",                       hint: "lista com checkboxes", insert: `\n- [ ] \n- [ ] \n- [ ] \n` },
+    { key: "cliente",  label: "Cliente atual",                   hint: c, insert: `**Cliente:** ${c}\n` },
+    { key: "pasta",    label: "Pasta atual",                     hint: pasta, insert: `**Pasta:** ${pasta}\n` },
+    { key: "hook",     label: "Bloco HOOK",                      hint: "roteiro 0-3s",
       insert: `\n### HOOK (0-3s)\nFALA: \nIMAGEM: \nTEXTO EM TELA: \n` },
-    { key: "desenv",  label: "Bloco DESENVOLVIMENTO", hint: "proof/argumento",
+    { key: "desenv",   label: "Bloco DESENVOLVIMENTO",           hint: "proof/argumento",
       insert: `\n### DESENVOLVIMENTO (3-25s)\nFALA: \nB-ROLL: \nSFX/TRILHA: \n` },
-    { key: "cta",     label: "Bloco CTA",      hint: "chamada final",
+    { key: "cta",      label: "Bloco CTA",                       hint: "chamada final",
       insert: `\n### CTA\nFALA: \nTEXTO: \nDESTINO: \n` },
-    { key: "brief",   label: "Template BRIEFING", hint: "objetivo + público + canal",
+    { key: "brief",    label: "Template BRIEFING",               hint: "objetivo + público + canal",
       insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
-    { key: "check",   label: "Checklist de entrega", hint: "pipeline pastas",
-      insert: `\n## Checklist entrega\n- [ ] 1. Brutos\n- [ ] 2. Trilhas/SFX\n- [ ] 3. Edição\n- [ ] 4. Final aprovado\n- [ ] 5. Publicado\n` },
-    { key: "kanban",  label: "Ver Kanban do cliente", hint: "abre em nova aba",
-      insert: `[Kanban do cliente](#kanban)` },
   ];
+}
+
+const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
+
+function videoEmbedFromUrl(url: string): string | null {
+  const u = url.trim();
+  const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vm = u.match(/vimeo\.com\/(\d+)/);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  const dr = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (dr) return `https://drive.google.com/file/d/${dr[1]}/preview`;
+  return null;
 }
 
 // Destaca trechos [start,end) do texto com <mark> para busca fuzzy.
