@@ -2496,13 +2496,22 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ExternalLink className="w-3 h-3" /> GPT
               </button>
             )}
+            <button
+              onClick={() => pullDeepContext({ silent: false })}
+              disabled={pulling || streaming}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50"
+              title="Reunir cliente, projetos, tasks, briefing e pasta em um dossiê e pedir diagnóstico ao agente"
+            >
+              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
+              Puxar contexto
+            </button>
             {onStructureToNotes && (
               <button
                 onClick={() => onStructureToNotes()}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
                 title="Estrutura o contexto atual como documento executivo e envia para as Notas"
               >
-                <ArrowRight className="w-3 h-3" /> Notas
+                <ArrowRight className="w-3 h-3" /> Enviar às Notas
               </button>
             )}
 
