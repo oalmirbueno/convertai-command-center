@@ -458,98 +458,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
 
-            {mode === "script" && (
-              <div className="p-3 space-y-2 h-full flex flex-col">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-muted-foreground">Roteiro em construção — use <b>@</b> para citar materiais.</span>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" onClick={copyBriefingForGPT} className="h-7 gap-1 text-[10px]">
-                      <Copy className="w-3 h-3" /> Copiar p/ GPT
-                    </Button>
-                    <Button size="sm" onClick={() => setMode("agent")} className="h-7 gap-1 text-[10px]">
-                      <Wand2 className="w-3 h-3" /> Abrir no Prepro
-                    </Button>
-
-                  </div>
-                </div>
-                <div className="relative flex-1 min-h-0">
-                  <textarea
-                    ref={scriptRef}
-                    value={state.script}
-                    onChange={e => handleTextChange("script", e.target.value, e.target.selectionStart)}
-                    onKeyUp={e => handleTextChange("script", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    onClick={e => handleTextChange("script", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    placeholder={"CENA 1 — Abertura\nINT. Estúdio. Dia.\n\nNarrador (V.O.): ..."}
-                    className="w-full h-full min-h-[260px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
-                  />
-                  {mentionQuery?.where === "script" && mentionMatches.length > 0 && (
-                    <MentionList items={mentionMatches} onPick={insertMention} />
-                  )}
-                  {slashMenu?.where === "script" && (
-                    <SlashList
-                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
-                      onPick={insertSlash}
-                    />
-                  )}
-
-                </div>
-              </div>
-            )}
-
-            {mode === "map" && (
-              <div className="p-3">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] text-muted-foreground">Clique num nó para editar; use <b>+</b> para ramificar.</p>
-                  <button onClick={() => setState(s => ({ ...s, mapRoot: JSON.parse(JSON.stringify(DEFAULT_MAP)) }))}
-                    className="text-[10px] text-muted-foreground hover:text-foreground">
-                    Reset
-                  </button>
-                </div>
-                <MindMapView root={state.mapRoot} onRename={renameNode} onAdd={addChild} onDelete={deleteNode} />
-              </div>
-            )}
-
-            {mode === "board" && (
-              <MiniKanban
-                board={state.board}
-                onChange={(next, logEntry) => setState(s => ({
-                  ...s,
-                  board: next,
-                  boardLog: logEntry ? [...s.boardLog.slice(-39), logEntry] : s.boardLog,
-                }))}
-                onReset={() => setState(s => ({ ...s, board: JSON.parse(JSON.stringify(DEFAULT_BOARD)), boardLog: [] }))}
-                log={state.boardLog}
-              />
-            )}
-
-
-            {mode === "process" && (
-              <div className="p-3 space-y-2">
-                <p className="text-[10px] text-muted-foreground mb-2">
-                  Fluxo padrão de audiovisual — clique para expandir.
-                </p>
-                <ol className="relative border-l-2 border-primary/20 pl-4 space-y-3">
-                  {PROCESS_STEPS.map((s, i) => (
-                    <li key={i} className="relative">
-                      <span className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center text-[8px] font-bold text-primary">
-                        {i + 1}
-                      </span>
-                      <p className="text-[12px] font-semibold text-foreground">{s.title}</p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{s.hint}</p>
-                    </li>
-                  ))}
-                </ol>
-                <div className="pt-3 border-t border-border mt-4">
-                  <button onClick={() => setMode("agent")}
-                     className="w-full flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 hover:bg-primary/15 border border-primary/30 text-primary text-[12px] font-medium">
-                    <Wand2 className="w-4 h-4" />
-                    <span className="flex-1 text-left">Abrir o Prepro Director aqui</span>
-                  </button>
-                </div>
-
-              </div>
-            )}
           </div>
+        </>
+      )}
+      {/* removidos: script, map, board, process — agora tudo via comandos / e @ nas Notas */}
         </>
       )}
 
