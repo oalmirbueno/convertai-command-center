@@ -1620,6 +1620,45 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             {clientName ? `Agente · ${clientName}` : "Agente · Global"}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
+          {persona.active?.gpt_url && (
+            <button
+              onClick={async () => {
+                const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
+                const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
+                const ctx = [
+                  `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+                  notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
+                  script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+                  availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
+                  lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
+                  lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
+                  `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
+                ].filter(Boolean).join("\n");
+                try {
+                  await navigator.clipboard.writeText(ctx);
+                  toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." });
+                } catch { /* ignore */ }
+                window.open(persona.active!.gpt_url!, "_blank", "noopener,noreferrer");
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+              title={`Copia contexto e abre ${persona.active.gpt_name || "GPT"} em nova aba`}>
+              <ExternalLink className="w-3 h-3" /> GPT
+            </button>
+          )}
+          <PasteBackButton
+            disabled={!activeId}
+            onPaste={async (text) => {
+              if (!activeId || !text.trim()) return;
+              const { data: userRes } = await supabase.auth.getUser();
+              if (!userRes?.user) return;
+              const { data: inserted, error } = await supabase.from("workspace_agent_messages")
+                .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${persona.active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
+                .select("id, role, content, created_at").single();
+              if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
+              if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
+              toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
+            }}
+          />
           <button onClick={() => setPersonaOpen(true)}
             className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Configurar GPT persona">
             <Settings className="w-3 h-3" />
