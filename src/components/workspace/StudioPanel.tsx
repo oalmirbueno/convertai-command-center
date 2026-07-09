@@ -779,17 +779,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     if (activeId === id) { setActiveId(null); setMsgs([]); }
   }
 
-  const mentionMatches = useMemo(() => {
-    if (!mention) return [] as FileRef[];
-    const q = mention.q.toLowerCase();
-    return availableFiles.filter(f => f.name.toLowerCase().includes(q)).slice(0, 8);
-  }, [mention, availableFiles]);
 
-  const slashMatches = useMemo(() => {
-    if (!slash) return [] as typeof AGENT_SLASH;
-    const q = slash.q.toLowerCase();
-    return AGENT_SLASH.filter(c => c.key.includes(q) || c.label.toLowerCase().includes(q));
-  }, [slash]);
+
 
   // Fuzzy: retorna { score, ranges } — score maior = melhor. Prioriza: exato > prefixo > subsequência.
   function fuzzyScore(name: string, q: string): { score: number; ranges: [number, number][] } | null {
