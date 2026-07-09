@@ -3,7 +3,7 @@ import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
-  Columns3, Pencil, GripVertical, Settings, Check,
+  Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -479,6 +479,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }
 
   const isFull = dock === "full";
+  useEffect(() => {
+    if (!isFull) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDock("bc"); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [isFull]);
   const dockPos = isFull
     ? "inset-3"
     : dock === "br" ? "right-4 bottom-4"
@@ -515,9 +521,17 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
             <button onClick={() => setDock("br")} title="Dock direita"
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
-            <button onClick={() => setDock(isFull ? "br" : "full")} title={isFull ? "Sair da tela cheia" : "Tela cheia"}
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>⛶</button>
+            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
+              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            </button>
           </div>
+        )}
+        {isFull && !minimized && (
+          <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
+            className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
+            <Minimize2 className="w-3 h-3" /> Sair
+          </button>
         )}
         <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
           {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
@@ -1606,6 +1620,45 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             {clientName ? `Agente · ${clientName}` : "Agente · Global"}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
+          {persona.active?.gpt_url && (
+            <button
+              onClick={async () => {
+                const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
+                const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
+                const ctx = [
+                  `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+                  notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
+                  script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+                  availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
+                  lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
+                  lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
+                  `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
+                ].filter(Boolean).join("\n");
+                try {
+                  await navigator.clipboard.writeText(ctx);
+                  toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." });
+                } catch { /* ignore */ }
+                window.open(persona.active!.gpt_url!, "_blank", "noopener,noreferrer");
+              }}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+              title={`Copia contexto e abre ${persona.active.gpt_name || "GPT"} em nova aba`}>
+              <ExternalLink className="w-3 h-3" /> GPT
+            </button>
+          )}
+          <PasteBackButton
+            disabled={!activeId}
+            onPaste={async (text) => {
+              if (!activeId || !text.trim()) return;
+              const { data: userRes } = await supabase.auth.getUser();
+              if (!userRes?.user) return;
+              const { data: inserted, error } = await supabase.from("workspace_agent_messages")
+                .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${persona.active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
+                .select("id, role, content, created_at").single();
+              if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
+              if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
+              toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
+            }}
+          />
           <button onClick={() => setPersonaOpen(true)}
             className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Configurar GPT persona">
             <Settings className="w-3 h-3" />
@@ -2232,5 +2285,52 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PasteBackButton({ onPaste, disabled }: { onPaste: (text: string) => void | Promise<void>; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="p-1 rounded hover:bg-secondary text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Colar resposta do ChatGPT">
+        <ClipboardPaste className="w-3 h-3" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Colar resposta do ChatGPT</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              Copie a resposta do seu GPT externo e cole abaixo. Ela entra na conversa como mensagem do agente e vira contexto para as próximas.
+            </p>
+            <textarea
+              autoFocus
+              value={txt}
+              onChange={e => setTxt(e.target.value)}
+              placeholder="Cole aqui..."
+              className="w-full min-h-[220px] max-h-[50vh] rounded-md border border-border bg-background px-3 py-2 text-[12px] leading-relaxed resize-y"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button size="sm" disabled={!txt.trim() || busy} onClick={async () => {
+              setBusy(true);
+              try { await onPaste(txt); setTxt(""); setOpen(false); }
+              finally { setBusy(false); }
+            }}>
+              {busy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ClipboardPaste className="w-3 h-3 mr-1" />}
+              Importar para conversa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
