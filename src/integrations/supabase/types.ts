@@ -1854,6 +1854,78 @@ export type Database = {
         }
         Relationships: []
       }
+      workspace_nodes: {
+        Row: {
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          duration_sec: number | null
+          id: string
+          kind: Database["public"]["Enums"]["workspace_kind"]
+          mime: string | null
+          name: string
+          parent_id: string | null
+          scope: Database["public"]["Enums"]["workspace_scope"]
+          sent_for_approval_file_id: string | null
+          size_bytes: number | null
+          sort_index: number
+          storage_path: string | null
+          thumb_path: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_sec?: number | null
+          id?: string
+          kind: Database["public"]["Enums"]["workspace_kind"]
+          mime?: string | null
+          name: string
+          parent_id?: string | null
+          scope: Database["public"]["Enums"]["workspace_scope"]
+          sent_for_approval_file_id?: string | null
+          size_bytes?: number | null
+          sort_index?: number
+          storage_path?: string | null
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          duration_sec?: number | null
+          id?: string
+          kind?: Database["public"]["Enums"]["workspace_kind"]
+          mime?: string | null
+          name?: string
+          parent_id?: string | null
+          scope?: Database["public"]["Enums"]["workspace_scope"]
+          sent_for_approval_file_id?: string | null
+          size_bytes?: number | null
+          sort_index?: number
+          storage_path?: string | null
+          thumb_path?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_nodes_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_nodes_sent_for_approval_file_id_fkey"
+            columns: ["sent_for_approval_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -1915,6 +1987,8 @@ export type Database = {
       brand_type: "aceleriq" | "sitebolt"
       client_type: "recurring" | "one_off" | "hybrid"
       project_billing_mode: "included" | "one_off"
+      workspace_kind: "folder" | "file"
+      workspace_scope: "global" | "client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2046,6 +2120,8 @@ export const Constants = {
       brand_type: ["aceleriq", "sitebolt"],
       client_type: ["recurring", "one_off", "hybrid"],
       project_billing_mode: ["included", "one_off"],
+      workspace_kind: ["folder", "file"],
+      workspace_scope: ["global", "client"],
     },
   },
 } as const
