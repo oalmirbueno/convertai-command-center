@@ -1107,17 +1107,31 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           </div>
         )}
         <div className="relative p-2 flex items-end gap-1">
-          {/* Popover @ arquivos */}
-          {mention && mentionMatches.length > 0 && (
-            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[220px] overflow-y-auto">
-              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
-                Anexar do workspace
+          {/* Popover @ arquivos — busca fuzzy + navegação por teclado */}
+          {mention && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
+              <div className="px-3 py-1 flex items-center gap-2 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                <span>Anexar do workspace</span>
+                <span className="ml-auto normal-case tracking-normal text-[10px] text-muted-foreground/70">
+                  {mention.q ? `"${mention.q}"` : "digite para filtrar"} · ↑↓ ⏎
+                </span>
               </div>
-              {mentionMatches.map(f => (
-                <button key={f.id} onClick={() => pickMention(f)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
-                  {f.kind === "folder" ? <FolderIcon className="w-3 h-3 text-amber-400 shrink-0" /> : <FileIcon className="w-3 h-3 text-primary shrink-0" />}
-                  <span className="truncate">{f.name}</span>
+              {mentionMatches.length === 0 ? (
+                <div className="px-3 py-3 text-[11px] text-muted-foreground text-center">Nenhum arquivo encontrado</div>
+              ) : mentionMatches.map((f, i) => (
+                <button key={f.id}
+                  onMouseEnter={() => setMentionIdx(i)}
+                  onClick={() => pickMention(f)}
+                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
+                    i === mentionIdx ? "bg-primary/15 text-foreground" : "hover:bg-secondary")}>
+                  {f.kind === "folder"
+                    ? <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    : <FileIcon className="w-3.5 h-3.5 text-primary shrink-0" />}
+                  <span className="truncate flex-1">{highlightRanges(f.name, f._ranges)}</span>
+                  {f._recent && <span className="text-[9px] uppercase tracking-wider text-primary/70 shrink-0">recente</span>}
+                  <span className="text-[9px] uppercase tracking-wider text-muted-foreground/60 shrink-0">
+                    {f.kind === "folder" ? "pasta" : "arquivo"}
+                  </span>
                 </button>
               ))}
             </div>
@@ -1128,9 +1142,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
                 Ações do agente
               </div>
-              {slashMatches.map(c => (
-                <button key={c.key} onClick={() => pickSlash(c)}
-                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+              {slashMatches.map((c, i) => (
+                <button key={c.key}
+                  onMouseEnter={() => setSlashIdx(i)}
+                  onClick={() => pickSlash(c)}
+                  className={cn("w-full flex items-center gap-2 px-3 py-1.5 text-[12px] text-left",
+                    i === slashIdx ? "bg-primary/15" : "hover:bg-secondary")}>
                   <Sparkles className="w-3 h-3 text-primary shrink-0" />
                   <span className="font-medium">{c.label}</span>
                   <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
@@ -1145,12 +1162,23 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
             onKeyDown={e => {
               if (e.key === "Escape") { setMention(null); setSlash(null); return; }
+              if (mention && mentionMatches.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setMentionIdx(i => (i + 1) % mentionMatches.length); return; }
+                if (e.key === "ArrowUp")   { e.preventDefault(); setMentionIdx(i => (i - 1 + mentionMatches.length) % mentionMatches.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickMention(mentionMatches[mentionIdx]); return; }
+              }
+              if (slash && slashMatches.length > 0) {
+                if (e.key === "ArrowDown") { e.preventDefault(); setSlashIdx(i => (i + 1) % slashMatches.length); return; }
+                if (e.key === "ArrowUp")   { e.preventDefault(); setSlashIdx(i => (i - 1 + slashMatches.length) % slashMatches.length); return; }
+                if (e.key === "Enter" || e.key === "Tab") { e.preventDefault(); pickSlash(slashMatches[slashIdx]); return; }
+              }
               if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
             }}
             placeholder="Pergunte ao agente... @ anexa arquivos · / dispara ações"
             rows={2}
             className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
           />
+
           <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
