@@ -168,6 +168,8 @@ export default function Workspace() {
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
+  const [moveCreate, setMoveCreate] = useState<{ node: Node; parentId: string | null; parentLabel: string } | null>(null);
+  const [moveCreateName, setMoveCreateName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
   const [dragOverArea, setDragOverArea] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
