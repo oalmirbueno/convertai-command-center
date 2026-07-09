@@ -796,7 +796,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
         </div>
-        {!minimized && (
+        {!minimized && !isMobile && (
           <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
             <button onClick={() => setDock("bl")} title="Dock esquerda"
               className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
@@ -811,7 +811,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             </button>
           </div>
         )}
-        {isFull && !minimized && (
+        {isFull && !minimized && !isMobile && (
           <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
             className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
             <Minimize2 className="w-3 h-3" /> Sair
