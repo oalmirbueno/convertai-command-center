@@ -21,11 +21,18 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
-    const { url, clear } = await req.json() as { url?: string; clear?: boolean };
+    const { url, clear, client_id, folder_path } = await req.json() as {
+      url?: string; clear?: boolean; client_id?: string | null; folder_path?: string | null;
+    };
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const cid = client_id || null;
+    const fpath = folder_path || null;
 
     if (clear) {
-      await admin.from("workspace_agent_personas").delete().eq("user_id", user.id);
+      let q = admin.from("workspace_agent_personas").delete().eq("user_id", user.id);
+      q = cid ? q.eq("client_id", cid) : q.is("client_id", null);
+      q = fpath ? q.eq("folder_path", fpath) : q.is("folder_path", null);
+      await q;
       return json({ ok: true, cleared: true });
     }
 
