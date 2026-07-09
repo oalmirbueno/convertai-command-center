@@ -1864,6 +1864,7 @@ export type Database = {
           created_by: string | null
           duration_sec: number | null
           id: string
+          inbox_token: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime: string | null
           name: string
@@ -1882,6 +1883,7 @@ export type Database = {
           created_by?: string | null
           duration_sec?: number | null
           id?: string
+          inbox_token?: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name: string
@@ -1900,6 +1902,7 @@ export type Database = {
           created_by?: string | null
           duration_sec?: number | null
           id?: string
+          inbox_token?: string | null
           kind?: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name?: string

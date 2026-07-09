@@ -1,0 +1,2 @@
+ALTER TABLE public.workspace_nodes ADD COLUMN IF NOT EXISTS inbox_token uuid UNIQUE;
+CREATE INDEX IF NOT EXISTS workspace_nodes_inbox_token_idx ON public.workspace_nodes(inbox_token) WHERE inbox_token IS NOT NULL;
