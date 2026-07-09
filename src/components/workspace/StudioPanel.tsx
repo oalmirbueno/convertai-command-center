@@ -1993,6 +1993,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   const [slashIdx, setSlashIdx] = useState(0);
   // arquivos anexados à próxima mensagem (sincronizam com @ do input)
   const [attached, setAttached] = useState<FileRef[]>([]);
+  const [pickerOpen, setPickerOpen] = useState(false);
   // recentes globais por usuário (top 8)
   const RECENT_KEY = "studio:recentMentions";
   const [recentIds, setRecentIds] = useState<string[]>(() => {
