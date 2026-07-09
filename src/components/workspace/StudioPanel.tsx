@@ -1007,42 +1007,109 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 function renderBrandedDoc(md: string, clientName: string, projectName: string) {
   const html = mdToHtml(md);
   const date = new Date().toLocaleDateString("pt-BR");
+  const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
 <title>${escapeHtml(projectName)} · AcelerIQ</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4; margin: 22mm 18mm 22mm 18mm; }
-  * { box-sizing: border-box; }
-  body { font-family: 'Outfit', -apple-system, sans-serif; color: #0D0D0D; margin: 0; padding: 24px; background: #fff; }
-  .cover { border-bottom: 3px solid #00FF66; padding-bottom: 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
-  .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
-  .logo .dot { color: #00FF66; }
-  .meta { text-align: right; font-size: 11px; color: #555; font-family: 'JetBrains Mono', monospace; }
-  h1 { font-size: 28px; letter-spacing: -0.02em; margin: 24px 0 8px; page-break-after: avoid; }
-  h2 { font-size: 18px; margin: 28px 0 8px; page-break-after: avoid; border-left: 3px solid #00FF66; padding-left: 10px; }
-  h3 { font-size: 14px; margin: 20px 0 6px; page-break-after: avoid; }
-  p, li { font-size: 12.5px; line-height: 1.6; }
-  ul, ol { padding-left: 22px; }
+  @page { size: A4; margin: 20mm 16mm 22mm 16mm; }
+  @page :first { margin: 0; }
+  * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  html, body { margin: 0; padding: 0; background: #fff; color: #0D0D0D; font-family: 'Outfit', -apple-system, sans-serif; font-size: 12.5px; line-height: 1.6; }
+
+  .cover-page {
+    height: 297mm; width: 210mm; padding: 28mm 22mm; background: #0D0D0D; color: #fff;
+    display: flex; flex-direction: column; justify-content: space-between;
+    page-break-after: always; break-after: page;
+  }
+  .cover-page .brand { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 22px; letter-spacing: -0.02em; }
+  .cover-page .brand .dot { color: #00FF66; }
+  .cover-page .rule { height: 3px; width: 64px; background: #00FF66; margin: 24px 0 18px; }
+  .cover-page h1 { font-size: 42px; line-height: 1.05; letter-spacing: -0.03em; margin: 0 0 12px; font-weight: 600; }
+  .cover-page .kicker { font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #00FF66; letter-spacing: 0.15em; text-transform: uppercase; margin-bottom: 8px; }
+  .cover-page .subtitle { font-size: 14px; color: #a3a3a3; max-width: 480px; }
+  .cover-page .meta { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 32px; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #a3a3a3; border-top: 1px solid #262626; padding-top: 18px; }
+  .cover-page .meta strong { display: block; color: #fff; font-weight: 500; font-size: 12.5px; margin-top: 3px; font-family: 'Outfit', sans-serif; }
+
+  .doc-header { display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 2px solid #0D0D0D; padding-bottom: 10px; margin-bottom: 20px; }
+  .doc-header .brand { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 14px; }
+  .doc-header .brand .dot { color: #00FF66; }
+  .doc-header .crumbs { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #737373; text-transform: uppercase; letter-spacing: 0.1em; text-align: right; }
+
+  .content { max-width: 178mm; margin: 0 auto; }
+
+  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid; }
+  h2 {
+    font-size: 17px; margin: 28px 0 10px; font-weight: 600; letter-spacing: -0.01em;
+    padding: 6px 0 6px 12px; border-left: 3px solid #00FF66;
+    page-break-after: avoid; break-after: avoid;
+  }
+  h3 { font-size: 13.5px; margin: 18px 0 6px; font-weight: 600; color: #171717; page-break-after: avoid; break-after: avoid; }
+  p { margin: 6px 0; orphans: 3; widows: 3; }
+  strong { font-weight: 600; }
+  em { color: #404040; }
+
+  .section { page-break-inside: avoid; break-inside: avoid-page; margin-bottom: 6px; }
+  ul, ol { padding-left: 20px; margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
   li { margin: 3px 0; }
-  .check { list-style: none; padding-left: 0; }
-  .check li::before { content: "☐  "; color: #00FF66; font-weight: bold; }
-  .check li.done::before { content: "☑  "; }
-  code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
-  hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 20px 0; }
-  footer { position: fixed; bottom: 10mm; left: 18mm; right: 18mm; font-size: 10px; color: #888; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 6px; }
-  .content { max-width: 720px; margin: 0 auto; }
+  li > p { margin: 0; }
+
+  ul.check { list-style: none; padding-left: 0; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 14px; background: #fafafa; page-break-inside: avoid; break-inside: avoid; }
+  ul.check li { padding: 3px 0; display: flex; gap: 8px; align-items: flex-start; }
+  ul.check li::before {
+    content: ""; display: inline-block; width: 12px; height: 12px; min-width: 12px;
+    border: 1.5px solid #0D0D0D; border-radius: 2px; margin-top: 4px; background: #fff;
+  }
+  ul.check li.done::before { background: #00FF66; border-color: #00FF66; }
+  ul.check li.done { color: #737373; text-decoration: line-through; }
+
+  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
+  pre { background: #0D0D0D; color: #fafafa; padding: 12px 14px; border-radius: 6px; font-size: 11px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+  pre code { background: transparent; color: inherit; padding: 0; }
+  blockquote {
+    margin: 10px 0; padding: 8px 14px; border-left: 3px solid #d4d4d8;
+    color: #525252; font-style: italic; background: #fafafa; page-break-inside: avoid; break-inside: avoid;
+  }
+  hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 22px 0; }
+
+  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11.5px; page-break-inside: avoid; break-inside: avoid; }
+  th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; vertical-align: top; }
+  th { background: #f4f4f5; font-weight: 600; }
+
+  @media print {
+    .doc-footer { position: fixed; bottom: 8mm; left: 16mm; right: 16mm; font-size: 9.5px; color: #737373; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #e5e5e5; padding-top: 5px; }
+    body { -webkit-print-color-adjust: exact; }
+  }
 </style></head><body>
-<div class="content">
-  <div class="cover">
-    <div class="logo">aceler<span class="dot">iq</span></div>
-    <div class="meta">
-      <div>${escapeHtml(clientName)}</div>
-      <div>${escapeHtml(projectName)}</div>
-      <div>${date}</div>
-    </div>
+
+<section class="cover-page">
+  <div>
+    <div class="brand">aceler<span class="dot">iq</span></div>
+    <div class="rule"></div>
+    <div class="kicker">Documento executivo</div>
+    <h1>${escapeHtml(projectName)}</h1>
+    <div class="subtitle">Registro consolidado do trabalho estratégico e criativo entregue pela AcelerIQ.</div>
   </div>
-  ${html}
+  <div class="meta">
+    <div>Cliente<strong>${escapeHtml(clientName)}</strong></div>
+    <div>Projeto<strong>${escapeHtml(projectName)}</strong></div>
+    <div>Emissão<strong>${date} · ${time}</strong></div>
+    <div>Confidencialidade<strong>Uso interno / cliente</strong></div>
+  </div>
+</section>
+
+<div class="doc-header">
+  <div class="brand">aceler<span class="dot">iq</span></div>
+  <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
 </div>
-<footer><span>aceleriq.online</span><span>Confidencial · gerado ${date}</span></footer>
+
+<div class="content">
+${html}
+</div>
+
+<div class="doc-footer"><span>aceleriq.online</span><span>Confidencial · ${date}</span></div>
 </body></html>`;
 }
 
@@ -1052,34 +1119,83 @@ function mdToHtml(md: string): string {
   const lines = md.split("\n");
   const out: string[] = [];
   let inList: "ul" | "ol" | "check" | null = null;
+  let inSection = false;
+  let inCode = false;
+  let codeBuf: string[] = [];
+  const openSection = () => { if (!inSection) { out.push(`<div class="section">`); inSection = true; } };
+  const closeSection = () => { if (inSection) { out.push(`</div>`); inSection = false; } };
   const closeList = () => { if (inList) { out.push(`</${inList === "check" ? "ul" : inList}>`); inList = null; } };
+
+  const inline = (s: string) => s
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/(^|[\s(])\*(?!\s)([^*\n]+?)\*(?=[\s.,;:!?)]|$)/g, "$1<em>$2</em>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>")
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g, '<a href="$2">$1</a>')
+    .replace(/\[@([^\]]+)\]\(wsfile:[^)]+\)/g, '<strong>@$1</strong>');
+
   for (const raw of lines) {
-    const l = raw.replace(/</g, "&lt;");
-    if (/^#{1,3}\s+/.test(l)) {
+    if (/^```/.test(raw)) {
+      if (inCode) { out.push(`<pre><code>${codeBuf.map(c => c.replace(/</g,"&lt;")).join("\n")}</code></pre>`); codeBuf = []; inCode = false; }
+      else { closeList(); closeSection(); inCode = true; }
+      continue;
+    }
+    if (inCode) { codeBuf.push(raw); continue; }
+
+    const l = raw;
+    if (/^#\s+/.test(l)) {
+      closeList(); closeSection();
+      out.push(`<h1>${inline(escapeHtml(l.replace(/^#\s+/, "")))}</h1>`);
+      openSection();
+    } else if (/^##\s+/.test(l)) {
+      closeList(); closeSection();
+      out.push(`<h2>${inline(escapeHtml(l.replace(/^##\s+/, "")))}</h2>`);
+      openSection();
+    } else if (/^###\s+/.test(l)) {
       closeList();
-      const level = l.match(/^#+/)![0].length;
-      out.push(`<h${level}>${l.replace(/^#+\s+/, "")}</h${level}>`);
-    } else if (/^\s*-\s+\[( |x)\]\s+/i.test(l)) {
+      if (!inSection) openSection();
+      out.push(`<h3>${inline(escapeHtml(l.replace(/^###\s+/, "")))}</h3>`);
+    } else if (/^\s*-\s+\[( |x|X)\]\s+/.test(l)) {
+      if (!inSection) openSection();
       if (inList !== "check") { closeList(); out.push(`<ul class="check">`); inList = "check"; }
-      const done = /\[x\]/i.test(l);
-      out.push(`<li class="${done ? "done" : ""}">${l.replace(/^\s*-\s+\[( |x)\]\s+/i, "")}</li>`);
+      const done = /\[(x|X)\]/.test(l);
+      const text = l.replace(/^\s*-\s+\[( |x|X)\]\s+/, "");
+      out.push(`<li class="${done ? "done" : ""}"><span>${inline(escapeHtml(text))}</span></li>`);
     } else if (/^\s*-\s+/.test(l)) {
+      if (!inSection) openSection();
       if (inList !== "ul") { closeList(); out.push("<ul>"); inList = "ul"; }
-      out.push(`<li>${l.replace(/^\s*-\s+/, "")}</li>`);
+      out.push(`<li>${inline(escapeHtml(l.replace(/^\s*-\s+/, "")))}</li>`);
     } else if (/^\s*\d+\.\s+/.test(l)) {
+      if (!inSection) openSection();
       if (inList !== "ol") { closeList(); out.push("<ol>"); inList = "ol"; }
-      out.push(`<li>${l.replace(/^\s*\d+\.\s+/, "")}</li>`);
-    } else if (l.trim() === "") {
-      closeList(); out.push("");
+      out.push(`<li>${inline(escapeHtml(l.replace(/^\s*\d+\.\s+/, "")))}</li>`);
+    } else if (/^>\s?/.test(l)) {
+      closeList();
+      if (!inSection) openSection();
+      out.push(`<blockquote>${inline(escapeHtml(l.replace(/^>\s?/, "")))}</blockquote>`);
     } else if (/^---+$/.test(l.trim())) {
-      closeList(); out.push("<hr/>");
+      closeList(); closeSection();
+      out.push("<hr/>");
+    } else if (l.trim() === "") {
+      closeList();
+      out.push("");
+    } else if (/^@kanban\s*$/.test(l.trim())) {
+      closeList();
+      if (!inSection) openSection();
+      out.push(`<blockquote><strong>Kanban vivo</strong> disponível na versão online do documento.</blockquote>`);
+    } else if (/^@video\[([^\]]*)\]\((https?:[^)]+)\)/.test(l.trim())) {
+      const m = l.trim().match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)/)!;
+      closeList();
+      if (!inSection) openSection();
+      out.push(`<blockquote><strong>Vídeo:</strong> ${escapeHtml(m[1] || "assistir")} · <a href="${m[2]}">${escapeHtml(m[2])}</a></blockquote>`);
     } else {
       closeList();
-      const withBold = l.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
-      out.push(`<p>${withBold}</p>`);
+      if (!inSection) openSection();
+      out.push(`<p>${inline(escapeHtml(l))}</p>`);
     }
   }
   closeList();
+  closeSection();
+  if (inCode) out.push(`<pre><code>${codeBuf.map(c => c.replace(/</g,"&lt;")).join("\n")}</code></pre>`);
   return out.join("\n");
 }
 
