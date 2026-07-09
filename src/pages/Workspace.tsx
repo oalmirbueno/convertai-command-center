@@ -157,6 +157,7 @@ export default function Workspace() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [applyingTpl, setApplyingTpl] = useState<string | null>(null);
+  const [organizing, setOrganizing] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
