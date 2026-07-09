@@ -88,6 +88,8 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
+    { key: "help",     label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
+    { key: "ajuda",    label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
     { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
     { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
@@ -106,6 +108,31 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
       insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
   ];
 }
+
+// Definições canônicas para o painel de ajuda inline (@help)
+const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
+  { cmd: "/help",      label: "Ajuda",              desc: "Abre este guia inline com todos os comandos." },
+  { cmd: "/tarefa",    label: "Nova tarefa",        desc: "Cria tarefa no Kanban do projeto. Aceita !alta !urgente @nome 15/07 hoje +3d." },
+  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo — lista, cria e move tasks reais do projeto sem sair da nota." },
+  { cmd: "/imagem",    label: "Imagem → OCR",       desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
+  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive → renderiza o player inline." },
+  { cmd: "/mapa",      label: "Mapa mental",        desc: "Insere estrutura hierárquica em texto (edite os ramos)." },
+  { cmd: "/checklist", label: "Checklist",          desc: "Lista com caixinhas [ ] clicáveis no preview." },
+  { cmd: "/hook",      label: "Bloco HOOK",         desc: "Template de roteiro 0–3s (fala, imagem, texto em tela)." },
+  { cmd: "/desenv",    label: "Bloco DESENV.",      desc: "Template de desenvolvimento (fala, b-roll, sfx)." },
+  { cmd: "/cta",       label: "Bloco CTA",          desc: "Template de chamada final." },
+  { cmd: "/brief",     label: "Template Briefing",  desc: "Objetivo, público, canal, duração, tom, referências." },
+  { cmd: "/cliente",   label: "Cliente atual",      desc: "Insere o nome do cliente ativo." },
+  { cmd: "/pasta",     label: "Pasta atual",        desc: "Insere o caminho da pasta ativa." },
+];
+
+const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
+  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome — busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
+  { cmd: "@kanban",   label: "Kanban",   desc: "Bloco vivo do Kanban do projeto renderizado dentro da nota." },
+  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed) — colar link gera automaticamente." },
+  { cmd: "@help",     label: "Ajuda",    desc: "Renderiza este painel de ajuda inline no ponto onde estiver escrito." },
+];
+
 
 const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
 
