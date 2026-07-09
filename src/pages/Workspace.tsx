@@ -99,9 +99,13 @@ export default function Workspace() {
   const { data: clients } = useQuery({
     queryKey: ["workspace-clients"],
     queryFn: async () => {
+      const { data: roles } = await (supabase as any)
+        .from("user_roles").select("user_id").eq("role", "client");
+      const ids = (roles || []).map((r: any) => r.user_id);
+      if (!ids.length) return [];
       const { data } = await (supabase as any)
         .from("profiles").select("id, full_name, company_name")
-        .eq("role", "client").order("full_name");
+        .in("id", ids).is("deleted_at", null).order("company_name");
       return data || [];
     },
     enabled: isStaff,
