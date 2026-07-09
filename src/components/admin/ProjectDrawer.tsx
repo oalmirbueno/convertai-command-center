@@ -162,6 +162,14 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
             <p className="text-xs font-mono text-muted-foreground text-right">{progress}%</p>
           </div>
 
+          {/* Pipeline audiovisual (opcional) */}
+          <ProjectPipelineChecklist
+            projectId={project.id}
+            projectName={project.name}
+            pipeline={project.pipeline}
+          />
+
+
           {/* Info */}
           <div className="space-y-2">
             <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Informações</p>
