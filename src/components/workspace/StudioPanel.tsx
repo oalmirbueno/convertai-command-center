@@ -913,14 +913,15 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                       });
                       toast({ title: "Anexos adicionados", description: `${picks.length} item(ns) enviado(s) para contexto e Notas.` });
                     }}
-                    onStructureToNotes={async () => {
+                    onStructureToNotes={async (sourceText) => {
+                      const raw = (sourceText || state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`).trim();
                       try {
                         const { data: sess } = await supabase.auth.getSession();
                         const tok = sess?.session?.access_token; if (!tok) return;
                         toast({ title: "Estruturando", description: "O agente está montando o documento executivo." });
                         const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
                           method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-                          body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
+                          body: JSON.stringify({ mode: "structure", text: raw, context: { client_name: clientName, folder_path: folderPath } }),
                         });
                         if (!r.ok) throw new Error(String(r.status));
                         const j = await r.json();
