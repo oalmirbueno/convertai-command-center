@@ -21,7 +21,7 @@ import {
   Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import AdminContracts from "@/pages/AdminContracts";
 
 const FOLDERS = [
