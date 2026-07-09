@@ -948,6 +948,7 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
           </Button>
         </div>
       </div>
+      </div>
     </div>
   );
 }
