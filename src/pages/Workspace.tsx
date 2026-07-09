@@ -16,7 +16,7 @@ import {
   Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
   Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
   Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
-  ChevronDown, Check, X as XIcon,
+  ChevronDown, Check, X as XIcon, Wand2,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -157,6 +157,7 @@ export default function Workspace() {
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [applyingTpl, setApplyingTpl] = useState<string | null>(null);
+  const [organizing, setOrganizing] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
@@ -475,6 +476,102 @@ export default function Workspace() {
       toast({ title: "Erro ao aplicar template", description: e.message, variant: "destructive" });
     } finally {
       setApplyingTpl(null);
+    }
+  }
+
+  // Pipeline destinos por SmartTag. Nomes alinhados ao template "Pipeline Vídeo e Áudio".
+  const PIPELINE_TARGETS: Record<SmartTag, string | null> = {
+    material:      "1. Brutos",
+    audio:         "2. Trilhas e SFX",
+    "video-ready": "3. Edição",
+    carrossel:     "Carrosséis",
+    static:        "Estáticos",
+    doc:           "Documentos",
+    other:         null,
+  };
+  function pipelineTargetFor(n: Node, siblings: Node[]): string | null {
+    const tag = tagOf(n, siblings);
+    // Vídeos "final/pronto/entrega" vão para "4. Final" em vez de Edição
+    if (tag === "video-ready") {
+      const ctx = `${n.name || ""} ${n.storage_path || ""}`.toLowerCase();
+      if (/(final|pronto|entrega|export|approved|aprovad|v\s*final|vf\b)/i.test(ctx)) return "4. Final";
+    }
+    return PIPELINE_TARGETS[tag];
+  }
+
+  async function autoOrganize() {
+    if (!user || organizing) return;
+    if (scope === "client" && !clientId) {
+      toast({ title: "Selecione um cliente", variant: "destructive" });
+      return;
+    }
+    // Só organiza nós reais do nível atual (não virtuais, não subpastas).
+    const source = (nodes || []).filter(n => n.kind === "file" && !n.__virtual);
+    if (!source.length) {
+      toast({ title: "Nada para organizar", description: "Sem arquivos soltos neste nível." });
+      return;
+    }
+    setOrganizing(true);
+    try {
+      // Agrupa por destino
+      const groups = new Map<string, Node[]>();
+      let skipped = 0;
+      for (const f of source) {
+        const dest = pipelineTargetFor(f, source);
+        if (!dest) { skipped++; continue; }
+        if (!groups.has(dest)) groups.set(dest, []);
+        groups.get(dest)!.push(f);
+      }
+      if (!groups.size) {
+        toast({ title: "Nada classificável", description: "Arquivos não se encaixam no pipeline." });
+        return;
+      }
+      // Resolve/cria pastas destino no nível atual
+      const parentId = parent?.id || null;
+      const { data: existing } = await supabase
+        .from("workspace_nodes")
+        .select("id, name")
+        .eq("scope", scope)
+        .eq("kind", "folder")
+        .is("parent_id", parentId as any);
+      const byName = new Map<string, string>();
+      for (const r of (existing || []) as any[]) byName.set((r.name || "").toLowerCase(), r.id);
+
+      let created = 0;
+      const folderIds = new Map<string, string>();
+      for (const name of groups.keys()) {
+        const existingId = byName.get(name.toLowerCase());
+        if (existingId) { folderIds.set(name, existingId); continue; }
+        const { data, error } = await supabase.from("workspace_nodes").insert({
+          name, kind: "folder", scope,
+          client_id: scope === "client" ? clientId : null,
+          parent_id: parentId, created_by: user.id,
+        }).select("id").single();
+        if (error) throw error;
+        folderIds.set(name, (data as any).id);
+        created++;
+      }
+
+      // Move em lote
+      let moved = 0;
+      for (const [dest, items] of groups.entries()) {
+        const destId = folderIds.get(dest);
+        if (!destId) continue;
+        const ids = items.map(i => i.id);
+        const { error } = await supabase.from("workspace_nodes")
+          .update({ parent_id: destId }).in("id", ids);
+        if (error) throw error;
+        moved += ids.length;
+      }
+      toast({
+        title: "Organização concluída",
+        description: `${moved} arquivo(s) movido(s) · ${created} pasta(s) criada(s)${skipped ? ` · ${skipped} ignorado(s)` : ""}`,
+      });
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao organizar", description: e.message, variant: "destructive" });
+    } finally {
+      setOrganizing(false);
     }
   }
 
@@ -845,6 +942,17 @@ export default function Workspace() {
               </Button>
               <Button size="sm" variant="outline" onClick={() => setTemplateOpen(true)} className="gap-1.5 h-8">
                 <Sparkles className="w-3.5 h-3.5" /> Template
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={autoOrganize}
+                disabled={organizing}
+                title="Move os arquivos deste nível para pastas do pipeline com base no nome e tipo"
+                className="gap-1.5 h-8"
+              >
+                {organizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                Auto-organizar
               </Button>
               <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8">
                 <Upload className="w-3.5 h-3.5" />
