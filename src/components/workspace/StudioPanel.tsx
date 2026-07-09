@@ -4,7 +4,7 @@ import {
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
   Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
-  Download, Radio, Zap, ArrowRight,
+  Download, Radio, Zap, ArrowRight, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -261,6 +261,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return v;
   });
   const [mode, setMode] = useState<Mode>("context");
+  const isMobile = useIsMobile();
+  const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
@@ -749,10 +751,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     );
   }
 
-  const isFull = dock === "full";
+  const isFull = dock === "full" || (isMobile && !minimized);
 
   const dockPos = isFull
-    ? "top-[64px] left-0 right-0 bottom-0 sm:top-[72px]"
+    ? (isMobile
+        ? "inset-0"
+        : "top-[64px] left-0 right-0 bottom-0 sm:top-[72px]")
     : dock === "br" ? "left-2 right-2 bottom-2 sm:left-auto sm:right-4 sm:bottom-4"
     : dock === "bl" ? "left-2 right-2 bottom-2 sm:right-auto sm:left-4 sm:bottom-4"
     :                 "left-2 right-2 bottom-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
@@ -767,21 +771,32 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
   return (
     <div className={cn(
-      "fixed z-40 bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+      "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+      isMobile && isFull ? "z-[60]" : "z-40",
       isFull ? "rounded-none border-t" : "rounded-2xl border",
 
       dockPos, dockSize
     )}>
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
-        <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-        </div>
+        {isMobile && !minimized ? (
+          <button
+            onClick={() => setOpen(false)}
+            title="Voltar"
+            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        ) : (
+          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
         </div>
-        {!minimized && (
+        {!minimized && !isMobile && (
           <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
             <button onClick={() => setDock("bl")} title="Dock esquerda"
               className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
@@ -796,7 +811,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             </button>
           </div>
         )}
-        {isFull && !minimized && (
+        {isFull && !minimized && !isMobile && (
           <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
             className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
             <Minimize2 className="w-3 h-3" /> Sair
@@ -975,12 +990,31 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
             {mode === "notes" && (
-              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4">
+              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
-                <div className="grid h-full min-h-0 gap-3 grid-cols-1 md:grid-cols-2">
-                  <section className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70">
+                {isMobile && (
+                  <div className="grid grid-cols-2 gap-1 rounded-lg border border-border bg-background/60 p-1 text-[12px]">
+                    <button
+                      onClick={() => setMobileNotesTab("editor")}
+                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "editor" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                    >Notas</button>
+                    <button
+                      onClick={() => setMobileNotesTab("preview")}
+                      className={cn("py-1.5 rounded-md font-medium transition-colors", mobileNotesTab === "preview" ? "bg-primary text-primary-foreground" : "text-muted-foreground")}
+                    >Preview</button>
+                  </div>
+                )}
+
+                <div className={cn(
+                  "grid flex-1 min-h-0 gap-3",
+                  isMobile ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2"
+                )}>
+                  <section className={cn(
+                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70",
+                    isMobile && mobileNotesTab !== "editor" && "hidden"
+                  )}>
                     <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
                       <NotebookPen className="h-3.5 w-3.5 text-primary" />
                       <span className="font-medium text-foreground/80">Notas de trabalho</span>
@@ -1015,7 +1049,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     </div>
                   </section>
 
-                  <aside className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50">
+                  <aside className={cn(
+                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50",
+                    isMobile && mobileNotesTab !== "preview" && "hidden"
+                  )}>
                     <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                       <FileText className="h-3.5 w-3.5 text-primary" />
                       <div className="min-w-0 flex-1">
