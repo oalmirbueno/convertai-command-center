@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 
 /**
@@ -2151,10 +2153,11 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   }
 
   const [pulling, setPulling] = useState(false);
-  async function pullDeepContext() {
+  const autoPulledRef = useRef<Set<string>>(new Set());
+  async function pullDeepContext(opts: { silent?: boolean } = {}) {
     if (streaming || pulling) return;
     setPulling(true);
-    toast({ title: "Puxando contexto…", description: "Reunindo dados do cliente, projetos e pasta." });
+    if (!opts.silent) toast({ title: "Preparando contexto", description: "Reunindo dados do cliente, projetos e pasta." });
     try {
       const chunks: string[] = [];
       if (clientId) {
@@ -2195,15 +2198,66 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
       if (notes?.trim()) chunks.push(`## Notas em construção\n${notes.slice(0, 2000)}`);
       if (script?.trim()) chunks.push(`## Roteiro em construção\n${script.slice(0, 2000)}`);
 
-      const dossier = chunks.join("\n\n") || "(sem dados disponíveis)";
-      const prompt = `Puxei o contexto completo abaixo. Aja como diretor de pré-produção sênior:\n\n1. Diagnóstico curto (3-5 linhas) do estado atual do cliente/projeto.\n2. Aponte as lacunas críticas de informação que estão travando o avanço.\n3. Me faça de 3 a 5 PERGUNTAS DIRETAS, numeradas e priorizadas — cada uma pensada para destravar o próximo passo concreto. Sem enrolação.\n4. Sugira o próximo entregável (roteiro, checklist, briefing revisado, plano de gravação, etc).\n\nConforme eu responder cada pergunta, avance para a próxima etapa e refine o plano.\n\n---\n${dossier}`;
+      const dossier = chunks.join("\n\n") || "(sem dados disponíveis para este escopo)";
+      const prompt = [
+        "[MODO ORQUESTRADOR · AUTO-CONTEXTO]",
+        "Você é o Orquestrador de Pré-Produção da AcelerIQ. O sistema já leu tudo do cliente, projetos, tasks, briefing, contratos e pasta atual. Assuma o comando.",
+        "",
+        "Regras de resposta (obrigatórias):",
+        "- Nada de asteriscos, negritos, itálicos ou emojis. Texto limpo.",
+        "- Use apenas títulos curtos em MAIÚSCULAS seguidos de dois-pontos e listas numeradas.",
+        "- Sem enrolação, sem cumprimento, sem repetir o dossiê. Vá direto ao ponto.",
+        "",
+        "Entregue exatamente nesta ordem:",
+        "",
+        "DIAGNÓSTICO:",
+        "Três linhas, no máximo, sobre onde o cliente está e o que trava o avanço.",
+        "",
+        "LACUNAS CRÍTICAS:",
+        "Lista numerada (1., 2., 3.) das informações que estão faltando para destravar o próximo entregável.",
+        "",
+        "PERGUNTAS PARA VOCÊ RESPONDER:",
+        "Entre 3 e 5 perguntas numeradas (1., 2., 3., ...), diretas, uma frase cada, priorizadas pelo impacto no próximo passo.",
+        "",
+        "PRÓXIMO ENTREGÁVEL SUGERIDO:",
+        "Uma linha nomeando o artefato concreto (roteiro, checklist, briefing revisado, plano de gravação, storyboard, etc.).",
+        "",
+        "A cada resposta minha, refine o plano e avance para a próxima etapa.",
+        "",
+        "----- DOSSIÊ -----",
+        dossier,
+      ].join("\n");
       await send(prompt);
     } catch (e: any) {
-      toast({ title: "Falha ao puxar contexto", description: e?.message || "erro", variant: "destructive" });
+      if (!opts.silent) toast({ title: "Falha ao preparar contexto", description: e?.message || "erro", variant: "destructive" });
     } finally {
       setPulling(false);
     }
   }
+
+  // Auto-puxa contexto quando abrir o painel com cliente definido: se a thread
+  // ativa está vazia, ou se ainda nem existe thread nesse escopo, o Orquestrador
+  // assume, monta o contexto e devolve as perguntas certas.
+  useEffect(() => {
+    if (!clientId) return;
+    if (streaming || pulling) return;
+    if (activeId) {
+      if (msgs.length > 0) return;
+      if (autoPulledRef.current.has(activeId)) return;
+      autoPulledRef.current.add(activeId);
+      void pullDeepContext({ silent: true });
+      return;
+    }
+    // Sem thread ainda: cria uma via pullDeepContext (send cria a thread)
+    const scopeKey = `new:${clientId}:${threadScope}:${folderPath || "_root"}`;
+    if (autoPulledRef.current.has(scopeKey)) return;
+    if (threads.length > 0) return; // aguarda seleção automática de thread existente
+    autoPulledRef.current.add(scopeKey);
+    void pullDeepContext({ silent: true });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [clientId, activeId, msgs.length, threads.length, folderPath, threadScope]);
+
+
 
   async function send(override?: string) {
     const text = (override ?? input).trim();
@@ -2447,14 +2501,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ArrowRight className="w-3 h-3" /> Notas
               </button>
             )}
-            <button
-              onClick={() => void pullDeepContext()}
-              disabled={pulling || streaming}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
-              title="Puxa cliente, projetos, tasks, briefing, pasta e monta o contexto; o agente devolve diagnóstico + perguntas certas para avançar"
-            >
-              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Puxar tudo
-            </button>
+
+
 
             {showExternalTools && <PasteBackButton
               disabled={!activeId}
@@ -2507,12 +2555,19 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         )}
         {msgs.map(m => (
           <div key={m.id} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
-            <div className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words",
-              m.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>
-              {m.content}
+            <div className={cn(
+              "max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed break-words",
+              m.role === "user"
+                ? "bg-primary text-primary-foreground whitespace-pre-wrap"
+                : "bg-secondary text-foreground prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:mt-2 prose-headings:mb-1 prose-headings:text-primary prose-headings:text-[11px] prose-headings:uppercase prose-headings:tracking-wider prose-headings:font-semibold prose-ol:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:font-medium prose-strong:text-foreground"
+            )}>
+              {m.role === "assistant"
+                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                : m.content}
             </div>
           </div>
         ))}
+
         {streaming && streamBuf && (
           <div className="flex justify-start">
             <div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words bg-secondary text-foreground">
