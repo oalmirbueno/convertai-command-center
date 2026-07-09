@@ -704,6 +704,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const [personaOpen, setPersonaOpen] = useState(false);
+  const [persona, setPersona] = useState<{ gpt_url: string | null; gpt_name: string | null } | null>(null);
+  useEffect(() => {
+    supabase.from("workspace_agent_personas").select("gpt_url,gpt_name").maybeSingle()
+      .then(({ data }) => setPersona(data as any));
+  }, []);
 
   // @ e / no composer do agente
   const [mention, setMention] = useState<{ q: string; start: number } | null>(null);
