@@ -80,13 +80,16 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap";
+type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap" | "insertHelp";
 type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: SlashAction };
+
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
+    { key: "help",     label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
+    { key: "ajuda",    label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
     { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
     { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
@@ -105,6 +108,31 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
       insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
   ];
 }
+
+// Definições canônicas para o painel de ajuda inline (@help)
+const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
+  { cmd: "/help",      label: "Ajuda",              desc: "Abre este guia inline com todos os comandos." },
+  { cmd: "/tarefa",    label: "Nova tarefa",        desc: "Cria tarefa no Kanban do projeto. Aceita !alta !urgente @nome 15/07 hoje +3d." },
+  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo — lista, cria e move tasks reais do projeto sem sair da nota." },
+  { cmd: "/imagem",    label: "Imagem → OCR",       desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
+  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive → renderiza o player inline." },
+  { cmd: "/mapa",      label: "Mapa mental",        desc: "Insere estrutura hierárquica em texto (edite os ramos)." },
+  { cmd: "/checklist", label: "Checklist",          desc: "Lista com caixinhas [ ] clicáveis no preview." },
+  { cmd: "/hook",      label: "Bloco HOOK",         desc: "Template de roteiro 0–3s (fala, imagem, texto em tela)." },
+  { cmd: "/desenv",    label: "Bloco DESENV.",      desc: "Template de desenvolvimento (fala, b-roll, sfx)." },
+  { cmd: "/cta",       label: "Bloco CTA",          desc: "Template de chamada final." },
+  { cmd: "/brief",     label: "Template Briefing",  desc: "Objetivo, público, canal, duração, tom, referências." },
+  { cmd: "/cliente",   label: "Cliente atual",      desc: "Insere o nome do cliente ativo." },
+  { cmd: "/pasta",     label: "Pasta atual",        desc: "Insere o caminho da pasta ativa." },
+];
+
+const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
+  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome — busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
+  { cmd: "@kanban",   label: "Kanban",   desc: "Bloco vivo do Kanban do projeto renderizado dentro da nota." },
+  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed) — colar link gera automaticamente." },
+  { cmd: "@help",     label: "Ajuda",    desc: "Renderiza este painel de ajuda inline no ponto onde estiver escrito." },
+];
+
 
 const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
 
@@ -341,6 +369,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       setSlashMenu(null);
       return;
     }
+    if (cmd.action === "insertHelp") {
+      const block = `\n@help\n`;
+      if (where === "notes") setState(s => ({ ...s, notes: before + block + after }));
+      else setState(s => ({ ...s, script: before + block + after }));
+      setSlashMenu(null);
+      return;
+    }
+
     if (cmd.action === "uploadImage") { applyCleaned(); setTimeout(() => imageInputRef.current?.click(), 30); return; }
     if (cmd.action === "insertVideo") {
       applyCleaned();
@@ -515,8 +551,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <div className="p-3 space-y-2 h-full flex flex-col">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
                   <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
+                  <button
+                    onClick={() => setState(s => ({ ...s, notes: (s.notes ? s.notes.replace(/\n?@help\n?/g, "") : "") + "\n@help\n" }))}
+                    className="ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
+                    title="Mostrar guia de comandos inline"
+                  >? ajuda</button>
                   {ocrBusy && <span className="text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR…</span>}
                 </div>
+
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
                 <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
@@ -604,6 +646,11 @@ function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: s
       out.push(<InlineKanbanBlock key={i} clientId={clientId ?? null} clientName={clientName ?? null} />);
       return;
     }
+    if (raw.trim() === "@help") {
+      out.push(<InlineHelpBlock key={i} />);
+      return;
+    }
+
     // vídeo embed
     const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
     if (v) {
@@ -646,6 +693,47 @@ function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: s
   });
   return <div className="space-y-0.5">{out}</div>;
 }
+
+// Guia inline de comandos / e @ — renderizado dentro das notas quando existir "@help" numa linha.
+function InlineHelpBlock() {
+  const [tab, setTab] = useState<"slash" | "at">("slash");
+  const items = tab === "slash" ? SLASH_HELP : MENTION_HELP;
+  return (
+    <div className="my-2 rounded-lg border border-primary/30 bg-primary/5 overflow-hidden">
+      <div className="flex items-center justify-between px-2.5 py-1.5 border-b border-primary/20 bg-primary/10">
+        <div className="flex items-center gap-1.5 text-[11px] font-semibold text-primary">
+          <Sparkles className="w-3 h-3" /> Guia de comandos
+        </div>
+        <div className="flex items-center gap-0.5 border border-border rounded p-0.5 bg-background/60">
+          <button
+            onClick={() => setTab("slash")}
+            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "slash" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
+          >/ comandos</button>
+          <button
+            onClick={() => setTab("at")}
+            className={cn("px-1.5 py-0.5 rounded text-[10px]", tab === "at" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}
+          >@ menções</button>
+        </div>
+      </div>
+      <div className="p-2 grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-[260px] overflow-y-auto">
+        {items.map(it => (
+          <div key={it.cmd} className="rounded-md border border-border bg-background/60 p-2">
+            <div className="flex items-center gap-1.5 mb-0.5">
+              <code className="text-[11px] font-mono font-semibold text-primary">{it.cmd}</code>
+              <span className="text-[10px] text-muted-foreground">{it.label}</span>
+            </div>
+            <p className="text-[10.5px] leading-snug text-muted-foreground">{it.desc}</p>
+          </div>
+        ))}
+      </div>
+      <div className="px-2.5 py-1.5 border-t border-primary/20 bg-primary/5 text-[10px] text-muted-foreground">
+        Dica: cole imagens (OCR automático) e links de vídeo (embed automático). Use <b>Alt+↑/↓</b> para alternar conversas do agente.
+      </div>
+    </div>
+  );
+}
+
+
 
 // Kanban inline: mostra as tasks reais do projeto ativo do cliente (tabela tasks via projects)
 function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: string | null; clientName: string | null }) {
