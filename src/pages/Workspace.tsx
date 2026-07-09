@@ -276,24 +276,37 @@ export default function Workspace() {
     return c;
   }, [nodes, virtualNodes, parent]);
 
-  // Batch-prefetch signed URLs for image files visible in current view (for covers).
-  // Uses createSignedUrls (single request for many paths) + image transform for tiny thumbs.
+  // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
-    const imgTargets = (filtered || []).filter(n =>
-      n.kind === "file" && !n.__virtual && n.storage_path &&
-      kindOf(n) === "image" && !signedUrls[n.storage_path!]
-    ).slice(0, 60);
-    if (!imgTargets.length) return;
+    const list = (filtered || []).filter(n =>
+      n.kind === "file" && !n.__virtual && n.storage_path && !signedUrls[n.storage_path!]
+    );
+    const imgTargets = list.filter(n => kindOf(n) === "image").slice(0, 60);
+    const vidTargets = list.filter(n => kindOf(n) === "video").slice(0, 24);
+    if (!imgTargets.length && !vidTargets.length) return;
     let alive = true;
     (async () => {
-      const paths = imgTargets.map(n => n.storage_path!);
-      const { data } = await (supabase.storage.from("workspace") as any).createSignedUrls(
-        paths, 3600, { transform: { width: 400, quality: 70, resize: "cover" } }
-      );
-      if (!alive || !data) return;
+      const jobs: Promise<any>[] = [];
+      if (imgTargets.length) {
+        jobs.push((supabase.storage.from("workspace") as any).createSignedUrls(
+          imgTargets.map(n => n.storage_path!), 3600,
+          { transform: { width: 400, quality: 70, resize: "cover" } }
+        ));
+      }
+      if (vidTargets.length) {
+        jobs.push(supabase.storage.from("workspace").createSignedUrls(
+          vidTargets.map(n => n.storage_path!), 3600
+        ));
+      }
+      const results = await Promise.all(jobs);
+      if (!alive) return;
       setSignedUrls(prev => {
         const next = { ...prev };
-        for (const row of data as any[]) if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
+        for (const r of results) {
+          for (const row of (r?.data as any[] | undefined) || []) {
+            if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
+          }
+        }
         return next;
       });
     })();
@@ -302,11 +315,13 @@ export default function Workspace() {
 
   const coverFor = (n: Node): string | null => {
     if (n.kind !== "file") return null;
-    if (kindOf(n) !== "image") return null; // videos use icon (avoid heavy fetches)
+    const k = kindOf(n);
+    if (k !== "image" && k !== "video") return null;
     if (n.__virtual) return n.__external_url || null;
     if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
     return null;
   };
+
 
 
 
