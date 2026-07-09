@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -78,12 +79,13 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashCmd = { key: string; label: string; hint: string; insert: string };
+type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: "createTask" };
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
+    { key: "tarefa",  label: "Nova tarefa no Kanban", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
     { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
     { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
@@ -100,6 +102,53 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
       insert: `[Kanban do cliente](#kanban)` },
   ];
 }
+
+// Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
+export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
+  let s = " " + raw.trim() + " ";
+  let priority: "low"|"medium"|"high"|"urgent" = "medium";
+  const pm = s.match(/\s!(baixa|low|media|média|medium|alta|high|urgente|urgent)\b/i);
+  if (pm) {
+    const p = pm[1].toLowerCase();
+    priority = p.startsWith("bai") || p === "low" ? "low"
+      : p.startsWith("alt") || p === "high" ? "high"
+      : p.startsWith("urg") ? "urgent" : "medium";
+    s = s.replace(pm[0], " ");
+  }
+  let assigneeName: string | undefined;
+  const am = s.match(/\s@([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9._-]{1,40}(?:\s[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9._-]{1,40})?)/);
+  if (am) { assigneeName = am[1].trim(); s = s.replace(am[0], " "); }
+  let dueISO: string | undefined;
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const rel = s.match(/\s(hoje|amanha|amanhã|\+(\d+)([dsw]))\b/i);
+  if (rel) {
+    if (/hoje/i.test(rel[1])) dueISO = iso(today);
+    else if (/amanh/i.test(rel[1])) { const d = new Date(today); d.setDate(d.getDate()+1); dueISO = iso(d); }
+    else {
+      const n = parseInt(rel[2], 10); const u = rel[3].toLowerCase();
+      const d = new Date(today);
+      d.setDate(d.getDate() + (u === "d" ? n : u === "s" || u === "w" ? n*7 : n));
+      dueISO = iso(d);
+    }
+    s = s.replace(rel[0], " ");
+  } else {
+    const dm = s.match(/\s(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+    if (dm) {
+      const day = parseInt(dm[1], 10), mon = parseInt(dm[2], 10) - 1;
+      const yr = dm[3] ? (dm[3].length === 2 ? 2000 + parseInt(dm[3], 10) : parseInt(dm[3], 10)) : today.getFullYear();
+      const d = new Date(yr, mon, day);
+      if (!isNaN(d.getTime())) dueISO = iso(d);
+      s = s.replace(dm[0], " ");
+    } else {
+      const im = s.match(/\s(\d{4}-\d{2}-\d{2})\b/);
+      if (im) { dueISO = im[1]; s = s.replace(im[0], " "); }
+    }
+  }
+  const title = s.replace(/\s+/g, " ").trim();
+  return { title, priority, assigneeName, dueISO };
+}
+
 
 
 const STORAGE_PREFIX = "workspace_studio_v1:";
@@ -147,6 +196,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const scriptRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
   const [slashMenu, setSlashMenu] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
+  const [taskDraft, setTaskDraft] = useState<{ raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number } | null>(null);
 
   // reload state when context changes
   useEffect(() => { setState(loadState(contextKey)); }, [contextKey]);
@@ -179,6 +229,19 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     const cur = where === "notes" ? state.notes : state.script;
     const before = cur.slice(0, start);
     const after = cur.slice(start + 1 + q.length);
+
+    // Ação especial: abre dialog de nova tarefa (prefill com texto do início da linha corrente)
+    if (cmd.action === "createTask") {
+      const lineStart = before.lastIndexOf("\n") + 1;
+      const currentLine = cur.slice(lineStart, start).trim();
+      setTaskDraft({
+        raw: currentLine,
+        where, insertAt: start, tokenLen: 1 + q.length,
+      });
+      setSlashMenu(null);
+      return;
+    }
+
     const next = before + cmd.insert + after;
     if (where === "notes") setState(s => ({ ...s, notes: next }));
     else setState(s => ({ ...s, script: next }));
@@ -188,6 +251,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       if (el) { el.focus(); const p = before.length + cmd.insert.length; el.setSelectionRange(p, p); }
     }, 10);
   }
+
 
 
   function insertMention(f: FileRef) {
@@ -474,9 +538,36 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           </div>
         </>
       )}
+
+      {taskDraft && (
+        <QuickTaskDialog
+          draft={taskDraft}
+          clientId={clientId ?? null}
+          clientName={clientName ?? null}
+          onClose={() => setTaskDraft(null)}
+          onCreated={(summary) => {
+            // Insere linha de checklist com o resumo da tarefa criada no ponto do slash
+            const { where, insertAt, tokenLen } = taskDraft;
+            const cur = where === "notes" ? state.notes : state.script;
+            const before = cur.slice(0, insertAt);
+            const after = cur.slice(insertAt + tokenLen);
+            // Remove o resto da linha corrente que virou a tarefa (do início da linha ao slash)
+            const lineStart = before.lastIndexOf("\n") + 1;
+            const cleanedBefore = before.slice(0, lineStart);
+            const line = `- [ ] ${summary}\n`;
+            const next = cleanedBefore + line + after;
+            if (where === "notes") setState(s => ({ ...s, notes: next }));
+            else setState(s => ({ ...s, script: next }));
+            // Registra também no log do Kanban interno para o agente ter contexto
+            setState(s => ({ ...s, boardLog: [`[${new Date().toISOString().slice(0,16).replace("T"," ")}] tarefa criada: ${summary}`, ...s.boardLog].slice(0, 40) }));
+            setTaskDraft(null);
+          }}
+        />
+      )}
     </div>
   );
 }
+
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
   return (
@@ -1140,5 +1231,166 @@ function MiniKanban({ board, onChange, onReset, log }: {
         </button>
       </div>
     </div>
+  );
+}
+
+// =========================
+// QuickTaskDialog — cria tarefa no Kanban do cliente via slash /tarefa
+// =========================
+function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
+  draft: { raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number };
+  clientId: string | null;
+  clientName: string | null;
+  onClose: () => void;
+  onCreated: (summary: string) => void;
+}) {
+  const { toast } = useToast();
+  const [raw, setRaw] = useState(draft.raw);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<"low"|"medium"|"high"|"urgent">("medium");
+  const [assigneeName, setAssigneeName] = useState("");
+  const [dueISO, setDueISO] = useState("");
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState<string>("");
+  const [staff, setStaff] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  // Reparse shorthand quando raw muda
+  useEffect(() => {
+    const p = parseTaskShorthand(raw);
+    setTitle(p.title);
+    setPriority(p.priority);
+    if (p.assigneeName) setAssigneeName(p.assigneeName);
+    if (p.dueISO) setDueISO(p.dueISO);
+  }, [raw]);
+
+  // Carrega projetos do cliente + staff atribuível
+  useEffect(() => {
+    (async () => {
+      if (!clientId) return;
+      const { data: ps } = await supabase
+        .from("projects")
+        .select("id,name,created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      const list = (ps || []).map((p: any) => ({ id: p.id, name: p.name }));
+      setProjects(list);
+      if (list.length && !projectId) setProjectId(list[0].id);
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["admin", "design", "traffic", "manager"] as any);
+      const ids = Array.from(new Set((roles || []).map((r: any) => r.user_id)));
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from("profiles").select("id,full_name,email").in("id", ids);
+        setStaff((profs || []) as any);
+      }
+    })();
+  }, [clientId]);
+
+  // Auto-match assignee por nome
+  useEffect(() => {
+    if (!assigneeName || !staff.length) return;
+    const q = assigneeName.toLowerCase();
+    const hit = staff.find(s => (s.full_name || s.email).toLowerCase().includes(q));
+    if (hit) setAssigneeId(hit.id);
+  }, [assigneeName, staff]);
+
+  async function submit() {
+    if (!title.trim()) { toast({ title: "Título obrigatório", variant: "destructive" }); return; }
+    if (!projectId) { toast({ title: "Selecione um projeto", variant: "destructive" }); return; }
+    setSaving(true);
+    const { error } = await supabase.from("tasks").insert({
+      project_id: projectId,
+      title: title.trim().slice(0, 200),
+      priority,
+      status: "backlog",
+      assigned_to: assigneeId || null,
+      due_date: dueISO || null,
+      source: "studio",
+    } as any);
+    setSaving(false);
+    if (error) { toast({ title: "Erro ao criar tarefa", description: error.message, variant: "destructive" }); return; }
+    const who = staff.find(s => s.id === assigneeId);
+    const parts = [
+      title.trim(),
+      priority !== "medium" && `!${priority}`,
+      who && `@${who.full_name || who.email.split("@")[0]}`,
+      dueISO && `📅 ${dueISO}`,
+    ].filter(Boolean).join(" ");
+    toast({ title: "Tarefa criada no Kanban", description: parts });
+    onCreated(parts);
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">
+            Nova tarefa {clientName ? `· ${clientName}` : ""}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Atalho</label>
+            <Input value={raw} onChange={e => setRaw(e.target.value)}
+              placeholder="Editar hook !alta @maria 15/07"
+              className="h-8 text-[12px] font-mono" autoFocus />
+            <p className="text-[9px] text-muted-foreground mt-1">
+              <code>!alta/!media/!baixa/!urgente</code> · <code>@nome</code> · <code>15/07</code>, <code>hoje</code>, <code>+3d</code>
+            </p>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Título</label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-[12px]" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</label>
+              <select value={projectId} onChange={e => setProjectId(e.target.value)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                {projects.length === 0 && <option value="">— sem projeto —</option>}
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prioridade</label>
+              <select value={priority} onChange={e => setPriority(e.target.value as any)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</label>
+              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                <option value="">— ninguém —</option>
+                {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prazo</label>
+              <Input type="date" value={dueISO} onChange={e => setDueISO(e.target.value)} className="h-8 text-[12px]" />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button size="sm" onClick={submit} disabled={saving || !title.trim() || !projectId}>
+            {saving ? "Criando…" : "Criar tarefa"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
