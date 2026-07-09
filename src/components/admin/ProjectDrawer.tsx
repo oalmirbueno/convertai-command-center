@@ -9,6 +9,7 @@ import { Slider } from "@/components/ui/slider";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { ProjectPipelineChecklist } from "./ProjectPipeline";
 
 const STATUS_OPTIONS = [
   { value: "planning", label: "Planejamento" },
