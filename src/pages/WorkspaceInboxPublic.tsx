@@ -84,12 +84,19 @@ export default function WorkspaceInboxPublic() {
           <Input value={sender} onChange={e => setSender(e.target.value)} placeholder="Ex.: João / Empresa X" className="h-10" />
         </div>
 
-        <div {...getRootProps()} className={`rounded-2xl border-2 border-dashed transition-colors p-10 text-center cursor-pointer ${isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 bg-card"}`}>
-          <input {...getInputProps()} />
+        <div
+          onClick={() => inputRef.current?.click()}
+          onDragOver={(e) => { e.preventDefault(); setDragActive(true); }}
+          onDragLeave={() => setDragActive(false)}
+          onDrop={(e) => { e.preventDefault(); setDragActive(false); onFiles(e.dataTransfer.files); }}
+          className={`rounded-2xl border-2 border-dashed transition-colors p-10 text-center cursor-pointer ${isDragActive ? "border-primary bg-primary/5" : "border-border hover:border-primary/50 bg-card"}`}
+        >
+          <input ref={inputRef} type="file" multiple hidden onChange={(e) => onFiles(e.target.files)} />
           <UploadCloud className="w-10 h-10 mx-auto text-primary mb-3" />
           <p className="text-sm font-medium">{isDragActive ? "Solte para enviar" : "Arraste arquivos ou clique aqui"}</p>
           <p className="text-[11px] text-muted-foreground mt-1">Vídeos, imagens, PDFs, docs — até 500 MB por arquivo</p>
         </div>
+
 
         {!!rows.length && (
           <div className="rounded-xl border border-border bg-card divide-y divide-border">
