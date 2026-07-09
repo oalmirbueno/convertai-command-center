@@ -690,9 +690,22 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
   // @ e / no composer do agente
   const [mention, setMention] = useState<{ q: string; start: number } | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
   const [slash, setSlash] = useState<{ q: string; start: number } | null>(null);
+  const [slashIdx, setSlashIdx] = useState(0);
   // arquivos anexados à próxima mensagem (sincronizam com @ do input)
   const [attached, setAttached] = useState<FileRef[]>([]);
+  // recentes globais por usuário (top 8)
+  const RECENT_KEY = "studio:recentMentions";
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem(RECENT_KEY) || "[]"); } catch { return []; }
+  });
+  const pushRecent = (id: string) => setRecentIds(prev => {
+    const next = [id, ...prev.filter(x => x !== id)].slice(0, 8);
+    try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch {}
+    return next;
+  });
+
 
   const AGENT_SLASH: { key: string; label: string; hint: string; prompt: string }[] = [
     { key: "roteiro",   label: "Gerar roteiro",       hint: "Prepro 6 passos",         prompt: "Gere um roteiro completo seguindo os 6 passos do Prepro Director com base nos materiais anexados." },
