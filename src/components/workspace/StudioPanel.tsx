@@ -551,6 +551,24 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [showHistory, setShowHistory] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // @ e / no composer do agente
+  const [mention, setMention] = useState<{ q: string; start: number } | null>(null);
+  const [slash, setSlash] = useState<{ q: string; start: number } | null>(null);
+  // arquivos anexados à próxima mensagem (sincronizam com @ do input)
+  const [attached, setAttached] = useState<FileRef[]>([]);
+
+  const AGENT_SLASH: { key: string; label: string; hint: string; prompt: string }[] = [
+    { key: "roteiro",   label: "Gerar roteiro",       hint: "Prepro 6 passos",         prompt: "Gere um roteiro completo seguindo os 6 passos do Prepro Director com base nos materiais anexados." },
+    { key: "storyboard",label: "Storyboard",          hint: "cena a cena",             prompt: "Monte um storyboard cena a cena (visual + fala + duração) usando os arquivos anexados." },
+    { key: "resumir",   label: "Resumir arquivos",    hint: "insights + próximos passos", prompt: "Analise e resuma os arquivos anexados. Traga insights e próximos passos." },
+    { key: "brief",     label: "Extrair briefing",    hint: "objetivo + público + tom", prompt: "Extraia um briefing (objetivo, público, canal, duração, tom, referências) dos anexos." },
+    { key: "checklist", label: "Checklist de pipeline", hint: "brutos → publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos → Trilhas/SFX → Edição → Final → Publicado)." },
+    { key: "hooks",     label: "5 hooks",              hint: "aberturas 0-3s",         prompt: "Sugira 5 opções de hook (0-3s) alinhadas ao contexto e materiais anexados." },
+    { key: "cta",       label: "Variações de CTA",     hint: "3 opções",               prompt: "Escreva 3 variações de CTA para este roteiro/contexto." },
+    { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
+  ];
 
   // Threads escopadas por cliente + pasta. Restaura a última thread ativa do cliente ao reabrir.
   const lastThreadKey = (cid?: string | null, fp?: string | null) =>
