@@ -179,12 +179,13 @@ interface Props {
   contextLabel: string;
   clientId?: string | null;
   clientName?: string | null;
+  folderId?: string | null;
   folderPath?: string | null;
   availableFiles: FileRef[];
   onOpenFile?: (id: string) => void;
 }
 
-export function StudioPanel({ contextKey, contextLabel, clientId, clientName, folderPath, availableFiles, onOpenFile }: Props) {
+export function StudioPanel({ contextKey, contextLabel, clientId, clientName, folderId, folderPath, availableFiles, onOpenFile }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
