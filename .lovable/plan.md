@@ -1,60 +1,78 @@
-# Comparação de Relatórios — v2
+# Workspace — Drive operacional interno
 
-Três correções na seção *Comparação com Relatório Anterior* do `ReportDetail`.
+Módulo `/workspace` acessível só para admin/equipe. Estrutura Global + por Cliente, pastas livres, upload de qualquer arquivo (com foco em vídeo), player nativo com streaming HTTP range direto do storage (Supabase entrega range headers nativamente → sem transcodificação, sem servidor extra) e botão "Enviar para aprovação" que promove o item para a área de Arquivos do cliente sem duplicar o binário.
 
-## 1. Botão "Comparar com anterior" no topo
+## Estrutura de dados
 
-A comparação deixa de aparecer automaticamente. No header do relatório (perto de Imprimir / WhatsApp) entra um toggle:
+Duas tabelas novas em `public`:
 
-- Estado off (padrão): seção escondida, só mostra um chip discreto "Relatório anterior disponível · {data}"
-- Estado on: expande a seção completa de comparação
-- Quando não existe relatório anterior: botão fica desabilitado com tooltip "Primeiro relatório deste projeto"
+**`workspace_nodes`** — árvore única de pastas + arquivos
+- `id`, `parent_id` (self-ref, null = raiz), `scope` (`global` | `client`), `client_id` (nullable, obrigatório se scope=client)
+- `kind` (`folder` | `file`), `name`, `mime`, `size_bytes`, `storage_path`, `thumb_path` (nullable), `duration_sec` (nullable, vídeos)
+- `created_by`, `created_at`, `updated_at`, `sort_index`
+- `sent_for_approval_file_id` (nullable → `files.id`) para rastrear promoção
 
-Persiste preferência em `localStorage` por relatório (`report-compare-{id}`).
+**`workspace_shares`** (fase 2, não bloqueia MVP) — links temporários públicos
 
-## 2. Leitura robusta dos dados do relatório anterior
+Bucket novo `workspace` (privado) para binários. Signed URLs por request. RLS: apenas `is_staff(auth.uid())` lê/escreve; equipe só vê nós de clientes onde tem tarefa atribuída ou scope=global; admin vê tudo. Grants completos para authenticated e service_role.
 
-Hoje a comparação lê só `metrics.ad_spend / impressions / clicks` direto. Quando o relatório antigo guardou os dados via `__breakdown` (linhas brutas da planilha) sem mapear pro schema, os totais aparecem zerados — foi o que aconteceu com o anterior do SERB que tinha custo real.
+## UI
 
-A nova função `extractTotals(report)` tenta na ordem:
+Rota `/workspace` no AppLayout (item de menu com ícone `FolderTree`, só renderiza pra staff).
 
-1. `metrics.ad_spend / impressions / link_clicks / clicks / results / messages / leads / revenue` (caminho atual)
-2. Se vazio, soma a partir de `metrics.__breakdown` detectando as colunas por nome (mesma heurística do `SourceDashboard.pickKey`: "valor usado", "amount spent", "impressões", "cliques no link" etc.)
-3. Aplica o mesmo *auto-heal* de taxas que já existe (CTR/CPC/CPM/ROAS derivados dos totais)
+Layout:
+- Sidebar esquerda (240px): árvore recolhível → `📁 Global` e `👥 Clientes` (lista de clientes ativos, cada um expansível).
+- Área central: breadcrumb + grid/lista de nós da pasta atual, com toggle grid↔lista, ordenação (nome/data/tamanho), busca por nome.
+- Drawer direito ao clicar num arquivo: preview (player pra vídeo, `<img>` pra imagem, PDF embed), metadados, botões **Baixar**, **Renomear**, **Mover**, **Enviar para aprovação**, **Excluir**.
 
-Resultado: comparação funciona mesmo em relatórios antigos importados antes do parser novo.
+Ações de barra superior: **Novo** (pasta / upload arquivos / upload vídeo), drag-and-drop pra soltar arquivos direto no grid, upload com progresso (barra por arquivo, cancelamento).
 
-## 3. Análise contextual (não só seta pra cima/baixo)
+Estética Aceleriq: fundo `#0D0D0D`, cards `#121212`, acento neon `#00FF66`, Outfit/JetBrains Mono, cantos arredondados, sem gradientes genéricos. Ícones por tipo (Film pra vídeo em verde, Image, FileText, Archive). Thumb de vídeo gerada no cliente via `<video>` + canvas no primeiro segundo, salva em `thumb_path`.
 
-Cada métrica recebe uma *interpretação* que considera o contexto, não apenas o sinal do delta. Substitui o atual "subiu/desceu = bom/ruim".
+## Vídeo
 
-Regras principais:
+Upload direto do browser pro bucket via SDK Supabase (chunked). Player `<video controls preload="metadata">` recebendo signed URL de 1h — Supabase Storage responde a `Range` headers, então o browser faz seek/streaming sem baixar tudo. Duração + thumb extraídas no cliente antes do upload e salvas no node.
 
-- **Investimento caiu** → não é regressão. Mostra "Investimento -30% (R$X → R$Y) · menos verba alocada no período"
-- **Resultados caíram proporcionalmente ao investimento** → neutro. "Volume acompanhou a redução de verba · eficiência mantida"
-- **Resultados caíram MAIS que o investimento** → atenção real. "Queda de eficiência: -40% em resultados com -10% em verba"
-- **Resultados caíram MENOS que o investimento** → ganho. "Mais eficiente: -10% em resultados com -30% em verba"
-- **CPC/CPM subiu mas CTR também subiu** → contexto positivo. "Custo subiu, mas público mais qualificado (CTR +X%)"
-- **ROAS caiu com receita estável** → investigar. "Receita igual mas com mais investimento"
-- **Período diferente** (ex: 7 dias vs 30 dias) → normaliza para diária e mostra aviso "Períodos de tamanhos diferentes — comparação ajustada para média diária"
+Limite: 500MB por arquivo (validação client-side + policy no bucket). Formatos: mp4, webm, mov, mkv, mp3, wav, além de tudo que Arquivos já aceita.
 
-Cada métrica vira um card com:
-- Valor atual e anterior (sem cores alarmantes)
-- Δ absoluto e %
-- Tag de contexto: `Esperado` / `Ganho` / `Atenção` / `Crítico` (não apenas "bom/ruim")
-- Uma frase explicando *por que* aquele delta significa o que significa, considerando as outras métricas
+## Envio para aprovação
 
-Os cards de "O que melhorou / Pontos de atenção" são reescritos pra usar essa classificação contextual em vez do `LOWER_IS_BETTER` cego.
+Botão "Enviar para aprovação" abre modal: escolher projeto do cliente, pasta destino em Arquivos (usa as `CLIENT_FOLDERS` existentes), legenda opcional. Ao confirmar:
+- Cria row em `files` com `file_url` = signed URL longa (ou copia storage_path referenciando o mesmo binário do bucket workspace — mais eficiente, sem duplicar bytes)
+- `approval_status = 'pending'`, `uploaded_by = staff atual`
+- Escreve `sent_for_approval_file_id` no node pra mostrar badge "Enviado ✓" no workspace
+- Dispara `notify-admin`/notificação pro cliente igual fluxo atual
 
-## Detalhes técnicos
+Cliente continua vendo tudo em `/documentos` sem saber da existência do workspace. Fluxo tradicional (upload direto em Arquivos) segue intacto.
 
-- `ReportComparison.tsx`: extrai `extractTotals()` no topo, refatora `rows` pra incluir `{ context, severity, narrative }` em vez de `{ good, trend }`
-- Período normalizado: calcula `days = (period_end - period_start)` para current e previous; quando diferem >20%, divide volumétricos por dias e marca `normalized: true`
-- `ReportDetail.tsx`: adiciona estado `showComparison`, lê do localStorage, renderiza botão toggle perto do print/WhatsApp e condiciona o `<ReportComparison />`
-- Query do previous report continua igual; só passa pra exibir quando toggle ligado (mantém prefetch pra mostrar a data no chip)
+## Permissões
 
-## Não muda
+- Admin: CRUD total, todos os escopos
+- Equipe (design/traffic/manager): CRUD total em `global` + em `client` onde `client_id` aparece em alguma task atribuída a ela. Sem restrição de delete (mais fluido pro operacional; auditoria via `created_by`)
+- Cliente: sem rota, sem policy — 100% invisível
 
-- Auditoria de Métricas (`MetricsAudit`) continua igual, sempre visível
-- Auto-heal de taxas no `analysis` useMemo continua igual
-- Parser de importação (`adsParser.ts`) não é alterado
+## Arquivos afetados
+
+Novos:
+- Migration: tabelas + bucket + policies + grants
+- `src/pages/Workspace.tsx` (shell + roteamento)
+- `src/components/workspace/WorkspaceSidebar.tsx`
+- `src/components/workspace/WorkspaceGrid.tsx`
+- `src/components/workspace/NodePreviewDrawer.tsx`
+- `src/components/workspace/UploadDropzone.tsx`
+- `src/components/workspace/SendToApprovalModal.tsx`
+- `src/hooks/useWorkspace.ts` (queries + mutations React Query)
+- `src/lib/videoThumb.ts` (extrai thumb + duração)
+
+Editados:
+- `src/App.tsx` — rota
+- `src/components/AppLayout.tsx` — item de menu (staff-only)
+
+## Fora do escopo desta entrega
+
+- Compartilhamento público com link expirável (fase 2)
+- Comentários/anotações por arquivo (usa Arquivos quando promovido)
+- Transcodificação server-side (não necessária pra streaming — Supabase já suporta Range)
+- Busca full-text em PDFs
+
+Confirma que posso seguir?
