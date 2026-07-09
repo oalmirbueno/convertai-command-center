@@ -243,21 +243,42 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     );
   }
 
+  const dockPos =
+    dock === "br" ? "right-4 bottom-4" :
+    dock === "bl" ? "left-4 bottom-4" :
+                    "left-1/2 -translate-x-1/2 bottom-4";
+  const dockSize = minimized
+    ? "w-[280px] h-[52px]"
+    : dock === "bc"
+      ? "w-[min(96vw,880px)] h-[min(72vh,620px)]"
+      : "w-[min(96vw,480px)] h-[min(78vh,680px)]";
+
   return (
     <div className={cn(
-      "fixed z-40 right-4 bottom-4 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all",
-      minimized ? "w-[280px] h-[52px]" : "w-[min(96vw,480px)] h-[min(78vh,680px)]"
+      "fixed z-40 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all",
+      dockPos, dockSize
     )}>
       {/* Header */}
-      <div className="flex items-center gap-2 px-3 h-[52px] border-b border-border shrink-0 bg-secondary/40">
+      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-secondary/40">
         <Sparkles className="w-4 h-4 text-primary" />
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
         </div>
+        {!minimized && (
+          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
+            <button onClick={() => setDock("bl")} title="Dock esquerda"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+            <button onClick={() => setDock("br")} title="Dock direita"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+          </div>
+        )}
         <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
           {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
         </button>
+
         <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Fechar">
           <X className="w-3.5 h-3.5" />
         </button>
