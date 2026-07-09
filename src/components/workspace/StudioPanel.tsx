@@ -902,7 +902,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               />
             )}
             {mode === "notes" && (
-              <div className="p-3 space-y-2 h-full min-h-0 flex flex-col overflow-y-auto">
+              <div className="p-4 sm:p-6 gap-3 h-full min-h-0 flex flex-col overflow-y-auto">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
                   <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
                   <button
@@ -915,7 +915,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
-                <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
+                <div className="relative flex-1 min-h-0 flex flex-col gap-3">
                   <textarea
                     ref={notesRef}
                     value={state.notes}
@@ -923,14 +923,18 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onPaste={onNotesPaste}
-                    placeholder="/ para comandos · @ para arquivos · cole imagem/vídeo…"
-                    className="w-full h-full min-h-[180px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
+                    placeholder="Comece a escrever…  /  para comandos  ·  @  para arquivos  ·  cole imagem ou link de vídeo"
+                    className="w-full flex-1 min-h-[280px] resize-none bg-background border border-border rounded-xl p-5 text-[14.5px] leading-[1.75] font-sans text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 transition-colors"
                   />
                   {state.notes.trim().length > 0 && (
-                    <div className="mt-2 border-t border-border pt-2 max-h-[240px] overflow-y-auto">
-                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Preview</div>
-                      <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
-                    </div>
+                    <details className="border-t border-border pt-3 group">
+                      <summary className="text-[10px] uppercase tracking-[0.14em] text-muted-foreground mb-2 cursor-pointer hover:text-foreground select-none">
+                        Preview do documento
+                      </summary>
+                      <div className="max-h-[320px] overflow-y-auto mt-2">
+                        <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
+                      </div>
+                    </details>
                   )}
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
@@ -2496,13 +2500,22 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ExternalLink className="w-3 h-3" /> GPT
               </button>
             )}
+            <button
+              onClick={() => pullDeepContext({ silent: false })}
+              disabled={pulling || streaming}
+              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50"
+              title="Reunir cliente, projetos, tasks, briefing e pasta em um dossiê e pedir diagnóstico ao agente"
+            >
+              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
+              Puxar contexto
+            </button>
             {onStructureToNotes && (
               <button
                 onClick={() => onStructureToNotes()}
-                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
                 title="Estrutura o contexto atual como documento executivo e envia para as Notas"
               >
-                <ArrowRight className="w-3 h-3" /> Notas
+                <ArrowRight className="w-3 h-3" /> Enviar às Notas
               </button>
             )}
 
@@ -2593,8 +2606,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         ))}
 
         {streaming && streamBuf && (
-          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] whitespace-pre-wrap break-words">
-            {streamBuf}
+          <article className="max-w-[68ch] text-foreground text-[13px] leading-[1.7] break-words prose prose-sm prose-invert max-w-none prose-p:my-2.5 prose-headings:font-semibold prose-headings:tracking-tight prose-h1:text-[11px] prose-h1:uppercase prose-h1:tracking-[0.14em] prose-h1:text-primary prose-h2:text-[11px] prose-h2:uppercase prose-h2:tracking-[0.14em] prose-h2:text-primary prose-ol:pl-5 prose-ol:space-y-1.5 prose-ul:pl-5 prose-ul:space-y-1.5 prose-li:leading-[1.65] prose-li:marker:text-primary/60">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{streamBuf}</ReactMarkdown>
             <span className="inline-block w-[3px] h-3.5 bg-primary/70 ml-0.5 align-middle animate-pulse" />
           </article>
         )}
