@@ -935,6 +935,29 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, streamBuf]);
 
+  // Atalhos de teclado: Alt+↑/↓ alterna threads, Alt+N nova, Alt+B toggle sidebar, Esc fecha overlay mobile
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      if (e.key === "Escape" && isMobile && sidebarOpen) { setSidebarOpen(false); return; }
+      if (!e.altKey || typing) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!threads.length) return;
+        const idx = Math.max(0, threads.findIndex(t => t.id === activeId));
+        const next = e.key === "ArrowDown" ? (idx + 1) % threads.length : (idx - 1 + threads.length) % threads.length;
+        setActiveId(threads[next].id);
+      } else if (e.key.toLowerCase() === "n") {
+        e.preventDefault(); void newThread();
+      } else if (e.key.toLowerCase() === "b") {
+        e.preventDefault(); setSidebarOpen(o => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [threads, activeId, isMobile, sidebarOpen]);
+
   async function newThread() {
     const { data: sess } = await supabase.auth.getUser();
     if (!sess.user) return;
