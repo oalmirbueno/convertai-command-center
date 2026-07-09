@@ -1487,6 +1487,19 @@ export default function Workspace() {
         onDismiss={uploads.dismiss}
         onClearDone={uploads.clearDone}
       />
+
+      <StudioPanel
+        contextKey={`${scope}:${clientId || "-"}:${parent?.id || "root"}`}
+        contextLabel={`${contextLabel}${parent ? ` › ${parent.name}` : ""}`}
+        availableFiles={(filtered || []).map(n => ({
+          id: n.id, name: n.name, kind: n.kind,
+          url: n.__virtual ? n.__external_url : (n.storage_path ? signedUrls[n.storage_path] : null),
+        }))}
+        onOpenFile={(id) => {
+          const found = (filtered || []).find(n => n.id === id);
+          if (found) found.kind === "folder" ? setParentStack([...parentStack, found]) : setSelected(found);
+        }}
+      />
     </div>
   );
 }
