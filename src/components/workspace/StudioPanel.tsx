@@ -744,7 +744,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const isFull = dock === "full";
 
   const dockPos = isFull
-    ? "top-[64px] left-2 right-2 bottom-2 sm:top-[72px] sm:left-3 sm:right-3 sm:bottom-3"
+    ? "top-[64px] left-0 right-0 bottom-0 sm:top-[72px]"
     : dock === "br" ? "left-2 right-2 bottom-2 sm:left-auto sm:right-4 sm:bottom-4"
     : dock === "bl" ? "left-2 right-2 bottom-2 sm:right-auto sm:left-4 sm:bottom-4"
     :                 "left-2 right-2 bottom-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
@@ -759,8 +759,9 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
   return (
     <div className={cn(
-      "fixed z-40 bg-card border border-border shadow-2xl flex flex-col overflow-hidden transition-all",
-      isFull ? "rounded-xl" : "rounded-2xl",
+      "fixed z-40 bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+      isFull ? "rounded-none border-t" : "rounded-2xl border",
+
       dockPos, dockSize
     )}>
       {/* Header */}
