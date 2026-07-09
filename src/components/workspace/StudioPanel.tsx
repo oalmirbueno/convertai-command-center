@@ -103,6 +103,23 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
   ];
 }
 
+// Destaca trechos [start,end) do texto com <mark> para busca fuzzy.
+function highlightRanges(text: string, ranges: [number, number][]): React.ReactNode {
+  if (!ranges?.length) return text;
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0]);
+  const out: React.ReactNode[] = [];
+  let cur = 0;
+  sorted.forEach(([s, e], i) => {
+    if (s > cur) out.push(text.slice(cur, s));
+    out.push(<mark key={i} className="bg-primary/25 text-primary rounded-sm px-0.5">{text.slice(s, e)}</mark>);
+    cur = e;
+  });
+  if (cur < text.length) out.push(text.slice(cur));
+  return <>{out}</>;
+}
+
+
+
 // Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
 export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
   let s = " " + raw.trim() + " ";
