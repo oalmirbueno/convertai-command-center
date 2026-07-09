@@ -73,6 +73,49 @@ function extOf(name: string) {
   return m ? m[1].toUpperCase() : "";
 }
 
+// Smart auto-tagging: detects content role beyond raw mime.
+type SmartTag = "carrossel" | "video-ready" | "static" | "material" | "audio" | "doc" | "other";
+const SMART_TAGS: { key: SmartTag; label: string; hint: string }[] = [
+  { key: "carrossel",   label: "Carrossel",     hint: "Sequências de imagens" },
+  { key: "static",      label: "Estático",      hint: "Peças únicas" },
+  { key: "video-ready", label: "Vídeo pronto",  hint: "Reels / edits finais" },
+  { key: "material",    label: "Materiais",     hint: "Brutos e fontes" },
+  { key: "doc",         label: "Documentos",    hint: "PDFs, textos, planilhas" },
+  { key: "audio",       label: "Áudios",        hint: "Trilhas e locuções" },
+  { key: "other",       label: "Outros",        hint: "" },
+];
+function tagOf(n: Node, siblings?: Node[]): SmartTag {
+  if (n.kind === "folder") return "other";
+  const k = kindOf(n);
+  const name = (n.name || "").toLowerCase();
+  const path = (n.storage_path || "").toLowerCase();
+  const ctx = `${name} ${path}`;
+  const isFinal = /(final|pronto|entrega|export|reels?|story|stories|post|edit|feed|approved|aprovad)/i.test(ctx);
+  const isRaw   = /(bruto|raw|material|fonte|source|assets?|captur|crua?|original)/i.test(ctx);
+
+  if (k === "audio") return "audio";
+  if (k === "doc")   return "doc";
+  if (k === "video") return isRaw && !isFinal ? "material" : "video-ready";
+  if (k === "image") {
+    if (/(carrossel|carousel|slide|slides?)/i.test(ctx)) return "carrossel";
+    // Sibling heuristic: multiple images sharing a numeric suffix pattern
+    if (siblings && siblings.length) {
+      const base = name.replace(/[-_ ]?\(?\d{1,3}\)?\.[a-z0-9]+$/i, "");
+      if (base && base !== name) {
+        const family = siblings.filter(s =>
+          s.kind === "file" && kindOf(s) === "image" &&
+          (s.name || "").toLowerCase().startsWith(base) && s.id !== n.id
+        );
+        if (family.length >= 1) return "carrossel";
+      }
+    }
+    if (isRaw && !isFinal) return "material";
+    return "static";
+  }
+  return "other";
+}
+
+
 function virtFileNode(f: any, clientId: string): Node {
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
