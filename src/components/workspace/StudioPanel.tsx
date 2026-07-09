@@ -3,7 +3,7 @@ import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
-  Columns3, Pencil, GripVertical, Settings, Check,
+  Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
