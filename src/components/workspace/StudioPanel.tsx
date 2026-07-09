@@ -1049,7 +1049,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     </div>
                   </section>
 
-                  <aside className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50">
+                  <aside className={cn(
+                    "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50",
+                    isMobile && mobileNotesTab !== "preview" && "hidden"
+                  )}>
                     <div className="flex items-center gap-2 border-b border-border px-3 py-2">
                       <FileText className="h-3.5 w-3.5 text-primary" />
                       <div className="min-w-0 flex-1">
