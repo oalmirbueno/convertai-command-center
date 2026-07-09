@@ -2550,7 +2550,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
           />
 
-          <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
+          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
         </div>
