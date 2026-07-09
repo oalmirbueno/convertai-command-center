@@ -122,12 +122,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   function handleTextChange(where: "notes" | "script", val: string, caret: number) {
     if (where === "notes") setState(s => ({ ...s, notes: val }));
     else setState(s => ({ ...s, script: val }));
-    // detect @token
     const before = val.slice(0, caret);
-    const m = /@([^\s@]{0,40})$/.exec(before);
-    if (m) setMentionQuery({ where, q: m[1], start: caret - m[0].length });
-    else setMentionQuery(null);
+    const mAt = /@([^\s@]{0,40})$/.exec(before);
+    const mSlash = /(^|\s)\/([^\s/]{0,20})$/.exec(before);
+    if (mAt) { setMentionQuery({ where, q: mAt[1], start: caret - mAt[0].length }); setSlashMenu(null); }
+    else if (mSlash) { setSlashMenu({ where, q: mSlash[2], start: caret - (mSlash[2].length + 1) }); setMentionQuery(null); }
+    else { setMentionQuery(null); setSlashMenu(null); }
   }
+
+  function insertSlash(cmd: SlashCmd) {
+    if (!slashMenu) return;
+    const { where, start, q } = slashMenu;
+    const cur = where === "notes" ? state.notes : state.script;
+    const before = cur.slice(0, start);
+    const after = cur.slice(start + 1 + q.length);
+    const next = before + cmd.insert + after;
+    if (where === "notes") setState(s => ({ ...s, notes: next }));
+    else setState(s => ({ ...s, script: next }));
+    setSlashMenu(null);
+    setTimeout(() => {
+      const el = where === "notes" ? notesRef.current : scriptRef.current;
+      if (el) { el.focus(); const p = before.length + cmd.insert.length; el.setSelectionRange(p, p); }
+    }, 10);
+  }
+
 
   function insertMention(f: FileRef) {
     if (!mentionQuery) return;
