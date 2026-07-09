@@ -16,7 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 
 /**
- * Studio flutuante — Notas, Mapa Mental, Roteiro (Prepro Director GPT), Processo.
+ * Studio flutuante: Contexto, Notas e GPT externo.
  * Persistência por contexto (scope + clientId + parentId) no localStorage.
  * Suporta @mention para vincular arquivos do view atual.
  */
@@ -25,7 +25,7 @@ const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-pre
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
 
-type Mode = "agent" | "notes";
+type Mode = "context" | "notes" | "gpt";
 
 
 type StudioState = {
@@ -135,7 +135,7 @@ const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
 ];
 
 
-const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
+const MINDMAP_TEMPLATE = `\n## Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
 
 function videoEmbedFromUrl(url: string): string | null {
   const u = url.trim();
@@ -257,7 +257,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!v || v === "br" || v === "bl") return "bc";
     return v;
   });
-  const [mode, setMode] = useState<Mode>("agent");
+  const [mode, setMode] = useState<Mode>("context");
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
@@ -581,7 +581,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     toast({ title: "Analisando imagem…", description: "Extraindo texto via Lovable AI (Gemini Flash Lite)." });
     try {
       const text = await ocrFile(file);
-      insertAtCaret(`\n> 🖼️ **Imagem — texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
+      insertAtCaret(`\n> **Imagem, texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
       toast({ title: "OCR concluído", description: `${text.length} caracteres extraídos.` });
     } catch (e: any) {
       toast({ title: "Falha no OCR", description: e?.message?.slice(0, 200), variant: "destructive" });
@@ -804,8 +804,9 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           {/* Tabs */}
           <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0 overflow-x-auto">
             {[
+              { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
-              { k: "agent",   icon: Bot,         label: "Agente" },
+              { k: "gpt",     icon: ExternalLink, label: "GPT" },
             ].map(t => {
               const active = mode === t.k;
               const Icon = t.icon;
@@ -828,7 +829,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               className="bg-background border border-border rounded px-1.5 py-0.5 text-[11px] max-w-[180px]"
               title="Vincule um projeto para publicar/espelhar ao cliente"
             >
-              <option value="">— nenhum —</option>
+              <option value="">sem projeto</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {projectId && (
@@ -856,7 +857,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <button onClick={togglePublish}
                 className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
                   docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-                title={docPublished ? "Publicado — cliente vê ao vivo" : "Publicar para o cliente"}>
+                title={docPublished ? "Publicado: cliente vê ao vivo" : "Publicar para o cliente"}>
                 <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
               </button>
               <button onClick={downloadPDF}
@@ -869,7 +870,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
 
-            {mode === "agent" && (
+            {mode === "context" && (
               <AgentChat
                 clientId={clientId ?? null}
                 clientName={clientName ?? null}
@@ -879,6 +880,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 notes={state.notes}
                 script={state.script}
                 boardLog={state.boardLog}
+                label="Contexto"
+                showExternalTools={false}
                 onStructureToNotes={async () => {
                   try {
                     const { data: sess } = await supabase.auth.getSession();
@@ -971,6 +974,21 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   </div>
                 )}
               </div>
+            )}
+
+            {mode === "gpt" && (
+              <GptPanel
+                clientId={clientId ?? null}
+                clientName={clientName ?? null}
+                folderPath={folderPath ?? contextLabel}
+                availableFiles={availableFiles}
+                notes={state.notes}
+                script={state.script}
+                onAppendToNotes={(text) => {
+                  setState(s => ({ ...s, notes: `${s.notes || ""}${s.notes?.trim() ? "\n\n" : ""}${text.trim()}\n` }));
+                  setMode("notes");
+                }}
+              />
             )}
 
 
@@ -1749,10 +1767,12 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
-function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes }: {
+function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
   onStructureToNotes?: () => void | Promise<void>;
+  label?: string;
+  showExternalTools?: boolean;
 }) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -2043,7 +2063,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     }
     // Preserva anexos no conteúdo da mensagem — histórico da thread mantém as referências
     const attachBlock = attached.length
-      ? `\n\n---\n📎 Anexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
+      ? `\n\n---\nAnexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
       : "";
     const finalText = text + attachBlock;
     const currentAttachments = attached;
@@ -2183,7 +2203,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                   </button>
                 </div>
                 {threadScope === "client" && t.folder_path && (
-                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">📁 {t.folder_path}</span>
+                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">/{t.folder_path}</span>
                 )}
               </div>
             ))}
@@ -2206,31 +2226,33 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           )}
           <Bot className="w-3.5 h-3.5 text-primary" />
           <span className="text-[10px] font-medium text-foreground/80 truncate">
-            {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+            {clientName ? `${label} · ${clientName}` : `${label} · Global`}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
 
           {/* Seletor de persona (Auto ou manual) — mostra TODAS as personas do escopo */}
           <div className="flex-1 flex items-center justify-end gap-1">
-            <select
-              value={persona.forcedId || "__auto__"}
-              onChange={e => {
-                const v = e.target.value;
-                setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
-              }}
-              className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
-              title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
-              <option value="__auto__">
-                🎯 Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
-              </option>
-              {persona.list.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.gpt_name || "Sem nome"} {p.folder_path ? "· 📁" : p.client_id ? "· 👤" : "· 🌐"}
+            {showExternalTools && (
+              <select
+                value={persona.forcedId || "__auto__"}
+                onChange={e => {
+                  const v = e.target.value;
+                  setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
+                }}
+                className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
+                title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
+                <option value="__auto__">
+                  Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
                 </option>
-              ))}
-            </select>
+                {persona.list.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.gpt_name || "Sem nome"} {p.folder_path ? "· Pasta" : p.client_id ? "· Cliente" : "· Global"}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            {(persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
+            {showExternalTools && (persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
               <button
                 onClick={async () => {
                   const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
@@ -2241,7 +2263,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                     `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
                     notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
                     script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
-                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
+                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
                     lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
                     lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
                     `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
@@ -2263,7 +2285,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ArrowRight className="w-3 h-3" /> Notas
               </button>
             )}
-            <PasteBackButton
+            {showExternalTools && <PasteBackButton
               disabled={!activeId}
               onPaste={async (text) => {
                 if (!activeId || !text.trim()) return;
@@ -2275,28 +2297,28 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
                 toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
               }}
-            />
-            <button onClick={() => setPersonaOpen(true)}
+            />}
+            {showExternalTools && <button onClick={() => setPersonaOpen(true)}
               className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Gerenciar personas (adicionar / remover)">
               <Settings className="w-3 h-3" />
-            </button>
+            </button>}
             <button onClick={newThread}
               className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
               <Plus className="w-3 h-3" />
             </button>
           </div>
         </div>
-        <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
+        {showExternalTools && <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
           list={persona.list}
           clientId={clientId} clientName={clientName} folderPath={folderPath}
-          onSaved={reloadPersona} />
+          onSaved={reloadPersona} />}
         {/* Chip de contexto auto por pasta */}
         <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
-          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40">📎 {availableFiles.filter(f=>f.kind==="file").length} arq</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40">🗂 {availableFiles.filter(f=>f.kind==="folder").length} sub</span>
-          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">📝 notas</span>}
-          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">🎬 roteiro</span>}
+          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />/{folderPath || "raiz"}</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="file").length} arq</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="folder").length} sub</span>
+          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><NotebookPen className="w-2.5 h-2.5" />notas</span>}
+          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileText className="w-2.5 h-2.5" />roteiro</span>}
           <span className="ml-auto opacity-60">contexto auto</span>
         </div>
 
@@ -2307,8 +2329,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           <div className="text-center py-8 space-y-2">
             <Bot className="w-8 h-8 text-primary/40 mx-auto" />
             <p className="text-[11px] text-muted-foreground">
-              Peça roteiro, plano de gravação, storyboard, ideias.<br/>
-              O agente já conhece <b>{clientName || "este contexto"}</b>.
+              Use este agente para organizar o contexto antes das notas e do GPT externo.<br/>
+              Ele já conhece <b>{clientName || "este contexto"}</b>.
             </p>
           </div>
         )}
@@ -2707,7 +2729,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
       title.trim(),
       priority !== "medium" && `!${priority}`,
       who && `@${who.full_name || who.email.split("@")[0]}`,
-      dueISO && `📅 ${dueISO}`,
+      dueISO && `Prazo ${dueISO}`,
     ].filter(Boolean).join(" ");
     toast({ title: "Tarefa criada no Kanban", description: parts });
     onCreated(parts);
@@ -2833,8 +2855,6 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
     } finally { setLoading(false); }
   }
 
-  const scopeIcon = (p: { client_id: string | null; folder_path: string | null }) =>
-    p.folder_path ? "📁" : p.client_id ? "👤" : "🌐";
   const scopeText = (p: { client_id: string | null; folder_path: string | null }) =>
     p.folder_path ? `/${p.folder_path}` : p.client_id ? "cliente" : "global";
 
@@ -2856,7 +2876,9 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
             <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-md border border-border bg-background/40 p-2">
               {list.map(p => (
                 <div key={p.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded hover:bg-secondary/40">
-                  <span className="text-sm leading-none pt-0.5">{scopeIcon(p)}</span>
+                  <span className="pt-0.5 text-primary/80">
+                    {p.folder_path ? <FolderIcon className="w-3.5 h-3.5" /> : p.client_id ? <Bot className="w-3.5 h-3.5" /> : <GitBranch className="w-3.5 h-3.5" />}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-foreground/90 truncate">{p.gpt_name || "Sem nome"}</div>
                     <div className="text-muted-foreground text-[10px] truncate">{scopeText(p)} · {p.gpt_description || p.gpt_url}</div>
@@ -2882,7 +2904,7 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
                     className={cn("text-[10px] px-2 py-1.5 rounded border transition",
                       scope === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/40 border-border hover:bg-secondary",
                       disabled && "opacity-40 cursor-not-allowed")}>
-                    {s === "folder" ? "📁 Pasta" : s === "client" ? "👤 Cliente" : "🌐 Global"}
+                    {s === "folder" ? "Pasta" : s === "client" ? "Cliente" : "Global"}
                   </button>
                 );
               })}
