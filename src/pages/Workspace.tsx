@@ -122,6 +122,33 @@ function tagOf(n: Node, siblings?: Node[]): SmartTag {
   return "other";
 }
 
+const SUGGEST_BY_TAG: Record<SmartTag, string> = {
+  carrossel: "Carrossel",
+  "video-ready": "Vídeos prontos",
+  material: "Brutos",
+  static: "Estáticos",
+  doc: "Documentos",
+  audio: "Áudios",
+  other: "Novos arquivos",
+};
+function suggestFolderName(n: Node): string {
+  if (n.kind === "folder") return `${n.name} (grupo)`;
+  const tag = tagOf(n);
+  const base = SUGGEST_BY_TAG[tag] || "Novos arquivos";
+  // Try to enrich with a filename stem: "Reels_Marca_01.mp4" → "Reels Marca"
+  const raw = (n.name || "").replace(/\.[a-z0-9]{1,5}$/i, "");
+  const stem = raw
+    .replace(/[-_]+/g, " ")
+    .replace(/\s?\(?\d{1,3}\)?\s*$/,"")
+    .trim();
+  if (stem && stem.length >= 3 && stem.length <= 32 && !/^[0-9\s]+$/.test(stem)) {
+    return `${base} — ${stem}`;
+  }
+  return base;
+}
+
+
+
 
 function virtFileNode(f: any, clientId: string): Node {
   return {
