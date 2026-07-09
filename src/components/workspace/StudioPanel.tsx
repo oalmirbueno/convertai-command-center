@@ -1042,23 +1042,29 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
 
   .content { max-width: 178mm; margin: 0 auto; }
 
-  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid; }
+  h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid; }
   h2 {
     font-size: 17px; margin: 28px 0 10px; font-weight: 600; letter-spacing: -0.01em;
     padding: 6px 0 6px 12px; border-left: 3px solid #00FF66;
-    page-break-after: avoid; break-after: avoid;
+    page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid;
   }
-  h3 { font-size: 13.5px; margin: 18px 0 6px; font-weight: 600; color: #171717; page-break-after: avoid; break-after: avoid; }
-  p { margin: 6px 0; orphans: 3; widows: 3; }
+  h3 { font-size: 13.5px; margin: 18px 0 6px; font-weight: 600; color: #171717; page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid; }
+  /* truque: puxa o primeiro bloco após o heading para não ficar heading sozinho no fim da página */
+  h2 + *, h3 + * { page-break-before: avoid; break-before: avoid; }
+  p { margin: 6px 0; orphans: 3; widows: 3; word-wrap: break-word; overflow-wrap: anywhere; }
   strong { font-weight: 600; }
   em { color: #404040; }
 
-  .section { page-break-inside: avoid; break-inside: avoid-page; margin-bottom: 6px; }
-  ul, ol { padding-left: 20px; margin: 6px 0; page-break-inside: avoid; break-inside: avoid; }
-  li { margin: 3px 0; }
+  /* Sessão longa: pode quebrar; apenas pequenas caixas (.keep) resistem à quebra */
+  .section { margin-bottom: 6px; }
+  .keep { page-break-inside: avoid; break-inside: avoid; }
+
+  ul, ol { padding-left: 20px; margin: 6px 0; }
+  li { margin: 3px 0; page-break-inside: avoid; break-inside: avoid; }
   li > p { margin: 0; }
 
   ul.check { list-style: none; padding-left: 0; border: 1px solid #e5e5e5; border-radius: 6px; padding: 10px 14px; background: #fafafa; page-break-inside: avoid; break-inside: avoid; }
+  ul.check.long { page-break-inside: auto; break-inside: auto; }
   ul.check li { padding: 3px 0; display: flex; gap: 8px; align-items: flex-start; }
   ul.check li::before {
     content: ""; display: inline-block; width: 12px; height: 12px; min-width: 12px;
@@ -1067,8 +1073,8 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
   ul.check li.done::before { background: #00FF66; border-color: #00FF66; }
   ul.check li.done { color: #737373; text-decoration: line-through; }
 
-  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; }
-  pre { background: #0D0D0D; color: #fafafa; padding: 12px 14px; border-radius: 6px; font-size: 11px; overflow: hidden; page-break-inside: avoid; break-inside: avoid; }
+  code { background: #f4f4f5; padding: 1px 5px; border-radius: 4px; font-size: 11px; font-family: 'JetBrains Mono', monospace; word-break: break-all; }
+  pre { background: #0D0D0D; color: #fafafa; padding: 12px 14px; border-radius: 6px; font-size: 11px; font-family: 'JetBrains Mono', monospace; white-space: pre-wrap; word-break: break-word; page-break-inside: auto; break-inside: auto; }
   pre code { background: transparent; color: inherit; padding: 0; }
   blockquote {
     margin: 10px 0; padding: 8px 14px; border-left: 3px solid #d4d4d8;
@@ -1076,13 +1082,19 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
   }
   hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 22px 0; }
 
-  table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 11.5px; page-break-inside: avoid; break-inside: avoid; }
-  th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; vertical-align: top; }
+  /* Tabelas fluidas com cabeçalho repetido em cada página */
+  table { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 11.5px; page-break-inside: auto; break-inside: auto; }
+  thead { display: table-header-group; }
+  tfoot { display: table-footer-group; }
+  tr { page-break-inside: avoid; break-inside: avoid; }
+  th, td { border: 1px solid #e5e5e5; padding: 6px 8px; text-align: left; vertical-align: top; word-wrap: break-word; overflow-wrap: anywhere; }
   th { background: #f4f4f5; font-weight: 600; }
+  table.compact th, table.compact td { padding: 4px 6px; font-size: 10.5px; }
 
   @media print {
     .doc-footer { position: fixed; bottom: 8mm; left: 16mm; right: 16mm; font-size: 9.5px; color: #737373; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #e5e5e5; padding-top: 5px; }
     body { -webkit-print-color-adjust: exact; }
+    a { color: inherit; text-decoration: none; }
   }
 </style></head><body>
 
