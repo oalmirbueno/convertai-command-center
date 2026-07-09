@@ -50,9 +50,15 @@ Deno.serve(async (req) => {
       thread_id: string;
       message: string;
       context?: {
-        client_name?: string; folder_path?: string; notes?: string; script?: string;
+        client_id?: string | null;
+        client_name?: string; folder_id?: string | null; folder_path?: string; notes?: string; script?: string;
         files?: { name: string; url?: string | null }[];
         attachments?: { id: string; name: string; kind?: string; url?: string | null }[];
+        folder_contents?: {
+          subfolders?: { id: string; name: string }[];
+          files?: { id: string; name: string; url?: string | null }[];
+          total?: number;
+        };
       };
     };
     if (!thread_id || !message?.trim()) return json({ error: "thread_id e message obrigatórios" }, 400);
@@ -68,22 +74,43 @@ Deno.serve(async (req) => {
     const { data: history } = await admin.from("workspace_agent_messages")
       .select("role, content").eq("thread_id", thread_id).order("created_at", { ascending: true }).limit(30);
 
+    // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
+    let fc = context?.folder_contents;
+    if ((!fc || (!fc.files?.length && !fc.subfolders?.length)) && context?.folder_id) {
+      const { data: nodes } = await admin.from("workspace_nodes")
+        .select("id,name,kind,mime,external_url").eq("parent_id", context.folder_id).limit(80);
+      if (nodes?.length) {
+        fc = {
+          subfolders: nodes.filter(n => n.kind === "folder").map(n => ({ id: n.id, name: n.name })),
+          files: nodes.filter(n => n.kind === "file").map(n => ({ id: n.id, name: n.name, url: n.external_url })),
+          total: nodes.length,
+        };
+      }
+    }
+
     // monta contexto
     const ctxLines: string[] = [];
     if (context?.client_name) ctxLines.push(`Cliente atual: ${context.client_name}`);
-    if (context?.folder_path) ctxLines.push(`Pasta: ${context.folder_path}`);
+    if (context?.folder_path) ctxLines.push(`Pasta atual: /${context.folder_path}`);
     if (context?.attachments?.length) {
       ctxLines.push("\nARQUIVOS CITADOS PELO USUÁRIO (@) — priorize estes na análise:");
       context.attachments.slice(0, 20).forEach(a =>
         ctxLines.push(`- [${a.kind || "file"}] ${a.name}${a.url ? ` (${a.url})` : ""} · ref=wsfile:${a.id}`)
       );
     }
-    if (context?.files?.length) {
-      ctxLines.push("\nOutros arquivos disponíveis no diretório:");
+    if (fc?.subfolders?.length) {
+      ctxLines.push(`\nSUBPASTAS DA PASTA ATUAL (${fc.subfolders.length}):`);
+      fc.subfolders.slice(0, 30).forEach(s => ctxLines.push(`- 🗂 ${s.name}`));
+    }
+    if (fc?.files?.length) {
+      ctxLines.push(`\nARQUIVOS DA PASTA ATUAL (${fc.files.length}) — use como material real de referência:`);
+      fc.files.slice(0, 40).forEach(f => ctxLines.push(`- 📎 ${f.name}${f.url ? ` (${f.url})` : ""} · ref=wsfile:${f.id}`));
+    } else if (context?.files?.length) {
+      ctxLines.push("\nArquivos disponíveis no diretório:");
       context.files.slice(0, 20).forEach(f => ctxLines.push(`- ${f.name}${f.url ? ` (${f.url})` : ""}`));
     }
-    if (context?.script) ctxLines.push(`\nROTEIRO EM CONSTRUÇÃO:\n${context.script.slice(0, 4000)}`);
-    if (context?.notes) ctxLines.push(`\nNOTAS DO PROJETO:\n${context.notes.slice(0, 3000)}`);
+    if (context?.script) ctxLines.push(`\nROTEIRO EM CONSTRUÇÃO (pasta atual):\n${context.script.slice(0, 4000)}`);
+    if (context?.notes) ctxLines.push(`\nNOTAS DO PROJETO (pasta atual):\n${context.notes.slice(0, 3000)}`);
 
     const systemMsg = [SYSTEM_BASE, thread.system_prompt || "", ctxLines.length ? `\n---CONTEXTO---\n${ctxLines.join("\n")}` : ""]
       .filter(Boolean).join("\n\n");

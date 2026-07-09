@@ -179,12 +179,13 @@ interface Props {
   contextLabel: string;
   clientId?: string | null;
   clientName?: string | null;
+  folderId?: string | null;
   folderPath?: string | null;
   availableFiles: FileRef[];
   onOpenFile?: (id: string) => void;
 }
 
-export function StudioPanel({ contextKey, contextLabel, clientId, clientName, folderPath, availableFiles, onOpenFile }: Props) {
+export function StudioPanel({ contextKey, contextLabel, clientId, clientName, folderId, folderPath, availableFiles, onOpenFile }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
@@ -397,6 +398,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <AgentChat
                 clientId={clientId ?? null}
                 clientName={clientName ?? null}
+                folderId={folderId ?? null}
                 folderPath={folderPath ?? contextLabel}
                 availableFiles={availableFiles}
                 notes={state.notes}
@@ -664,8 +666,8 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
-function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, script, boardLog }: {
-  clientId: string | null; clientName: string | null; folderPath: string;
+function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog }: {
+  clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
 }) {
   const { toast } = useToast();
@@ -852,7 +854,9 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
           thread_id: tid,
           message: finalText,
           context: {
+            client_id: clientId,
             client_name: clientName,
+            folder_id: folderId,
             folder_path: folderPath,
             notes: boardLog && boardLog.length
               ? `${notes}\n\n---\n## Atividade do Kanban (últimas ${boardLog.length})\n${boardLog.map(l => `- ${l}`).join("\n")}`
@@ -860,6 +864,13 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
             script,
             // arquivos citados via @ ganham prioridade e vão marcados
             attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
+            // conteúdo da pasta atual (auto): subpastas + arquivos
+            folder_contents: {
+              subfolders: availableFiles.filter(f => f.kind === "folder").slice(0, 30).map(f => ({ id: f.id, name: f.name })),
+              files: availableFiles.filter(f => f.kind === "file").slice(0, 40).map(f => ({ id: f.id, name: f.name, url: f.url })),
+              total: availableFiles.length,
+            },
+            // legado (compatibilidade)
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
           },
         }),
@@ -938,6 +949,15 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
             className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
             <Plus className="w-3 h-3" />
           </button>
+        </div>
+        {/* Chip de contexto auto por pasta */}
+        <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
+          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40">📎 {availableFiles.filter(f=>f.kind==="file").length} arq</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40">🗂 {availableFiles.filter(f=>f.kind==="folder").length} sub</span>
+          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">📝 notas</span>}
+          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">🎬 roteiro</span>}
+          <span className="ml-auto opacity-60">contexto auto</span>
         </div>
 
 
