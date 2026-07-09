@@ -843,6 +843,9 @@ export default function Workspace() {
               <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)} className="gap-1.5 h-8">
                 <FolderPlus className="w-3.5 h-3.5" /> Pasta
               </Button>
+              <Button size="sm" variant="outline" onClick={() => setTemplateOpen(true)} className="gap-1.5 h-8">
+                <Sparkles className="w-3.5 h-3.5" /> Template
+              </Button>
               <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8">
                 <Upload className="w-3.5 h-3.5" />
                 Upload
