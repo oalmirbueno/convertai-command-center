@@ -552,15 +552,18 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Carrega threads do contexto (cliente)
-  useEffect(() => { void loadThreads(); }, [clientId]);
+  // Threads escopadas por cliente + pasta — cada diretório tem seu contexto isolado
+  useEffect(() => { void loadThreads(); setActiveId(null); }, [clientId, folderPath]);
   async function loadThreads() {
-    const q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id")
+    let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
       .order("updated_at", { ascending: false }).limit(30);
-    const { data } = clientId ? await q.eq("client_id", clientId) : await q.is("client_id", null);
+    q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
+    q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    const { data } = await q;
     setThreads((data as AgentThread[]) || []);
-    if (data && data.length && !activeId) setActiveId(data[0].id);
+    if (data && data.length) setActiveId(data[0].id);
   }
+
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
   async function loadMsgs(id: string) {
