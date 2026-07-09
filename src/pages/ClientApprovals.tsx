@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
