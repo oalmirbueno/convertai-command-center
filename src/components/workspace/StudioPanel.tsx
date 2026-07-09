@@ -537,9 +537,36 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           </div>
         </>
       )}
+
+      {taskDraft && (
+        <QuickTaskDialog
+          draft={taskDraft}
+          clientId={clientId ?? null}
+          clientName={clientName ?? null}
+          onClose={() => setTaskDraft(null)}
+          onCreated={(summary) => {
+            // Insere linha de checklist com o resumo da tarefa criada no ponto do slash
+            const { where, insertAt, tokenLen } = taskDraft;
+            const cur = where === "notes" ? state.notes : state.script;
+            const before = cur.slice(0, insertAt);
+            const after = cur.slice(insertAt + tokenLen);
+            // Remove o resto da linha corrente que virou a tarefa (do início da linha ao slash)
+            const lineStart = before.lastIndexOf("\n") + 1;
+            const cleanedBefore = before.slice(0, lineStart);
+            const line = `- [ ] ${summary}\n`;
+            const next = cleanedBefore + line + after;
+            if (where === "notes") setState(s => ({ ...s, notes: next }));
+            else setState(s => ({ ...s, script: next }));
+            // Registra também no log do Kanban interno para o agente ter contexto
+            setState(s => ({ ...s, boardLog: [`[${new Date().toISOString().slice(0,16).replace("T"," ")}] tarefa criada: ${summary}`, ...s.boardLog].slice(0, 40) }));
+            setTaskDraft(null);
+          }}
+        />
+      )}
     </div>
   );
 }
+
 
 function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef) => void }) {
   return (
