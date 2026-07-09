@@ -694,21 +694,24 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <FilePreview node={selected} getUrl={signedUrl} />
+              <FilePreview node={selected} getUrl={urlFor} />
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={async () => openFile(await signedUrl(selected.storage_path!))} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={async () => openFile(await urlFor(selected))} className="gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button size="sm" variant="outline" onClick={async () => downloadFile(await signedUrl(selected.storage_path!), selected.name)} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={async () => downloadFile(await urlFor(selected), selected.name)} className="gap-1.5">
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
-                {scope === "client" && !selected.sent_for_approval_file_id && (
+                {scope === "client" && !selected.__virtual && !selected.sent_for_approval_file_id && (
                   <Button size="sm" onClick={() => sendToApproval(selected)} className="gap-1.5 bg-primary">
                     <Send className="w-3.5 h-3.5" /> Enviar para aprovação
                   </Button>
+                )}
+                {selected.__virtual && (
+                  <span className="text-[11px] text-muted-foreground">📎 De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
                 )}
                 {selected.sent_for_approval_file_id && (
                   <span className="text-[11px] text-warning">Já enviado para aprovação</span>
