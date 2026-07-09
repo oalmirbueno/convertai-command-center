@@ -168,6 +168,8 @@ export default function Workspace() {
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
+  const [moveCreate, setMoveCreate] = useState<{ node: Node; parentId: string | null; parentLabel: string } | null>(null);
+  const [moveCreateName, setMoveCreateName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
   const [dragOverArea, setDragOverArea] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -696,6 +698,31 @@ export default function Workspace() {
     invalidate();
   }
 
+  async function createFolderAndMove() {
+    if (!moveCreate || !user || !moveCreateName.trim()) return;
+    const { node, parentId } = moveCreate;
+    if (node.__virtual) {
+      toast({ title: "Ação não suportada", description: "Itens de Arquivos não podem ser movidos para novas pastas.", variant: "destructive" });
+      setMoveCreate(null); setMoveCreateName(""); return;
+    }
+    const { data, error } = await supabase.from("workspace_nodes").insert({
+      name: moveCreateName.trim(), kind: "folder", scope,
+      client_id: scope === "client" ? clientId : null,
+      parent_id: parentId, created_by: user.id,
+    }).select("id").single();
+    if (error || !data) {
+      toast({ title: "Erro ao criar pasta", description: error?.message, variant: "destructive" });
+      return;
+    }
+    const newId = (data as any).id as string;
+    const { error: mvErr } = await supabase.from("workspace_nodes")
+      .update({ parent_id: newId }).eq("id", node.id);
+    if (mvErr) { toast({ title: "Pasta criada, mas falhou ao mover", description: mvErr.message, variant: "destructive" }); }
+    else toast({ title: "Pasta criada e item movido" });
+    setMoveCreate(null); setMoveCreateName("");
+    invalidate();
+  }
+
   async function sendToApproval(n: Node) {
     if (!user || n.kind !== "file" || !n.storage_path) return;
     if (scope !== "client" || !clientId) {
@@ -778,6 +805,19 @@ export default function Workspace() {
               <FolderInput className="w-3.5 h-3.5 mr-2" /> Mover para
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-h-72 overflow-y-auto w-64">
+              {!n.__virtual && (
+                <>
+                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
+                  </DropdownMenuItem>
+                  {parent && (
+                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onSelect={() => moveNode(n, null)}>
                 <Globe2 className="w-3.5 h-3.5 mr-2" /> Raiz
               </DropdownMenuItem>
@@ -849,6 +889,19 @@ export default function Workspace() {
               <FolderInput className="w-3.5 h-3.5 mr-2" /> Mover para
             </ContextMenuSubTrigger>
             <ContextMenuSubContent className="max-h-72 overflow-y-auto w-64">
+              {!n.__virtual && (
+                <>
+                  <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
+                  </ContextMenuItem>
+                  {parent && (
+                    <ContextMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
+                    </ContextMenuItem>
+                  )}
+                  <ContextMenuSeparator />
+                </>
+              )}
               <ContextMenuItem onSelect={() => moveNode(n, null)}>
                 <Globe2 className="w-3.5 h-3.5 mr-2" /> Raiz
               </ContextMenuItem>
@@ -1304,6 +1357,24 @@ export default function Workspace() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewFolderOpen(false)}>Cancelar</Button>
             <Button onClick={createFolder} disabled={!newFolderName.trim()}>Criar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* New folder + move */}
+      <Dialog open={!!moveCreate} onOpenChange={(o) => { if (!o) { setMoveCreate(null); setMoveCreateName(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova pasta e mover</DialogTitle>
+            <DialogDescription>
+              Criar em <span className="text-foreground font-medium">{moveCreate?.parentLabel}</span> e mover “{moveCreate?.node.name}” para dentro.
+            </DialogDescription>
+          </DialogHeader>
+          <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
+            placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
+            <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
