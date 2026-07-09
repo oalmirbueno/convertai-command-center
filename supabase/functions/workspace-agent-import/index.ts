@@ -21,13 +21,21 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
-    const { url, clear, client_id, folder_path } = await req.json() as {
+    const { url, clear, client_id, folder_path, persona_id, delete_id } = await req.json() as {
       url?: string; clear?: boolean; client_id?: string | null; folder_path?: string | null;
+      persona_id?: string | null; delete_id?: string | null;
     };
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
     const cid = client_id || null;
     const fpath = folder_path || null;
 
+    // deletar uma persona específica pelo id
+    if (delete_id) {
+      await admin.from("workspace_agent_personas").delete().eq("id", delete_id).eq("user_id", user.id);
+      return json({ ok: true, deleted: delete_id });
+    }
+
+    // clear = remove TODAS as personas do escopo (mantido por compatibilidade)
     if (clear) {
       let q = admin.from("workspace_agent_personas").delete().eq("user_id", user.id);
       q = cid ? q.eq("client_id", cid) : q.is("client_id", null);
@@ -108,11 +116,7 @@ Deno.serve(async (req) => {
       } catch { /* usa fallback */ }
     }
 
-    // upsert manual: unique (user_id, coalesce(client_id::text,''), coalesce(folder_path,''))
-    let sel = admin.from("workspace_agent_personas").select("id").eq("user_id", user.id);
-    sel = cid ? sel.eq("client_id", cid) : sel.is("client_id", null);
-    sel = fpath ? sel.eq("folder_path", fpath) : sel.is("folder_path", null);
-    const { data: existing } = await sel.maybeSingle();
+    // Múltiplas personas por escopo. Se persona_id vier, atualiza aquela; senão insere nova.
     const row = {
       user_id: user.id,
       client_id: cid,
@@ -123,13 +127,19 @@ Deno.serve(async (req) => {
       persona_prompt: persona,
       updated_at: new Date().toISOString(),
     };
-    if (existing?.id) {
-      await admin.from("workspace_agent_personas").update(row).eq("id", existing.id);
-    } else {
-      await admin.from("workspace_agent_personas").insert(row);
+    let savedId: string | null = null;
+    if (persona_id) {
+      const { data: upd } = await admin.from("workspace_agent_personas")
+        .update(row).eq("id", persona_id).eq("user_id", user.id).select("id").maybeSingle();
+      savedId = upd?.id || null;
+    }
+    if (!savedId) {
+      const { data: ins } = await admin.from("workspace_agent_personas")
+        .insert(row).select("id").maybeSingle();
+      savedId = ins?.id || null;
     }
 
-    return json({ ok: true, name: title, description, starters, persona, scope: { client_id: cid, folder_path: fpath } });
+    return json({ ok: true, id: savedId, name: title, description, starters, persona, scope: { client_id: cid, folder_path: fpath } });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "erro" }, 500);
   }

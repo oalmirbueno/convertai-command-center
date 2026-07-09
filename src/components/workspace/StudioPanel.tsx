@@ -1190,28 +1190,29 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [personaOpen, setPersonaOpen] = useState(false);
-  type PersonaRow = { gpt_url: string | null; gpt_name: string | null; client_id: string | null; folder_path: string | null };
-  const [persona, setPersona] = useState<{ active: PersonaRow | null; scopeLevel: "folder" | "client" | "global" | "none" }>({ active: null, scopeLevel: "none" });
+  type PersonaRow = { id: string; gpt_url: string | null; gpt_name: string | null; gpt_description?: string | null; client_id: string | null; folder_path: string | null };
+  const [persona, setPersona] = useState<{ list: PersonaRow[]; active: PersonaRow | null; scopeLevel: "folder" | "client" | "global" | "none"; forcedId: string | null; lastUsedName: string | null }>({
+    list: [], active: null, scopeLevel: "none", forcedId: null, lastUsedName: null,
+  });
   async function reloadPersona() {
     const { data } = await supabase.from("workspace_agent_personas")
-      .select("gpt_url,gpt_name,client_id,folder_path");
+      .select("id,gpt_url,gpt_name,gpt_description,client_id,folder_path");
     const rows = (data || []) as PersonaRow[];
-    const pick = (fn: (r: PersonaRow) => boolean) => rows.find(fn) || null;
+    // Filtra o que é visível no escopo atual (global + cliente + pasta)
+    const list = rows.filter(r => {
+      if (!r.client_id && !r.folder_path) return true;
+      if (clientId && r.client_id === clientId && !r.folder_path) return true;
+      if (clientId && r.client_id === clientId && folderPath && r.folder_path === folderPath) return true;
+      return false;
+    });
+    // "active" = mais específica (retrocompat p/ botão GPT quando não há override)
+    const pick = (fn: (r: PersonaRow) => boolean) => list.find(fn) || null;
     let active: PersonaRow | null = null;
     let level: "folder" | "client" | "global" | "none" = "none";
-    if (clientId && folderPath) {
-      active = pick(r => r.client_id === clientId && r.folder_path === folderPath);
-      if (active) level = "folder";
-    }
-    if (!active && clientId) {
-      active = pick(r => r.client_id === clientId && !r.folder_path);
-      if (active) level = "client";
-    }
-    if (!active) {
-      active = pick(r => !r.client_id && !r.folder_path);
-      if (active) level = "global";
-    }
-    setPersona({ active, scopeLevel: level });
+    if (clientId && folderPath) { active = pick(r => r.client_id === clientId && r.folder_path === folderPath); if (active) level = "folder"; }
+    if (!active && clientId) { active = pick(r => r.client_id === clientId && !r.folder_path); if (active) level = "client"; }
+    if (!active) { active = pick(r => !r.client_id && !r.folder_path); if (active) level = "global"; }
+    setPersona(p => ({ ...p, list, active, scopeLevel: level, forcedId: p.forcedId && list.some(x => x.id === p.forcedId) ? p.forcedId : null }));
   }
   useEffect(() => { void reloadPersona(); }, [clientId, folderPath]);
 
@@ -1480,6 +1481,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         body: JSON.stringify({
           thread_id: tid,
           message: finalText,
+          persona_id: persona.forcedId || undefined,
           context: {
             client_id: clientId,
             client_name: clientName,
@@ -1489,19 +1491,21 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               ? `${notes}\n\n---\n## Atividade do Kanban (últimas ${boardLog.length})\n${boardLog.map(l => `- ${l}`).join("\n")}`
               : notes,
             script,
-            // arquivos citados via @ ganham prioridade e vão marcados
             attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
-            // conteúdo da pasta atual (auto): subpastas + arquivos
             folder_contents: {
               subfolders: availableFiles.filter(f => f.kind === "folder").slice(0, 30).map(f => ({ id: f.id, name: f.name })),
               files: availableFiles.filter(f => f.kind === "file").slice(0, 40).map(f => ({ id: f.id, name: f.name, url: f.url })),
               total: availableFiles.length,
             },
-            // legado (compatibilidade)
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
           },
         }),
       });
+      // Captura qual persona foi escolhida pelo roteador
+      try {
+        const usedName = res.headers.get("X-Persona-Name");
+        if (usedName) setPersona(p => ({ ...p, lastUsedName: decodeURIComponent(usedName) }));
+      } catch { /* ignore */ }
       if (!res.ok || !res.body) {
         const t = await res.text().catch(() => "");
         let msg = t || `HTTP ${res.status}`;
@@ -1616,60 +1620,80 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
             </button>
           )}
           <Bot className="w-3.5 h-3.5 text-primary" />
-          <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
+          <span className="text-[10px] font-medium text-foreground/80 truncate">
             {clientName ? `Agente · ${clientName}` : "Agente · Global"}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
-          {persona.active?.gpt_url && (
-            <button
-              onClick={async () => {
-                const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
-                const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
-                const ctx = [
-                  `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
-                  notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
-                  script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
-                  availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
-                  lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
-                  lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
-                  `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
-                ].filter(Boolean).join("\n");
-                try {
-                  await navigator.clipboard.writeText(ctx);
-                  toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." });
-                } catch { /* ignore */ }
-                window.open(persona.active!.gpt_url!, "_blank", "noopener,noreferrer");
+
+          {/* Seletor de persona (Auto ou manual) — mostra TODAS as personas do escopo */}
+          <div className="flex-1 flex items-center justify-end gap-1">
+            <select
+              value={persona.forcedId || "__auto__"}
+              onChange={e => {
+                const v = e.target.value;
+                setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
               }}
-              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-              title={`Copia contexto e abre ${persona.active.gpt_name || "GPT"} em nova aba`}>
-              <ExternalLink className="w-3 h-3" /> GPT
+              className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
+              title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
+              <option value="__auto__">
+                🎯 Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
+              </option>
+              {persona.list.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.gpt_name || "Sem nome"} {p.folder_path ? "· 📁" : p.client_id ? "· 👤" : "· 🌐"}
+                </option>
+              ))}
+            </select>
+
+            {(persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
+              <button
+                onClick={async () => {
+                  const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
+                  if (!active?.gpt_url) return;
+                  const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content || "";
+                  const lastUser = [...msgs].reverse().find(m => m.role === "user")?.content || "";
+                  const ctx = [
+                    `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+                    notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
+                    script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
+                    lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
+                    lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
+                    `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
+                  ].filter(Boolean).join("\n");
+                  try { await navigator.clipboard.writeText(ctx); toast({ title: "Contexto copiado", description: "Cole no ChatGPT que abrirá agora." }); } catch { /* ignore */ }
+                  window.open(active.gpt_url, "_blank", "noopener,noreferrer");
+                }}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                title="Copia contexto e abre este GPT no ChatGPT">
+                <ExternalLink className="w-3 h-3" /> GPT
+              </button>
+            )}
+            <PasteBackButton
+              disabled={!activeId}
+              onPaste={async (text) => {
+                if (!activeId || !text.trim()) return;
+                const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
+                const { data: inserted, error } = await supabase.from("workspace_agent_messages")
+                  .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
+                  .select("id, role, content, created_at").single();
+                if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
+                if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
+                toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
+              }}
+            />
+            <button onClick={() => setPersonaOpen(true)}
+              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Gerenciar personas (adicionar / remover)">
+              <Settings className="w-3 h-3" />
             </button>
-          )}
-          <PasteBackButton
-            disabled={!activeId}
-            onPaste={async (text) => {
-              if (!activeId || !text.trim()) return;
-              const { data: userRes } = await supabase.auth.getUser();
-              if (!userRes?.user) return;
-              const { data: inserted, error } = await supabase.from("workspace_agent_messages")
-                .insert({ thread_id: activeId, role: "assistant", content: `**[Colado do ChatGPT · ${persona.active?.gpt_name || "GPT externo"}]**\n\n${text.trim()}` })
-                .select("id, role, content, created_at").single();
-              if (error) { toast({ title: "Erro ao colar", description: error.message, variant: "destructive" }); return; }
-              if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
-              toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
-            }}
-          />
-          <button onClick={() => setPersonaOpen(true)}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Configurar GPT persona">
-            <Settings className="w-3 h-3" />
-          </button>
-          <button onClick={newThread}
-            className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
-            <Plus className="w-3 h-3" />
-          </button>
+            <button onClick={newThread}
+              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
         </div>
         <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
-          active={persona.active} scopeLevel={persona.scopeLevel}
+          list={persona.list}
           clientId={clientId} clientName={clientName} folderPath={folderPath}
           onSaved={reloadPersona} />
         {/* Chip de contexto auto por pasta */}
@@ -2165,26 +2189,22 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
   );
 }
 
-function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clientName, folderPath, onSaved }: {
+function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderPath, onSaved }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
-  active: { gpt_url: string | null; gpt_name: string | null; client_id: string | null; folder_path: string | null } | null;
-  scopeLevel: "folder" | "client" | "global" | "none";
+  list: { id: string; gpt_url: string | null; gpt_name: string | null; gpt_description?: string | null; client_id: string | null; folder_path: string | null }[];
   clientId: string | null;
   clientName: string | null;
   folderPath: string;
   onSaved: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
-  const [url, setUrl] = useState(active?.gpt_url || "");
+  const [url, setUrl] = useState("");
   const [loading, setLoading] = useState(false);
   type Scope = "global" | "client" | "folder";
   const defaultScope: Scope = clientId ? (folderPath ? "folder" : "client") : "global";
   const [scope, setScope] = useState<Scope>(defaultScope);
-  useEffect(() => {
-    setUrl(active?.gpt_url || "");
-    setScope(clientId ? (folderPath ? "folder" : "client") : "global");
-  }, [active, open, clientId, folderPath]);
+  useEffect(() => { setScope(clientId ? (folderPath ? "folder" : "client") : "global"); }, [open, clientId, folderPath]);
 
   const bodyScope = () => ({
     client_id: scope === "global" ? null : clientId,
@@ -2205,50 +2225,66 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
       }
       const d = data as any;
       await onSaved();
-      toast({ title: "Persona salva", description: d.name ? `"${d.name}" ativa neste escopo.` : "Persona salva." });
-      onOpenChange(false);
+      setUrl("");
+      toast({ title: "Persona adicionada", description: d.name ? `"${d.name}" pronta pro roteador.` : "Persona salva." });
     } finally { setLoading(false); }
   }
 
-  async function clearPersona() {
+  async function deleteOne(id: string, name: string | null) {
     setLoading(true);
     try {
-      await supabase.functions.invoke("workspace-agent-import", { body: { clear: true, ...bodyScope() } });
+      await supabase.functions.invoke("workspace-agent-import", { body: { delete_id: id } });
       await onSaved();
-      setUrl("");
-      toast({ title: "Persona removida", description: "Voltando ao escopo superior." });
-      onOpenChange(false);
+      toast({ title: "Persona removida", description: name || undefined });
     } finally { setLoading(false); }
   }
 
-  const scopeLabel = scope === "folder" ? `Pasta atual · /${folderPath || "raiz"}`
-    : scope === "client" ? `Cliente · ${clientName || "atual"}`
-    : "Global (todos os workspaces)";
-  const activeScopeLabel = scopeLevel === "folder" ? "pasta atual"
-    : scopeLevel === "client" ? "cliente atual"
-    : scopeLevel === "global" ? "global" : "nenhum";
+  const scopeIcon = (p: { client_id: string | null; folder_path: string | null }) =>
+    p.folder_path ? "📁" : p.client_id ? "👤" : "🌐";
+  const scopeText = (p: { client_id: string | null; folder_path: string | null }) =>
+    p.folder_path ? `/${p.folder_path}` : p.client_id ? "cliente" : "global";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md">
+      <DialogContent className="max-w-lg">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-sm">
-            <Bot className="w-4 h-4 text-primary" /> Persona do agente
+            <Bot className="w-4 h-4 text-primary" /> Personas do agente ({list.length})
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-3">
           <p className="text-[11px] text-muted-foreground">
-            Cole o link público do <b>Custom GPT</b>. A persona é salva no <b>escopo escolhido</b> e sobrescreve os mais amplos: pasta &gt; cliente &gt; global.
+            Adicione quantos Custom GPTs quiser. O <b>roteador interno</b> escolhe qual usar em cada mensagem, ou você trava manualmente pelo seletor no cabeçalho.
           </p>
 
-          <div className="space-y-1">
-            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Aplicar em</label>
+          {/* Lista */}
+          {list.length > 0 && (
+            <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-md border border-border bg-background/40 p-2">
+              {list.map(p => (
+                <div key={p.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded hover:bg-secondary/40">
+                  <span className="text-sm leading-none pt-0.5">{scopeIcon(p)}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-foreground/90 truncate">{p.gpt_name || "Sem nome"}</div>
+                    <div className="text-muted-foreground text-[10px] truncate">{scopeText(p)} · {p.gpt_description || p.gpt_url}</div>
+                  </div>
+                  <button onClick={() => deleteOne(p.id, p.gpt_name)}
+                    disabled={loading}
+                    className="text-[10px] text-destructive/70 hover:text-destructive px-1.5 py-0.5 rounded hover:bg-destructive/10">
+                    Remover
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Nova */}
+          <div className="space-y-2 pt-1 border-t border-border">
+            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Adicionar nova persona</label>
             <div className="grid grid-cols-3 gap-1">
               {(["folder", "client", "global"] as Scope[]).map(s => {
                 const disabled = (s !== "global" && !clientId) || (s === "folder" && !folderPath);
                 return (
-                  <button key={s} type="button" disabled={disabled}
-                    onClick={() => setScope(s)}
+                  <button key={s} type="button" disabled={disabled} onClick={() => setScope(s)}
                     className={cn("text-[10px] px-2 py-1.5 rounded border transition",
                       scope === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/40 border-border hover:bg-secondary",
                       disabled && "opacity-40 cursor-not-allowed")}>
@@ -2257,30 +2293,14 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
                 );
               })}
             </div>
-            <div className="text-[10px] text-muted-foreground pt-0.5">{scopeLabel}</div>
+            <Input value={url} onChange={(e) => setUrl(e.target.value)}
+              placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
           </div>
-
-          <Input value={url} onChange={(e) => setUrl(e.target.value)}
-            placeholder="https://chatgpt.com/g/g-xxxxxxxx-nome-do-gpt" className="text-xs" />
-
-          {active?.gpt_name && (
-            <div className="text-[11px] flex items-center gap-1.5 text-primary">
-              <Check className="w-3 h-3" /> Em uso agora: <b>{active.gpt_name}</b>
-              <span className="text-muted-foreground">({activeScopeLabel})</span>
-            </div>
-          )}
         </div>
-        <DialogFooter className="gap-2">
-          {active && ((scope === "folder" && active.folder_path === folderPath && active.client_id === clientId)
-            || (scope === "client" && active.client_id === clientId && !active.folder_path)
-            || (scope === "global" && !active.client_id && !active.folder_path)) && (
-            <Button variant="ghost" size="sm" onClick={clearPersona} disabled={loading}>
-              Remover deste escopo
-            </Button>
-          )}
+        <DialogFooter>
           <Button size="sm" onClick={importGpt} disabled={loading || !url}>
             {loading ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <Sparkles className="w-3 h-3 mr-1" />}
-            Carregar persona
+            Adicionar persona
           </Button>
         </DialogFooter>
       </DialogContent>
