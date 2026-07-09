@@ -990,7 +990,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
             {mode === "notes" && (
-              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2">
+              <div className="h-full min-h-0 overflow-hidden p-3 sm:p-4 flex flex-col gap-2 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
@@ -1015,7 +1015,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70",
                     isMobile && mobileNotesTab !== "editor" && "hidden"
                   )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground shrink-0">
                       <NotebookPen className="h-3.5 w-3.5 text-primary" />
                       <span className="font-medium text-foreground/80">Notas de trabalho</span>
                       <span className="hidden sm:inline">/ comandos · @ arquivos · imagem ou link de vídeo</span>
@@ -1035,7 +1035,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                         onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                         onPaste={onNotesPaste}
                         placeholder="Escreva ou cole o material aqui. Use / para estruturar e @ para anexar arquivos."
-                        className="h-full min-h-[360px] w-full resize-none rounded-lg border border-border bg-card/70 p-5 font-sans text-[14px] leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10"
+                        className="h-full w-full resize-none overflow-y-auto rounded-lg border border-border bg-card/70 p-4 sm:p-5 font-sans text-[14px] leading-[1.7] sm:leading-[1.8] text-foreground placeholder:text-muted-foreground/60 transition-colors focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/10 sm:min-h-[360px]"
                       />
                       {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                         <MentionList items={mentionMatches} onPick={insertMention} />
@@ -1053,7 +1053,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50",
                     isMobile && mobileNotesTab !== "preview" && "hidden"
                   )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
                       <FileText className="h-3.5 w-3.5 text-primary" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-medium text-foreground/85">Documento estruturado</p>
