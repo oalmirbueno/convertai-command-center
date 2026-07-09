@@ -275,10 +275,23 @@ export default function Workspace() {
 
 
   async function performDelete(n: Node) {
-    // Recursively collect child files' storage paths if folder
+    // Virtual folder (grouping of files.folder) — clear folder field on those files
+    if (n.__virtual && n.kind === "folder") {
+      const folderName = n.id.substring((VIRT_PREFIX + "folder:").length);
+      await (supabase as any).from("files").update({ folder: null })
+        .eq("client_id", clientId).eq("folder", folderName);
+      setSelected(null); setConfirmDelete(null);
+      toast({ title: "Pasta virtual removida", description: "Os arquivos permanecem em Arquivos." });
+      invalidate(); return;
+    }
+    // Virtual file — delete from public.files
+    if (n.__virtual && n.kind === "file" && n.__file_id) {
+      await (supabase as any).from("files").delete().eq("id", n.__file_id);
+      setSelected(null); setConfirmDelete(null);
+      toast({ title: "Excluído" });
+      invalidate(); return;
+    }
     if (n.kind === "folder") {
-      const { data: descendants } = await (supabase as any).rpc("noop"); // placeholder if RPC exists
-      // Fallback: iterative walk
       const collected: string[] = [];
       const stack = [n.id];
       while (stack.length) {
@@ -291,7 +304,6 @@ export default function Workspace() {
         }
       }
       if (collected.length) await supabase.storage.from("workspace").remove(collected);
-      void descendants;
     } else if (n.storage_path) {
       await supabase.storage.from("workspace").remove([n.storage_path]);
     }
@@ -303,6 +315,16 @@ export default function Workspace() {
 
   async function renameNode() {
     if (!renaming || !renameValue.trim()) return;
+    if (renaming.__virtual) {
+      if (renaming.kind === "file" && renaming.__file_id) {
+        await (supabase as any).from("files").update({ file_name: renameValue.trim() }).eq("id", renaming.__file_id);
+      } else if (renaming.kind === "folder") {
+        const oldName = renaming.id.substring((VIRT_PREFIX + "folder:").length);
+        await (supabase as any).from("files").update({ folder: renameValue.trim() })
+          .eq("client_id", clientId).eq("folder", oldName);
+      }
+      setRaming(null); setRenameValue(""); invalidate(); return;
+    }
     const { error } = await supabase.from("workspace_nodes")
       .update({ name: renameValue.trim() }).eq("id", renaming.id);
     if (error) { toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" }); return; }
