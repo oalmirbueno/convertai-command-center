@@ -1173,19 +1173,33 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Sidebar de threads */}
+    <div className="flex h-full min-h-0 relative">
+      {/* Backdrop mobile */}
+      {sidebarOpen && isMobile && (
+        <div
+          className="absolute inset-0 bg-background/70 backdrop-blur-sm z-20 animate-in fade-in"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {/* Sidebar de threads (overlay no mobile, inline no desktop) */}
       {sidebarOpen && (
-        <aside className="w-[180px] shrink-0 border-r border-border bg-background/60 flex flex-col min-h-0">
+        <aside
+          className={cn(
+            "border-r border-border bg-background flex flex-col min-h-0",
+            isMobile
+              ? "absolute inset-y-0 left-0 z-30 w-[78%] max-w-[280px] shadow-2xl animate-in slide-in-from-left"
+              : "w-[180px] shrink-0 bg-background/60"
+          )}
+        >
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
             <MessageSquare className="w-3 h-3 text-muted-foreground" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1 truncate">
               {clientName ? clientName : "Global"}
             </span>
-            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa (Alt+N)">
               <Plus className="w-3 h-3" />
             </button>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher">
+            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher (Alt+B / Esc)">
               <X className="w-3 h-3" />
             </button>
           </div>
@@ -1207,12 +1221,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <div key={t.id}
                 className={cn("group flex flex-col gap-0.5 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
                   activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
-                onClick={() => setActiveId(t.id)}>
+                onClick={() => { setActiveId(t.id); if (isMobile) setSidebarOpen(false); }}>
                 <div className="flex items-center gap-1">
                   <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
                   <span className="text-[11px] truncate flex-1">{t.title}</span>
                   <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                    className={cn("p-0.5 hover:text-destructive", isMobile ? "opacity-70" : "opacity-0 group-hover:opacity-100")}>
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
@@ -1221,6 +1235,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 )}
               </div>
             ))}
+          </div>
+          <div className="px-2 py-1 border-t border-border text-[9px] text-muted-foreground/70 hidden md:block">
+            Alt+↑↓ alternar · Alt+N nova · Alt+B recolher
           </div>
         </aside>
       )}
@@ -1231,7 +1248,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
           {!sidebarOpen && (
             <button onClick={() => setSidebarOpen(true)}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas">
+              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas (Alt+B)">
               <History className="w-3 h-3" />
             </button>
           )}
