@@ -149,7 +149,10 @@ export default function Workspace() {
       return (data || []) as Node[];
     },
     enabled: isStaff && (scope === "global" || !!clientId),
+    staleTime: 30_000,
+    placeholderData: (prev: any) => prev,
   });
+
 
   // Full folder list of current scope (for "Move to..." menu)
   const { data: allFolders } = useQuery({
