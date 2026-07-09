@@ -78,12 +78,13 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashCmd = { key: string; label: string; hint: string; insert: string };
+type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: "createTask" };
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
+    { key: "tarefa",  label: "Nova tarefa no Kanban", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
     { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
     { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
@@ -100,6 +101,53 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
       insert: `[Kanban do cliente](#kanban)` },
   ];
 }
+
+// Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
+export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
+  let s = " " + raw.trim() + " ";
+  let priority: "low"|"medium"|"high"|"urgent" = "medium";
+  const pm = s.match(/\s!(baixa|low|media|média|medium|alta|high|urgente|urgent)\b/i);
+  if (pm) {
+    const p = pm[1].toLowerCase();
+    priority = p.startsWith("bai") || p === "low" ? "low"
+      : p.startsWith("alt") || p === "high" ? "high"
+      : p.startsWith("urg") ? "urgent" : "medium";
+    s = s.replace(pm[0], " ");
+  }
+  let assigneeName: string | undefined;
+  const am = s.match(/\s@([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9._-]{1,40}(?:\s[A-Za-zÀ-ÿ][A-Za-zÀ-ÿ0-9._-]{1,40})?)/);
+  if (am) { assigneeName = am[1].trim(); s = s.replace(am[0], " "); }
+  let dueISO: string | undefined;
+  const today = new Date();
+  const iso = (d: Date) => d.toISOString().slice(0, 10);
+  const rel = s.match(/\s(hoje|amanha|amanhã|\+(\d+)([dsw]))\b/i);
+  if (rel) {
+    if (/hoje/i.test(rel[1])) dueISO = iso(today);
+    else if (/amanh/i.test(rel[1])) { const d = new Date(today); d.setDate(d.getDate()+1); dueISO = iso(d); }
+    else {
+      const n = parseInt(rel[2], 10); const u = rel[3].toLowerCase();
+      const d = new Date(today);
+      d.setDate(d.getDate() + (u === "d" ? n : u === "s" || u === "w" ? n*7 : n));
+      dueISO = iso(d);
+    }
+    s = s.replace(rel[0], " ");
+  } else {
+    const dm = s.match(/\s(\d{1,2})[\/\-](\d{1,2})(?:[\/\-](\d{2,4}))?\b/);
+    if (dm) {
+      const day = parseInt(dm[1], 10), mon = parseInt(dm[2], 10) - 1;
+      const yr = dm[3] ? (dm[3].length === 2 ? 2000 + parseInt(dm[3], 10) : parseInt(dm[3], 10)) : today.getFullYear();
+      const d = new Date(yr, mon, day);
+      if (!isNaN(d.getTime())) dueISO = iso(d);
+      s = s.replace(dm[0], " ");
+    } else {
+      const im = s.match(/\s(\d{4}-\d{2}-\d{2})\b/);
+      if (im) { dueISO = im[1]; s = s.replace(im[0], " "); }
+    }
+  }
+  const title = s.replace(/\s+/g, " ").trim();
+  return { title, priority, assigneeName, dueISO };
+}
+
 
 
 const STORAGE_PREFIX = "workspace_studio_v1:";
