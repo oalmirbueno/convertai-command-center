@@ -1,10 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { supabase } from "@/integrations/supabase/client";
-import { Button } from "@/components/ui/button";
+import { useEffect, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
-import { useToast } from "@/hooks/use-toast";
-import { UploadCloud, Loader2, CheckCircle2, FileText, X } from "lucide-react";
-import { useDropzone } from "react-dropzone";
+import { UploadCloud, Loader2, CheckCircle2, FileText } from "lucide-react";
+
 
 const FN_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/workspace-inbox`;
 const ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
