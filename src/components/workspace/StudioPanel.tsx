@@ -599,6 +599,11 @@ function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: s
   const lines = src.split("\n");
   const out: React.ReactNode[] = [];
   lines.forEach((raw, i) => {
+    // bloco kanban inline (funcional, dentro do texto)
+    if (raw.trim() === "@kanban") {
+      out.push(<InlineKanbanBlock key={i} clientId={clientId ?? null} clientName={clientName ?? null} />);
+      return;
+    }
     // vídeo embed
     const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
     if (v) {
