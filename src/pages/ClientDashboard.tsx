@@ -49,11 +49,25 @@ export default function ClientDashboard({ impersonateClientId, impersonateClient
   useEffect(() => {
     (async () => {
       try {
+        // Garante sessão válida (auto-refresh) antes de chamar a function
+        const { data: sess } = await supabase.auth.getSession();
+        if (!sess.session) {
+          const { data: refreshed } = await supabase.auth.refreshSession();
+          if (!refreshed.session) {
+            setLoadingMetrics(false);
+            return; // sem sessão, silencioso
+          }
+        }
+
         const { data, error } = await supabase.functions.invoke("fetch-ops-metrics");
-        // Try to extract error body even on HTTP error responses
         let payload: any = data;
         if (error && (error as any)?.context?.json) {
           try { payload = await (error as any).context.json(); } catch { /* ignore */ }
+        }
+        // Token expirado → não polui a tela
+        if (error && (error as any)?.context?.status === 401) {
+          setLoadingMetrics(false);
+          return;
         }
         if (payload?.error) {
           setOpsError(String(payload.error));
@@ -64,12 +78,12 @@ export default function ClientDashboard({ impersonateClientId, impersonateClient
         }
       } catch (err: any) {
         console.warn("fetch-ops-metrics:", err?.message ?? err);
-        setOpsError(err?.message || "Falha ao buscar métricas");
       } finally {
         setLoadingMetrics(false);
       }
     })();
   }, [clientId]);
+
 
   if (selectedProject) {
     return <ProjectView project={selectedProject} onBack={() => setSelectedProject(null)} />;
