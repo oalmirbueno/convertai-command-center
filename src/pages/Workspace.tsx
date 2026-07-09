@@ -632,6 +632,14 @@ export default function Workspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UploadProgressPanel
+        items={uploads.items}
+        onCancel={uploads.cancel}
+        onRetry={uploads.retry}
+        onDismiss={uploads.dismiss}
+        onClearDone={uploads.clearDone}
+      />
     </div>
   );
 }
