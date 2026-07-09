@@ -552,17 +552,30 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
 
-  // Threads escopadas por cliente + pasta — cada diretório tem seu contexto isolado
-  useEffect(() => { void loadThreads(); setActiveId(null); }, [clientId, folderPath]);
+  // Threads escopadas por cliente + pasta. Restaura a última thread ativa do cliente ao reabrir.
+  const lastThreadKey = (cid?: string | null, fp?: string | null) =>
+    `studio:lastThread:${cid || "_global"}:${fp || "_root"}`;
+  useEffect(() => { void loadThreads(); }, [clientId, folderPath]);
   async function loadThreads() {
     let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
       .order("updated_at", { ascending: false }).limit(30);
     q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
     q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
     const { data } = await q;
-    setThreads((data as AgentThread[]) || []);
-    if (data && data.length) setActiveId(data[0].id);
+    const list = (data as AgentThread[]) || [];
+    setThreads(list);
+    if (!list.length) { setActiveId(null); return; }
+    let restored: string | null = null;
+    try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath)); } catch {}
+    const pick = (restored && list.find(t => t.id === restored)?.id) || list[0].id;
+    setActiveId(pick);
   }
+
+  // Persiste a última thread ativa por (cliente, pasta) para restaurar ao reabrir
+  useEffect(() => {
+    if (!activeId) return;
+    try { localStorage.setItem(lastThreadKey(clientId, folderPath), activeId); } catch {}
+  }, [activeId, clientId, folderPath]);
 
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
