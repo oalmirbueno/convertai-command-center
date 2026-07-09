@@ -80,8 +80,9 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap";
+type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap" | "insertHelp";
 type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: SlashAction };
+
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
