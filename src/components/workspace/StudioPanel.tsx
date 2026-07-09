@@ -839,6 +839,15 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 {docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}
               </span>
             )}
+            <button
+              onClick={() => setAutoFix(v => !v)}
+              title="Auto-correção: reorganiza headline, checklist e ações quando você pausa"
+              className={cn("px-2 py-[3px] rounded flex items-center gap-1 text-[10px] font-medium border shrink-0",
+                autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
+            >
+              {reflowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
+              Auto-fix {autoFix ? "on" : "off"}
+            </button>
             <div className="ml-auto flex items-center gap-1 shrink-0">
               <button onClick={togglePublish}
                 className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
