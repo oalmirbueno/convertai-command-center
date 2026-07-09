@@ -788,30 +788,57 @@ export default function Workspace() {
             </div>
           </div>
 
-          {/* Smart category chips */}
+          {/* Smart tag chips + sort */}
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            {([
-              ["all", "Todos", (nodes?.length || 0) + (virtualNodes?.length || 0)],
-              ["image", KIND_META.image.label, kindCounts.image],
-              ["video", KIND_META.video.label, kindCounts.video],
-              ["doc", KIND_META.doc.label, kindCounts.doc],
-              ["audio", KIND_META.audio.label, kindCounts.audio],
-              ["other", KIND_META.other.label, kindCounts.other],
-            ] as const).map(([k, label, count]) => (
+            <button
+              onClick={() => setTagFilter("all")}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                tagFilter === "all"
+                  ? "bg-primary/15 border-primary/40 text-primary"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+              )}
+            >
+              Todos <span className="opacity-60">{(nodes?.length || 0) + (virtualNodes?.length || 0)}</span>
+            </button>
+            {SMART_TAGS.filter(t => t.key !== "other" || tagCounts.other > 0).map(t => (
               <button
-                key={k}
-                onClick={() => setKindFilter(k as any)}
+                key={t.key}
+                onClick={() => setTagFilter(t.key)}
+                title={t.hint}
                 className={cn(
                   "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                  kindFilter === k
+                  tagFilter === t.key
                     ? "bg-primary/15 border-primary/40 text-primary"
                     : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
                 )}
               >
-                {label} <span className="opacity-60">{count}</span>
+                {t.label} <span className="opacity-60">{tagCounts[t.key]}</span>
               </button>
             ))}
+            <div className="ml-auto flex items-center gap-1">
+              {([
+                ["recent", "Recentes"],
+                ["old", "Antigos"],
+                ["az", "A–Z"],
+                ["za", "Z–A"],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setSortBy(k)}
+                  className={cn(
+                    "px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-wider border transition-colors",
+                    sortBy === k
+                      ? "bg-secondary border-primary/30 text-foreground"
+                      : "bg-transparent border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
 
 
 
