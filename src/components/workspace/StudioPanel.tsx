@@ -589,7 +589,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           }}
         />
       )}
-      <KanbanInlineDialog open={kanbanOpen} onOpenChange={setKanbanOpen} clientId={clientId ?? null} clientName={clientName ?? null} />
+      {/* KanbanInlineDialog removido: agora o /kanban insere @kanban no texto e vira bloco vivo no preview */}
     </div>
   );
 }
