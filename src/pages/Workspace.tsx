@@ -135,11 +135,80 @@ export default function Workspace() {
 
   useEffect(() => { setParentStack([]); setSelected(null); }, [scope, clientId]);
 
+  // Existing client files (from public.files) — merged as virtual folders/files
+  const { data: clientFiles } = useQuery({
+    queryKey: ["workspace-client-files", clientId],
+    queryFn: async () => {
+      if (!clientId) return [];
+      const { data } = await (supabase as any)
+        .from("files")
+        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by")
+        .eq("client_id", clientId)
+        .is("parent_file_id", null)
+        .order("created_at", { ascending: false });
+      return data || [];
+    },
+    enabled: isStaff && scope === "client" && !!clientId,
+  });
+
+  // Build virtual nodes for current view (root or inside a virtual folder)
+  const virtualNodes: Node[] = useMemo(() => {
+    if (scope !== "client" || !clientId || !clientFiles?.length) return [];
+    const currentVirtId = parent?.id;
+    const insideVirtFolder = currentVirtId && currentVirtId.startsWith(VIRT_PREFIX + "folder:");
+    // At root of client scope → show virtual folders per distinct `folder` value + orphan files
+    if (!parent) {
+      const folders = new Map<string, number>();
+      const orphans: any[] = [];
+      for (const f of clientFiles as any[]) {
+        const fld = (f.folder || "").trim();
+        if (fld) folders.set(fld, (folders.get(fld) || 0) + 1);
+        else orphans.push(f);
+      }
+      const nodes: Node[] = [];
+      Array.from(folders.entries()).sort((a, b) => a[0].localeCompare(b[0])).forEach(([name, count]) => {
+        nodes.push({
+          id: `${VIRT_PREFIX}folder:${name}`,
+          parent_id: null, scope: "client", client_id: clientId,
+          kind: "folder", name: `${name} (${count})`,
+          mime: null, size_bytes: null, storage_path: null, duration_sec: null,
+          sort_index: 0, sent_for_approval_file_id: null,
+          created_by: null, created_at: new Date().toISOString(),
+          __virtual: true,
+        });
+      });
+      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId)));
+      return nodes;
+    }
+    if (insideVirtFolder) {
+      const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
+      return (clientFiles as any[])
+        .filter((f) => (f.folder || "").trim() === folderName)
+        .map((f) => virtFileNode(f, clientId));
+    }
+    return [];
+  }, [clientFiles, scope, clientId, parent]);
+
   const filtered = useMemo(() => {
+    const merged: Node[] = [
+      ...(virtualNodes || []),
+      ...((nodes || []).filter((n) => !(parent?.id && parent.id.startsWith(VIRT_PREFIX)))),
+    ];
+    // Dedup by name (real workspace_nodes win over virtual with same name)
+    const seen = new Set<string>();
+    const out: Node[] = [];
+    for (const n of [...(nodes || []), ...virtualNodes]) {
+      const key = `${n.kind}:${n.name.replace(/ \(\d+\)$/, "")}`;
+      if (parent?.id?.startsWith(VIRT_PREFIX)) { out.push(n); continue; }
+      if (seen.has(key) && n.__virtual) continue;
+      seen.add(key); out.push(n);
+    }
+    const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
-    if (!s) return nodes || [];
-    return (nodes || []).filter(n => n.name.toLowerCase().includes(s));
-  }, [nodes, search]);
+    if (!s) return base;
+    return base.filter(n => n.name.toLowerCase().includes(s));
+  }, [nodes, virtualNodes, search, parent]);
+
 
   async function signedUrl(path: string) {
     if (signedUrls[path]) return signedUrls[path];
