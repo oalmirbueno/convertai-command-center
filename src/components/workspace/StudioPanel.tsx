@@ -822,18 +822,69 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       </div>
 
       {/* Composer */}
-      <div className="border-t border-border p-2 flex items-end gap-1 bg-secondary/30">
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
-          placeholder="Pergunte ao agente... (Enter envia, Shift+Enter quebra linha)"
-          rows={2}
-          className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
-        />
-        <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
-          {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-        </Button>
+      <div className="border-t border-border bg-secondary/30">
+        {attached.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-2 pt-2">
+            {attached.map(a => (
+              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full pl-2 pr-1 py-0.5">
+                {a.kind === "folder" ? <FolderIcon className="w-2.5 h-2.5" /> : <FileIcon className="w-2.5 h-2.5" />}
+                <span className="max-w-[140px] truncate">{a.name}</span>
+                <button onClick={() => removeAttached(a.id)} className="hover:bg-primary/20 rounded-full p-0.5">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative p-2 flex items-end gap-1">
+          {/* Popover @ arquivos */}
+          {mention && mentionMatches.length > 0 && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[220px] overflow-y-auto">
+              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                Anexar do workspace
+              </div>
+              {mentionMatches.map(f => (
+                <button key={f.id} onClick={() => pickMention(f)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+                  {f.kind === "folder" ? <FolderIcon className="w-3 h-3 text-amber-400 shrink-0" /> : <FileIcon className="w-3 h-3 text-primary shrink-0" />}
+                  <span className="truncate">{f.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Popover / ações */}
+          {slash && slashMatches.length > 0 && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[240px] overflow-y-auto">
+              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                Ações do agente
+              </div>
+              {slashMatches.map(c => (
+                <button key={c.key} onClick={() => pickSlash(c)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+                  <Sparkles className="w-3 h-3 text-primary shrink-0" />
+                  <span className="font-medium">{c.label}</span>
+                  <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => onInputChange(e.target.value, e.target.selectionStart)}
+            onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+            onKeyDown={e => {
+              if (e.key === "Escape") { setMention(null); setSlash(null); return; }
+              if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
+            }}
+            placeholder="Pergunte ao agente... @ anexa arquivos · / dispara ações"
+            rows={2}
+            className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
+          />
+          <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
+            {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
       </div>
     </div>
   );
