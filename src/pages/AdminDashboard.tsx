@@ -17,6 +17,7 @@ import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { Slider } from "@/components/ui/slider";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
+import { PipelineBar } from "@/components/admin/ProjectPipeline";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
