@@ -162,33 +162,17 @@ export default function Workspace() {
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
     const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
-    setUploading(files.length);
-    let ok = 0;
-    for (const file of Array.from(files)) {
-      try {
-        const ext = file.name.split(".").pop() || "bin";
-        const key = `${scope}/${scope === "client" ? clientId : "global"}/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("workspace").upload(key, file, {
-          cacheControl: "3600", upsert: false, contentType: file.type || undefined,
-        });
-        if (upErr) throw upErr;
-        const { error: insErr } = await supabase.from("workspace_nodes").insert({
-          name: file.name, kind: "file", scope,
-          client_id: scope === "client" ? clientId : null,
-          parent_id: destParent, mime: file.type || null,
-          size_bytes: file.size, storage_path: key, created_by: user.id,
-        });
-        if (insErr) throw insErr;
-        ok++;
-      } catch (e: any) {
-        toast({ title: `Falha em ${file.name}`, description: e.message, variant: "destructive" });
-      }
-    }
-    setUploading(0);
-    if (ok) toast({ title: `${ok} arquivo(s) enviado(s)` });
-    invalidate();
+    uploads.enqueue({
+      files: Array.from(files),
+      scope,
+      clientId,
+      parentId: destParent,
+      userId: user.id,
+      onDone: () => invalidate(),
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
 
   async function performDelete(n: Node) {
     // Recursively collect child files' storage paths if folder
