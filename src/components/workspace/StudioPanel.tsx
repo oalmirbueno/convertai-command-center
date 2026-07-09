@@ -1053,7 +1053,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-card/50",
                     isMobile && mobileNotesTab !== "preview" && "hidden"
                   )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 shrink-0">
                       <FileText className="h-3.5 w-3.5 text-primary" />
                       <div className="min-w-0 flex-1">
                         <p className="text-[11px] font-medium text-foreground/85">Documento estruturado</p>
