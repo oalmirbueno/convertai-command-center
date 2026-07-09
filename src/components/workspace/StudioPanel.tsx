@@ -256,6 +256,59 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     else { setMentionQuery(null); setSlashMenu(null); }
   }
 
+  const [kanbanOpen, setKanbanOpen] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
+
+  function insertAtCaret(text: string) {
+    const el = notesRef.current;
+    const cur = state.notes;
+    const caret = el?.selectionStart ?? cur.length;
+    const next = cur.slice(0, caret) + text + cur.slice(caret);
+    setState(s => ({ ...s, notes: next }));
+    setTimeout(() => { if (el) { el.focus(); const p = caret + text.length; el.setSelectionRange(p, p); } }, 10);
+  }
+
+  async function ocrFile(file: File): Promise<string> {
+    const dataUrl: string = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const { data, error } = await supabase.functions.invoke("workspace-ocr", { body: { image: dataUrl } });
+    if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || "OCR falhou");
+    return (data as any)?.text || "";
+  }
+
+  async function handleImageFile(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    setOcrBusy(true);
+    toast({ title: "Analisando imagem…", description: "Extraindo texto via Lovable AI (Gemini Flash Lite)." });
+    try {
+      const text = await ocrFile(file);
+      insertAtCaret(`\n> 🖼️ **Imagem — texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
+      toast({ title: "OCR concluído", description: `${text.length} caracteres extraídos.` });
+    } catch (e: any) {
+      toast({ title: "Falha no OCR", description: e?.message?.slice(0, 200), variant: "destructive" });
+    } finally { setOcrBusy(false); }
+  }
+
+  function onNotesPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items || []);
+    const img = items.find(i => i.type.startsWith("image/"));
+    if (img) {
+      const f = img.getAsFile();
+      if (f) { e.preventDefault(); void handleImageFile(f); return; }
+    }
+    const txt = e.clipboardData.getData("text/plain");
+    const embed = videoEmbedFromUrl(txt);
+    if (embed) {
+      e.preventDefault();
+      insertAtCaret(`\n@video[${txt}](${embed})\n`);
+    }
+  }
+
   function insertSlash(cmd: SlashCmd) {
     if (!slashMenu) return;
     const { where, start, q } = slashMenu;
@@ -263,17 +316,34 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     const before = cur.slice(0, start);
     const after = cur.slice(start + 1 + q.length);
 
-    // Ação especial: abre dialog de nova tarefa (prefill com texto do início da linha corrente)
     if (cmd.action === "createTask") {
       const lineStart = before.lastIndexOf("\n") + 1;
       const currentLine = cur.slice(lineStart, start).trim();
-      setTaskDraft({
-        raw: currentLine,
-        where, insertAt: start, tokenLen: 1 + q.length,
-      });
+      setTaskDraft({ raw: currentLine, where, insertAt: start, tokenLen: 1 + q.length });
       setSlashMenu(null);
       return;
     }
+
+    // Ações que apenas removem o token /xxx e disparam side-effect
+    const cleaned = before + after;
+    const applyCleaned = () => {
+      if (where === "notes") setState(s => ({ ...s, notes: cleaned }));
+      else setState(s => ({ ...s, script: cleaned }));
+      setSlashMenu(null);
+    };
+
+    if (cmd.action === "openKanban") { applyCleaned(); setKanbanOpen(true); return; }
+    if (cmd.action === "uploadImage") { applyCleaned(); setTimeout(() => imageInputRef.current?.click(), 30); return; }
+    if (cmd.action === "insertVideo") {
+      applyCleaned();
+      const url = window.prompt("Cole o link do vídeo (YouTube / Vimeo / Drive):", "");
+      if (url) {
+        const embed = videoEmbedFromUrl(url);
+        insertAtCaret(embed ? `\n@video[${url}](${embed})\n` : `\n[${url}](${url})\n`);
+      }
+      return;
+    }
+    if (cmd.action === "insertMindmap") { applyCleaned(); insertAtCaret(MINDMAP_TEMPLATE); return; }
 
     const next = before + cmd.insert + after;
     if (where === "notes") setState(s => ({ ...s, notes: next }));
