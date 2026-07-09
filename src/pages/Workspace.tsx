@@ -772,6 +772,8 @@ export default function Workspace() {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
                   const dragActive = dragOverId === n.id && isFolder;
+                  const cover = coverFor(n);
+                  const k = kindOf(n);
                   return (
                     <div
                       key={n.id}
@@ -782,25 +784,48 @@ export default function Workspace() {
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
                       onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
                       className={cn(
-                        "group relative rounded-xl border bg-card hover:border-primary/40 hover:bg-secondary/30 transition-all p-3 flex flex-col items-center gap-2 aspect-square cursor-pointer",
+                        "group relative rounded-xl border bg-card hover:border-primary/40 transition-all overflow-hidden flex flex-col cursor-pointer aspect-square",
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
                       )}
                     >
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                         {renderActionsMenu(n)}
                       </div>
-                      <div className="flex-1 flex items-center justify-center w-full">
-                        <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : "text-muted-foreground")} />
-                      </div>
-                      <p className="text-[11px] font-medium text-foreground truncate w-full text-center">{n.name}</p>
-                      {!isFolder && <p className="text-[10px] text-muted-foreground">{fmtSize(n.size_bytes)}</p>}
                       {n.sent_for_approval_file_id && (
-                        <span className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">↗ aprovação</span>
+                        <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
+                      <div className={cn(
+                        "flex-1 flex items-center justify-center w-full relative",
+                        !cover && "bg-gradient-to-br from-secondary/40 to-secondary/10"
+                      )}>
+                        {cover ? (
+                          k === "video" ? (
+                            <>
+                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <Film className="w-8 h-8 text-white/90 drop-shadow" />
+                              </div>
+                            </>
+                          ) : (
+                            <img src={cover} alt={n.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                          )
+                        ) : (
+                          <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : KIND_META[k].color)} />
+                        )}
+                      </div>
+                      <div className="px-2.5 py-1.5 border-t border-border/60 bg-card/95 backdrop-blur">
+                        <p className="text-[11px] font-medium text-foreground truncate">{n.name}</p>
+                        {!isFolder && (
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {KIND_META[k].label} · {fmtSize(n.size_bytes)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
+
             ) : (
               <div className="rounded-xl border border-border bg-card divide-y divide-border">
                 {filtered.map(n => {
