@@ -28,7 +28,16 @@ type Node = {
   mime: string | null; size_bytes: number | null; storage_path: string | null;
   duration_sec: number | null; sort_index: number; sent_for_approval_file_id: string | null;
   created_by: string | null; created_at: string;
+  // virtual nodes derived from public.files (linked, not stored in workspace_nodes)
+  __virtual?: boolean;
+  __external_url?: string | null;
+  __file_id?: string | null;
+  __approval_status?: string | null;
 };
+
+const VIRT_PREFIX = "virt:";
+const isVirt = (id: string | null | undefined) => !!id && id.startsWith(VIRT_PREFIX);
+
 
 const iconFor = (n: Node) => {
   if (n.kind === "folder") return Folder;
