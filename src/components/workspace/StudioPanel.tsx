@@ -785,7 +785,86 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   );
 }
 
-// Preview leve das Notas: renderiza checkboxes, imagens ![](url), links, embeds de vídeo @video[nome](embedUrl) e menções wsfile.
+// ── PDF branded AcelerIQ (via window.print) ──
+function renderBrandedDoc(md: string, clientName: string, projectName: string) {
+  const html = mdToHtml(md);
+  const date = new Date().toLocaleDateString("pt-BR");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+<title>${escapeHtml(projectName)} · AcelerIQ</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm 22mm 18mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Outfit', -apple-system, sans-serif; color: #0D0D0D; margin: 0; padding: 24px; background: #fff; }
+  .cover { border-bottom: 3px solid #00FF66; padding-bottom: 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+  .logo .dot { color: #00FF66; }
+  .meta { text-align: right; font-size: 11px; color: #555; font-family: 'JetBrains Mono', monospace; }
+  h1 { font-size: 28px; letter-spacing: -0.02em; margin: 24px 0 8px; page-break-after: avoid; }
+  h2 { font-size: 18px; margin: 28px 0 8px; page-break-after: avoid; border-left: 3px solid #00FF66; padding-left: 10px; }
+  h3 { font-size: 14px; margin: 20px 0 6px; page-break-after: avoid; }
+  p, li { font-size: 12.5px; line-height: 1.6; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  .check { list-style: none; padding-left: 0; }
+  .check li::before { content: "☐  "; color: #00FF66; font-weight: bold; }
+  .check li.done::before { content: "☑  "; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
+  hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 20px 0; }
+  footer { position: fixed; bottom: 10mm; left: 18mm; right: 18mm; font-size: 10px; color: #888; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 6px; }
+  .content { max-width: 720px; margin: 0 auto; }
+</style></head><body>
+<div class="content">
+  <div class="cover">
+    <div class="logo">aceler<span class="dot">iq</span></div>
+    <div class="meta">
+      <div>${escapeHtml(clientName)}</div>
+      <div>${escapeHtml(projectName)}</div>
+      <div>${date}</div>
+    </div>
+  </div>
+  ${html}
+</div>
+<footer><span>aceleriq.online</span><span>Confidencial · gerado ${date}</span></footer>
+</body></html>`;
+}
+
+function escapeHtml(s: string) { return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]!)); }
+
+function mdToHtml(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inList: "ul" | "ol" | "check" | null = null;
+  const closeList = () => { if (inList) { out.push(`</${inList === "check" ? "ul" : inList}>`); inList = null; } };
+  for (const raw of lines) {
+    const l = raw.replace(/</g, "&lt;");
+    if (/^#{1,3}\s+/.test(l)) {
+      closeList();
+      const level = l.match(/^#+/)![0].length;
+      out.push(`<h${level}>${l.replace(/^#+\s+/, "")}</h${level}>`);
+    } else if (/^\s*-\s+\[( |x)\]\s+/i.test(l)) {
+      if (inList !== "check") { closeList(); out.push(`<ul class="check">`); inList = "check"; }
+      const done = /\[x\]/i.test(l);
+      out.push(`<li class="${done ? "done" : ""}">${l.replace(/^\s*-\s+\[( |x)\]\s+/i, "")}</li>`);
+    } else if (/^\s*-\s+/.test(l)) {
+      if (inList !== "ul") { closeList(); out.push("<ul>"); inList = "ul"; }
+      out.push(`<li>${l.replace(/^\s*-\s+/, "")}</li>`);
+    } else if (/^\s*\d+\.\s+/.test(l)) {
+      if (inList !== "ol") { closeList(); out.push("<ol>"); inList = "ol"; }
+      out.push(`<li>${l.replace(/^\s*\d+\.\s+/, "")}</li>`);
+    } else if (l.trim() === "") {
+      closeList(); out.push("");
+    } else if (/^---+$/.test(l.trim())) {
+      closeList(); out.push("<hr/>");
+    } else {
+      closeList();
+      const withBold = l.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+      out.push(`<p>${withBold}</p>`);
+    }
+  }
+  closeList();
+  return out.join("\n");
+}
+
 export function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: string | null; clientName?: string | null }) {
   const lines = src.split("\n");
   const out: React.ReactNode[] = [];
