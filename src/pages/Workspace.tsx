@@ -802,6 +802,87 @@ export default function Workspace() {
     );
   }
 
+  async function copyLink(n: Node) {
+    try {
+      const url = await urlFor(n);
+      if (!url) throw new Error("Sem link disponível");
+      await navigator.clipboard.writeText(url);
+      toast({ title: "Link copiado" });
+    } catch (e: any) {
+      toast({ title: "Não foi possível copiar", description: e?.message, variant: "destructive" });
+    }
+  }
+
+  function renderContextMenu(n: Node, children: React.ReactNode) {
+    const isFolder = n.kind === "folder";
+    const canApprove = !isFolder && !n.__virtual && !!n.storage_path && scope === "client" && !!clientId;
+    return (
+      <ContextMenu>
+        <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
+        <ContextMenuContent className="w-56">
+          {isFolder ? (
+            <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+              <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
+            </ContextMenuItem>
+          ) : (
+            <>
+              <ContextMenuItem onSelect={() => setSelected(n)}>
+                <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={async () => openFile(await urlFor(n))}>
+                <ExternalLink className="w-3.5 h-3.5 mr-2" /> Abrir em nova aba
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={async () => downloadFile(await urlFor(n), n.name)}>
+                <Download className="w-3.5 h-3.5 mr-2" /> Baixar
+              </ContextMenuItem>
+              <ContextMenuItem onSelect={() => copyLink(n)}>
+                <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+              </ContextMenuItem>
+            </>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => { setRaming(n); setRenameValue(n.name); }}>
+            <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+          </ContextMenuItem>
+          <ContextMenuSub>
+            <ContextMenuSubTrigger>
+              <FolderInput className="w-3.5 h-3.5 mr-2" /> Mover para
+            </ContextMenuSubTrigger>
+            <ContextMenuSubContent className="max-h-72 overflow-y-auto w-64">
+              <ContextMenuItem onSelect={() => moveNode(n, null)}>
+                <Globe2 className="w-3.5 h-3.5 mr-2" /> Raiz
+              </ContextMenuItem>
+              <ContextMenuSeparator />
+              {(allFolders || [])
+                .filter(f => f.id !== n.id && !(n.kind === "folder" && isDescendant(n.id, f.id)))
+                .sort((a, b) => (folderPaths.get(a.id) || "").localeCompare(folderPaths.get(b.id) || ""))
+                .map(f => (
+                  <ContextMenuItem key={f.id} onSelect={() => moveNode(n, f.id)}>
+                    <Folder className="w-3.5 h-3.5 mr-2 text-primary" />
+                    <span className="truncate">{folderPaths.get(f.id) || f.name}</span>
+                  </ContextMenuItem>
+                ))}
+            </ContextMenuSubContent>
+          </ContextMenuSub>
+          {canApprove && (
+            <>
+              <ContextMenuSeparator />
+              <ContextMenuItem onSelect={() => sendToApproval(n)}>
+                <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
+              </ContextMenuItem>
+            </>
+          )}
+          <ContextMenuSeparator />
+          <ContextMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
+    );
+  }
+
+
+
   if (!isStaff) {
     return <div className="p-8 text-center text-muted-foreground">Acesso restrito à equipe.</div>;
   }
