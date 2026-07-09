@@ -30,6 +30,7 @@ import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel"
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
+import { StudioPanel } from "@/components/workspace/StudioPanel";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
