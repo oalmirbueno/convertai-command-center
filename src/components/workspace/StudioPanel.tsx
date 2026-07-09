@@ -2881,6 +2881,224 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
 }
 
 // =========================
+// ATTACH PICKER — navegar pastas + busca + múltipla seleção
+// =========================
+type PickerNode = { id: string; name: string; kind: "folder" | "file"; parent_id: string | null; mime?: string | null };
+type Crumb = { id: string | null; name: string };
+
+function AttachPicker({
+  open, onOpenChange, clientId, rootFolderId, rootLabel, alreadyAttachedIds, onConfirm,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  clientId?: string | null;
+  rootFolderId?: string | null;
+  rootLabel: string;
+  alreadyAttachedIds: Set<string>;
+  onConfirm: (picks: FileRef[]) => void;
+}) {
+  const [crumbs, setCrumbs] = useState<Crumb[]>([{ id: rootFolderId ?? null, name: rootLabel }]);
+  const currentId = crumbs[crumbs.length - 1].id;
+  const [nodes, setNodes] = useState<PickerNode[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [query, setQuery] = useState("");
+  const [selected, setSelected] = useState<Map<string, PickerNode>>(new Map());
+  const [globalSearch, setGlobalSearch] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setCrumbs([{ id: rootFolderId ?? null, name: rootLabel }]);
+      setSelected(new Map());
+      setQuery("");
+      setGlobalSearch(false);
+    }
+  }, [open, rootFolderId, rootLabel]);
+
+  useEffect(() => {
+    if (!open) return;
+    let cancelled = false;
+    (async () => {
+      setLoading(true);
+      let q = supabase.from("workspace_nodes")
+        .select("id,name,kind,parent_id,mime")
+        .order("kind", { ascending: true })
+        .order("name", { ascending: true })
+        .limit(400);
+      if (clientId) q = q.eq("client_id", clientId); else q = q.is("client_id", null);
+      if (globalSearch && query.trim()) {
+        q = q.ilike("name", `%${query.trim()}%`);
+      } else if (currentId) {
+        q = q.eq("parent_id", currentId);
+      } else {
+        q = q.is("parent_id", null);
+      }
+      const { data } = await q;
+      if (!cancelled) setNodes((data ?? []) as PickerNode[]);
+      setLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [open, clientId, currentId, globalSearch, query]);
+
+  const filtered = useMemo(() => {
+    if (globalSearch) return nodes;
+    const s = query.trim().toLowerCase();
+    if (!s) return nodes;
+    return nodes.filter(n => n.name.toLowerCase().includes(s));
+  }, [nodes, query, globalSearch]);
+
+  const visibleSelectableIds = filtered.map(n => n.id);
+  const allVisibleChecked = visibleSelectableIds.length > 0 && visibleSelectableIds.every(id => selected.has(id));
+
+  function toggle(n: PickerNode) {
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (next.has(n.id)) next.delete(n.id); else next.set(n.id, n);
+      return next;
+    });
+  }
+  function toggleAllVisible() {
+    setSelected(prev => {
+      const next = new Map(prev);
+      if (allVisibleChecked) filtered.forEach(n => next.delete(n.id));
+      else filtered.forEach(n => next.set(n.id, n));
+      return next;
+    });
+  }
+  function openFolder(n: PickerNode) {
+    if (n.kind !== "folder") return;
+    setCrumbs(prev => [...prev, { id: n.id, name: n.name }]);
+    setQuery("");
+    setGlobalSearch(false);
+  }
+  function goTo(idx: number) {
+    setCrumbs(prev => prev.slice(0, idx + 1));
+    setQuery("");
+    setGlobalSearch(false);
+  }
+  function confirm() {
+    const picks: FileRef[] = Array.from(selected.values()).map(n => ({
+      id: n.id, name: n.name, kind: n.kind, url: null, meta: n.mime ?? null,
+    }));
+    onConfirm(picks);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl p-0 gap-0 overflow-hidden">
+        <DialogHeader className="px-4 pt-4 pb-2 border-b border-border">
+          <DialogTitle className="text-sm font-medium">Anexar arquivos ao contexto</DialogTitle>
+          <div className="flex flex-wrap items-center gap-1 text-[11px] text-muted-foreground mt-1">
+            {crumbs.map((c, i) => (
+              <span key={i} className="flex items-center gap-1">
+                {i > 0 && <ChevronDown className="w-3 h-3 -rotate-90 opacity-50" />}
+                <button
+                  onClick={() => goTo(i)}
+                  className={cn("hover:text-foreground truncate max-w-[180px]",
+                    i === crumbs.length - 1 ? "text-foreground font-medium" : "")}
+                >
+                  {c.name}
+                </button>
+              </span>
+            ))}
+          </div>
+        </DialogHeader>
+
+        <div className="px-4 py-2 border-b border-border flex items-center gap-2">
+          <div className="relative flex-1">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder={globalSearch ? "Buscar em todo o workspace..." : "Filtrar nesta pasta..."}
+              className="h-8 text-[12px] pl-2"
+            />
+          </div>
+          <label className="flex items-center gap-1.5 text-[11px] text-muted-foreground cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={globalSearch}
+              onChange={(e) => setGlobalSearch(e.target.checked)}
+              className="accent-primary"
+            />
+            Buscar em tudo
+          </label>
+        </div>
+
+        <div className="px-4 py-2 flex items-center justify-between text-[11px] text-muted-foreground border-b border-border">
+          <button
+            onClick={toggleAllVisible}
+            disabled={filtered.length === 0}
+            className="flex items-center gap-1.5 hover:text-foreground disabled:opacity-40"
+          >
+            <span className={cn("w-3.5 h-3.5 rounded border border-border flex items-center justify-center",
+              allVisibleChecked ? "bg-primary border-primary" : "bg-background")}>
+              {allVisibleChecked && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+            </span>
+            {allVisibleChecked ? "Desmarcar visíveis" : "Selecionar visíveis"}
+          </button>
+          <span>{selected.size} selecionado(s)</span>
+        </div>
+
+        <div className="max-h-[380px] overflow-y-auto">
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-[11px] text-muted-foreground">
+              <Loader2 className="w-3.5 h-3.5 animate-spin mr-2" /> carregando
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="py-10 text-center text-[11px] text-muted-foreground">
+              {globalSearch && !query.trim() ? "Digite algo para buscar." : "Pasta vazia."}
+            </div>
+          ) : (
+            <ul>
+              {filtered.map(n => {
+                const already = alreadyAttachedIds.has(n.id);
+                const checked = selected.has(n.id);
+                return (
+                  <li key={n.id}
+                    className={cn("flex items-center gap-2 px-4 py-1.5 border-b border-border/40 hover:bg-secondary/40",
+                      checked && "bg-primary/5")}>
+                    <button
+                      onClick={() => toggle(n)}
+                      disabled={already}
+                      title={already ? "Já anexado" : ""}
+                      className={cn("w-3.5 h-3.5 rounded border flex items-center justify-center shrink-0",
+                        checked ? "bg-primary border-primary" : "bg-background border-border",
+                        already && "opacity-40 cursor-not-allowed")}
+                    >
+                      {(checked || already) && <Check className="w-2.5 h-2.5 text-primary-foreground" />}
+                    </button>
+                    <button
+                      onClick={() => n.kind === "folder" ? openFolder(n) : toggle(n)}
+                      className="flex items-center gap-2 flex-1 min-w-0 text-left"
+                    >
+                      {n.kind === "folder"
+                        ? <FolderIcon className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                        : <FileIcon className="w-3.5 h-3.5 text-primary shrink-0" />}
+                      <span className="truncate text-[12px]">{n.name}</span>
+                      {n.kind === "folder" && (
+                        <ChevronDown className="w-3 h-3 -rotate-90 opacity-40 ml-auto" />
+                      )}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        <DialogFooter className="px-4 py-3 border-t border-border">
+          <Button variant="outline" size="sm" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button size="sm" onClick={confirm} disabled={selected.size === 0}>
+            Anexar {selected.size > 0 ? `(${selected.size})` : ""}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+
+// =========================
 // MINI KANBAN (drag-drop entre colunas + log de contexto)
 // =========================
 function MiniKanban({ board, onChange, onReset, log }: {
