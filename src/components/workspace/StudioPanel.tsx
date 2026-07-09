@@ -535,7 +535,7 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 // AGENT CHAT (persistente por cliente)
 // =========================
 
-type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null };
+type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
 function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, script }: {
