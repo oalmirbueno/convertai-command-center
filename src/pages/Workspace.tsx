@@ -66,7 +66,7 @@ export default function Workspace() {
   const { data: clients } = useQuery({
     queryKey: ["workspace-clients"],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data } = await (supabase as any)
         .from("profiles").select("id, full_name, company_name")
         .eq("role", "client").order("full_name");
       return data || [];
