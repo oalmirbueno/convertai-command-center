@@ -16,6 +16,7 @@ import TabDeliveries from "./tabs/TabDeliveries";
 import { summarizeProjectText } from "@/lib/projectPresentation";
 import TabUpdates from "./tabs/TabUpdates";
 import TabPayments from "./tabs/TabPayments";
+import TabDocument from "./tabs/TabDocument";
 import RequestButton from "./RequestButton";
 import { useTasks, useMilestones, useFiles, useProjectUpdates } from "@/hooks/useSupabaseData";
 import { formatDate, formatDateShort, daysUntil, relativeTime } from "./dashboardHelpers";
@@ -391,6 +392,7 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             { value: "timeline", label: "Timeline" },
             { value: "deliveries", label: "Entregas" },
             ...(NON_RECURRING_TYPES.includes(project.project_type) ? [{ value: "payments", label: "Pagamentos" }] : []),
+            { value: "document", label: "Documento" },
             { value: "updates", label: "Atualizações" },
           ].map(tab => (
             <TabsTrigger
@@ -420,6 +422,9 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             <TabPayments projectId={project.id} clientId={project.client_id} projectName={project.name} />
           </TabsContent>
         )}
+        <TabsContent value="document" className="mt-6">
+          <TabDocument projectId={project.id} />
+        </TabsContent>
         <TabsContent value="updates" className="mt-6">
           <TabUpdates projectId={project.id} />
         </TabsContent>

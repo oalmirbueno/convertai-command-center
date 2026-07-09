@@ -45,6 +45,55 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
+    // ─── MODO STRUCTURE / ENRICH (não-stream, retorna JSON pronto pro doc) ───
+    const preview = await req.clone().json().catch(() => ({} as any));
+    const specialMode = preview?.mode as "structure" | "enrich" | undefined;
+    if (specialMode === "structure" || specialMode === "enrich") {
+      const raw = String(preview?.text || "").slice(0, 12000);
+      const ctxName = preview?.context?.client_name || "Global";
+      const folderP = preview?.context?.folder_path || "raiz";
+      const openaiKey = Deno.env.get("OPENAI_API_KEY");
+      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
+      const url = openaiKey ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
+      const key = openaiKey || lovableKey;
+      const model = openaiKey ? "gpt-4o-mini" : "google/gemini-2.5-flash-lite";
+      if (!key) return json({ error: "sem_motor" }, 500);
+
+      const sysStructure = `Você reescreve o texto do usuário em MARKDOWN PROFISSIONAL, pronto pra colar em um documento executivo da AcelerIQ. Regras:
+- H1 curto (# Título), H2/H3 para seções (## / ###).
+- Bullets objetivos, sem enrolação.
+- Sempre inclua no fim: uma seção "## Checklist" com \`- [ ] item\` executáveis, e "## Próximas ações" com passos numerados (responsável sugerido + prazo relativo).
+- Sem emoji decorativo. Ação > teoria. Nunca invente dados; se faltar contexto, marque {{campo}}.
+- Cliente: ${ctxName}. Pasta: /${folderP}.`;
+
+      const sysEnrich = `Você enriquece um documento em andamento. Devolve APENAS JSON válido:
+{"checklist":["item"],"next_actions":["ação com responsável e prazo"],"suggestion":"1-2 linhas sugerindo o próximo bloco"}
+Máximo 5 checklist, 4 next_actions. Sem markdown fora do JSON.`;
+
+      const r = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: specialMode === "structure" ? sysStructure : sysEnrich },
+            { role: "user", content: raw || "(vazio)" },
+          ],
+          temperature: 0.2,
+          ...(specialMode === "enrich" ? { response_format: { type: "json_object" } } : {}),
+        }),
+      });
+      if (!r.ok) return json({ error: `ai_${r.status}`, detail: (await r.text()).slice(0, 200) }, r.status);
+      const jr = await r.json();
+      const out = jr?.choices?.[0]?.message?.content || "";
+      if (specialMode === "enrich") {
+        try { return json({ mode: "enrich", data: JSON.parse(out) }); }
+        catch { return json({ mode: "enrich", data: { checklist: [], next_actions: [], suggestion: "" } }); }
+      }
+      return json({ mode: "structure", markdown: out });
+    }
+
+
     const body = await req.json();
     const { thread_id, message, context } = body as {
       thread_id: string;

@@ -1446,6 +1446,44 @@ export type Database = {
         }
         Relationships: []
       }
+      studio_docs: {
+        Row: {
+          created_at: string
+          doc_blocks: Json
+          notes: string
+          project_id: string
+          published: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          doc_blocks?: Json
+          notes?: string
+          project_id: string
+          published?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          doc_blocks?: Json
+          notes?: string
+          project_id?: string
+          published?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "studio_docs_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: true
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       suppressed_emails: {
         Row: {
           created_at: string

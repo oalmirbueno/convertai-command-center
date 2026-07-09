@@ -1,78 +1,62 @@
-# Workspace — Drive operacional interno
+# Studio v3 — Fluxo Fordista (Agente → Notas → GPT)
 
-Módulo `/workspace` acessível só para admin/equipe. Estrutura Global + por Cliente, pastas livres, upload de qualquer arquivo (com foco em vídeo), player nativo com streaming HTTP range direto do storage (Supabase entrega range headers nativamente → sem transcodificação, sem servidor extra) e botão "Enviar para aprovação" que promove o item para a área de Arquivos do cliente sem duplicar o binário.
+Reorganizar o `StudioPanel` em três estágios claros, lado a lado, com sync bidirecional e saída em documento branded.
 
-## Estrutura de dados
+## Layout (staff/admin only — cliente só recebe espelho read-only)
 
-Duas tabelas novas em `public`:
+```text
+┌──────────────────────────────────────────────────────────────────┐
+│  Studio · [Cliente ▾ / Projeto ▾]        ◧ ▬ ◨ ⛶  [Baixar PDF]  │
+├────────────┬─────────────────────────────┬───────────────────────┤
+│ 1. AGENTE  │      2. NOTAS (centro)      │  3. GPT EXTERNO       │
+│ (esquerda) │      documento vivo         │  (direita)            │
+│            │                             │                       │
+│ contexto+  │  H1/H2/H3, listas, check,   │  recomendação de qual │
+│ chat curto │  auto-formata, auto-plano   │  GPT usar, copiar ctx,│
+│ manda→notas│  edge interno, bidirecional │  colar resposta→notas │
+└────────────┴─────────────────────────────┴───────────────────────┘
+```
 
-**`workspace_nodes`** — árvore única de pastas + arquivos
-- `id`, `parent_id` (self-ref, null = raiz), `scope` (`global` | `client`), `client_id` (nullable, obrigatório se scope=client)
-- `kind` (`folder` | `file`), `name`, `mime`, `size_bytes`, `storage_path`, `thumb_path` (nullable), `duration_sec` (nullable, vídeos)
-- `created_by`, `created_at`, `updated_at`, `sort_index`
-- `sent_for_approval_file_id` (nullable → `files.id`) para rastrear promoção
+Fluxo:
 
-**`workspace_shares`** (fase 2, não bloqueia MVP) — links temporários públicos
+1. **Agente (E)**
+  **Se pedir pra atualizar o plano, ou seja, a gente tem um projeto, a gente vai atualizar o projeto. Vai pra etapas automaticamente. Ele já pega o projeto existente e ele automaticamente já faz algo interno sozinho, tá, e já faz tudo isso: já atualiza, já implementa, já cria outros projetos em cima daquele cliente, assim por diante, tá** puxa contexto (cliente, pasta, arquivos, roteiro, notas atuais) e conversa. Botão **"Enviar para Notas"** transforma a última resposta em bloco estruturado (headline + subheadline + bullets + checklist + próximos passos) e injeta no doc central.
+2. **Notas (centro)** = documento vivo com formatação rica (Tiptap-like via `contenteditable` + toolbar leve já existente). Enquanto o usuário digita, um "edge interno" (debounce 1.5s) chama `workspace-agent` em modo `mode: "enrich"` que devolve: correções, próximos blocos sugeridos, checklist, plano executável — inseridos como sugestões aceitáveis (chips no rodapé "Aceitar / Descartar"). Sempre orientado a **ação**, não só teoria.
+3. **GPT (D)** lista personas do escopo com badge "⭐ recomendado" (roteador escolhe com base no conteúdo atual das notas). Clicar abre GPT externo com contexto copiado. Botão **"Colar resposta"** faz merge automático no doc central preservando estrutura.
 
-Bucket novo `workspace` (privado) para binários. Signed URLs por request. RLS: apenas `is_staff(auth.uid())` lê/escreve; equipe só vê nós de clientes onde tem tarefa atribuída ou scope=global; admin vê tudo. Grants completos para authenticated e service_role.
+## Documento vivo → PDF Aceleriq
 
-## UI
+- Renderização em `NotesDocument.tsx` com estilos branded (verde neon `#00FF66`, dark `#0D0D0D`, Outfit + JetBrains Mono, logo no topo).
+- Botão **"Baixar PDF"** usa `html2pdf.js` (bun add) com `pagebreak: { mode: ['avoid-all','css','legacy'] }` e classes `.no-break` em headings/checklists.
+- Auto-save no `workspace_nodes.metadata.notes` (já existe) + nova coluna `metadata.doc_blocks` (JSONB) para blocos estruturados.
 
-Rota `/workspace` no AppLayout (item de menu com ícone `FolderTree`, só renderiza pra staff).
+## Bidirecional + Cliente
 
-Layout:
-- Sidebar esquerda (240px): árvore recolhível → `📁 Global` e `👥 Clientes` (lista de clientes ativos, cada um expansível).
-- Área central: breadcrumb + grid/lista de nós da pasta atual, com toggle grid↔lista, ordenação (nome/data/tamanho), busca por nome.
-- Drawer direito ao clicar num arquivo: preview (player pra vídeo, `<img>` pra imagem, PDF embed), metadados, botões **Baixar**, **Renomear**, **Mover**, **Enviar para aprovação**, **Excluir**.
+- Realtime channel `studio:{project_id}` — qualquer save no doc dispara `postgres_changes` em `workspace_nodes`.
+- Cliente vê **espelho read-only** na aba do projeto (`ProjectView.tsx` → nova aba "Documento") — apenas se `metadata.doc_published = true` (toggle "Publicar para cliente" no header do Studio).
+- Staff vê tudo; cliente só vê publicado.
 
-Ações de barra superior: **Novo** (pasta / upload arquivos / upload vídeo), drag-and-drop pra soltar arquivos direto no grid, upload com progresso (barra por arquivo, cancelamento).
+## Backend
 
-Estética Aceleriq: fundo `#0D0D0D`, cards `#121212`, acento neon `#00FF66`, Outfit/JetBrains Mono, cantos arredondados, sem gradientes genéricos. Ícones por tipo (Film pra vídeo em verde, Image, FileText, Archive). Thumb de vídeo gerada no cliente via `<video>` + canvas no primeiro segundo, salva em `thumb_path`.
+- `supabase/functions/workspace-agent/index.ts`: adicionar `mode: "enrich" | "chat" | "structure"`:
+  - `enrich`: recebe doc atual → devolve JSON `{ corrections[], suggestions[], checklist[], next_actions[] }`.
+  - `structure`: recebe texto bruto do agente → devolve markdown formatado (H1/H2/lista/check).
+- `workspace-agent-recommend` (nova): recebe doc + catálogo → devolve `persona_id` recomendado + razão.
 
-## Vídeo
+## Frontend
 
-Upload direto do browser pro bucket via SDK Supabase (chunked). Player `<video controls preload="metadata">` recebendo signed URL de 1h — Supabase Storage responde a `Range` headers, então o browser faz seek/streaming sem baixar tudo. Duração + thumb extraídas no cliente antes do upload e salvas no node.
+- `src/components/workspace/StudioPanel.tsx`: reorganizar em 3 colunas (grid `grid-cols-[280px_1fr_300px]` em desktop; tabs em mobile). Header limpo com breadcrumb Cliente/Projeto e ações compactas.
+- `src/components/workspace/NotesDocument.tsx` (novo): editor rico com toolbar + suggestion chips + branded print CSS.
+- `src/components/workspace/StudioAgentColumn.tsx` (novo): chat compacto + botão "→ Notas".
+- `src/components/workspace/StudioGptColumn.tsx` (novo): lista personas com recomendação, copy-context, paste-back.
+- `src/components/client/tabs/TabDocument.tsx` (novo): read-only view do doc publicado.
 
-Limite: 500MB por arquivo (validação client-side + policy no bucket). Formatos: mp4, webm, mov, mkv, mp3, wav, além de tudo que Arquivos já aceita.
+## Design
 
-## Envio para aprovação
+- Grid limpo, dividers sutis (`border-border/40`), cada coluna com header próprio (ícone + título + ação).
+- Chips de sugestão animados com framer-motion (fade+slide).
+- PDF: capa com logo Aceleriq, rodapé com "aceleriq.online · confidencial", numeração de página.
 
-Botão "Enviar para aprovação" abre modal: escolher projeto do cliente, pasta destino em Arquivos (usa as `CLIENT_FOLDERS` existentes), legenda opcional. Ao confirmar:
-- Cria row em `files` com `file_url` = signed URL longa (ou copia storage_path referenciando o mesmo binário do bucket workspace — mais eficiente, sem duplicar bytes)
-- `approval_status = 'pending'`, `uploaded_by = staff atual`
-- Escreve `sent_for_approval_file_id` no node pra mostrar badge "Enviado ✓" no workspace
-- Dispara `notify-admin`/notificação pro cliente igual fluxo atual
+## Escopo desta entrega
 
-Cliente continua vendo tudo em `/documentos` sem saber da existência do workspace. Fluxo tradicional (upload direto em Arquivos) segue intacto.
-
-## Permissões
-
-- Admin: CRUD total, todos os escopos
-- Equipe (design/traffic/manager): CRUD total em `global` + em `client` onde `client_id` aparece em alguma task atribuída a ela. Sem restrição de delete (mais fluido pro operacional; auditoria via `created_by`)
-- Cliente: sem rota, sem policy — 100% invisível
-
-## Arquivos afetados
-
-Novos:
-- Migration: tabelas + bucket + policies + grants
-- `src/pages/Workspace.tsx` (shell + roteamento)
-- `src/components/workspace/WorkspaceSidebar.tsx`
-- `src/components/workspace/WorkspaceGrid.tsx`
-- `src/components/workspace/NodePreviewDrawer.tsx`
-- `src/components/workspace/UploadDropzone.tsx`
-- `src/components/workspace/SendToApprovalModal.tsx`
-- `src/hooks/useWorkspace.ts` (queries + mutations React Query)
-- `src/lib/videoThumb.ts` (extrai thumb + duração)
-
-Editados:
-- `src/App.tsx` — rota
-- `src/components/AppLayout.tsx` — item de menu (staff-only)
-
-## Fora do escopo desta entrega
-
-- Compartilhamento público com link expirável (fase 2)
-- Comentários/anotações por arquivo (usa Arquivos quando promovido)
-- Transcodificação server-side (não necessária pra streaming — Supabase já suporta Range)
-- Busca full-text em PDFs
-
-Confirma que posso seguir?
+Vou implementar em uma passada: layout 3-colunas, doc rico com auto-enrich, recomendação de GPT, PDF branded, publicação para cliente + aba read-only. Sem alterar business logic fora do Studio.

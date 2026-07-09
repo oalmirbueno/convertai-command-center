@@ -4,6 +4,7 @@ import {
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
   Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
+  Download, Radio, Zap, ArrowRight,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -271,6 +272,126 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => { localStorage.setItem("studio_open", open ? "1" : "0"); }, [open]);
   useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
   useEffect(() => { localStorage.setItem("studio_dock_v2", dock); }, [dock]);
+
+  // ── Fordista: linkagem com projeto + publicação + PDF ──
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState<string | null>(() => {
+    try { return localStorage.getItem(`studio_project_v1:${contextKey}`) || null; } catch { return null; }
+  });
+  const [docPublished, setDocPublished] = useState(false);
+  const [docSyncing, setDocSyncing] = useState<"idle"|"saving"|"saved"|"error">("idle");
+  const [enrichBusy, setEnrichBusy] = useState(false);
+  const [enrichData, setEnrichData] = useState<{ checklist: string[]; next_actions: string[]; suggestion: string } | null>(null);
+
+  useEffect(() => { setProjectId(localStorage.getItem(`studio_project_v1:${contextKey}`) || null); }, [contextKey]);
+  useEffect(() => {
+    try {
+      if (projectId) localStorage.setItem(`studio_project_v1:${contextKey}`, projectId);
+      else localStorage.removeItem(`studio_project_v1:${contextKey}`);
+    } catch {}
+  }, [projectId, contextKey]);
+
+  // Lista de projetos do cliente atual (ou todos se global)
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      let q = supabase.from("projects").select("id, name").order("created_at", { ascending: false }).limit(50);
+      if (clientId) q = q.eq("client_id", clientId);
+      const { data } = await q;
+      if (!cancel) setProjects((data as any) || []);
+    })();
+    return () => { cancel = true; };
+  }, [clientId]);
+
+  // Carrega doc do projeto atual + realtime
+  useEffect(() => {
+    if (!projectId) { setDocPublished(false); return; }
+    let cancel = false;
+    (async () => {
+      const { data } = await supabase.from("studio_docs").select("notes, published").eq("project_id", projectId).maybeSingle();
+      if (cancel) return;
+      if (data) {
+        setDocPublished(!!(data as any).published);
+        // Se o doc remoto tem conteúdo e local está vazio, hidrata local
+        const remote = ((data as any).notes || "").trim();
+        if (remote && !state.notes.trim()) setState(s => ({ ...s, notes: remote }));
+      }
+    })();
+    return () => { cancel = true; };
+  }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced upsert das notas -> studio_docs
+  useEffect(() => {
+    if (!projectId) return;
+    setDocSyncing("saving");
+    const t = setTimeout(async () => {
+      const { data: userRes } = await supabase.auth.getUser();
+      const uid = userRes?.user?.id;
+      const { error } = await supabase.from("studio_docs").upsert({
+        project_id: projectId,
+        notes: state.notes,
+        published: docPublished,
+        updated_by: uid,
+        updated_at: new Date().toISOString(),
+      } as any, { onConflict: "project_id" });
+      setDocSyncing(error ? "error" : "saved");
+      if (!error) setTimeout(() => setDocSyncing("idle"), 1200);
+    }, 1200);
+    return () => clearTimeout(t);
+  }, [state.notes, projectId, docPublished]);
+
+  // Auto-enrich (debounce 2.5s após parar de digitar; só se tiver >120 chars)
+  useEffect(() => {
+    if (!state.notes || state.notes.trim().length < 120) { setEnrichData(null); return; }
+    const t = setTimeout(async () => {
+      setEnrichBusy(true);
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const tok = sess?.session?.access_token;
+        if (!tok) return;
+        const url = `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`;
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+          body: JSON.stringify({ mode: "enrich", text: state.notes.slice(-4000), context: { client_name: clientName, folder_path: folderPath } }),
+        });
+        if (r.ok) {
+          const j = await r.json();
+          setEnrichData(j?.data || null);
+        }
+      } finally { setEnrichBusy(false); }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [state.notes, clientName, folderPath]);
+
+  async function togglePublish() {
+    if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
+    const next = !docPublished;
+    setDocPublished(next);
+    toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
+  }
+
+  function downloadPDF() {
+    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel);
+    const w = window.open("", "_blank", "width=900,height=1000");
+    if (!w) { toast({ title: "Bloqueado", description: "Habilite pop-ups pra imprimir o PDF." }); return; }
+    w.document.open(); w.document.write(html); w.document.close();
+    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 500);
+  }
+
+  function acceptEnrichChecklist() {
+    if (!enrichData?.checklist?.length) return;
+    const block = "\n\n## Checklist sugerido\n" + enrichData.checklist.map(i => `- [ ] ${i}`).join("\n") + "\n";
+    setState(s => ({ ...s, notes: (s.notes || "") + block }));
+    setEnrichData(null);
+  }
+  function acceptEnrichActions() {
+    if (!enrichData?.next_actions?.length) return;
+    const block = "\n\n## Próximas ações\n" + enrichData.next_actions.map((i, idx) => `${idx + 1}. ${i}`).join("\n") + "\n";
+    setState(s => ({ ...s, notes: (s.notes || "") + block }));
+    setEnrichData(null);
+  }
+
 
 
   const mentionMatches = useMemo(() => {
@@ -562,6 +683,45 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             })}
           </div>
 
+          {/* Fordista bar: Projeto · Publicar · PDF */}
+          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 text-[11px] overflow-x-auto">
+            <span className="text-muted-foreground shrink-0">Projeto</span>
+            <select
+              value={projectId ?? ""}
+              onChange={e => setProjectId(e.target.value || null)}
+              className="bg-background border border-border rounded px-1.5 py-0.5 text-[11px] max-w-[180px]"
+              title="Vincule um projeto para publicar/espelhar ao cliente"
+            >
+              <option value="">— nenhum —</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {projectId && (
+              <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
+                docSyncing === "saving" && "text-amber-500",
+                docSyncing === "saved" && "text-primary",
+                docSyncing === "error" && "text-destructive",
+                docSyncing === "idle" && "text-muted-foreground")}>
+                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {docSyncing === "saved" && <Check className="w-3 h-3" />}
+                {docSyncing === "error" && <X className="w-3 h-3" />}
+                {docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}
+              </span>
+            )}
+            <div className="ml-auto flex items-center gap-1 shrink-0">
+              <button onClick={togglePublish}
+                className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
+                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
+                title={docPublished ? "Publicado — cliente vê ao vivo" : "Publicar para o cliente"}>
+                <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
+              </button>
+              <button onClick={downloadPDF}
+                className="px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
+                title="Exportar PDF com marca AcelerIQ">
+                <Download className="w-3 h-3" /> PDF
+              </button>
+            </div>
+          </div>
+
           <div className="flex-1 min-h-0 overflow-y-auto">
             {mode === "agent" && (
               <AgentChat
@@ -573,6 +733,21 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 notes={state.notes}
                 script={state.script}
                 boardLog={state.boardLog}
+                onStructureToNotes={async () => {
+                  try {
+                    const { data: sess } = await supabase.auth.getSession();
+                    const tok = sess?.session?.access_token; if (!tok) return;
+                    toast({ title: "Estruturando…", description: "O agente está montando o documento executivo." });
+                    const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
+                      method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+                      body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
+                    });
+                    if (!r.ok) throw new Error(String(r.status));
+                    const j = await r.json();
+                    const md = j?.markdown || "";
+                    if (md) { setState(s => ({ ...s, notes: md })); setMode("notes"); toast({ title: "Notas atualizadas", description: "Documento pronto pra você complementar." }); }
+                  } catch (e: any) { toast({ title: "Falha ao estruturar", description: e?.message || "erro", variant: "destructive" }); }
+                }}
               />
             )}
             {mode === "notes" && (
@@ -626,6 +801,29 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     ))}
                   </div>
                 )}
+                {(enrichBusy || enrichData) && (
+                  <div className="border border-dashed border-primary/40 rounded-lg p-2 space-y-1.5 bg-primary/5">
+                    <div className="text-[10px] uppercase tracking-wider text-primary flex items-center gap-1">
+                      <Zap className="w-3 h-3" /> Enriquecimento{enrichBusy && "…"}
+                    </div>
+                    {enrichData?.suggestion && <div className="text-[11px] text-foreground/80">{enrichData.suggestion}</div>}
+                    <div className="flex flex-wrap gap-1">
+                      {enrichData?.checklist?.length ? (
+                        <button onClick={acceptEnrichChecklist} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                          + Checklist ({enrichData.checklist.length})
+                        </button>
+                      ) : null}
+                      {enrichData?.next_actions?.length ? (
+                        <button onClick={acceptEnrichActions} className="text-[10px] px-2 py-0.5 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30">
+                          + Próximas ações ({enrichData.next_actions.length})
+                        </button>
+                      ) : null}
+                      {enrichData && !enrichData.checklist?.length && !enrichData.next_actions?.length && (
+                        <span className="text-[10px] text-muted-foreground">sem sugestões novas</span>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -664,8 +862,87 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   );
 }
 
-// Preview leve das Notas: renderiza checkboxes, imagens ![](url), links, embeds de vídeo @video[nome](embedUrl) e menções wsfile.
-function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: string | null; clientName?: string | null }) {
+// ── PDF branded AcelerIQ (via window.print) ──
+function renderBrandedDoc(md: string, clientName: string, projectName: string) {
+  const html = mdToHtml(md);
+  const date = new Date().toLocaleDateString("pt-BR");
+  return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
+<title>${escapeHtml(projectName)} · AcelerIQ</title>
+<style>
+  @page { size: A4; margin: 22mm 18mm 22mm 18mm; }
+  * { box-sizing: border-box; }
+  body { font-family: 'Outfit', -apple-system, sans-serif; color: #0D0D0D; margin: 0; padding: 24px; background: #fff; }
+  .cover { border-bottom: 3px solid #00FF66; padding-bottom: 16px; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-family: 'JetBrains Mono', monospace; font-weight: 700; font-size: 20px; letter-spacing: -0.02em; }
+  .logo .dot { color: #00FF66; }
+  .meta { text-align: right; font-size: 11px; color: #555; font-family: 'JetBrains Mono', monospace; }
+  h1 { font-size: 28px; letter-spacing: -0.02em; margin: 24px 0 8px; page-break-after: avoid; }
+  h2 { font-size: 18px; margin: 28px 0 8px; page-break-after: avoid; border-left: 3px solid #00FF66; padding-left: 10px; }
+  h3 { font-size: 14px; margin: 20px 0 6px; page-break-after: avoid; }
+  p, li { font-size: 12.5px; line-height: 1.6; }
+  ul, ol { padding-left: 22px; }
+  li { margin: 3px 0; }
+  .check { list-style: none; padding-left: 0; }
+  .check li::before { content: "☐  "; color: #00FF66; font-weight: bold; }
+  .check li.done::before { content: "☑  "; }
+  code { background: #f3f4f6; padding: 1px 5px; border-radius: 4px; font-size: 11.5px; font-family: 'JetBrains Mono', monospace; }
+  hr { border: 0; border-top: 1px dashed #d4d4d8; margin: 20px 0; }
+  footer { position: fixed; bottom: 10mm; left: 18mm; right: 18mm; font-size: 10px; color: #888; font-family: 'JetBrains Mono', monospace; display: flex; justify-content: space-between; border-top: 1px solid #eee; padding-top: 6px; }
+  .content { max-width: 720px; margin: 0 auto; }
+</style></head><body>
+<div class="content">
+  <div class="cover">
+    <div class="logo">aceler<span class="dot">iq</span></div>
+    <div class="meta">
+      <div>${escapeHtml(clientName)}</div>
+      <div>${escapeHtml(projectName)}</div>
+      <div>${date}</div>
+    </div>
+  </div>
+  ${html}
+</div>
+<footer><span>aceleriq.online</span><span>Confidencial · gerado ${date}</span></footer>
+</body></html>`;
+}
+
+function escapeHtml(s: string) { return s.replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]!)); }
+
+function mdToHtml(md: string): string {
+  const lines = md.split("\n");
+  const out: string[] = [];
+  let inList: "ul" | "ol" | "check" | null = null;
+  const closeList = () => { if (inList) { out.push(`</${inList === "check" ? "ul" : inList}>`); inList = null; } };
+  for (const raw of lines) {
+    const l = raw.replace(/</g, "&lt;");
+    if (/^#{1,3}\s+/.test(l)) {
+      closeList();
+      const level = l.match(/^#+/)![0].length;
+      out.push(`<h${level}>${l.replace(/^#+\s+/, "")}</h${level}>`);
+    } else if (/^\s*-\s+\[( |x)\]\s+/i.test(l)) {
+      if (inList !== "check") { closeList(); out.push(`<ul class="check">`); inList = "check"; }
+      const done = /\[x\]/i.test(l);
+      out.push(`<li class="${done ? "done" : ""}">${l.replace(/^\s*-\s+\[( |x)\]\s+/i, "")}</li>`);
+    } else if (/^\s*-\s+/.test(l)) {
+      if (inList !== "ul") { closeList(); out.push("<ul>"); inList = "ul"; }
+      out.push(`<li>${l.replace(/^\s*-\s+/, "")}</li>`);
+    } else if (/^\s*\d+\.\s+/.test(l)) {
+      if (inList !== "ol") { closeList(); out.push("<ol>"); inList = "ol"; }
+      out.push(`<li>${l.replace(/^\s*\d+\.\s+/, "")}</li>`);
+    } else if (l.trim() === "") {
+      closeList(); out.push("");
+    } else if (/^---+$/.test(l.trim())) {
+      closeList(); out.push("<hr/>");
+    } else {
+      closeList();
+      const withBold = l.replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/`([^`]+)`/g, "<code>$1</code>");
+      out.push(`<p>${withBold}</p>`);
+    }
+  }
+  closeList();
+  return out.join("\n");
+}
+
+export function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: string | null; clientName?: string | null }) {
   const lines = src.split("\n");
   const out: React.ReactNode[] = [];
   lines.forEach((raw, i) => {
@@ -1165,9 +1442,10 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
-function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog }: {
+function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes }: {
   clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
+  onStructureToNotes?: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -1667,6 +1945,15 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
                 title="Copia contexto e abre este GPT no ChatGPT">
                 <ExternalLink className="w-3 h-3" /> GPT
+              </button>
+            )}
+            {onStructureToNotes && (
+              <button
+                onClick={() => onStructureToNotes()}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                title="Estrutura o contexto atual como documento executivo e envia para as Notas"
+              >
+                <ArrowRight className="w-3 h-3" /> Notas
               </button>
             )}
             <PasteBackButton
