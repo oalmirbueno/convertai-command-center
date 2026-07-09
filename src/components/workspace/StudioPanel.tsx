@@ -255,7 +255,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return v || "bc";
   });
   const [mode, setMode] = useState<Mode>("agent");
-  useEffect(() => { try { localStorage.setItem("studio_dock", dock); } catch {} }, [dock]);
+  useEffect(() => { try { localStorage.setItem("studio_dock_v2", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
