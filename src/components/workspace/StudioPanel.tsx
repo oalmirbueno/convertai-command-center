@@ -65,6 +65,30 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
+type SlashCmd = { key: string; label: string; hint: string; insert: string };
+
+function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
+  const c = ctx.clientName || ctx.contextLabel || "cliente";
+  const pasta = ctx.folderPath || "raiz";
+  return [
+    { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
+    { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
+    { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
+      insert: `\n### HOOK (0-3s)\nFALA: \nIMAGEM: \nTEXTO EM TELA: \n` },
+    { key: "desenv",  label: "Bloco DESENVOLVIMENTO", hint: "proof/argumento",
+      insert: `\n### DESENVOLVIMENTO (3-25s)\nFALA: \nB-ROLL: \nSFX/TRILHA: \n` },
+    { key: "cta",     label: "Bloco CTA",      hint: "chamada final",
+      insert: `\n### CTA\nFALA: \nTEXTO: \nDESTINO: \n` },
+    { key: "brief",   label: "Template BRIEFING", hint: "objetivo + público + canal",
+      insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
+    { key: "check",   label: "Checklist de entrega", hint: "pipeline pastas",
+      insert: `\n## Checklist entrega\n- [ ] 1. Brutos\n- [ ] 2. Trilhas/SFX\n- [ ] 3. Edição\n- [ ] 4. Final aprovado\n- [ ] 5. Publicado\n` },
+    { key: "kanban",  label: "Ver Kanban do cliente", hint: "abre em nova aba",
+      insert: `[Kanban do cliente](#kanban)` },
+  ];
+}
+
+
 const STORAGE_PREFIX = "workspace_studio_v1:";
 
 function makeEmpty(): StudioState {
