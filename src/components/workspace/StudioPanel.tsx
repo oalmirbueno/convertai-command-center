@@ -515,9 +515,17 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
             <button onClick={() => setDock("br")} title="Dock direita"
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
-            <button onClick={() => setDock(isFull ? "br" : "full")} title={isFull ? "Sair da tela cheia" : "Tela cheia"}
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>⛶</button>
+            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
+              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            </button>
           </div>
+        )}
+        {isFull && !minimized && (
+          <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
+            className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
+            <Minimize2 className="w-3 h-3" /> Sair
+          </button>
         )}
         <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
           {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
