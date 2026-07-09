@@ -1122,24 +1122,24 @@ export default function Workspace() {
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2">
-              <div className="relative">
+            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+              <div className="relative flex-1 sm:flex-none min-w-[140px]">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="h-8 pl-8 w-[180px] text-xs" />
+                <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="h-9 sm:h-8 pl-8 w-full sm:w-[180px] text-xs" />
               </div>
               <div className="flex rounded-md border border-border overflow-hidden">
-                <button onClick={() => setView("grid")} className={cn("p-1.5", view === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground")}>
+                <button onClick={() => setView("grid")} className={cn("p-2 sm:p-1.5", view === "grid" ? "bg-secondary text-foreground" : "text-muted-foreground")}>
                   <Grid2X2 className="w-3.5 h-3.5" />
                 </button>
-                <button onClick={() => setView("list")} className={cn("p-1.5", view === "list" ? "bg-secondary text-foreground" : "text-muted-foreground")}>
+                <button onClick={() => setView("list")} className={cn("p-2 sm:p-1.5", view === "list" ? "bg-secondary text-foreground" : "text-muted-foreground")}>
                   <List className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)} className="gap-1.5 h-8">
-                <FolderPlus className="w-3.5 h-3.5" /> Pasta
+              <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3">
+                <FolderPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Pasta</span>
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setTemplateOpen(true)} className="gap-1.5 h-8">
-                <Sparkles className="w-3.5 h-3.5" /> Template
+              <Button size="sm" variant="outline" onClick={() => setTemplateOpen(true)} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3">
+                <Sparkles className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Template</span>
               </Button>
               <Button
                 size="sm"
@@ -1147,17 +1147,18 @@ export default function Workspace() {
                 onClick={autoOrganize}
                 disabled={organizing}
                 title="Move os arquivos deste nível para pastas do pipeline com base no nome e tipo"
-                className="gap-1.5 h-8"
+                className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3"
               >
                 {organizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
-                Auto-organizar
+                <span className="hidden sm:inline">Auto-organizar</span>
               </Button>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8">
+              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0">
                 <Upload className="w-3.5 h-3.5" />
                 Upload
               </Button>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleUpload(e.target.files)} />
             </div>
+
           </div>
 
           {/* Smart tag chips + sort */}
