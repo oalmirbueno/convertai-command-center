@@ -105,7 +105,13 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
 const STORAGE_PREFIX = "workspace_studio_v1:";
 
 function makeEmpty(): StudioState {
-  return { notes: "", script: "", mapRoot: JSON.parse(JSON.stringify(DEFAULT_MAP)), mentions: [] };
+  return {
+    notes: "", script: "",
+    mapRoot: JSON.parse(JSON.stringify(DEFAULT_MAP)),
+    mentions: [],
+    board: JSON.parse(JSON.stringify(DEFAULT_BOARD)),
+    boardLog: [],
+  };
 }
 function loadState(ctxKey: string): StudioState {
   try {
