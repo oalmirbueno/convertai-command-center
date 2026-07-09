@@ -457,6 +457,25 @@ function MentionList({ items, onPick }: { items: FileRef[]; onPick: (f: FileRef)
   );
 }
 
+function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd) => void }) {
+  if (!items.length) return null;
+  return (
+    <div className="absolute bottom-2 left-2 right-2 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-10 max-h-[240px] overflow-y-auto">
+      <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+        Comandos
+      </div>
+      {items.map(c => (
+        <button key={c.key} onClick={() => onPick(c)}
+          className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+          <Sparkles className="w-3 h-3 text-primary shrink-0" />
+          <span className="font-medium">{c.label}</span>
+          <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
+
+
 function MindMapView({ root, onRename, onAdd, onDelete }:
   { root: MapNode; onRename: (id: string, l: string) => void; onAdd: (id: string) => void; onDelete: (id: string) => void; }) {
   return (
