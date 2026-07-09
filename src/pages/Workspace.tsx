@@ -61,13 +61,17 @@ function kindOf(n: Node): MediaKind {
   if (m.includes("pdf") || /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv)$/.test(name)) return "doc";
   return "other";
 }
-const KIND_META: Record<MediaKind, { label: string; color: string }> = {
-  image: { label: "Imagens", color: "text-blue-400" },
-  video: { label: "Vídeos", color: "text-purple-400" },
-  audio: { label: "Áudios", color: "text-pink-400" },
-  doc:   { label: "Documentos", color: "text-amber-400" },
-  other: { label: "Outros", color: "text-muted-foreground" },
+const KIND_META: Record<MediaKind, { label: string; color: string; gradient: string; accent: string }> = {
+  image: { label: "Imagens",    color: "text-blue-400",   gradient: "from-blue-500/25 via-blue-500/10 to-transparent",     accent: "text-blue-300" },
+  video: { label: "Vídeos",     color: "text-purple-400", gradient: "from-purple-500/25 via-fuchsia-500/10 to-transparent", accent: "text-purple-300" },
+  audio: { label: "Áudios",     color: "text-pink-400",   gradient: "from-pink-500/25 via-rose-500/10 to-transparent",     accent: "text-pink-300" },
+  doc:   { label: "Documentos", color: "text-amber-400",  gradient: "from-amber-500/25 via-orange-500/10 to-transparent",  accent: "text-amber-300" },
+  other: { label: "Outros",     color: "text-muted-foreground", gradient: "from-secondary/50 via-secondary/20 to-transparent", accent: "text-muted-foreground" },
 };
+function extOf(name: string) {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(name || "");
+  return m ? m[1].toUpperCase() : "";
+}
 
 function virtFileNode(f: any, clientId: string): Node {
   return {
