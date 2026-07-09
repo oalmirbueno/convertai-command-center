@@ -1419,9 +1419,10 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
-function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog }: {
+function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes }: {
   clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
+  onStructureToNotes?: () => void | Promise<void>;
 }) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
