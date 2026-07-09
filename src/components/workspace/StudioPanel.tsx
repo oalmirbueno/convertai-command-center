@@ -791,6 +791,69 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     return AGENT_SLASH.filter(c => c.key.includes(q) || c.label.toLowerCase().includes(q));
   }, [slash]);
 
+  // Fuzzy: retorna { score, ranges } — score maior = melhor. Prioriza: exato > prefixo > subsequência.
+  function fuzzyScore(name: string, q: string): { score: number; ranges: [number, number][] } | null {
+    if (!q) return { score: 0, ranges: [] };
+    const n = name.toLowerCase(); const s = q.toLowerCase();
+    if (n === s) return { score: 1000, ranges: [[0, s.length]] };
+    if (n.startsWith(s)) return { score: 800, ranges: [[0, s.length]] };
+    const idx = n.indexOf(s);
+    if (idx >= 0) return { score: 600 - idx, ranges: [[idx, idx + s.length]] };
+    // subsequência
+    let si = 0, score = 0, streak = 0;
+    const ranges: [number, number][] = [];
+    for (let i = 0; i < n.length && si < s.length; i++) {
+      if (n[i] === s[si]) {
+        ranges.push([i, i + 1]);
+        streak++; score += 10 + streak * 2;
+        si++;
+      } else { streak = 0; }
+    }
+    if (si < s.length) return null;
+    // merge ranges contíguos
+    const merged: [number, number][] = [];
+    for (const r of ranges) {
+      const last = merged[merged.length - 1];
+      if (last && last[1] === r[0]) last[1] = r[1]; else merged.push([r[0], r[1]]);
+    }
+    return { score, ranges: merged };
+  }
+  type ScoredFile = FileRef & { _score: number; _ranges: [number, number][]; _recent?: boolean };
+  const mentionMatches = useMemo<ScoredFile[]>(() => {
+    if (!mention) return [];
+    const q = mention.q.trim();
+    if (!q) {
+      // sem query: recentes primeiro, depois pastas, depois arquivos
+      const recents = recentIds
+        .map(id => availableFiles.find(f => f.id === id))
+        .filter(Boolean) as FileRef[];
+      const rest = availableFiles.filter(f => !recentIds.includes(f.id));
+      return [
+        ...recents.map(f => ({ ...f, _score: 999, _ranges: [] as [number, number][], _recent: true })),
+        ...rest.map(f => ({ ...f, _score: f.kind === "folder" ? 1 : 0, _ranges: [] as [number, number][] })),
+      ].slice(0, 10);
+    }
+    const scored = availableFiles
+      .map(f => {
+        const r = fuzzyScore(f.name, q);
+        if (!r) return null;
+        const bonus = f.kind === "folder" ? 5 : 0;
+        const rec = recentIds.includes(f.id) ? 50 : 0;
+        return { ...f, _score: r.score + bonus + rec, _ranges: r.ranges, _recent: rec > 0 } as ScoredFile;
+      })
+      .filter(Boolean) as ScoredFile[];
+    return scored.sort((a, b) => b._score - a._score).slice(0, 10);
+  }, [mention, availableFiles, recentIds]);
+
+  useEffect(() => { setMentionIdx(0); }, [mention?.q]);
+  useEffect(() => { setSlashIdx(0); }, [slash?.q]);
+
+  const slashMatches = useMemo(() => {
+    if (!slash) return [] as typeof AGENT_SLASH;
+    const q = slash.q.toLowerCase();
+    return AGENT_SLASH.filter(c => c.key.includes(q) || c.label.toLowerCase().includes(q));
+  }, [slash]);
+
   function onInputChange(val: string, caret: number) {
     setInput(val);
     const before = val.slice(0, caret);
@@ -800,6 +863,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     else if (mSlash) { setSlash({ q: mSlash[2], start: caret - (mSlash[2].length + 1) }); setMention(null); }
     else { setMention(null); setSlash(null); }
   }
+
 
   function pickMention(f: FileRef) {
     if (!mention) return;
