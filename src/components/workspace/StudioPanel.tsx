@@ -258,6 +258,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const [mode, setMode] = useState<Mode>("agent");
   useEffect(() => { try { localStorage.setItem("studio_dock_v2", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
+  // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
+  useEffect(() => {
+    if (dock !== "full") return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDock("bc"); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [dock]);
+
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -600,12 +608,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }
 
   const isFull = dock === "full";
-  useEffect(() => {
-    if (!isFull) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDock("bc"); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isFull]);
+
   const dockPos = isFull
     ? "inset-3"
     : dock === "br" ? "right-4 bottom-4"
