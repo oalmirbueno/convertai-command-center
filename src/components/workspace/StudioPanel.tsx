@@ -2543,12 +2543,19 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         )}
         {msgs.map(m => (
           <div key={m.id} className={cn("flex gap-2", m.role === "user" ? "justify-end" : "justify-start")}>
-            <div className={cn("max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words",
-              m.role === "user" ? "bg-primary text-primary-foreground" : "bg-secondary text-foreground")}>
-              {m.content}
+            <div className={cn(
+              "max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed break-words",
+              m.role === "user"
+                ? "bg-primary text-primary-foreground whitespace-pre-wrap"
+                : "bg-secondary text-foreground prose prose-invert prose-sm max-w-none prose-p:my-1 prose-headings:mt-2 prose-headings:mb-1 prose-headings:text-primary prose-headings:text-[11px] prose-headings:uppercase prose-headings:tracking-wider prose-headings:font-semibold prose-ol:my-1 prose-ul:my-1 prose-li:my-0 prose-strong:font-medium prose-strong:text-foreground"
+            )}>
+              {m.role === "assistant"
+                ? <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.content}</ReactMarkdown>
+                : m.content}
             </div>
           </div>
         ))}
+
         {streaming && streamBuf && (
           <div className="flex justify-start">
             <div className="max-w-[85%] rounded-2xl px-3 py-2 text-[12px] leading-relaxed whitespace-pre-wrap break-words bg-secondary text-foreground">
