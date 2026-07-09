@@ -147,24 +147,34 @@ Deno.serve(async (req) => {
     const apiKey = Deno.env.get("LOVABLE_API_KEY");
     if (!apiKey) return json({ error: "LOVABLE_API_KEY ausente" }, 500);
 
-    const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-      body: JSON.stringify({ model: "google/gemini-2.5-flash", messages, stream: true }),
-    });
+    // Cadeia de modelos: começa pelo mais barato/grátis do ciclo e escala se necessário.
+    // Flash-Lite = 0 créditos no ciclo atual do Lovable AI; Flash = fallback qualitativo.
+    const MODEL_CHAIN = ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash", "google/gemini-3.1-flash-lite"];
+    let aiRes: Response | null = null;
+    let lastStatus = 0; let lastText = "";
+    for (const model of MODEL_CHAIN) {
+      const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+        body: JSON.stringify({ model, messages, stream: true }),
+      });
+      if (r.ok && r.body) { aiRes = r; break; }
+      lastStatus = r.status; lastText = await r.text().catch(() => "");
+      // Só faz fallback em 402 (créditos) ou 429 (rate). Outros erros: aborta.
+      if (r.status !== 402 && r.status !== 429) break;
+    }
 
-    if (!aiRes.ok || !aiRes.body) {
-      const t = await aiRes.text().catch(() => "");
-      if (aiRes.status === 402) {
+    if (!aiRes) {
+      if (lastStatus === 402) {
         return json({
           error: "PAYMENT_REQUIRED",
-          message: "Créditos do Lovable AI esgotados. Adicione créditos em Settings → Workspace → Usage para continuar usando o Agente.",
+          message: "Todos os modelos gratuitos do ciclo estão sem saldo. Aguarde o refill diário ou adicione créditos.",
         }, 402);
       }
-      if (aiRes.status === 429) {
+      if (lastStatus === 429) {
         return json({ error: "RATE_LIMITED", message: "Muitas requisições. Tente novamente em instantes." }, 429);
       }
-      return json({ error: `AI falhou: ${aiRes.status} ${t.slice(0, 200)}` }, 500);
+      return json({ error: `AI falhou: ${lastStatus} ${lastText.slice(0, 200)}` }, 500);
     }
 
     // Proxy do stream + captura para persistir
