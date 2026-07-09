@@ -55,6 +55,21 @@ function CarouselSlider({ files }: { files: any[] }) {
   const [idx, setIdx] = useState(0);
   const current = files[idx];
 
+  useEffect(() => {
+    prefetchImages(files.map((f) => f?.file_url).filter(Boolean));
+    setIdx(0);
+  }, [files]);
+
+  useEffect(() => {
+    if (files.length <= 1) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + files.length) % files.length);
+      if (e.key === "ArrowRight") setIdx((i) => (i + 1) % files.length);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [files.length]);
+
   if (!current) return null;
   if (files.length === 1) {
     return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />;
