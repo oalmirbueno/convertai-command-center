@@ -1481,6 +1481,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         body: JSON.stringify({
           thread_id: tid,
           message: finalText,
+          persona_id: persona.forcedId || undefined,
           context: {
             client_id: clientId,
             client_name: clientName,
@@ -1490,19 +1491,21 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               ? `${notes}\n\n---\n## Atividade do Kanban (últimas ${boardLog.length})\n${boardLog.map(l => `- ${l}`).join("\n")}`
               : notes,
             script,
-            // arquivos citados via @ ganham prioridade e vão marcados
             attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
-            // conteúdo da pasta atual (auto): subpastas + arquivos
             folder_contents: {
               subfolders: availableFiles.filter(f => f.kind === "folder").slice(0, 30).map(f => ({ id: f.id, name: f.name })),
               files: availableFiles.filter(f => f.kind === "file").slice(0, 40).map(f => ({ id: f.id, name: f.name, url: f.url })),
               total: availableFiles.length,
             },
-            // legado (compatibilidade)
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
           },
         }),
       });
+      // Captura qual persona foi escolhida pelo roteador
+      try {
+        const usedName = res.headers.get("X-Persona-Name");
+        if (usedName) setPersona(p => ({ ...p, lastUsedName: decodeURIComponent(usedName) }));
+      } catch { /* ignore */ }
       if (!res.ok || !res.body) {
         const t = await res.text().catch(() => "");
         let msg = t || `HTTP ${res.status}`;
