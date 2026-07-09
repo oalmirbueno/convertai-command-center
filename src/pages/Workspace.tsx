@@ -95,6 +95,9 @@ export default function Workspace() {
   const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
   const [dragOverArea, setDragOverArea] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerQuery, setPickerQuery] = useState("");
+  const [pickerFilter, setPickerFilter] = useState<"all" | "az" | "za" | "recent">("all");
 
   const parent = parentStack[parentStack.length - 1] || null;
 
