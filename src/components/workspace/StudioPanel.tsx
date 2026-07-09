@@ -624,6 +624,59 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
     if (activeId === id) { setActiveId(null); setMsgs([]); }
   }
 
+  const mentionMatches = useMemo(() => {
+    if (!mention) return [] as FileRef[];
+    const q = mention.q.toLowerCase();
+    return availableFiles.filter(f => f.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [mention, availableFiles]);
+
+  const slashMatches = useMemo(() => {
+    if (!slash) return [] as typeof AGENT_SLASH;
+    const q = slash.q.toLowerCase();
+    return AGENT_SLASH.filter(c => c.key.includes(q) || c.label.toLowerCase().includes(q));
+  }, [slash]);
+
+  function onInputChange(val: string, caret: number) {
+    setInput(val);
+    const before = val.slice(0, caret);
+    const mAt = /@([^\s@]{0,40})$/.exec(before);
+    const mSlash = /(^|\s)\/([^\s/]{0,20})$/.exec(before);
+    if (mAt) { setMention({ q: mAt[1], start: caret - mAt[0].length }); setSlash(null); }
+    else if (mSlash) { setSlash({ q: mSlash[2], start: caret - (mSlash[2].length + 1) }); setMention(null); }
+    else { setMention(null); setSlash(null); }
+  }
+
+  function pickMention(f: FileRef) {
+    if (!mention) return;
+    const insert = `[@${f.name}](wsfile:${f.id})`;
+    const before = input.slice(0, mention.start);
+    const after = input.slice(mention.start + 1 + mention.q.length);
+    const next = before + insert + " " + after;
+    setInput(next);
+    setAttached(prev => prev.some(x => x.id === f.id) ? prev : [...prev, f]);
+    setMention(null);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) { el.focus(); const p = before.length + insert.length + 1; el.setSelectionRange(p, p); }
+    }, 10);
+  }
+
+  function pickSlash(cmd: typeof AGENT_SLASH[number]) {
+    if (!slash) return;
+    const before = input.slice(0, slash.start);
+    const after = input.slice(slash.start + 1 + slash.q.length);
+    const next = (before + cmd.prompt + " " + after).trimStart();
+    setInput(next);
+    setSlash(null);
+    setTimeout(() => inputRef.current?.focus(), 10);
+  }
+
+  function removeAttached(id: string) {
+    setAttached(prev => prev.filter(f => f.id !== id));
+    // remove todas as ocorrências do link do arquivo no input
+    setInput(prev => prev.replace(new RegExp(`\\s?\\[@[^\\]]+\\]\\(wsfile:${id}\\)`, "g"), "").trim());
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || streaming) return;
@@ -640,8 +693,15 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       setThreads(t => [data as AgentThread, ...t]);
       setActiveId(tid);
     }
+    // Preserva anexos no conteúdo da mensagem — histórico da thread mantém as referências
+    const attachBlock = attached.length
+      ? `\n\n---\n📎 Anexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
+      : "";
+    const finalText = text + attachBlock;
+    const currentAttachments = attached;
     setInput("");
-    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: text, created_at: new Date().toISOString() }]);
+    setAttached([]);
+    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: finalText, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamBuf("");
 
     try {
@@ -657,11 +717,13 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
         },
         body: JSON.stringify({
           thread_id: tid,
-          message: text,
+          message: finalText,
           context: {
             client_name: clientName,
             folder_path: folderPath,
             notes, script,
+            // arquivos citados via @ ganham prioridade e vão marcados
+            attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
           },
         }),
