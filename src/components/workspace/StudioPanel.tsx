@@ -2627,13 +2627,18 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </button>
             {onStructureToNotes && (
               <button
-                onClick={() => onStructureToNotes()}
+                onClick={() => {
+                  const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content?.trim() || "";
+                  if (!lastAssistant) { toast({ title: "Nada para enviar", description: "Peça uma análise ao agente primeiro." }); return; }
+                  onStructureToNotes(lastAssistant);
+                }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-                title="Estrutura o contexto atual como documento executivo e envia para as Notas"
+                title="Envia a última resposta do agente estruturada para as Notas"
               >
                 <ArrowRight className="w-3 h-3" /> Enviar às Notas
               </button>
             )}
+
 
 
 
