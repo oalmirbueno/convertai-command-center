@@ -6,12 +6,16 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
+  DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubTrigger, DropdownMenuSubContent,
+} from "@/components/ui/dropdown-menu";
 import {
   Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
   Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
-  Search, Grid2X2, List, X, Loader2,
+  Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
@@ -58,11 +62,15 @@ export default function Workspace() {
   const [newFolderName, setNewFolderName] = useState("");
   const [uploading, setUploading] = useState(0);
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  const [renaming, setRaming] = useState<Node | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
+  const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
+  const [dragOverArea, setDragOverArea] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const parent = parentStack[parentStack.length - 1] || null;
 
-  // Clients list (for client scope)
   const { data: clients } = useQuery({
     queryKey: ["workspace-clients"],
     queryFn: async () => {
@@ -88,6 +96,32 @@ export default function Workspace() {
     enabled: isStaff && (scope === "global" || !!clientId),
   });
 
+  // Full folder list of current scope (for "Move to..." menu)
+  const { data: allFolders } = useQuery({
+    queryKey: ["workspace-folders", scope, clientId],
+    queryFn: async () => {
+      let q: any = (supabase as any).from("workspace_nodes").select("id, parent_id, name")
+        .eq("scope", scope).eq("kind", "folder");
+      if (scope === "client") q = q.eq("client_id", clientId!);
+      const { data } = await q;
+      return (data || []) as { id: string; parent_id: string | null; name: string }[];
+    },
+    enabled: isStaff && (scope === "global" || !!clientId),
+  });
+
+  const folderPaths = useMemo(() => {
+    const map = new Map<string, string>();
+    const byId = new Map((allFolders || []).map(f => [f.id, f]));
+    const build = (id: string): string => {
+      if (map.has(id)) return map.get(id)!;
+      const f = byId.get(id); if (!f) return "";
+      const p = f.parent_id ? build(f.parent_id) + " / " + f.name : f.name;
+      map.set(id, p); return p;
+    };
+    (allFolders || []).forEach(f => build(f.id));
+    return map;
+  }, [allFolders]);
+
   useEffect(() => { setParentStack([]); setSelected(null); }, [scope, clientId]);
 
   const filtered = useMemo(() => {
@@ -106,6 +140,11 @@ export default function Workspace() {
     return "";
   }
 
+  function invalidate() {
+    qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
+    qc.invalidateQueries({ queryKey: ["workspace-folders"] });
+  }
+
   async function createFolder() {
     if (!newFolderName.trim() || !user) return;
     const { error } = await supabase.from("workspace_nodes").insert({
@@ -115,11 +154,12 @@ export default function Workspace() {
     });
     if (error) { toast({ title: "Erro ao criar pasta", description: error.message, variant: "destructive" }); return; }
     setNewFolderName(""); setNewFolderOpen(false);
-    qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
+    invalidate();
   }
 
-  async function handleUpload(files: FileList | null) {
+  async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
+    const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
     setUploading(files.length);
     let ok = 0;
     for (const file of Array.from(files)) {
@@ -133,7 +173,7 @@ export default function Workspace() {
         const { error: insErr } = await supabase.from("workspace_nodes").insert({
           name: file.name, kind: "file", scope,
           client_id: scope === "client" ? clientId : null,
-          parent_id: parent?.id || null, mime: file.type || null,
+          parent_id: destParent, mime: file.type || null,
           size_bytes: file.size, storage_path: key, created_by: user.id,
         });
         if (insErr) throw insErr;
@@ -144,18 +184,70 @@ export default function Workspace() {
     }
     setUploading(0);
     if (ok) toast({ title: `${ok} arquivo(s) enviado(s)` });
-    qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
+    invalidate();
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
-  async function removeNode(n: Node) {
-    if (!confirm(`Excluir "${n.name}"?`)) return;
-    if (n.kind === "file" && n.storage_path) {
+  async function performDelete(n: Node) {
+    // Recursively collect child files' storage paths if folder
+    if (n.kind === "folder") {
+      const { data: descendants } = await (supabase as any).rpc("noop"); // placeholder if RPC exists
+      // Fallback: iterative walk
+      const collected: string[] = [];
+      const stack = [n.id];
+      while (stack.length) {
+        const pid = stack.pop()!;
+        const { data: children } = await (supabase as any).from("workspace_nodes")
+          .select("id, kind, storage_path").eq("parent_id", pid);
+        for (const c of children || []) {
+          if (c.kind === "folder") stack.push(c.id);
+          else if (c.storage_path) collected.push(c.storage_path);
+        }
+      }
+      if (collected.length) await supabase.storage.from("workspace").remove(collected);
+      void descendants;
+    } else if (n.storage_path) {
       await supabase.storage.from("workspace").remove([n.storage_path]);
     }
     await supabase.from("workspace_nodes").delete().eq("id", n.id);
-    setSelected(null);
-    qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
+    setSelected(null); setConfirmDelete(null);
+    toast({ title: "Excluído" });
+    invalidate();
+  }
+
+  async function renameNode() {
+    if (!renaming || !renameValue.trim()) return;
+    const { error } = await supabase.from("workspace_nodes")
+      .update({ name: renameValue.trim() }).eq("id", renaming.id);
+    if (error) { toast({ title: "Erro ao renomear", description: error.message, variant: "destructive" }); return; }
+    setRaming(null); setRenameValue("");
+    invalidate();
+  }
+
+  // Check target isn't descendant of source folder
+  function isDescendant(sourceId: string, targetId: string | null): boolean {
+    if (!targetId) return false;
+    if (sourceId === targetId) return true;
+    const byId = new Map((allFolders || []).map(f => [f.id, f]));
+    let cur = byId.get(targetId);
+    while (cur) {
+      if (cur.id === sourceId) return true;
+      cur = cur.parent_id ? byId.get(cur.parent_id) : undefined;
+    }
+    return false;
+  }
+
+  async function moveNode(n: Node, targetParentId: string | null) {
+    if (n.kind === "folder" && isDescendant(n.id, targetParentId)) {
+      toast({ title: "Movimento inválido", description: "Não pode mover para dentro de si mesma.", variant: "destructive" });
+      return;
+    }
+    if (n.parent_id === targetParentId) return;
+    const { error } = await supabase.from("workspace_nodes")
+      .update({ parent_id: targetParentId }).eq("id", n.id);
+    if (error) { toast({ title: "Erro ao mover", description: error.message, variant: "destructive" }); return; }
+    toast({ title: "Movido" });
+    invalidate();
   }
 
   async function sendToApproval(n: Node) {
@@ -165,7 +257,6 @@ export default function Workspace() {
       return;
     }
     try {
-      // Copy from workspace bucket to files bucket
       const { data: blobData, error: dlErr } = await supabase.storage.from("workspace").download(n.storage_path);
       if (dlErr) throw dlErr;
       const newKey = `${clientId}/${crypto.randomUUID()}-${n.name}`;
@@ -182,23 +273,101 @@ export default function Workspace() {
       if (insErr) throw insErr;
       await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: fileRow.id }).eq("id", n.id);
       toast({ title: "Enviado para aprovação" });
-      qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
+      invalidate();
       qc.invalidateQueries({ queryKey: ["files"] });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
   }
 
+  // DnD handlers
+  function onDragStartNode(e: React.DragEvent, n: Node) {
+    e.dataTransfer.setData("application/x-ws-node", n.id);
+    e.dataTransfer.effectAllowed = "move";
+  }
+  function onDragOverFolder(e: React.DragEvent, folderId: string | "root") {
+    if (e.dataTransfer.types.includes("application/x-ws-node") || e.dataTransfer.types.includes("Files")) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = e.dataTransfer.types.includes("Files") ? "copy" : "move";
+      setDragOverId(folderId);
+    }
+  }
+  async function onDropFolder(e: React.DragEvent, folderId: string | null) {
+    e.preventDefault(); setDragOverId(null); setDragOverArea(false);
+    const nodeId = e.dataTransfer.getData("application/x-ws-node");
+    if (nodeId) {
+      const src = (nodes || []).find(x => x.id === nodeId);
+      if (src) await moveNode(src, folderId);
+      return;
+    }
+    if (e.dataTransfer.files?.length) {
+      await handleUpload(e.dataTransfer.files, folderId);
+    }
+  }
+
+  function renderActionsMenu(n: Node) {
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+          <button className="p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground">
+            <MoreVertical className="w-3.5 h-3.5" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
+          {n.kind === "folder" && (
+            <DropdownMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+              <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
+            </DropdownMenuItem>
+          )}
+          {n.kind === "file" && (
+            <DropdownMenuItem onSelect={() => setSelected(n)}>
+              <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
+            </DropdownMenuItem>
+          )}
+          <DropdownMenuItem onSelect={() => { setRaming(n); setRenameValue(n.name); }}>
+            <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
+          </DropdownMenuItem>
+          <DropdownMenuSub>
+            <DropdownMenuSubTrigger>
+              <FolderInput className="w-3.5 h-3.5 mr-2" /> Mover para
+            </DropdownMenuSubTrigger>
+            <DropdownMenuSubContent className="max-h-72 overflow-y-auto w-64">
+              <DropdownMenuItem onSelect={() => moveNode(n, null)}>
+                <Globe2 className="w-3.5 h-3.5 mr-2" /> Raiz
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              {(allFolders || [])
+                .filter(f => f.id !== n.id && !(n.kind === "folder" && isDescendant(n.id, f.id)))
+                .sort((a, b) => (folderPaths.get(a.id) || "").localeCompare(folderPaths.get(b.id) || ""))
+                .map(f => (
+                  <DropdownMenuItem key={f.id} onSelect={() => moveNode(n, f.id)}>
+                    <Folder className="w-3.5 h-3.5 mr-2 text-primary" />
+                    <span className="truncate">{folderPaths.get(f.id) || f.name}</span>
+                  </DropdownMenuItem>
+                ))}
+            </DropdownMenuSubContent>
+          </DropdownMenuSub>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
+            <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+
   if (!isStaff) {
     return <div className="p-8 text-center text-muted-foreground">Acesso restrito à equipe.</div>;
   }
+
+  const rootDropActive = dragOverArea && dragOverId === null;
 
   return (
     <div className="pt-20 pb-8 px-4 md:px-6 max-w-[1400px] mx-auto animate-fade-in">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
-          <p className="text-xs text-muted-foreground mt-1">Drive interno da equipe · vídeos, docs e materiais operacionais</p>
+          <p className="text-xs text-muted-foreground mt-1">Drive interno da equipe · arraste para mover, solte arquivos para enviar</p>
         </div>
       </div>
 
@@ -244,7 +413,18 @@ export default function Workspace() {
           {/* Breadcrumb + actions */}
           <div className="flex flex-wrap items-center gap-2 justify-between">
             <div className="flex items-center gap-1 text-sm flex-wrap min-w-0">
-              <button onClick={() => setParentStack([])} className="text-muted-foreground hover:text-foreground truncate">
+              {parent && (
+                <button onClick={() => setParentStack(parentStack.slice(0, -1))}
+                  className="p-1 rounded hover:bg-secondary text-muted-foreground mr-1"><ArrowLeft className="w-3.5 h-3.5" /></button>
+              )}
+              <button
+                onClick={() => setParentStack([])}
+                onDragOver={(e) => onDragOverFolder(e, "root")}
+                onDragLeave={() => setDragOverId(null)}
+                onDrop={(e) => onDropFolder(e, null)}
+                className={cn("text-muted-foreground hover:text-foreground truncate px-2 py-1 rounded",
+                  dragOverId === "root" && "bg-primary/10 text-primary ring-1 ring-primary/40")}
+              >
                 {scope === "global"
                   ? "Global"
                   : (clients?.find((c: any) => c.id === clientId)?.company_name || clients?.find((c: any) => c.id === clientId)?.full_name || "Cliente")}
@@ -283,56 +463,101 @@ export default function Workspace() {
             </div>
           </div>
 
-          {scope === "client" && !clientId ? (
-            <div className="text-center py-16 text-sm text-muted-foreground">Selecione um cliente na barra lateral.</div>
-          ) : isLoading ? (
-            <div className="text-center py-16 text-sm text-muted-foreground">Carregando...</div>
-          ) : !filtered.length ? (
-            <div className="text-center py-16 text-sm text-muted-foreground">
-              <Folder className="w-8 h-8 mx-auto mb-2 opacity-40" />
-              Pasta vazia. Envie arquivos ou crie uma subpasta.
-            </div>
-          ) : view === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
-              {filtered.map(n => {
-                const Icon = iconFor(n);
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => n.kind === "folder" ? setParentStack([...parentStack, n]) : setSelected(n)}
-                    className="group relative rounded-xl border border-border bg-card hover:border-primary/40 hover:bg-secondary/30 transition-all p-3 text-left flex flex-col items-center gap-2 aspect-square"
-                  >
-                    <div className="flex-1 flex items-center justify-center w-full">
-                      <Icon className={cn("w-10 h-10", n.kind === "folder" ? "text-primary" : "text-muted-foreground")} />
+          {/* Drop zone wrapper */}
+          <div
+            onDragEnter={(e) => { if (e.dataTransfer.types.includes("Files")) { setDragOverArea(true); } }}
+            onDragOver={(e) => {
+              if (e.dataTransfer.types.includes("Files") || e.dataTransfer.types.includes("application/x-ws-node")) {
+                e.preventDefault();
+                if (!dragOverId) setDragOverArea(true);
+              }
+            }}
+            onDragLeave={(e) => {
+              if (e.currentTarget === e.target) setDragOverArea(false);
+            }}
+            onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
+            className={cn("relative rounded-xl transition-all",
+              rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
+          >
+            {rootDropActive && (
+              <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-dashed border-primary/50 flex items-center justify-center pointer-events-none z-10">
+                <p className="text-sm font-medium text-primary">Solte para enviar aqui</p>
+              </div>
+            )}
+
+            {scope === "client" && !clientId ? (
+              <div className="text-center py-16 text-sm text-muted-foreground">Selecione um cliente na barra lateral.</div>
+            ) : isLoading ? (
+              <div className="text-center py-16 text-sm text-muted-foreground">Carregando...</div>
+            ) : !filtered.length ? (
+              <div className="text-center py-16 text-sm text-muted-foreground">
+                <Folder className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                Pasta vazia. Arraste arquivos aqui, envie ou crie uma subpasta.
+              </div>
+            ) : view === "grid" ? (
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+                {filtered.map(n => {
+                  const Icon = iconFor(n);
+                  const isFolder = n.kind === "folder";
+                  const dragActive = dragOverId === n.id && isFolder;
+                  return (
+                    <div
+                      key={n.id}
+                      draggable
+                      onDragStart={(e) => onDragStartNode(e, n)}
+                      onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
+                      onDragLeave={() => isFolder && setDragOverId(null)}
+                      onDrop={(e) => isFolder && onDropFolder(e, n.id)}
+                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      className={cn(
+                        "group relative rounded-xl border bg-card hover:border-primary/40 hover:bg-secondary/30 transition-all p-3 flex flex-col items-center gap-2 aspect-square cursor-pointer",
+                        dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
+                      )}
+                    >
+                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        {renderActionsMenu(n)}
+                      </div>
+                      <div className="flex-1 flex items-center justify-center w-full">
+                        <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : "text-muted-foreground")} />
+                      </div>
+                      <p className="text-[11px] font-medium text-foreground truncate w-full text-center">{n.name}</p>
+                      {!isFolder && <p className="text-[10px] text-muted-foreground">{fmtSize(n.size_bytes)}</p>}
+                      {n.sent_for_approval_file_id && (
+                        <span className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">↗ aprovação</span>
+                      )}
                     </div>
-                    <p className="text-[11px] font-medium text-foreground truncate w-full text-center">{n.name}</p>
-                    {n.kind === "file" && <p className="text-[10px] text-muted-foreground">{fmtSize(n.size_bytes)}</p>}
-                    {n.sent_for_approval_file_id && (
-                      <span className="absolute top-1.5 right-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">↗ aprovação</span>
-                    )}
-                  </button>
-                );
-              })}
-            </div>
-          ) : (
-            <div className="rounded-xl border border-border bg-card divide-y divide-border">
-              {filtered.map(n => {
-                const Icon = iconFor(n);
-                return (
-                  <button
-                    key={n.id}
-                    onClick={() => n.kind === "folder" ? setParentStack([...parentStack, n]) : setSelected(n)}
-                    className="w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors text-left"
-                  >
-                    <Icon className={cn("w-4 h-4 shrink-0", n.kind === "folder" ? "text-primary" : "text-muted-foreground")} />
-                    <span className="flex-1 text-[13px] truncate">{n.name}</span>
-                    {n.kind === "file" && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
-                    {n.sent_for_approval_file_id && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">aprovação</span>}
-                  </button>
-                );
-              })}
-            </div>
-          )}
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-border bg-card divide-y divide-border">
+                {filtered.map(n => {
+                  const Icon = iconFor(n);
+                  const isFolder = n.kind === "folder";
+                  const dragActive = dragOverId === n.id && isFolder;
+                  return (
+                    <div
+                      key={n.id}
+                      draggable
+                      onDragStart={(e) => onDragStartNode(e, n)}
+                      onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
+                      onDragLeave={() => isFolder && setDragOverId(null)}
+                      onDrop={(e) => isFolder && onDropFolder(e, n.id)}
+                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      className={cn("w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors cursor-pointer",
+                        dragActive && "bg-primary/10 ring-1 ring-primary/40")}
+                    >
+                      <Icon className={cn("w-4 h-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} />
+                      <span className="flex-1 text-[13px] truncate">{n.name}</span>
+                      {!isFolder && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
+                      {n.sent_for_approval_file_id && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">aprovação</span>}
+                      {renderActionsMenu(n)}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
         </main>
       </div>
 
@@ -352,6 +577,9 @@ export default function Workspace() {
                 <Button size="sm" variant="outline" onClick={async () => downloadFile(await signedUrl(selected.storage_path!), selected.name)} className="gap-1.5">
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
+                <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
+                  <Pencil className="w-3.5 h-3.5" /> Renomear
+                </Button>
                 {scope === "client" && !selected.sent_for_approval_file_id && (
                   <Button size="sm" onClick={() => sendToApproval(selected)} className="gap-1.5 bg-primary">
                     <Send className="w-3.5 h-3.5" /> Enviar para aprovação
@@ -361,7 +589,7 @@ export default function Workspace() {
                   <span className="text-[11px] text-warning">Já enviado para aprovação</span>
                 )}
                 <div className="flex-1" />
-                <Button size="sm" variant="ghost" onClick={() => removeNode(selected)} className="gap-1.5 text-destructive hover:text-destructive">
+                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(selected)} className="gap-1.5 text-destructive hover:text-destructive">
                   <Trash2 className="w-3.5 h-3.5" /> Excluir
                 </Button>
               </div>
@@ -384,6 +612,37 @@ export default function Workspace() {
           <DialogFooter>
             <Button variant="outline" onClick={() => setNewFolderOpen(false)}>Cancelar</Button>
             <Button onClick={createFolder} disabled={!newFolderName.trim()}>Criar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Rename */}
+      <Dialog open={!!renaming} onOpenChange={(o) => !o && setRaming(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader><DialogTitle>Renomear</DialogTitle></DialogHeader>
+          <Input autoFocus value={renameValue} onChange={e => setRenameValue(e.target.value)}
+            onKeyDown={e => e.key === "Enter" && renameNode()} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRaming(null)}>Cancelar</Button>
+            <Button onClick={renameNode} disabled={!renameValue.trim()}>Salvar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm delete */}
+      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir {confirmDelete?.kind === "folder" ? "pasta" : "arquivo"}?</DialogTitle>
+            <DialogDescription>
+              {confirmDelete?.kind === "folder"
+                ? <>A pasta <b>{confirmDelete?.name}</b> e todo seu conteúdo serão removidos permanentemente.</>
+                : <>O arquivo <b>{confirmDelete?.name}</b> será removido permanentemente.</>}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => confirmDelete && performDelete(confirmDelete)}>Excluir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
