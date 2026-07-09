@@ -608,12 +608,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }
 
   const isFull = dock === "full";
-  useEffect(() => {
-    if (!isFull) return;
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setDock("bc"); };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [isFull]);
+
   const dockPos = isFull
     ? "inset-3"
     : dock === "br" ? "right-4 bottom-4"
