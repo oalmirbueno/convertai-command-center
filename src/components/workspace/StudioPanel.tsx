@@ -504,21 +504,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               />
             )}
             {mode === "notes" && (
-
               <div className="p-3 space-y-2 h-full flex flex-col">
-                <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                  <MessageSquare className="w-3 h-3" /> <b>@</b> vincula arquivos · <b>/</b> insere blocos (hook, CTA, briefing, cliente…)
+                <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
+                  <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
+                  {ocrBusy && <span className="text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR…</span>}
                 </div>
-                <div className="relative flex-1 min-h-0">
+                <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
+                <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
                   <textarea
                     ref={notesRef}
                     value={state.notes}
                     onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
                     onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    placeholder="Contexto do projeto, ideias, notas de reunião, próximos passos..."
-                    className="w-full h-full min-h-[240px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
+                    onPaste={onNotesPaste}
+                    placeholder="/ para comandos · @ para arquivos · cole imagem/vídeo…"
+                    className="w-full h-full min-h-[180px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
                   />
+                  {state.notes.trim().length > 0 && (
+                    <div className="mt-2 border-t border-border pt-2 max-h-[240px] overflow-y-auto">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Preview</div>
+                      <NotesPreview src={state.notes} />
+                    </div>
+                  )}
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
@@ -528,7 +537,6 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                       onPick={insertSlash}
                     />
                   )}
-
                 </div>
                 {!!state.mentions.length && (
                   <div className="flex flex-wrap gap-1 pt-1 border-t border-border">
@@ -542,6 +550,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 )}
               </div>
             )}
+
 
           </div>
         </>
