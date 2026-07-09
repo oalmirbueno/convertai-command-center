@@ -23,7 +23,7 @@ const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-pre
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
 
-type Mode = "agent" | "notes" | "map" | "script" | "board" | "process";
+type Mode = "agent" | "notes";
 
 
 type StudioState = {
@@ -79,28 +79,43 @@ const PROCESS_STEPS = [
   { title: "5. Entrega",      hint: "Versão final publicada. Registre variações e links de destino." },
 ];
 
-type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: "createTask" };
+type SlashAction = "createTask" | "openKanban" | "uploadImage" | "insertVideo" | "insertMindmap";
+type SlashCmd = { key: string; label: string; hint: string; insert: string; action?: SlashAction };
 
 function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: string | null; contextLabel: string }): SlashCmd[] {
   const c = ctx.clientName || ctx.contextLabel || "cliente";
   const pasta = ctx.folderPath || "raiz";
   return [
-    { key: "tarefa",  label: "Nova tarefa no Kanban", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
-    { key: "cliente", label: "Cliente atual", hint: c, insert: `**Cliente:** ${c}\n` },
-    { key: "pasta",   label: "Pasta atual",   hint: pasta, insert: `**Pasta:** ${pasta}\n` },
-    { key: "hook",    label: "Bloco HOOK",    hint: "roteiro 0-3s",
+    { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
+    { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
+    { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
+    { key: "video",    label: "Embed de vídeo",                  hint: "YouTube / Vimeo / Drive", insert: "", action: "insertVideo" },
+    { key: "mapa",     label: "Mapa mental (ASCII)",             hint: "insere estrutura hierárquica", insert: "", action: "insertMindmap" },
+    { key: "checklist",label: "Checklist",                       hint: "lista com checkboxes", insert: `\n- [ ] \n- [ ] \n- [ ] \n` },
+    { key: "cliente",  label: "Cliente atual",                   hint: c, insert: `**Cliente:** ${c}\n` },
+    { key: "pasta",    label: "Pasta atual",                     hint: pasta, insert: `**Pasta:** ${pasta}\n` },
+    { key: "hook",     label: "Bloco HOOK",                      hint: "roteiro 0-3s",
       insert: `\n### HOOK (0-3s)\nFALA: \nIMAGEM: \nTEXTO EM TELA: \n` },
-    { key: "desenv",  label: "Bloco DESENVOLVIMENTO", hint: "proof/argumento",
+    { key: "desenv",   label: "Bloco DESENVOLVIMENTO",           hint: "proof/argumento",
       insert: `\n### DESENVOLVIMENTO (3-25s)\nFALA: \nB-ROLL: \nSFX/TRILHA: \n` },
-    { key: "cta",     label: "Bloco CTA",      hint: "chamada final",
+    { key: "cta",      label: "Bloco CTA",                       hint: "chamada final",
       insert: `\n### CTA\nFALA: \nTEXTO: \nDESTINO: \n` },
-    { key: "brief",   label: "Template BRIEFING", hint: "objetivo + público + canal",
+    { key: "brief",    label: "Template BRIEFING",               hint: "objetivo + público + canal",
       insert: `\n## Briefing\n- **Objetivo:** \n- **Público:** \n- **Canal:** \n- **Duração:** \n- **Tom:** \n- **Referências:** \n` },
-    { key: "check",   label: "Checklist de entrega", hint: "pipeline pastas",
-      insert: `\n## Checklist entrega\n- [ ] 1. Brutos\n- [ ] 2. Trilhas/SFX\n- [ ] 3. Edição\n- [ ] 4. Final aprovado\n- [ ] 5. Publicado\n` },
-    { key: "kanban",  label: "Ver Kanban do cliente", hint: "abre em nova aba",
-      insert: `[Kanban do cliente](#kanban)` },
   ];
+}
+
+const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
+
+function videoEmbedFromUrl(url: string): string | null {
+  const u = url.trim();
+  const yt = u.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([\w-]{11})/);
+  if (yt) return `https://www.youtube.com/embed/${yt[1]}`;
+  const vm = u.match(/vimeo\.com\/(\d+)/);
+  if (vm) return `https://player.vimeo.com/video/${vm[1]}`;
+  const dr = u.match(/drive\.google\.com\/file\/d\/([\w-]+)/);
+  if (dr) return `https://drive.google.com/file/d/${dr[1]}/preview`;
+  return null;
 }
 
 // Destaca trechos [start,end) do texto com <mark> para busca fuzzy.
@@ -241,6 +256,59 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     else { setMentionQuery(null); setSlashMenu(null); }
   }
 
+  const [kanbanOpen, setKanbanOpen] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const [ocrBusy, setOcrBusy] = useState(false);
+
+  function insertAtCaret(text: string) {
+    const el = notesRef.current;
+    const cur = state.notes;
+    const caret = el?.selectionStart ?? cur.length;
+    const next = cur.slice(0, caret) + text + cur.slice(caret);
+    setState(s => ({ ...s, notes: next }));
+    setTimeout(() => { if (el) { el.focus(); const p = caret + text.length; el.setSelectionRange(p, p); } }, 10);
+  }
+
+  async function ocrFile(file: File): Promise<string> {
+    const dataUrl: string = await new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result as string);
+      r.onerror = rej;
+      r.readAsDataURL(file);
+    });
+    const { data, error } = await supabase.functions.invoke("workspace-ocr", { body: { image: dataUrl } });
+    if (error || (data as any)?.error) throw new Error((data as any)?.error || error?.message || "OCR falhou");
+    return (data as any)?.text || "";
+  }
+
+  async function handleImageFile(file: File) {
+    if (!file.type.startsWith("image/")) return;
+    setOcrBusy(true);
+    toast({ title: "Analisando imagem…", description: "Extraindo texto via Lovable AI (Gemini Flash Lite)." });
+    try {
+      const text = await ocrFile(file);
+      insertAtCaret(`\n> 🖼️ **Imagem — texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
+      toast({ title: "OCR concluído", description: `${text.length} caracteres extraídos.` });
+    } catch (e: any) {
+      toast({ title: "Falha no OCR", description: e?.message?.slice(0, 200), variant: "destructive" });
+    } finally { setOcrBusy(false); }
+  }
+
+  function onNotesPaste(e: React.ClipboardEvent<HTMLTextAreaElement>) {
+    const items = Array.from(e.clipboardData.items || []);
+    const img = items.find(i => i.type.startsWith("image/"));
+    if (img) {
+      const f = img.getAsFile();
+      if (f) { e.preventDefault(); void handleImageFile(f); return; }
+    }
+    const txt = e.clipboardData.getData("text/plain");
+    const embed = videoEmbedFromUrl(txt);
+    if (embed) {
+      e.preventDefault();
+      insertAtCaret(`\n@video[${txt}](${embed})\n`);
+    }
+  }
+
   function insertSlash(cmd: SlashCmd) {
     if (!slashMenu) return;
     const { where, start, q } = slashMenu;
@@ -248,17 +316,34 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     const before = cur.slice(0, start);
     const after = cur.slice(start + 1 + q.length);
 
-    // Ação especial: abre dialog de nova tarefa (prefill com texto do início da linha corrente)
     if (cmd.action === "createTask") {
       const lineStart = before.lastIndexOf("\n") + 1;
       const currentLine = cur.slice(lineStart, start).trim();
-      setTaskDraft({
-        raw: currentLine,
-        where, insertAt: start, tokenLen: 1 + q.length,
-      });
+      setTaskDraft({ raw: currentLine, where, insertAt: start, tokenLen: 1 + q.length });
       setSlashMenu(null);
       return;
     }
+
+    // Ações que apenas removem o token /xxx e disparam side-effect
+    const cleaned = before + after;
+    const applyCleaned = () => {
+      if (where === "notes") setState(s => ({ ...s, notes: cleaned }));
+      else setState(s => ({ ...s, script: cleaned }));
+      setSlashMenu(null);
+    };
+
+    if (cmd.action === "openKanban") { applyCleaned(); setKanbanOpen(true); return; }
+    if (cmd.action === "uploadImage") { applyCleaned(); setTimeout(() => imageInputRef.current?.click(), 30); return; }
+    if (cmd.action === "insertVideo") {
+      applyCleaned();
+      const url = window.prompt("Cole o link do vídeo (YouTube / Vimeo / Drive):", "");
+      if (url) {
+        const embed = videoEmbedFromUrl(url);
+        insertAtCaret(embed ? `\n@video[${url}](${embed})\n` : `\n[${url}](${url})\n`);
+      }
+      return;
+    }
+    if (cmd.action === "insertMindmap") { applyCleaned(); insertAtCaret(MINDMAP_TEMPLATE); return; }
 
     const next = before + cmd.insert + after;
     if (where === "notes") setState(s => ({ ...s, notes: next }));
@@ -390,13 +475,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           {/* Tabs */}
           <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0 overflow-x-auto">
             {[
-              { k: "agent",   icon: Bot,         label: "Agente" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
-              { k: "map",     icon: Brain,       label: "Mapa" },
-              { k: "script",  icon: FileText,    label: "Roteiro" },
-              { k: "board",   icon: Columns3,    label: "Kanban" },
-              { k: "process", icon: GitBranch,   label: "Processo" },
-
+              { k: "agent",   icon: Bot,         label: "Agente" },
             ].map(t => {
               const active = mode === t.k;
               const Icon = t.icon;
@@ -424,21 +504,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               />
             )}
             {mode === "notes" && (
-
               <div className="p-3 space-y-2 h-full flex flex-col">
-                <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                  <MessageSquare className="w-3 h-3" /> <b>@</b> vincula arquivos · <b>/</b> insere blocos (hook, CTA, briefing, cliente…)
+                <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
+                  <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
+                  {ocrBusy && <span className="text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR…</span>}
                 </div>
-                <div className="relative flex-1 min-h-0">
+                <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
+                <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
                   <textarea
                     ref={notesRef}
                     value={state.notes}
                     onChange={e => handleTextChange("notes", e.target.value, e.target.selectionStart)}
                     onKeyUp={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
                     onClick={e => handleTextChange("notes", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    placeholder="Contexto do projeto, ideias, notas de reunião, próximos passos..."
-                    className="w-full h-full min-h-[240px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
+                    onPaste={onNotesPaste}
+                    placeholder="/ para comandos · @ para arquivos · cole imagem/vídeo…"
+                    className="w-full h-full min-h-[180px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
                   />
+                  {state.notes.trim().length > 0 && (
+                    <div className="mt-2 border-t border-border pt-2 max-h-[240px] overflow-y-auto">
+                      <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Preview</div>
+                      <NotesPreview src={state.notes} />
+                    </div>
+                  )}
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
@@ -448,7 +537,6 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                       onPick={insertSlash}
                     />
                   )}
-
                 </div>
                 {!!state.mentions.length && (
                   <div className="flex flex-wrap gap-1 pt-1 border-t border-border">
@@ -463,97 +551,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
 
-            {mode === "script" && (
-              <div className="p-3 space-y-2 h-full flex flex-col">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-[10px] text-muted-foreground">Roteiro em construção — use <b>@</b> para citar materiais.</span>
-                  <div className="flex items-center gap-1">
-                    <Button size="sm" variant="outline" onClick={copyBriefingForGPT} className="h-7 gap-1 text-[10px]">
-                      <Copy className="w-3 h-3" /> Copiar p/ GPT
-                    </Button>
-                    <Button size="sm" onClick={() => setMode("agent")} className="h-7 gap-1 text-[10px]">
-                      <Wand2 className="w-3 h-3" /> Abrir no Prepro
-                    </Button>
 
-                  </div>
-                </div>
-                <div className="relative flex-1 min-h-0">
-                  <textarea
-                    ref={scriptRef}
-                    value={state.script}
-                    onChange={e => handleTextChange("script", e.target.value, e.target.selectionStart)}
-                    onKeyUp={e => handleTextChange("script", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    onClick={e => handleTextChange("script", (e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
-                    placeholder={"CENA 1 — Abertura\nINT. Estúdio. Dia.\n\nNarrador (V.O.): ..."}
-                    className="w-full h-full min-h-[260px] resize-none bg-background border border-border rounded-lg p-3 text-[13px] leading-relaxed font-mono focus:outline-none focus:border-primary/50"
-                  />
-                  {mentionQuery?.where === "script" && mentionMatches.length > 0 && (
-                    <MentionList items={mentionMatches} onPick={insertMention} />
-                  )}
-                  {slashMenu?.where === "script" && (
-                    <SlashList
-                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
-                      onPick={insertSlash}
-                    />
-                  )}
-
-                </div>
-              </div>
-            )}
-
-            {mode === "map" && (
-              <div className="p-3">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-[10px] text-muted-foreground">Clique num nó para editar; use <b>+</b> para ramificar.</p>
-                  <button onClick={() => setState(s => ({ ...s, mapRoot: JSON.parse(JSON.stringify(DEFAULT_MAP)) }))}
-                    className="text-[10px] text-muted-foreground hover:text-foreground">
-                    Reset
-                  </button>
-                </div>
-                <MindMapView root={state.mapRoot} onRename={renameNode} onAdd={addChild} onDelete={deleteNode} />
-              </div>
-            )}
-
-            {mode === "board" && (
-              <MiniKanban
-                board={state.board}
-                onChange={(next, logEntry) => setState(s => ({
-                  ...s,
-                  board: next,
-                  boardLog: logEntry ? [...s.boardLog.slice(-39), logEntry] : s.boardLog,
-                }))}
-                onReset={() => setState(s => ({ ...s, board: JSON.parse(JSON.stringify(DEFAULT_BOARD)), boardLog: [] }))}
-                log={state.boardLog}
-              />
-            )}
-
-
-            {mode === "process" && (
-              <div className="p-3 space-y-2">
-                <p className="text-[10px] text-muted-foreground mb-2">
-                  Fluxo padrão de audiovisual — clique para expandir.
-                </p>
-                <ol className="relative border-l-2 border-primary/20 pl-4 space-y-3">
-                  {PROCESS_STEPS.map((s, i) => (
-                    <li key={i} className="relative">
-                      <span className="absolute -left-[22px] top-1 w-3.5 h-3.5 rounded-full bg-primary/20 border-2 border-primary flex items-center justify-center text-[8px] font-bold text-primary">
-                        {i + 1}
-                      </span>
-                      <p className="text-[12px] font-semibold text-foreground">{s.title}</p>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{s.hint}</p>
-                    </li>
-                  ))}
-                </ol>
-                <div className="pt-3 border-t border-border mt-4">
-                  <button onClick={() => setMode("agent")}
-                     className="w-full flex items-center gap-2 p-2.5 rounded-lg bg-primary/10 hover:bg-primary/15 border border-primary/30 text-primary text-[12px] font-medium">
-                    <Wand2 className="w-4 h-4" />
-                    <span className="flex-1 text-left">Abrir o Prepro Director aqui</span>
-                  </button>
-                </div>
-
-              </div>
-            )}
           </div>
         </>
       )}
@@ -583,7 +581,138 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           }}
         />
       )}
+      <KanbanInlineDialog open={kanbanOpen} onOpenChange={setKanbanOpen} clientId={clientId ?? null} clientName={clientName ?? null} />
     </div>
+  );
+}
+
+// Preview leve das Notas: renderiza checkboxes, imagens ![](url), links, embeds de vídeo @video[nome](embedUrl) e menções wsfile.
+function NotesPreview({ src }: { src: string }) {
+  const lines = src.split("\n");
+  const out: React.ReactNode[] = [];
+  lines.forEach((raw, i) => {
+    // vídeo embed
+    const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
+    if (v) {
+      out.push(
+        <div key={i} className="my-2 aspect-video w-full max-w-md rounded overflow-hidden border border-border">
+          <iframe src={v[2]} className="w-full h-full" allow="autoplay; encrypted-media" allowFullScreen title={v[1]} />
+        </div>
+      );
+      return;
+    }
+    // imagem markdown
+    const img = raw.match(/^!\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
+    if (img) {
+      out.push(<img key={i} src={img[2]} alt={img[1]} className="my-2 max-h-48 rounded border border-border" />);
+      return;
+    }
+    // checkbox
+    const cb = raw.match(/^(\s*)- \[( |x|X)\] (.+)$/);
+    if (cb) {
+      const checked = cb[2].toLowerCase() === "x";
+      out.push(
+        <div key={i} className="flex items-start gap-2 text-[12px] py-0.5" style={{ paddingLeft: cb[1].length * 6 }}>
+          <span className={cn("mt-[3px] w-3 h-3 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/40")}>
+            {checked && <Check className="w-2 h-2 text-primary-foreground" />}
+          </span>
+          <span className={checked ? "line-through text-muted-foreground" : ""}>{cb[3]}</span>
+        </div>
+      );
+      return;
+    }
+    // heading
+    if (raw.startsWith("### ")) { out.push(<div key={i} className="text-[12px] font-semibold text-primary mt-1">{raw.slice(4)}</div>); return; }
+    if (raw.startsWith("## "))  { out.push(<div key={i} className="text-[13px] font-bold mt-1">{raw.slice(3)}</div>); return; }
+    if (raw.startsWith("# "))   { out.push(<div key={i} className="text-[14px] font-bold mt-1">{raw.slice(2)}</div>); return; }
+    if (raw.startsWith("> "))   { out.push(<div key={i} className="border-l-2 border-primary/40 pl-2 text-[11px] text-muted-foreground italic">{raw.slice(2)}</div>); return; }
+    if (raw.trim() === "")      { out.push(<div key={i} className="h-1" />); return; }
+    // linha simples com wsfile mention
+    const withMentions = raw.replace(/\[@([^\]]+)\]\(wsfile:[^)]+\)/g, "@$1");
+    out.push(<div key={i} className="text-[12px] leading-relaxed">{withMentions}</div>);
+  });
+  return <div className="space-y-0.5">{out}</div>;
+}
+
+// Kanban inline: mostra as tasks reais do projeto ativo do cliente (tabela tasks via projects)
+function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: string | null; clientName: string | null }) {
+  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string }>>([]);
+  const [projectName, setProjectName] = useState<string>("");
+
+  useEffect(() => {
+    if (!open || !clientId) return;
+    (async () => {
+      setLoading(true);
+      const { data: projs } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1);
+      const pid = projs?.[0]?.id;
+      setProjectName(projs?.[0]?.name || "");
+      if (!pid) { setTasks([]); setLoading(false); return; }
+      const { data: ts } = await supabase.from("tasks").select("id, title, status, priority, due_date, project_id").eq("project_id", pid).order("created_at", { ascending: false });
+      setTasks((ts as any) || []);
+      setLoading(false);
+    })();
+  }, [open, clientId]);
+
+  const cols: Array<{ key: string; title: string }> = [
+    { key: "todo", title: "A fazer" },
+    { key: "doing", title: "Em andamento" },
+    { key: "review", title: "Revisão" },
+    { key: "done", title: "Feito" },
+  ];
+
+  async function move(taskId: string, next: string) {
+    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, status: next } : t));
+    await supabase.from("tasks").update({ status: next }).eq("id", taskId);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Columns3 className="w-4 h-4 text-primary" /> Kanban · {clientName || "cliente"} {projectName && <span className="text-muted-foreground font-normal">/ {projectName}</span>}
+          </DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="p-8 flex items-center justify-center text-muted-foreground text-xs"><Loader2 className="w-4 h-4 animate-spin mr-2" /> carregando…</div>
+        ) : !clientId ? (
+          <p className="text-xs text-muted-foreground">Selecione um cliente no Workspace primeiro.</p>
+        ) : tasks.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Este projeto ainda não tem tarefas. Use <b>/tarefa</b> nas Notas para criar.</p>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
+            {cols.map(col => (
+              <div key={col.key} className="bg-secondary/30 rounded-lg p-2 space-y-1.5">
+                <div className="text-[10px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
+                  <span>{col.title}</span>
+                  <span className="text-[9px] opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
+                </div>
+                {tasks.filter(t => t.status === col.key).map(t => (
+                  <div key={t.id} className="bg-background rounded p-2 border border-border text-[11px] space-y-1">
+                    <div className="font-medium">{t.title}</div>
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      {t.priority && <span className={cn("px-1.5 py-0.5 rounded",
+                        t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
+                        t.priority === "high" ? "bg-amber-500/20 text-amber-600" : "bg-secondary")}>{t.priority}</span>}
+                      {t.due_date && <span>· {t.due_date}</span>}
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      {cols.filter(c => c.key !== t.status).map(c => (
+                        <button key={c.key} onClick={() => move(t.id, c.key)}
+                          className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
+                          → {c.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
