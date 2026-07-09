@@ -1398,7 +1398,9 @@ export default function Workspace() {
             </DialogDescription>
           </DialogHeader>
           <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
+            onFocus={e => e.currentTarget.select()}
             placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
+          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática — edite à vontade.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
             <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>
