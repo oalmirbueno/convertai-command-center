@@ -311,37 +311,99 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return () => { cancel = true; };
   }, [clientId]);
 
-  // Carrega doc do projeto atual + realtime
+  // ── Sincronização bidirecional em tempo real ──
+  // Refs internas para evitar loops (save→realtime→save) e preservar edições locais
+  // quando um enrich/publish/edição remota chega no meio do fluxo.
+  const uidRef = useRef<string | null>(null);
+  const lastSavedNotesRef = useRef<string>("");     // último conteúdo confirmado no servidor
+  const lastRemoteAtRef = useRef<string>("");        // updated_at do último snapshot remoto aplicado
+  const isTypingRef = useRef<boolean>(false);        // true enquanto usuário digita (limpo após debounce)
+  const notesRef = useRef<string>(state.notes);
+  useEffect(() => { notesRef.current = state.notes; }, [state.notes]);
   useEffect(() => {
-    if (!projectId) { setDocPublished(false); return; }
+    (async () => {
+      const { data } = await supabase.auth.getUser();
+      uidRef.current = data?.user?.id || null;
+    })();
+  }, []);
+
+  // Carga inicial + assinatura realtime por projeto
+  useEffect(() => {
+    if (!projectId) {
+      setDocPublished(false);
+      lastSavedNotesRef.current = "";
+      lastRemoteAtRef.current = "";
+      return;
+    }
     let cancel = false;
     (async () => {
-      const { data } = await supabase.from("studio_docs").select("notes, published").eq("project_id", projectId).maybeSingle();
-      if (cancel) return;
-      if (data) {
-        setDocPublished(!!(data as any).published);
-        // Se o doc remoto tem conteúdo e local está vazio, hidrata local
-        const remote = ((data as any).notes || "").trim();
-        if (remote && !state.notes.trim()) setState(s => ({ ...s, notes: remote }));
+      const { data } = await supabase.from("studio_docs")
+        .select("notes, published, updated_at, updated_by")
+        .eq("project_id", projectId).maybeSingle();
+      if (cancel || !data) return;
+      const remoteNotes = ((data as any).notes || "") as string;
+      setDocPublished(!!(data as any).published);
+      lastSavedNotesRef.current = remoteNotes;
+      lastRemoteAtRef.current = (data as any).updated_at || "";
+      // Hidrata local quando ele estiver vazio ou o remoto for mais recente e local ainda não foi tocado
+      if (remoteNotes && (!notesRef.current.trim() || notesRef.current === "")) {
+        setState(s => ({ ...s, notes: remoteNotes }));
       }
     })();
-    return () => { cancel = true; };
+
+    const ch = supabase
+      .channel(`studio_docs:${projectId}`)
+      .on("postgres_changes",
+        { event: "*", schema: "public", table: "studio_docs", filter: `project_id=eq.${projectId}` },
+        (payload) => {
+          const row = (payload.new as any) || (payload.old as any);
+          if (!row) return;
+          // Ignora eco do próprio usuário (evita loop)
+          if (row.updated_by && row.updated_by === uidRef.current) {
+            lastSavedNotesRef.current = row.notes || "";
+            lastRemoteAtRef.current = row.updated_at || lastRemoteAtRef.current;
+            setDocPublished(!!row.published);
+            return;
+          }
+          // Só aplica se snapshot é mais novo que o já visto
+          if (row.updated_at && row.updated_at <= lastRemoteAtRef.current) return;
+          lastRemoteAtRef.current = row.updated_at || lastRemoteAtRef.current;
+          setDocPublished(!!row.published);
+          const remoteNotes = (row.notes || "") as string;
+          // Preserva edições locais não salvas: só sobrescreve se local == último salvo
+          if (remoteNotes && remoteNotes !== notesRef.current && !isTypingRef.current
+              && notesRef.current === lastSavedNotesRef.current) {
+            lastSavedNotesRef.current = remoteNotes;
+            setState(s => ({ ...s, notes: remoteNotes }));
+          } else if (remoteNotes && remoteNotes !== notesRef.current && notesRef.current !== lastSavedNotesRef.current) {
+            // Conflito: mantém edição local, avisa
+            toast({ title: "Edição remota detectada", description: "Sua versão local foi preservada. Recarregue para ver a remota." });
+          }
+        })
+      .subscribe();
+    return () => { cancel = true; supabase.removeChannel(ch); };
   }, [projectId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Debounced upsert das notas -> studio_docs
+  // Debounced upsert das notas -> studio_docs (só quando houve mudança real)
   useEffect(() => {
     if (!projectId) return;
+    if (state.notes === lastSavedNotesRef.current) { setDocSyncing("idle"); return; }
+    isTypingRef.current = true;
     setDocSyncing("saving");
     const t = setTimeout(async () => {
-      const { data: userRes } = await supabase.auth.getUser();
-      const uid = userRes?.user?.id;
-      const { error } = await supabase.from("studio_docs").upsert({
+      const notesToSave = state.notes;
+      const { data, error } = await supabase.from("studio_docs").upsert({
         project_id: projectId,
-        notes: state.notes,
+        notes: notesToSave,
         published: docPublished,
-        updated_by: uid,
+        updated_by: uidRef.current,
         updated_at: new Date().toISOString(),
-      } as any, { onConflict: "project_id" });
+      } as any, { onConflict: "project_id" }).select("updated_at").maybeSingle();
+      if (!error) {
+        lastSavedNotesRef.current = notesToSave;
+        if (data?.updated_at) lastRemoteAtRef.current = data.updated_at as string;
+      }
+      isTypingRef.current = false;
       setDocSyncing(error ? "error" : "saved");
       if (!error) setTimeout(() => setDocSyncing("idle"), 1200);
     }, 1200);
@@ -376,6 +438,22 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
     const next = !docPublished;
     setDocPublished(next);
+    // Persistência imediata (não espera debounce) — garante que o cliente veja na hora
+    const notesNow = notesRef.current;
+    const { data, error } = await supabase.from("studio_docs").upsert({
+      project_id: projectId,
+      notes: notesNow,
+      published: next,
+      updated_by: uidRef.current,
+      updated_at: new Date().toISOString(),
+    } as any, { onConflict: "project_id" }).select("updated_at").maybeSingle();
+    if (error) {
+      setDocPublished(!next);
+      toast({ title: "Falha ao publicar", description: error.message, variant: "destructive" });
+      return;
+    }
+    lastSavedNotesRef.current = notesNow;
+    if (data?.updated_at) lastRemoteAtRef.current = data.updated_at as string;
     toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
   }
 
