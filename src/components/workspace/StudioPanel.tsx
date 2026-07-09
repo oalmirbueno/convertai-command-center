@@ -1956,10 +1956,11 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
   );
 }
 
-function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
+function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, onAttachToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; projectId?: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
   onStructureToNotes?: () => void | Promise<void>;
+  onAttachToNotes?: (picks: FileRef[]) => void;
   label?: string;
   showExternalTools?: boolean;
 }) {
