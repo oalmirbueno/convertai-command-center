@@ -2801,10 +2801,47 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               }
               if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
             }}
-            placeholder="Pergunte ao agente... @ anexa arquivos · / dispara ações"
+            placeholder="Converse com o agente. @ anexa arquivo · / dispara ação · cole um link que ele lê"
             rows={2}
             className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
           />
+
+          <div className="flex flex-col gap-1">
+            <button
+              type="button"
+              title="Anexar arquivo ou pasta do workspace"
+              onClick={() => {
+                const el = inputRef.current;
+                if (!el) return;
+                const caret = el.selectionStart ?? input.length;
+                const next = input.slice(0, caret) + "@" + input.slice(caret);
+                setInput(next);
+                setMention({ q: "", start: caret });
+                setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
+              }}
+              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
+            >
+              <Paperclip className="w-3 h-3" />
+            </button>
+            <button
+              type="button"
+              title="Anexar link (o agente lê o conteúdo)"
+              onClick={() => {
+                const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
+                if (!url) return;
+                const clean = url.trim();
+                if (!/^https?:\/\//i.test(clean)) { toast.error("URL inválida"); return; }
+                const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
+                const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
+                setAttached(prev => [...prev, ref]);
+                setInput(prev => (prev ? prev + " " : "") + clean + " ");
+                setTimeout(() => inputRef.current?.focus(), 10);
+              }}
+              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
+            >
+              <LinkIcon className="w-3 h-3" />
+            </button>
+          </div>
 
           <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
