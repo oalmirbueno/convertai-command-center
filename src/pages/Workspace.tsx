@@ -50,6 +50,25 @@ const iconFor = (n: Node) => {
   return FileText;
 };
 
+type MediaKind = "image" | "video" | "audio" | "doc" | "other";
+function kindOf(n: Node): MediaKind {
+  if (n.kind === "folder") return "other";
+  const m = (n.mime || "").toLowerCase();
+  const name = (n.name || "").toLowerCase();
+  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/.test(name)) return "image";
+  if (m.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v)$/.test(name)) return "video";
+  if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/.test(name)) return "audio";
+  if (m.includes("pdf") || /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv)$/.test(name)) return "doc";
+  return "other";
+}
+const KIND_META: Record<MediaKind, { label: string; color: string }> = {
+  image: { label: "Imagens", color: "text-blue-400" },
+  video: { label: "Vídeos", color: "text-purple-400" },
+  audio: { label: "Áudios", color: "text-pink-400" },
+  doc:   { label: "Documentos", color: "text-amber-400" },
+  other: { label: "Outros", color: "text-muted-foreground" },
+};
+
 function virtFileNode(f: any, clientId: string): Node {
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
