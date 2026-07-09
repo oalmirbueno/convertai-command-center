@@ -252,11 +252,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
   const [dock, setDock] = useState<"br" | "bl" | "bc" | "full">(() => {
-    const v = localStorage.getItem("studio_dock_v2") as any;
-    return v || "bc";
+    const v = localStorage.getItem("studio_dock_v3") as any;
+    // migração: laterais antigas viram centralizado
+    if (!v || v === "br" || v === "bl") return "bc";
+    return v;
   });
   const [mode, setMode] = useState<Mode>("agent");
-  useEffect(() => { try { localStorage.setItem("studio_dock_v2", dock); } catch {} }, [dock]);
+  useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
   useEffect(() => {
