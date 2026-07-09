@@ -911,7 +911,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         <aside className="w-[180px] shrink-0 border-r border-border bg-background/60 flex flex-col min-h-0">
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
             <MessageSquare className="w-3 h-3 text-muted-foreground" />
-            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">Conversas</span>
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1 truncate">
+              {clientName ? clientName : "Global"}
+            </span>
             <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
               <Plus className="w-3 h-3" />
             </button>
@@ -919,24 +921,42 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <X className="w-3 h-3" />
             </button>
           </div>
+          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border bg-background/40">
+            <button onClick={() => setThreadScope("client")}
+              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
+                threadScope === "client" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
+              Cliente
+            </button>
+            <button onClick={() => setThreadScope("folder")}
+              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
+                threadScope === "folder" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
+              Pasta
+            </button>
+          </div>
           <div className="flex-1 min-h-0 overflow-y-auto">
             {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
             {threads.map(t => (
               <div key={t.id}
-                className={cn("group flex items-center gap-1 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
+                className={cn("group flex flex-col gap-0.5 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
                   activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
                 onClick={() => setActiveId(t.id)}>
-                <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
-                <span className="text-[11px] truncate flex-1">{t.title}</span>
-                <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
-                  <Trash2 className="w-3 h-3" />
-                </button>
+                <div className="flex items-center gap-1">
+                  <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
+                  <span className="text-[11px] truncate flex-1">{t.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                    <Trash2 className="w-3 h-3" />
+                  </button>
+                </div>
+                {threadScope === "client" && t.folder_path && (
+                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">📁 {t.folder_path}</span>
+                )}
               </div>
             ))}
           </div>
         </aside>
       )}
+
 
       <div className="flex flex-col h-full flex-1 min-w-0">
         {/* Header: cliente + toggle sidebar + nova */}
