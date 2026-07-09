@@ -422,6 +422,9 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             <TabPayments projectId={project.id} clientId={project.client_id} projectName={project.name} />
           </TabsContent>
         )}
+        <TabsContent value="document" className="mt-6">
+          <TabDocument projectId={project.id} />
+        </TabsContent>
         <TabsContent value="updates" className="mt-6">
           <TabUpdates projectId={project.id} />
         </TabsContent>
