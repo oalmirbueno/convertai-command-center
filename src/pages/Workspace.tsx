@@ -264,26 +264,24 @@ export default function Workspace() {
     return c;
   }, [nodes, virtualNodes, parent]);
 
-  // Batch-prefetch signed URLs for image/video files visible in current view (for covers)
+  // Batch-prefetch signed URLs for image files visible in current view (for covers).
+  // Uses createSignedUrls (single request for many paths) + image transform for tiny thumbs.
   useEffect(() => {
-    const targets = (filtered || []).filter(n =>
+    const imgTargets = (filtered || []).filter(n =>
       n.kind === "file" && !n.__virtual && n.storage_path &&
-      (kindOf(n) === "image" || kindOf(n) === "video") &&
-      !signedUrls[n.storage_path!]
-    ).slice(0, 40);
-    if (!targets.length) return;
+      kindOf(n) === "image" && !signedUrls[n.storage_path!]
+    ).slice(0, 60);
+    if (!imgTargets.length) return;
     let alive = true;
     (async () => {
-      const results = await Promise.all(
-        targets.map(async (n) => {
-          const { data } = await supabase.storage.from("workspace").createSignedUrl(n.storage_path!, 3600);
-          return [n.storage_path!, data?.signedUrl || ""] as const;
-        })
+      const paths = imgTargets.map(n => n.storage_path!);
+      const { data } = await (supabase.storage.from("workspace") as any).createSignedUrls(
+        paths, 3600, { transform: { width: 400, quality: 70, resize: "cover" } }
       );
-      if (!alive) return;
+      if (!alive || !data) return;
       setSignedUrls(prev => {
         const next = { ...prev };
-        for (const [k, v] of results) if (v) next[k] = v;
+        for (const row of data as any[]) if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
         return next;
       });
     })();
@@ -292,12 +290,12 @@ export default function Workspace() {
 
   const coverFor = (n: Node): string | null => {
     if (n.kind !== "file") return null;
-    const k = kindOf(n);
-    if (k !== "image" && k !== "video") return null;
+    if (kindOf(n) !== "image") return null; // videos use icon (avoid heavy fetches)
     if (n.__virtual) return n.__external_url || null;
     if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
     return null;
   };
+
 
 
 
