@@ -805,6 +805,19 @@ export default function Workspace() {
               <FolderInput className="w-3.5 h-3.5 mr-2" /> Mover para
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent className="max-h-72 overflow-y-auto w-64">
+              {!n.__virtual && (
+                <>
+                  <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: null, parentLabel: "Raiz" }); setMoveCreateName(""); }}>
+                    <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta na raiz…
+                  </DropdownMenuItem>
+                  {parent && (
+                    <DropdownMenuItem onSelect={() => { setMoveCreate({ node: n, parentId: parent.id, parentLabel: parent.name }); setMoveCreateName(""); }}>
+                      <FolderPlus className="w-3.5 h-3.5 mr-2 text-primary" /> Nova pasta em “{parent.name}”…
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuSeparator />
+                </>
+              )}
               <DropdownMenuItem onSelect={() => moveNode(n, null)}>
                 <Globe2 className="w-3.5 h-3.5 mr-2" /> Raiz
               </DropdownMenuItem>
