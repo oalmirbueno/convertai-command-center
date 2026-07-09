@@ -13,13 +13,20 @@ function countNodes(nodes: TplNode[]): number {
 
 function TreePreview({ nodes, depth = 0 }: { nodes: TplNode[]; depth?: number }) {
   return (
-    <div className="space-y-0.5">
+    <div className="space-y-1">
       {nodes.map((n, i) => (
         <div key={i}>
-          <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground" style={{ paddingLeft: depth * 12 }}>
-            {depth > 0 && <ChevronRight className="w-2.5 h-2.5 opacity-40" />}
-            <Folder className="w-3 h-3 text-primary/70" />
-            <span className="truncate">{n.name}</span>
+          <div className="flex items-start gap-1.5 text-[11px]" style={{ paddingLeft: depth * 12 }}>
+            {depth > 0 && <ChevronRight className="w-2.5 h-2.5 opacity-40 mt-0.5 shrink-0" />}
+            <Folder className="w-3 h-3 text-primary/70 mt-0.5 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <div className="text-foreground/90 truncate">{n.name}</div>
+              {n.hint && (
+                <div className="text-[10px] text-muted-foreground/80 leading-snug mt-0.5">
+                  {n.hint}
+                </div>
+              )}
+            </div>
           </div>
           {n.children && <TreePreview nodes={n.children} depth={depth + 1} />}
         </div>
