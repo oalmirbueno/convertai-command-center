@@ -392,6 +392,7 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
             { value: "timeline", label: "Timeline" },
             { value: "deliveries", label: "Entregas" },
             ...(NON_RECURRING_TYPES.includes(project.project_type) ? [{ value: "payments", label: "Pagamentos" }] : []),
+            { value: "document", label: "Documento" },
             { value: "updates", label: "Atualizações" },
           ].map(tab => (
             <TabsTrigger
