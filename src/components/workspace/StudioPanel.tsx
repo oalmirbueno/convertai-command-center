@@ -581,7 +581,138 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           }}
         />
       )}
+      <KanbanInlineDialog open={kanbanOpen} onOpenChange={setKanbanOpen} clientId={clientId ?? null} clientName={clientName ?? null} />
     </div>
+  );
+}
+
+// Preview leve das Notas: renderiza checkboxes, imagens ![](url), links, embeds de vídeo @video[nome](embedUrl) e menções wsfile.
+function NotesPreview({ src }: { src: string }) {
+  const lines = src.split("\n");
+  const out: React.ReactNode[] = [];
+  lines.forEach((raw, i) => {
+    // vídeo embed
+    const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
+    if (v) {
+      out.push(
+        <div key={i} className="my-2 aspect-video w-full max-w-md rounded overflow-hidden border border-border">
+          <iframe src={v[2]} className="w-full h-full" allow="autoplay; encrypted-media" allowFullScreen title={v[1]} />
+        </div>
+      );
+      return;
+    }
+    // imagem markdown
+    const img = raw.match(/^!\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
+    if (img) {
+      out.push(<img key={i} src={img[2]} alt={img[1]} className="my-2 max-h-48 rounded border border-border" />);
+      return;
+    }
+    // checkbox
+    const cb = raw.match(/^(\s*)- \[( |x|X)\] (.+)$/);
+    if (cb) {
+      const checked = cb[2].toLowerCase() === "x";
+      out.push(
+        <div key={i} className="flex items-start gap-2 text-[12px] py-0.5" style={{ paddingLeft: cb[1].length * 6 }}>
+          <span className={cn("mt-[3px] w-3 h-3 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/40")}>
+            {checked && <Check className="w-2 h-2 text-primary-foreground" />}
+          </span>
+          <span className={checked ? "line-through text-muted-foreground" : ""}>{cb[3]}</span>
+        </div>
+      );
+      return;
+    }
+    // heading
+    if (raw.startsWith("### ")) { out.push(<div key={i} className="text-[12px] font-semibold text-primary mt-1">{raw.slice(4)}</div>); return; }
+    if (raw.startsWith("## "))  { out.push(<div key={i} className="text-[13px] font-bold mt-1">{raw.slice(3)}</div>); return; }
+    if (raw.startsWith("# "))   { out.push(<div key={i} className="text-[14px] font-bold mt-1">{raw.slice(2)}</div>); return; }
+    if (raw.startsWith("> "))   { out.push(<div key={i} className="border-l-2 border-primary/40 pl-2 text-[11px] text-muted-foreground italic">{raw.slice(2)}</div>); return; }
+    if (raw.trim() === "")      { out.push(<div key={i} className="h-1" />); return; }
+    // linha simples com wsfile mention
+    const withMentions = raw.replace(/\[@([^\]]+)\]\(wsfile:[^)]+\)/g, "@$1");
+    out.push(<div key={i} className="text-[12px] leading-relaxed">{withMentions}</div>);
+  });
+  return <div className="space-y-0.5">{out}</div>;
+}
+
+// Kanban inline: mostra as tasks reais do projeto ativo do cliente (tabela tasks via projects)
+function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open: boolean; onOpenChange: (v: boolean) => void; clientId: string | null; clientName: string | null }) {
+  const [loading, setLoading] = useState(false);
+  const [tasks, setTasks] = useState<Array<{ id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string }>>([]);
+  const [projectName, setProjectName] = useState<string>("");
+
+  useEffect(() => {
+    if (!open || !clientId) return;
+    (async () => {
+      setLoading(true);
+      const { data: projs } = await supabase.from("projects").select("id, name").eq("client_id", clientId).order("created_at", { ascending: false }).limit(1);
+      const pid = projs?.[0]?.id;
+      setProjectName(projs?.[0]?.name || "");
+      if (!pid) { setTasks([]); setLoading(false); return; }
+      const { data: ts } = await supabase.from("tasks").select("id, title, status, priority, due_date, project_id").eq("project_id", pid).order("created_at", { ascending: false });
+      setTasks((ts as any) || []);
+      setLoading(false);
+    })();
+  }, [open, clientId]);
+
+  const cols: Array<{ key: string; title: string }> = [
+    { key: "todo", title: "A fazer" },
+    { key: "doing", title: "Em andamento" },
+    { key: "review", title: "Revisão" },
+    { key: "done", title: "Feito" },
+  ];
+
+  async function move(taskId: string, next: string) {
+    setTasks(cur => cur.map(t => t.id === taskId ? { ...t, status: next } : t));
+    await supabase.from("tasks").update({ status: next }).eq("id", taskId);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-5xl">
+        <DialogHeader>
+          <DialogTitle className="text-sm flex items-center gap-2">
+            <Columns3 className="w-4 h-4 text-primary" /> Kanban · {clientName || "cliente"} {projectName && <span className="text-muted-foreground font-normal">/ {projectName}</span>}
+          </DialogTitle>
+        </DialogHeader>
+        {loading ? (
+          <div className="p-8 flex items-center justify-center text-muted-foreground text-xs"><Loader2 className="w-4 h-4 animate-spin mr-2" /> carregando…</div>
+        ) : !clientId ? (
+          <p className="text-xs text-muted-foreground">Selecione um cliente no Workspace primeiro.</p>
+        ) : tasks.length === 0 ? (
+          <p className="text-xs text-muted-foreground">Este projeto ainda não tem tarefas. Use <b>/tarefa</b> nas Notas para criar.</p>
+        ) : (
+          <div className="grid grid-cols-4 gap-2 max-h-[60vh] overflow-y-auto">
+            {cols.map(col => (
+              <div key={col.key} className="bg-secondary/30 rounded-lg p-2 space-y-1.5">
+                <div className="text-[10px] uppercase font-semibold text-muted-foreground px-1 flex items-center justify-between">
+                  <span>{col.title}</span>
+                  <span className="text-[9px] opacity-60">{tasks.filter(t => t.status === col.key).length}</span>
+                </div>
+                {tasks.filter(t => t.status === col.key).map(t => (
+                  <div key={t.id} className="bg-background rounded p-2 border border-border text-[11px] space-y-1">
+                    <div className="font-medium">{t.title}</div>
+                    <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                      {t.priority && <span className={cn("px-1.5 py-0.5 rounded",
+                        t.priority === "urgent" ? "bg-destructive/20 text-destructive" :
+                        t.priority === "high" ? "bg-amber-500/20 text-amber-600" : "bg-secondary")}>{t.priority}</span>}
+                      {t.due_date && <span>· {t.due_date}</span>}
+                    </div>
+                    <div className="flex gap-1 pt-1">
+                      {cols.filter(c => c.key !== t.status).map(c => (
+                        <button key={c.key} onClick={() => move(t.id, c.key)}
+                          className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
+                          → {c.title}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
