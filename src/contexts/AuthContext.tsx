@@ -99,23 +99,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }, 6000);
 
-    // 1. Check existing session
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!mounted) return;
-
-      if (session?.user) {
-        setUser(session.user);
-        const p = await getOrCreateProfile(session.user);
-        if (mounted) {
-          setProfile(p);
+    // 1. Check existing session — force a refresh to guarantee the token is
+    // signed with the current JWKS (handles signing-key rotation, which the
+    // server reports as "JWT expired" even before the exp claim).
+    (async () => {
+      try {
+        let { data: { session } } = await supabase.auth.getSession();
+        if (session?.refresh_token) {
+          const { data: refreshed, error: refErr } = await supabase.auth.refreshSession();
+          if (refErr) {
+            // Refresh token is invalid/rotated — force clean logout
+            console.warn("[Auth] refresh failed, signing out:", refErr.message);
+            await supabase.auth.signOut();
+            if (mounted) { setUser(null); setProfile(null); setLoading(false); }
+            return;
+          }
+          session = refreshed.session ?? session;
+        }
+        if (!mounted) return;
+        if (session?.user) {
+          setUser(session.user);
+          const p = await getOrCreateProfile(session.user);
+          if (mounted) { setProfile(p); setLoading(false); }
+        } else {
           setLoading(false);
         }
-      } else {
-        setLoading(false);
+      } catch (e) {
+        if (mounted) setLoading(false);
       }
-    }).catch(() => {
-      if (mounted) setLoading(false);
-    });
+    })();
+
 
     // 2. Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
