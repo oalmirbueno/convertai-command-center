@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
+import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
+import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
