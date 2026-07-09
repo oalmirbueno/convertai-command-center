@@ -434,6 +434,57 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return () => clearTimeout(t);
   }, [state.notes, clientName, folderPath]);
 
+  // ── Auto-correção (REFLOW) em tempo real ──
+  // Reorganiza headline/subheadline, completa checklist e ajusta racional/ações
+  // sem sobrescrever o que o usuário está digitando. Só aplica quando o textarea
+  // está sem foco (usuário terminou o bloco) e o resultado diverge do já aplicado.
+  const [autoFix, setAutoFix] = useState<boolean>(() => {
+    try { return localStorage.getItem("studio_autofix") !== "0"; } catch { return true; }
+  });
+  const [reflowBusy, setReflowBusy] = useState(false);
+  const [reflowAt, setReflowAt] = useState<string>("");
+  const lastReflowInputRef = useRef<string>("");
+  const lastReflowOutputRef = useRef<string>("");
+  useEffect(() => { try { localStorage.setItem("studio_autofix", autoFix ? "1" : "0"); } catch {} }, [autoFix]);
+
+  useEffect(() => {
+    if (!autoFix) return;
+    const txt = state.notes || "";
+    if (txt.trim().length < 80) return;
+    if (txt === lastReflowInputRef.current) return;
+    const t = setTimeout(async () => {
+      // Não aplica se o usuário ainda está com foco no textarea
+      const focused = typeof document !== "undefined" && document.activeElement === notesRef.current;
+      if (focused) return;
+      setReflowBusy(true);
+      try {
+        const { data: sess } = await supabase.auth.getSession();
+        const tok = sess?.session?.access_token;
+        if (!tok) return;
+        const url = `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`;
+        const r = await fetch(url, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+          body: JSON.stringify({ mode: "reflow", text: txt.slice(0, 8000), context: { client_name: clientName, folder_path: folderPath } }),
+        });
+        if (!r.ok) return;
+        const j = await r.json();
+        const md = String(j?.markdown || "").trim();
+        if (!md || md === lastReflowOutputRef.current) return;
+        // Se o textarea ganhou foco enquanto rodava, aborta pra não quebrar a digitação
+        if (document.activeElement === notesRef.current) return;
+        // Só aplica se o texto ainda for o mesmo que enviamos (nada mudou no meio)
+        if (notesContentRef.current !== txt) return;
+        lastReflowInputRef.current = md;
+        lastReflowOutputRef.current = md;
+        setState(s => ({ ...s, notes: md }));
+        setReflowAt(new Date().toISOString());
+      } finally { setReflowBusy(false); }
+    }, 3500);
+    return () => clearTimeout(t);
+  }, [state.notes, autoFix, clientName, folderPath]);
+
+
   async function togglePublish() {
     if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
     const next = !docPublished;
