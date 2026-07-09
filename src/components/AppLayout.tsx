@@ -19,6 +19,8 @@ import {
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 import VoiceAssistant from "@/components/admin/VoiceAssistant";
+import MobileBottomNav from "@/components/MobileBottomNav";
+
 
 interface NavItem {
   title: string;
@@ -310,9 +312,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="pt-20 pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding" data-tour="finish">
+      <main className="pt-20 pb-24 md:pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding" data-tour="finish">
         {children}
       </main>
+
+      <MobileBottomNav unreadCount={unreadCount} onOpenNotifications={() => setNotifOpen(true)} />
+
 
       <NotificationsPanel open={notifOpen} onOpenChange={setNotifOpen} />
 
