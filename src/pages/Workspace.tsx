@@ -441,9 +441,10 @@ export default function Workspace() {
               <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)} className="gap-1.5 h-8">
                 <FolderPlus className="w-3.5 h-3.5" /> Pasta
               </Button>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8" disabled={uploading > 0}>
-                {uploading > 0 ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {uploading > 0 ? `Enviando ${uploading}...` : "Upload"}
+              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8">
+                <Upload className="w-3.5 h-3.5" />
+                Upload
+              </Button>
               </Button>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleUpload(e.target.files)} />
             </div>
