@@ -1141,8 +1141,9 @@ export default function Workspace() {
                   const cover = coverFor(n);
                   const k = kindOf(n);
                   return (
+                    <div key={n.id}>
+                    {renderContextMenu(n, (
                     <div
-                      key={n.id}
                       draggable
                       onDragStart={(e) => onDragStartNode(e, n)}
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
@@ -1207,6 +1208,8 @@ export default function Workspace() {
                         )}
                       </div>
 
+                    </div>
+                    ))}
                     </div>
                   );
                 })}
