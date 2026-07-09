@@ -698,6 +698,31 @@ export default function Workspace() {
     invalidate();
   }
 
+  async function createFolderAndMove() {
+    if (!moveCreate || !user || !moveCreateName.trim()) return;
+    const { node, parentId } = moveCreate;
+    if (node.__virtual) {
+      toast({ title: "Ação não suportada", description: "Itens de Arquivos não podem ser movidos para novas pastas.", variant: "destructive" });
+      setMoveCreate(null); setMoveCreateName(""); return;
+    }
+    const { data, error } = await supabase.from("workspace_nodes").insert({
+      name: moveCreateName.trim(), kind: "folder", scope,
+      client_id: scope === "client" ? clientId : null,
+      parent_id: parentId, created_by: user.id,
+    }).select("id").single();
+    if (error || !data) {
+      toast({ title: "Erro ao criar pasta", description: error?.message, variant: "destructive" });
+      return;
+    }
+    const newId = (data as any).id as string;
+    const { error: mvErr } = await supabase.from("workspace_nodes")
+      .update({ parent_id: newId }).eq("id", node.id);
+    if (mvErr) { toast({ title: "Pasta criada, mas falhou ao mover", description: mvErr.message, variant: "destructive" }); }
+    else toast({ title: "Pasta criada e item movido" });
+    setMoveCreate(null); setMoveCreateName("");
+    invalidate();
+  }
+
   async function sendToApproval(n: Node) {
     if (!user || n.kind !== "file" || !n.storage_path) return;
     if (scope !== "client" || !clientId) {
