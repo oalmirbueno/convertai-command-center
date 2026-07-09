@@ -1892,6 +1892,33 @@ export type Database = {
           },
         ]
       }
+      workspace_agent_personas: {
+        Row: {
+          gpt_description: string | null
+          gpt_name: string | null
+          gpt_url: string | null
+          persona_prompt: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          gpt_description?: string | null
+          gpt_name?: string | null
+          gpt_url?: string | null
+          persona_prompt?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          gpt_description?: string | null
+          gpt_name?: string | null
+          gpt_url?: string | null
+          persona_prompt?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       workspace_agent_threads: {
         Row: {
           client_id: string | null
