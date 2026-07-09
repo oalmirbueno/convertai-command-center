@@ -270,7 +270,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => { saveState(contextKey, state); }, [contextKey, state]);
   useEffect(() => { localStorage.setItem("studio_open", open ? "1" : "0"); }, [open]);
   useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
-  useEffect(() => { localStorage.setItem("studio_dock", dock); }, [dock]);
+  useEffect(() => { localStorage.setItem("studio_dock_v2", dock); }, [dock]);
 
 
   const mentionMatches = useMemo(() => {
