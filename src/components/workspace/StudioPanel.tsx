@@ -864,7 +864,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     const next = before + insert + " " + after;
     setInput(next);
     setAttached(prev => prev.some(x => x.id === f.id) ? prev : [...prev, f]);
+    pushRecent(f.id);
     setMention(null);
+
     setTimeout(() => {
       const el = inputRef.current;
       if (el) { el.focus(); const p = before.length + insert.length + 1; el.setSelectionRange(p, p); }
