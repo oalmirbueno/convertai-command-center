@@ -421,6 +421,64 @@ export default function Workspace() {
     invalidate();
   }
 
+  async function applyTemplate(tpl: WorkspaceTemplate) {
+    if (!user) return;
+    if (tpl.scope === "global" && scope !== "global") {
+      toast({ title: "Template exclusivo da agência", description: "Alterne para o contexto Global para aplicar.", variant: "destructive" });
+      return;
+    }
+    setApplyingTpl(tpl.id);
+    try {
+      // Load existing folder names at the target parent to avoid duplicates
+      const { data: existing } = await supabase
+        .from("workspace_nodes")
+        .select("name")
+        .eq("scope", scope)
+        .eq("kind", "folder")
+        .is("parent_id", parent?.id || null as any);
+      const existingNames = new Set((existing || []).map((r: any) => r.name.toLowerCase()));
+
+      let created = 0;
+      const insertTree = async (nodes: TplNode[], parentId: string | null, skipCheck = false) => {
+        for (const n of nodes) {
+          let id: string | null = null;
+          if (!skipCheck && !parentId && existingNames.has(n.name.toLowerCase())) {
+            // Reuse existing top-level folder if present
+            const { data: found } = await supabase
+              .from("workspace_nodes")
+              .select("id")
+              .eq("scope", scope)
+              .eq("kind", "folder")
+              .is("parent_id", parent?.id || null as any)
+              .ilike("name", n.name)
+              .maybeSingle();
+            id = (found as any)?.id || null;
+          }
+          if (!id) {
+            const { data, error } = await supabase.from("workspace_nodes").insert({
+              name: n.name, kind: "folder", scope,
+              client_id: scope === "client" ? clientId : null,
+              parent_id: parentId, created_by: user.id,
+            }).select("id").single();
+            if (error) throw error;
+            id = (data as any).id;
+            created++;
+          }
+          if (n.children?.length && id) await insertTree(n.children, id, true);
+        }
+      };
+      await insertTree(tpl.tree, parent?.id || null);
+      toast({ title: "Template aplicado", description: `${created} pastas criadas.` });
+      setTemplateOpen(false);
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao aplicar template", description: e.message, variant: "destructive" });
+    } finally {
+      setApplyingTpl(null);
+    }
+  }
+
+
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
     const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
