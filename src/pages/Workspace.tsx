@@ -249,9 +249,56 @@ export default function Workspace() {
     }
     const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
-    if (!s) return base;
-    return base.filter(n => n.name.toLowerCase().includes(s));
-  }, [nodes, virtualNodes, search, parent]);
+    let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
+    if (kindFilter !== "all") res = res.filter(n => n.kind === "folder" || kindOf(n) === kindFilter);
+    return res;
+  }, [nodes, virtualNodes, search, parent, kindFilter]);
+
+  // Category counts for smart chips
+  const kindCounts = useMemo(() => {
+    const src = parent?.id?.startsWith(VIRT_PREFIX)
+      ? [...(virtualNodes || [])]
+      : [...(nodes || []), ...(virtualNodes || [])];
+    const c: Record<MediaKind, number> = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+    for (const n of src) if (n.kind === "file") c[kindOf(n)]++;
+    return c;
+  }, [nodes, virtualNodes, parent]);
+
+  // Batch-prefetch signed URLs for image/video files visible in current view (for covers)
+  useEffect(() => {
+    const targets = (filtered || []).filter(n =>
+      n.kind === "file" && !n.__virtual && n.storage_path &&
+      (kindOf(n) === "image" || kindOf(n) === "video") &&
+      !signedUrls[n.storage_path!]
+    ).slice(0, 40);
+    if (!targets.length) return;
+    let alive = true;
+    (async () => {
+      const results = await Promise.all(
+        targets.map(async (n) => {
+          const { data } = await supabase.storage.from("workspace").createSignedUrl(n.storage_path!, 3600);
+          return [n.storage_path!, data?.signedUrl || ""] as const;
+        })
+      );
+      if (!alive) return;
+      setSignedUrls(prev => {
+        const next = { ...prev };
+        for (const [k, v] of results) if (v) next[k] = v;
+        return next;
+      });
+    })();
+    return () => { alive = false; };
+  }, [filtered]);
+
+  const coverFor = (n: Node): string | null => {
+    if (n.kind !== "file") return null;
+    const k = kindOf(n);
+    if (k !== "image" && k !== "video") return null;
+    if (n.__virtual) return n.__external_url || null;
+    if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
+    return null;
+  };
+
 
 
   async function signedUrl(path: string) {
