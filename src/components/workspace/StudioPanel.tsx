@@ -431,6 +431,20 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </div>
             )}
 
+            {mode === "board" && (
+              <MiniKanban
+                board={state.board}
+                onChange={(next, logEntry) => setState(s => ({
+                  ...s,
+                  board: next,
+                  boardLog: logEntry ? [...s.boardLog.slice(-39), logEntry] : s.boardLog,
+                }))}
+                onReset={() => setState(s => ({ ...s, board: JSON.parse(JSON.stringify(DEFAULT_BOARD)), boardLog: [] }))}
+                log={state.boardLog}
+              />
+            )}
+
+
             {mode === "process" && (
               <div className="p-3 space-y-2">
                 <p className="text-[10px] text-muted-foreground mb-2">
