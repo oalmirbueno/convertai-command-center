@@ -165,7 +165,9 @@ export default function Workspace() {
       return (data || []) as { id: string; parent_id: string | null; name: string }[];
     },
     enabled: isStaff && (scope === "global" || !!clientId),
+    staleTime: 60_000,
   });
+
 
   const folderPaths = useMemo(() => {
     const map = new Map<string, string>();
