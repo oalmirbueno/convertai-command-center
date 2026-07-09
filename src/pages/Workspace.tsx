@@ -61,13 +61,17 @@ function kindOf(n: Node): MediaKind {
   if (m.includes("pdf") || /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv)$/.test(name)) return "doc";
   return "other";
 }
-const KIND_META: Record<MediaKind, { label: string; color: string }> = {
-  image: { label: "Imagens", color: "text-blue-400" },
-  video: { label: "Vídeos", color: "text-purple-400" },
-  audio: { label: "Áudios", color: "text-pink-400" },
-  doc:   { label: "Documentos", color: "text-amber-400" },
-  other: { label: "Outros", color: "text-muted-foreground" },
+const KIND_META: Record<MediaKind, { label: string; color: string; gradient: string; accent: string }> = {
+  image: { label: "Imagens",    color: "text-blue-400",   gradient: "from-blue-500/25 via-blue-500/10 to-transparent",     accent: "text-blue-300" },
+  video: { label: "Vídeos",     color: "text-purple-400", gradient: "from-purple-500/25 via-fuchsia-500/10 to-transparent", accent: "text-purple-300" },
+  audio: { label: "Áudios",     color: "text-pink-400",   gradient: "from-pink-500/25 via-rose-500/10 to-transparent",     accent: "text-pink-300" },
+  doc:   { label: "Documentos", color: "text-amber-400",  gradient: "from-amber-500/25 via-orange-500/10 to-transparent",  accent: "text-amber-300" },
+  other: { label: "Outros",     color: "text-muted-foreground", gradient: "from-secondary/50 via-secondary/20 to-transparent", accent: "text-muted-foreground" },
 };
+function extOf(name: string) {
+  const m = /\.([a-z0-9]{1,5})$/i.exec(name || "");
+  return m ? m[1].toUpperCase() : "";
+}
 
 function virtFileNode(f: any, clientId: string): Node {
   return {
@@ -272,24 +276,37 @@ export default function Workspace() {
     return c;
   }, [nodes, virtualNodes, parent]);
 
-  // Batch-prefetch signed URLs for image files visible in current view (for covers).
-  // Uses createSignedUrls (single request for many paths) + image transform for tiny thumbs.
+  // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
-    const imgTargets = (filtered || []).filter(n =>
-      n.kind === "file" && !n.__virtual && n.storage_path &&
-      kindOf(n) === "image" && !signedUrls[n.storage_path!]
-    ).slice(0, 60);
-    if (!imgTargets.length) return;
+    const list = (filtered || []).filter(n =>
+      n.kind === "file" && !n.__virtual && n.storage_path && !signedUrls[n.storage_path!]
+    );
+    const imgTargets = list.filter(n => kindOf(n) === "image").slice(0, 60);
+    const vidTargets = list.filter(n => kindOf(n) === "video").slice(0, 24);
+    if (!imgTargets.length && !vidTargets.length) return;
     let alive = true;
     (async () => {
-      const paths = imgTargets.map(n => n.storage_path!);
-      const { data } = await (supabase.storage.from("workspace") as any).createSignedUrls(
-        paths, 3600, { transform: { width: 400, quality: 70, resize: "cover" } }
-      );
-      if (!alive || !data) return;
+      const jobs: Promise<any>[] = [];
+      if (imgTargets.length) {
+        jobs.push((supabase.storage.from("workspace") as any).createSignedUrls(
+          imgTargets.map(n => n.storage_path!), 3600,
+          { transform: { width: 400, quality: 70, resize: "cover" } }
+        ));
+      }
+      if (vidTargets.length) {
+        jobs.push(supabase.storage.from("workspace").createSignedUrls(
+          vidTargets.map(n => n.storage_path!), 3600
+        ));
+      }
+      const results = await Promise.all(jobs);
+      if (!alive) return;
       setSignedUrls(prev => {
         const next = { ...prev };
-        for (const row of data as any[]) if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
+        for (const r of results) {
+          for (const row of (r?.data as any[] | undefined) || []) {
+            if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
+          }
+        }
         return next;
       });
     })();
@@ -298,11 +315,13 @@ export default function Workspace() {
 
   const coverFor = (n: Node): string | null => {
     if (n.kind !== "file") return null;
-    if (kindOf(n) !== "image") return null; // videos use icon (avoid heavy fetches)
+    const k = kindOf(n);
+    if (k !== "image" && k !== "video") return null;
     if (n.__virtual) return n.__external_url || null;
     if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
     return null;
   };
+
 
 
 
@@ -801,22 +820,41 @@ export default function Workspace() {
                         <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
                       <div className={cn(
-                        "flex-1 flex items-center justify-center w-full relative",
-                        !cover && "bg-gradient-to-br from-secondary/40 to-secondary/10"
+                        "flex-1 flex items-center justify-center w-full relative overflow-hidden",
+                        !cover && `bg-gradient-to-br ${isFolder ? "from-primary/20 via-primary/5 to-transparent" : KIND_META[k].gradient}`
                       )}>
                         {cover ? (
                           k === "video" ? (
                             <>
-                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
-                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                                <Film className="w-8 h-8 text-white/90 drop-shadow" />
+                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                  <Film className="w-5 h-5 text-black" />
+                                </div>
                               </div>
                             </>
                           ) : (
                             <img src={cover} alt={n.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                           )
                         ) : (
-                          <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : KIND_META[k].color)} />
+                          <>
+                            {/* Decorative pattern */}
+                            <div className="absolute inset-0 opacity-[0.07]" style={{
+                              backgroundImage: "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+                              backgroundSize: "14px 14px"
+                            }} />
+                            <div className="relative flex flex-col items-center gap-2">
+                              <Icon className={cn("w-12 h-12 drop-shadow-sm", isFolder ? "text-primary" : KIND_META[k].color)} />
+                              {!isFolder && extOf(n.name) && (
+                                <span className={cn(
+                                  "text-[9px] font-mono font-semibold tracking-wider px-2 py-0.5 rounded-full border bg-background/60 backdrop-blur",
+                                  KIND_META[k].accent, "border-current/30"
+                                )}>
+                                  {extOf(n.name)}
+                                </span>
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
                       <div className="px-2.5 py-1.5 border-t border-border/60 bg-card/95 backdrop-blur">
@@ -827,6 +865,7 @@ export default function Workspace() {
                           </p>
                         )}
                       </div>
+
                     </div>
                   );
                 })}
