@@ -820,22 +820,41 @@ export default function Workspace() {
                         <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
                       <div className={cn(
-                        "flex-1 flex items-center justify-center w-full relative",
-                        !cover && "bg-gradient-to-br from-secondary/40 to-secondary/10"
+                        "flex-1 flex items-center justify-center w-full relative overflow-hidden",
+                        !cover && `bg-gradient-to-br ${isFolder ? "from-primary/20 via-primary/5 to-transparent" : KIND_META[k].gradient}`
                       )}>
                         {cover ? (
                           k === "video" ? (
                             <>
-                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
-                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
-                                <Film className="w-8 h-8 text-white/90 drop-shadow" />
+                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata" />
+                              <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent flex items-center justify-center">
+                                <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
+                                  <Film className="w-5 h-5 text-black" />
+                                </div>
                               </div>
                             </>
                           ) : (
                             <img src={cover} alt={n.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
                           )
                         ) : (
-                          <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : KIND_META[k].color)} />
+                          <>
+                            {/* Decorative pattern */}
+                            <div className="absolute inset-0 opacity-[0.07]" style={{
+                              backgroundImage: "radial-gradient(circle at 1px 1px, currentColor 1px, transparent 0)",
+                              backgroundSize: "14px 14px"
+                            }} />
+                            <div className="relative flex flex-col items-center gap-2">
+                              <Icon className={cn("w-12 h-12 drop-shadow-sm", isFolder ? "text-primary" : KIND_META[k].color)} />
+                              {!isFolder && extOf(n.name) && (
+                                <span className={cn(
+                                  "text-[9px] font-mono font-semibold tracking-wider px-2 py-0.5 rounded-full border bg-background/60 backdrop-blur",
+                                  KIND_META[k].accent, "border-current/30"
+                                )}>
+                                  {extOf(n.name)}
+                                </span>
+                              )}
+                            </div>
+                          </>
                         )}
                       </div>
                       <div className="px-2.5 py-1.5 border-t border-border/60 bg-card/95 backdrop-blur">
@@ -846,6 +865,7 @@ export default function Workspace() {
                           </p>
                         )}
                       </div>
+
                     </div>
                   );
                 })}
