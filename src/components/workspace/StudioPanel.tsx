@@ -1233,3 +1233,164 @@ function MiniKanban({ board, onChange, onReset, log }: {
     </div>
   );
 }
+
+// =========================
+// QuickTaskDialog — cria tarefa no Kanban do cliente via slash /tarefa
+// =========================
+function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
+  draft: { raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number };
+  clientId: string | null;
+  clientName: string | null;
+  onClose: () => void;
+  onCreated: (summary: string) => void;
+}) {
+  const { toast } = useToast();
+  const [raw, setRaw] = useState(draft.raw);
+  const [title, setTitle] = useState("");
+  const [priority, setPriority] = useState<"low"|"medium"|"high"|"urgent">("medium");
+  const [assigneeName, setAssigneeName] = useState("");
+  const [dueISO, setDueISO] = useState("");
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projectId, setProjectId] = useState<string>("");
+  const [staff, setStaff] = useState<{ id: string; full_name: string | null; email: string }[]>([]);
+  const [assigneeId, setAssigneeId] = useState<string>("");
+  const [saving, setSaving] = useState(false);
+
+  // Reparse shorthand quando raw muda
+  useEffect(() => {
+    const p = parseTaskShorthand(raw);
+    setTitle(p.title);
+    setPriority(p.priority);
+    if (p.assigneeName) setAssigneeName(p.assigneeName);
+    if (p.dueISO) setDueISO(p.dueISO);
+  }, [raw]);
+
+  // Carrega projetos do cliente + staff atribuível
+  useEffect(() => {
+    (async () => {
+      if (!clientId) return;
+      const { data: ps } = await supabase
+        .from("projects")
+        .select("id,name,created_at")
+        .eq("client_id", clientId)
+        .order("created_at", { ascending: false });
+      const list = (ps || []).map((p: any) => ({ id: p.id, name: p.name }));
+      setProjects(list);
+      if (list.length && !projectId) setProjectId(list[0].id);
+
+      const { data: roles } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .in("role", ["admin", "design", "traffic", "manager"] as any);
+      const ids = Array.from(new Set((roles || []).map((r: any) => r.user_id)));
+      if (ids.length) {
+        const { data: profs } = await supabase
+          .from("profiles").select("id,full_name,email").in("id", ids);
+        setStaff((profs || []) as any);
+      }
+    })();
+  }, [clientId]);
+
+  // Auto-match assignee por nome
+  useEffect(() => {
+    if (!assigneeName || !staff.length) return;
+    const q = assigneeName.toLowerCase();
+    const hit = staff.find(s => (s.full_name || s.email).toLowerCase().includes(q));
+    if (hit) setAssigneeId(hit.id);
+  }, [assigneeName, staff]);
+
+  async function submit() {
+    if (!title.trim()) { toast({ title: "Título obrigatório", variant: "destructive" }); return; }
+    if (!projectId) { toast({ title: "Selecione um projeto", variant: "destructive" }); return; }
+    setSaving(true);
+    const { error } = await supabase.from("tasks").insert({
+      project_id: projectId,
+      title: title.trim().slice(0, 200),
+      priority,
+      status: "backlog",
+      assigned_to: assigneeId || null,
+      due_date: dueISO || null,
+      source: "studio",
+    } as any);
+    setSaving(false);
+    if (error) { toast({ title: "Erro ao criar tarefa", description: error.message, variant: "destructive" }); return; }
+    const who = staff.find(s => s.id === assigneeId);
+    const parts = [
+      title.trim(),
+      priority !== "medium" && `!${priority}`,
+      who && `@${who.full_name || who.email.split("@")[0]}`,
+      dueISO && `📅 ${dueISO}`,
+    ].filter(Boolean).join(" ");
+    toast({ title: "Tarefa criada no Kanban", description: parts });
+    onCreated(parts);
+  }
+
+  return (
+    <Dialog open onOpenChange={(v) => { if (!v) onClose(); }}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="text-sm">
+            Nova tarefa {clientName ? `· ${clientName}` : ""}
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-2.5">
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Atalho</label>
+            <Input value={raw} onChange={e => setRaw(e.target.value)}
+              placeholder="Editar hook !alta @maria 15/07"
+              className="h-8 text-[12px] font-mono" autoFocus />
+            <p className="text-[9px] text-muted-foreground mt-1">
+              <code>!alta/!media/!baixa/!urgente</code> · <code>@nome</code> · <code>15/07</code>, <code>hoje</code>, <code>+3d</code>
+            </p>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Título</label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} className="h-8 text-[12px]" />
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</label>
+              <select value={projectId} onChange={e => setProjectId(e.target.value)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                {projects.length === 0 && <option value="">— sem projeto —</option>}
+                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prioridade</label>
+              <select value={priority} onChange={e => setPriority(e.target.value as any)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                <option value="low">Baixa</option>
+                <option value="medium">Média</option>
+                <option value="high">Alta</option>
+                <option value="urgent">Urgente</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</label>
+              <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
+                className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
+                <option value="">— ninguém —</option>
+                {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Prazo</label>
+              <Input type="date" value={dueISO} onChange={e => setDueISO(e.target.value)} className="h-8 text-[12px]" />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={saving}>Cancelar</Button>
+          <Button size="sm" onClick={submit} disabled={saving || !title.trim() || !projectId}>
+            {saving ? "Criando…" : "Criar tarefa"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
