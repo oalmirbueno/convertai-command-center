@@ -779,9 +779,19 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     )}>
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
-        <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
-          <Sparkles className="w-3.5 h-3.5 text-primary" />
-        </div>
+        {isMobile && !minimized ? (
+          <button
+            onClick={() => setOpen(false)}
+            title="Voltar"
+            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground"
+          >
+            <ArrowLeft className="w-4 h-4" />
+          </button>
+        ) : (
+          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
+            <Sparkles className="w-3.5 h-3.5 text-primary" />
+          </div>
+        )}
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
