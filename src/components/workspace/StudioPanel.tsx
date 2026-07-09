@@ -338,6 +338,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
+                  {slashMenu?.where === "notes" && (
+                    <SlashList
+                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                      onPick={insertSlash}
+                    />
+                  )}
+
                 </div>
                 {!!state.mentions.length && (
                   <div className="flex flex-wrap gap-1 pt-1 border-t border-border">
