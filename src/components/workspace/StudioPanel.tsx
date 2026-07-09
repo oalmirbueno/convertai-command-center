@@ -705,30 +705,37 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
   ];
 
-  // Threads escopadas por cliente + pasta. Restaura a última thread ativa do cliente ao reabrir.
-  const lastThreadKey = (cid?: string | null, fp?: string | null) =>
-    `studio:lastThread:${cid || "_global"}:${fp || "_root"}`;
-  useEffect(() => { void loadThreads(); }, [clientId, folderPath]);
+  // Threads escopadas por cliente. Filtro opcional: "cliente" (todas as pastas) ou "pasta" (apenas a atual).
+  const [threadScope, setThreadScope] = useState<"client" | "folder">(() => {
+    try { return (localStorage.getItem("studio:threadScope") as any) || "client"; } catch { return "client"; }
+  });
+  useEffect(() => { try { localStorage.setItem("studio:threadScope", threadScope); } catch {} }, [threadScope]);
+  const lastThreadKey = (cid?: string | null, fp?: string | null, scope?: string) =>
+    `studio:lastThread:${scope || threadScope}:${cid || "_global"}:${scope === "folder" ? (fp || "_root") : "_any"}`;
+  useEffect(() => { void loadThreads(); }, [clientId, folderPath, threadScope]);
   async function loadThreads() {
     let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
-      .order("updated_at", { ascending: false }).limit(30);
+      .order("updated_at", { ascending: false }).limit(50);
     q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
-    q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    if (threadScope === "folder") {
+      q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
+    }
     const { data } = await q;
     const list = (data as AgentThread[]) || [];
     setThreads(list);
     if (!list.length) { setActiveId(null); return; }
     let restored: string | null = null;
-    try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath)); } catch {}
+    try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath, threadScope)); } catch {}
     const pick = (restored && list.find(t => t.id === restored)?.id) || list[0].id;
     setActiveId(pick);
   }
 
-  // Persiste a última thread ativa por (cliente, pasta) para restaurar ao reabrir
+  // Persiste a última thread ativa por (escopo, cliente, pasta) para restaurar ao reabrir
   useEffect(() => {
     if (!activeId) return;
-    try { localStorage.setItem(lastThreadKey(clientId, folderPath), activeId); } catch {}
-  }, [activeId, clientId, folderPath]);
+    try { localStorage.setItem(lastThreadKey(clientId, folderPath, threadScope), activeId); } catch {}
+  }, [activeId, clientId, folderPath, threadScope]);
+
 
 
   useEffect(() => { if (activeId) void loadMsgs(activeId); else setMsgs([]); }, [activeId]);
