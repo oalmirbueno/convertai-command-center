@@ -73,6 +73,49 @@ function extOf(name: string) {
   return m ? m[1].toUpperCase() : "";
 }
 
+// Smart auto-tagging: detects content role beyond raw mime.
+type SmartTag = "carrossel" | "video-ready" | "static" | "material" | "audio" | "doc" | "other";
+const SMART_TAGS: { key: SmartTag; label: string; hint: string }[] = [
+  { key: "carrossel",   label: "Carrossel",     hint: "Sequências de imagens" },
+  { key: "static",      label: "Estático",      hint: "Peças únicas" },
+  { key: "video-ready", label: "Vídeo pronto",  hint: "Reels / edits finais" },
+  { key: "material",    label: "Materiais",     hint: "Brutos e fontes" },
+  { key: "doc",         label: "Documentos",    hint: "PDFs, textos, planilhas" },
+  { key: "audio",       label: "Áudios",        hint: "Trilhas e locuções" },
+  { key: "other",       label: "Outros",        hint: "" },
+];
+function tagOf(n: Node, siblings?: Node[]): SmartTag {
+  if (n.kind === "folder") return "other";
+  const k = kindOf(n);
+  const name = (n.name || "").toLowerCase();
+  const path = (n.storage_path || "").toLowerCase();
+  const ctx = `${name} ${path}`;
+  const isFinal = /(final|pronto|entrega|export|reels?|story|stories|post|edit|feed|approved|aprovad)/i.test(ctx);
+  const isRaw   = /(bruto|raw|material|fonte|source|assets?|captur|crua?|original)/i.test(ctx);
+
+  if (k === "audio") return "audio";
+  if (k === "doc")   return "doc";
+  if (k === "video") return isRaw && !isFinal ? "material" : "video-ready";
+  if (k === "image") {
+    if (/(carrossel|carousel|slide|slides?)/i.test(ctx)) return "carrossel";
+    // Sibling heuristic: multiple images sharing a numeric suffix pattern
+    if (siblings && siblings.length) {
+      const base = name.replace(/[-_ ]?\(?\d{1,3}\)?\.[a-z0-9]+$/i, "");
+      if (base && base !== name) {
+        const family = siblings.filter(s =>
+          s.kind === "file" && kindOf(s) === "image" &&
+          (s.name || "").toLowerCase().startsWith(base) && s.id !== n.id
+        );
+        if (family.length >= 1) return "carrossel";
+      }
+    }
+    if (isRaw && !isFinal) return "material";
+    return "static";
+  }
+  return "other";
+}
+
+
 function virtFileNode(f: any, clientId: string): Node {
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
@@ -121,7 +164,8 @@ export default function Workspace() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerFilter, setPickerFilter] = useState<"all" | "az" | "za" | "recent">("all");
-  const [kindFilter, setKindFilter] = useState<"all" | MediaKind>("all");
+  const [tagFilter, setTagFilter] = useState<"all" | SmartTag>("all");
+  const [sortBy, setSortBy] = useState<"recent" | "old" | "az" | "za">("recent");
 
 
   const parent = parentStack[parentStack.length - 1] || null;
@@ -262,19 +306,30 @@ export default function Workspace() {
     const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
     let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
-    if (kindFilter !== "all") res = res.filter(n => n.kind === "folder" || kindOf(n) === kindFilter);
+    if (tagFilter !== "all") res = res.filter(n => n.kind === "folder" || tagOf(n, base) === tagFilter);
+    // Sort: folders always pinned first
+    const key = (n: Node) => (n.name || "").toLowerCase();
+    const t = (n: Node) => new Date(n.created_at || 0).getTime();
+    res = [...res].sort((a, b) => {
+      if (a.kind !== b.kind) return a.kind === "folder" ? -1 : 1;
+      if (sortBy === "az") return key(a).localeCompare(key(b));
+      if (sortBy === "za") return key(b).localeCompare(key(a));
+      if (sortBy === "old") return t(a) - t(b);
+      return t(b) - t(a); // recent
+    });
     return res;
-  }, [nodes, virtualNodes, search, parent, kindFilter]);
+  }, [nodes, virtualNodes, search, parent, tagFilter, sortBy]);
 
-  // Category counts for smart chips
-  const kindCounts = useMemo(() => {
+  // Category counts for smart chips (by SmartTag)
+  const tagCounts = useMemo(() => {
     const src = parent?.id?.startsWith(VIRT_PREFIX)
       ? [...(virtualNodes || [])]
       : [...(nodes || []), ...(virtualNodes || [])];
-    const c: Record<MediaKind, number> = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
-    for (const n of src) if (n.kind === "file") c[kindOf(n)]++;
+    const c: Record<SmartTag, number> = { carrossel: 0, static: 0, "video-ready": 0, material: 0, doc: 0, audio: 0, other: 0 };
+    for (const n of src) if (n.kind === "file") c[tagOf(n, src)]++;
     return c;
   }, [nodes, virtualNodes, parent]);
+
 
   // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
@@ -733,30 +788,57 @@ export default function Workspace() {
             </div>
           </div>
 
-          {/* Smart category chips */}
+          {/* Smart tag chips + sort */}
           <div className="flex flex-wrap items-center gap-1.5 mb-3">
-            {([
-              ["all", "Todos", (nodes?.length || 0) + (virtualNodes?.length || 0)],
-              ["image", KIND_META.image.label, kindCounts.image],
-              ["video", KIND_META.video.label, kindCounts.video],
-              ["doc", KIND_META.doc.label, kindCounts.doc],
-              ["audio", KIND_META.audio.label, kindCounts.audio],
-              ["other", KIND_META.other.label, kindCounts.other],
-            ] as const).map(([k, label, count]) => (
+            <button
+              onClick={() => setTagFilter("all")}
+              className={cn(
+                "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                tagFilter === "all"
+                  ? "bg-primary/15 border-primary/40 text-primary"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+              )}
+            >
+              Todos <span className="opacity-60">{(nodes?.length || 0) + (virtualNodes?.length || 0)}</span>
+            </button>
+            {SMART_TAGS.filter(t => t.key !== "other" || tagCounts.other > 0).map(t => (
               <button
-                key={k}
-                onClick={() => setKindFilter(k as any)}
+                key={t.key}
+                onClick={() => setTagFilter(t.key)}
+                title={t.hint}
                 className={cn(
                   "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
-                  kindFilter === k
+                  tagFilter === t.key
                     ? "bg-primary/15 border-primary/40 text-primary"
                     : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
                 )}
               >
-                {label} <span className="opacity-60">{count}</span>
+                {t.label} <span className="opacity-60">{tagCounts[t.key]}</span>
               </button>
             ))}
+            <div className="ml-auto flex items-center gap-1">
+              {([
+                ["recent", "Recentes"],
+                ["old", "Antigos"],
+                ["az", "A–Z"],
+                ["za", "Z–A"],
+              ] as const).map(([k, label]) => (
+                <button
+                  key={k}
+                  onClick={() => setSortBy(k)}
+                  className={cn(
+                    "px-2 py-1 rounded-md text-[10px] font-mono uppercase tracking-wider border transition-colors",
+                    sortBy === k
+                      ? "bg-secondary border-primary/30 text-foreground"
+                      : "bg-transparent border-transparent text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
           </div>
+
 
 
 
