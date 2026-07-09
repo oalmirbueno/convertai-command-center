@@ -386,6 +386,13 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   {mentionQuery?.where === "script" && mentionMatches.length > 0 && (
                     <MentionList items={mentionMatches} onPick={insertMention} />
                   )}
+                  {slashMenu?.where === "script" && (
+                    <SlashList
+                      items={buildSlashCommands({ clientName, folderPath, contextLabel }).filter(c => c.label.toLowerCase().includes(slashMenu.q.toLowerCase()) || c.key.includes(slashMenu.q.toLowerCase()))}
+                      onPick={insertSlash}
+                    />
+                  )}
+
                 </div>
               </div>
             )}
