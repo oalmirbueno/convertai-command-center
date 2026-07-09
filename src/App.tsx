@@ -37,6 +37,7 @@ import ApiDocs from "@/pages/ApiDocs";
 import AdminQuizSubmissions from "@/pages/AdminQuizSubmissions";
 import AdminBackfillPage from "@/pages/AdminBackfillPage";
 import ClientVaultPage from "@/pages/ClientVaultPage";
+import Workspace from "@/pages/Workspace";
 import UnsubscribePage from "@/pages/UnsubscribePage";
 import FirstAccess from "@/pages/FirstAccess";
 import AdminContracts from "@/pages/AdminContracts";
