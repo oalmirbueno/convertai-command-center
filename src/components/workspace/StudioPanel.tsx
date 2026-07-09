@@ -16,7 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 
 
 /**
- * Studio flutuante — Notas, Mapa Mental, Roteiro (Prepro Director GPT), Processo.
+ * Studio flutuante: Contexto, Notas e GPT externo.
  * Persistência por contexto (scope + clientId + parentId) no localStorage.
  * Suporta @mention para vincular arquivos do view atual.
  */
@@ -25,7 +25,7 @@ const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-pre
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
 
-type Mode = "agent" | "notes";
+type Mode = "context" | "notes" | "gpt";
 
 
 type StudioState = {
@@ -93,7 +93,7 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
     { key: "ajuda",    label: "Ajuda · comandos / e @",          hint: "abre o guia inline", insert: "", action: "insertHelp" },
     { key: "tarefa",   label: "Nova tarefa (Kanban do projeto)", hint: "título !alta @nome 15/07", insert: "", action: "createTask" },
     { key: "kanban",   label: "Ver Kanban do projeto",           hint: "abre inline com tasks reais", insert: "", action: "openKanban" },
-    { key: "imagem",   label: "Imagem → OCR",                    hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
+    { key: "imagem",   label: "Imagem OCR",                      hint: "extrai texto da imagem", insert: "", action: "uploadImage" },
     { key: "video",    label: "Embed de vídeo",                  hint: "YouTube / Vimeo / Drive", insert: "", action: "insertVideo" },
     { key: "mapa",     label: "Mapa mental (ASCII)",             hint: "insere estrutura hierárquica", insert: "", action: "insertMindmap" },
     { key: "checklist",label: "Checklist",                       hint: "lista com checkboxes", insert: `\n- [ ] \n- [ ] \n- [ ] \n` },
@@ -114,9 +114,9 @@ function buildSlashCommands(ctx: { clientName?: string | null; folderPath?: stri
 const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
   { cmd: "/help",      label: "Ajuda",              desc: "Abre este guia inline com todos os comandos." },
   { cmd: "/tarefa",    label: "Nova tarefa",        desc: "Cria tarefa no Kanban do projeto. Aceita !alta !urgente @nome 15/07 hoje +3d." },
-  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo — lista, cria e move tasks reais do projeto sem sair da nota." },
-  { cmd: "/imagem",    label: "Imagem → OCR",       desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
-  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive → renderiza o player inline." },
+  { cmd: "/kanban",    label: "Kanban inline",      desc: "Insere @kanban vivo: lista, cria e move tasks reais do projeto sem sair da nota." },
+  { cmd: "/imagem",    label: "Imagem OCR",         desc: "Envia uma imagem e extrai o texto automaticamente na nota." },
+  { cmd: "/video",     label: "Embed de vídeo",     desc: "Cole link YouTube/Vimeo/Drive e renderiza o player inline." },
   { cmd: "/mapa",      label: "Mapa mental",        desc: "Insere estrutura hierárquica em texto (edite os ramos)." },
   { cmd: "/checklist", label: "Checklist",          desc: "Lista com caixinhas [ ] clicáveis no preview." },
   { cmd: "/hook",      label: "Bloco HOOK",         desc: "Template de roteiro 0–3s (fala, imagem, texto em tela)." },
@@ -128,14 +128,14 @@ const SLASH_HELP: Array<{ cmd: string; label: string; desc: string }> = [
 ];
 
 const MENTION_HELP: Array<{ cmd: string; label: string; desc: string }> = [
-  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome — busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
+  { cmd: "@arquivo",  label: "Arquivo",  desc: "Digite @ + nome: busca fuzzy nos arquivos da pasta e insere link clicável (wsfile)." },
   { cmd: "@kanban",   label: "Kanban",   desc: "Bloco vivo do Kanban do projeto renderizado dentro da nota." },
-  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed) — colar link gera automaticamente." },
+  { cmd: "@video",    label: "Vídeo",    desc: "Player embutido: @video[nome](url_embed). Colar link gera automaticamente." },
   { cmd: "@help",     label: "Ajuda",    desc: "Renderiza este painel de ajuda inline no ponto onde estiver escrito." },
 ];
 
 
-const MINDMAP_TEMPLATE = `\n## 🧠 Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
+const MINDMAP_TEMPLATE = `\n## Mapa Mental\n- Ideia central\n  - Ramo 1\n    - Detalhe\n    - Detalhe\n  - Ramo 2\n    - Detalhe\n  - Ramo 3\n`;
 
 function videoEmbedFromUrl(url: string): string | null {
   const u = url.trim();
@@ -165,7 +165,7 @@ function highlightRanges(text: string, ranges: [number, number][]): React.ReactN
 
 
 
-// Parser inline: "Editar hook !alta @maria 15/07" → { title, priority, assigneeName, dueISO }
+// Parser inline: "Editar hook !alta @maria 15/07" para { title, priority, assigneeName, dueISO }
 export function parseTaskShorthand(raw: string): { title: string; priority: "low"|"medium"|"high"|"urgent"; assigneeName?: string; dueISO?: string } {
   let s = " " + raw.trim() + " ";
   let priority: "low"|"medium"|"high"|"urgent" = "medium";
@@ -257,7 +257,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!v || v === "br" || v === "bl") return "bc";
     return v;
   });
-  const [mode, setMode] = useState<Mode>("agent");
+  const [mode, setMode] = useState<Mode>("context");
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
@@ -314,7 +314,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }, [clientId]);
 
   // ── Sincronização bidirecional em tempo real ──
-  // Refs internas para evitar loops (save→realtime→save) e preservar edições locais
+  // Refs internas para evitar loops entre save e realtime e preservar edições locais
   // quando um enrich/publish/edição remota chega no meio do fluxo.
   const uidRef = useRef<string | null>(null);
   const lastSavedNotesRef = useRef<string>("");     // último conteúdo confirmado no servidor
@@ -491,7 +491,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     if (!projectId) { toast({ title: "Vincule um projeto primeiro", description: "Selecione o projeto no topo do Studio para publicar.", variant: "destructive" }); return; }
     const next = !docPublished;
     setDocPublished(next);
-    // Persistência imediata (não espera debounce) — garante que o cliente veja na hora
+    // Persistência imediata: garante que o cliente veja na hora
     const notesNow = notesContentRef.current;
     const { data, error } = await supabase.from("studio_docs").upsert({
       project_id: projectId,
@@ -581,7 +581,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     toast({ title: "Analisando imagem…", description: "Extraindo texto via Lovable AI (Gemini Flash Lite)." });
     try {
       const text = await ocrFile(file);
-      insertAtCaret(`\n> 🖼️ **Imagem — texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
+      insertAtCaret(`\n> **Imagem, texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
       toast({ title: "OCR concluído", description: `${text.length} caracteres extraídos.` });
     } catch (e: any) {
       toast({ title: "Falha no OCR", description: e?.message?.slice(0, 200), variant: "destructive" });
@@ -694,7 +694,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       state.notes || "(vazio)",
       "",
       "## Arquivos vinculados",
-      ...state.mentions.map(m => `- ${m.name}${m.url ? ` — ${m.url}` : ""}`),
+      ...state.mentions.map(m => `- ${m.name}${m.url ? `: ${m.url}` : ""}`),
     ].join("\n");
     navigator.clipboard.writeText(parts);
     toast({ title: "Contexto copiado", description: "Cole no Prepro Director GPT." });
@@ -804,8 +804,9 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           {/* Tabs */}
           <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0 overflow-x-auto">
             {[
+              { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
-              { k: "agent",   icon: Bot,         label: "Agente" },
+              { k: "gpt",     icon: ExternalLink, label: "GPT" },
             ].map(t => {
               const active = mode === t.k;
               const Icon = t.icon;
@@ -828,7 +829,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               className="bg-background border border-border rounded px-1.5 py-0.5 text-[11px] max-w-[180px]"
               title="Vincule um projeto para publicar/espelhar ao cliente"
             >
-              <option value="">— nenhum —</option>
+              <option value="">sem projeto</option>
               {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
             {projectId && (
@@ -856,7 +857,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <button onClick={togglePublish}
                 className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
                   docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-                title={docPublished ? "Publicado — cliente vê ao vivo" : "Publicar para o cliente"}>
+                title={docPublished ? "Publicado: cliente vê ao vivo" : "Publicar para o cliente"}>
                 <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
               </button>
               <button onClick={downloadPDF}
@@ -869,7 +870,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
 
-            {mode === "agent" && (
+            {mode === "context" && (
               <AgentChat
                 clientId={clientId ?? null}
                 clientName={clientName ?? null}
@@ -879,6 +880,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 notes={state.notes}
                 script={state.script}
                 boardLog={state.boardLog}
+                label="Contexto"
+                showExternalTools={false}
                 onStructureToNotes={async () => {
                   try {
                     const { data: sess } = await supabase.auth.getSession();
@@ -971,6 +974,20 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   </div>
                 )}
               </div>
+            )}
+
+            {mode === "gpt" && (
+              <GptPanel
+                clientName={clientName ?? null}
+                folderPath={folderPath ?? contextLabel}
+                availableFiles={availableFiles}
+                notes={state.notes}
+                script={state.script}
+                onAppendToNotes={(text) => {
+                  setState(s => ({ ...s, notes: `${s.notes || ""}${s.notes?.trim() ? "\n\n" : ""}${text.trim()}\n` }));
+                  setMode("notes");
+                }}
+              />
             )}
 
 
@@ -1306,7 +1323,7 @@ export function NotesPreview({ src, clientId, clientName }: { src: string; clien
   return <div className="space-y-0.5">{out}</div>;
 }
 
-// Guia inline de comandos / e @ — renderizado dentro das notas quando existir "@help" numa linha.
+// Guia inline de comandos / e @ renderizado dentro das notas quando existir "@help" numa linha.
 function InlineHelpBlock() {
   const [tab, setTab] = useState<"slash" | "at">("slash");
   const items = tab === "slash" ? SLASH_HELP : MENTION_HELP;
@@ -1414,7 +1431,7 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
                       {cols.filter(c => c.key !== t.status).map(c => (
                         <button key={c.key} onClick={() => move(t.id, c.key)}
                           className="text-[9px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground">
-                          → {c.title}
+                          Mover para {c.title}
                         </button>
                       ))}
                     </div>
@@ -1429,7 +1446,7 @@ function KanbanInlineDialog({ open, onOpenChange, clientId, clientName }: { open
   );
 }
 
-// Bloco Kanban vivo embutido no fluxo das Notas (não é modal — renderiza como parte do documento)
+// Bloco Kanban vivo embutido no fluxo das Notas.
 function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; clientName: string | null }) {
   type Task = { id: string; title: string; status: string; priority: string | null; due_date: string | null; project_id: string };
   const { toast } = useToast();
@@ -1635,7 +1652,7 @@ function InlineKanbanBlock({ clientId, clientName }: { clientId: string | null; 
                           onClick={() => setEditing({ id: t.id, field: "due" })}
                           className="px-1 py-0.5 rounded border border-dashed border-border/60 hover:bg-secondary"
                           title="Definir prazo"
-                        >{t.due_date ? `📅 ${t.due_date}` : "📅 prazo"}</button>
+                        >{t.due_date ? `Prazo ${t.due_date}` : "Prazo"}</button>
                       )}
                     </div>
                   </div>
@@ -1749,10 +1766,118 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
-function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes }: {
+function GptPanel({ clientName, folderPath, availableFiles, notes, script, onAppendToNotes }: {
+  clientName: string | null;
+  folderPath: string;
+  availableFiles: FileRef[];
+  notes: string;
+  script: string;
+  onAppendToNotes: (text: string) => void;
+}) {
+  const { toast } = useToast();
+  const [pasted, setPasted] = useState("");
+
+  const contextText = useMemo(() => [
+    `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+    notes?.trim() ? `\n## NOTAS\n${notes.slice(0, 5000)}` : "",
+    script?.trim() ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+    availableFiles.length ? `\n## ARQUIVOS\n${availableFiles.slice(0, 40).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
+    "\n## ORDEM DE TRABALHO\nUse o contexto do sistema, preserve a estrutura das notas e devolva uma resposta pronta para colar no Studio.",
+  ].filter(Boolean).join("\n"), [availableFiles, clientName, folderPath, notes, script]);
+
+  const copyContext = async () => {
+    try {
+      await navigator.clipboard.writeText(contextText);
+      toast({ title: "Contexto copiado", description: "Abra o GPT e cole o contexto." });
+    } catch {
+      toast({ title: "Não foi possível copiar", description: "Copie manualmente pelo bloco de contexto.", variant: "destructive" });
+    }
+  };
+
+  const openGpt = async () => {
+    await copyContext();
+    window.open(PREPRO_GPT, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Agente GPT</div>
+          <div className="text-sm font-semibold truncate">{clientName || "Contexto global"}</div>
+          <div className="text-[10px] text-muted-foreground truncate">/{folderPath || "raiz"}</div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={copyContext}
+            className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-1"
+            title="Copiar contexto para usar no GPT"
+          >
+            <Copy className="w-3 h-3" /> Copiar
+          </button>
+          <button
+            onClick={openGpt}
+            className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 flex items-center gap-1"
+            title="Abrir GPT externo com o contexto copiado"
+          >
+            <ExternalLink className="w-3 h-3" /> Abrir GPT
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+          <Brain className="w-3 h-3" /> Contexto preparado
+        </div>
+        <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words p-3 text-[10.5px] leading-relaxed text-foreground/80 font-mono">
+          {contextText}
+        </pre>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+          <ClipboardPaste className="w-3 h-3" /> Retorno do GPT
+        </div>
+        <div className="p-2 space-y-2">
+          <textarea
+            value={pasted}
+            onChange={e => setPasted(e.target.value)}
+            placeholder="Cole aqui a resposta do GPT externo para enviar às Notas."
+            className="w-full min-h-[180px] resize-y bg-background border border-border rounded-md p-2 text-[12px] leading-relaxed focus:outline-none focus:border-primary/50"
+          />
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={() => setPasted("")}
+              disabled={!pasted.trim()}
+              className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40"
+            >
+              Limpar
+            </button>
+            <button
+              onClick={() => {
+                if (!pasted.trim()) return;
+                onAppendToNotes(pasted);
+                setPasted("");
+                toast({ title: "Enviado para Notas", description: "Resposta adicionada ao documento." });
+              }}
+              disabled={!pasted.trim()}
+              className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 disabled:opacity-40 flex items-center gap-1"
+            >
+              <ArrowRight className="w-3 h-3" /> Enviar para Notas
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
   onStructureToNotes?: () => void | Promise<void>;
+  label?: string;
+  showExternalTools?: boolean;
 }) {
   const { toast } = useToast();
   const isMobile = useIsMobile();
@@ -1825,7 +1950,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     { key: "storyboard",label: "Storyboard",          hint: "cena a cena",             prompt: "Monte um storyboard cena a cena (visual + fala + duração) usando os arquivos anexados." },
     { key: "resumir",   label: "Resumir arquivos",    hint: "insights + próximos passos", prompt: "Analise e resuma os arquivos anexados. Traga insights e próximos passos." },
     { key: "brief",     label: "Extrair briefing",    hint: "objetivo + público + tom", prompt: "Extraia um briefing (objetivo, público, canal, duração, tom, referências) dos anexos." },
-    { key: "checklist", label: "Checklist de pipeline", hint: "brutos → publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos → Trilhas/SFX → Edição → Final → Publicado)." },
+    { key: "checklist", label: "Checklist de pipeline", hint: "brutos até publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos, Trilhas/SFX, Edição, Final e Publicado)." },
     { key: "hooks",     label: "5 hooks",              hint: "aberturas 0-3s",         prompt: "Sugira 5 opções de hook (0-3s) alinhadas ao contexto e materiais anexados." },
     { key: "cta",       label: "Variações de CTA",     hint: "3 opções",               prompt: "Escreva 3 variações de CTA para este roteiro/contexto." },
     { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
@@ -1918,7 +2043,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
 
 
 
-  // Fuzzy: retorna { score, ranges } — score maior = melhor. Prioriza: exato > prefixo > subsequência.
+  // Fuzzy: retorna { score, ranges }. Score maior = melhor.
   function fuzzyScore(name: string, q: string): { score: number; ranges: [number, number][] } | null {
     if (!q) return { score: 0, ranges: [] };
     const n = name.toLowerCase(); const s = q.toLowerCase();
@@ -2041,9 +2166,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
       setThreads(t => [data as AgentThread, ...t]);
       setActiveId(tid);
     }
-    // Preserva anexos no conteúdo da mensagem — histórico da thread mantém as referências
+    // Preserva anexos no conteúdo da mensagem e mantém referências no histórico da thread
     const attachBlock = attached.length
-      ? `\n\n---\n📎 Anexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
+      ? `\n\n---\nAnexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
       : "";
     const finalText = text + attachBlock;
     const currentAttachments = attached;
@@ -2097,7 +2222,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         try {
           const j = JSON.parse(t);
           if (j?.error === "PAYMENT_REQUIRED" || res.status === 402) {
-            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos em Settings → Workspace → Usage.";
+            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos nas configurações de uso.";
           } else if (j?.error === "RATE_LIMITED" || res.status === 429) {
             msg = j?.message || "Muitas requisições. Tente novamente em instantes.";
           } else if (j?.message || j?.error) {
@@ -2183,7 +2308,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                   </button>
                 </div>
                 {threadScope === "client" && t.folder_path && (
-                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">📁 {t.folder_path}</span>
+                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">/{t.folder_path}</span>
                 )}
               </div>
             ))}
@@ -2206,31 +2331,33 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           )}
           <Bot className="w-3.5 h-3.5 text-primary" />
           <span className="text-[10px] font-medium text-foreground/80 truncate">
-            {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+            {clientName ? `${label} · ${clientName}` : `${label} · Global`}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
 
-          {/* Seletor de persona (Auto ou manual) — mostra TODAS as personas do escopo */}
+          {/* Seletor de persona: Auto ou manual */}
           <div className="flex-1 flex items-center justify-end gap-1">
-            <select
-              value={persona.forcedId || "__auto__"}
-              onChange={e => {
-                const v = e.target.value;
-                setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
-              }}
-              className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
-              title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
-              <option value="__auto__">
-                🎯 Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
-              </option>
-              {persona.list.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.gpt_name || "Sem nome"} {p.folder_path ? "· 📁" : p.client_id ? "· 👤" : "· 🌐"}
+            {showExternalTools && (
+              <select
+                value={persona.forcedId || "__auto__"}
+                onChange={e => {
+                  const v = e.target.value;
+                  setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
+                }}
+                className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
+                title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
+                <option value="__auto__">
+                  Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
                 </option>
-              ))}
-            </select>
+                {persona.list.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.gpt_name || "Sem nome"} {p.folder_path ? "· Pasta" : p.client_id ? "· Cliente" : "· Global"}
+                  </option>
+                ))}
+              </select>
+            )}
 
-            {(persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
+            {showExternalTools && (persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active)?.gpt_url && (
               <button
                 onClick={async () => {
                   const active = persona.forcedId ? persona.list.find(p => p.id === persona.forcedId) : persona.active;
@@ -2241,7 +2368,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                     `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
                     notes ? `\n## NOTAS\n${notes.slice(0, 3000)}` : "",
                     script ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
-                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "🗂" : "📎"} ${f.name}`).join("\n")}` : "",
+                    availableFiles.length ? `\n## ARQUIVOS DA PASTA\n${availableFiles.slice(0, 30).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
                     lastUser ? `\n## ÚLTIMA PERGUNTA\n${lastUser}` : "",
                     lastAssistant ? `\n## RASCUNHO DO AGENTE INTERNO\n${lastAssistant}` : "",
                     `\n---\nUse este contexto para responder no padrão do seu GPT. A resposta será colada de volta no Studio.`,
@@ -2263,7 +2390,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ArrowRight className="w-3 h-3" /> Notas
               </button>
             )}
-            <PasteBackButton
+            {showExternalTools && <PasteBackButton
               disabled={!activeId}
               onPaste={async (text) => {
                 if (!activeId || !text.trim()) return;
@@ -2275,28 +2402,28 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 if (inserted) setMsgs(m => [...m, inserted as AgentMsg]);
                 toast({ title: "Resposta importada", description: "Adicionada à conversa como mensagem do agente." });
               }}
-            />
-            <button onClick={() => setPersonaOpen(true)}
+            />}
+            {showExternalTools && <button onClick={() => setPersonaOpen(true)}
               className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Gerenciar personas (adicionar / remover)">
               <Settings className="w-3 h-3" />
-            </button>
+            </button>}
             <button onClick={newThread}
               className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
               <Plus className="w-3 h-3" />
             </button>
           </div>
         </div>
-        <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
+        {showExternalTools && <PersonaDialog open={personaOpen} onOpenChange={setPersonaOpen}
           list={persona.list}
           clientId={clientId} clientName={clientName} folderPath={folderPath}
-          onSaved={reloadPersona} />
+          onSaved={reloadPersona} />}
         {/* Chip de contexto auto por pasta */}
         <div className="px-2 py-1 border-b border-border bg-background/60 flex flex-wrap items-center gap-1 text-[9px] text-muted-foreground">
-          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70">📁 /{folderPath || "raiz"}</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40">📎 {availableFiles.filter(f=>f.kind==="file").length} arq</span>
-          <span className="px-1.5 py-0.5 rounded bg-secondary/40">🗂 {availableFiles.filter(f=>f.kind==="folder").length} sub</span>
-          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">📝 notas</span>}
-          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40">🎬 roteiro</span>}
+          <span className="px-1.5 py-0.5 rounded bg-secondary/60 text-foreground/70 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />/{folderPath || "raiz"}</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="file").length} arq</span>
+          <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FolderIcon className="w-2.5 h-2.5" />{availableFiles.filter(f=>f.kind==="folder").length} sub</span>
+          {notes?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><NotebookPen className="w-2.5 h-2.5" />notas</span>}
+          {script?.trim() && <span className="px-1.5 py-0.5 rounded bg-secondary/40 flex items-center gap-1"><FileText className="w-2.5 h-2.5" />roteiro</span>}
           <span className="ml-auto opacity-60">contexto auto</span>
         </div>
 
@@ -2307,8 +2434,8 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           <div className="text-center py-8 space-y-2">
             <Bot className="w-8 h-8 text-primary/40 mx-auto" />
             <p className="text-[11px] text-muted-foreground">
-              Peça roteiro, plano de gravação, storyboard, ideias.<br/>
-              O agente já conhece <b>{clientName || "este contexto"}</b>.
+              Use este agente para organizar o contexto antes das notas e do GPT externo.<br/>
+              Ele já conhece <b>{clientName || "este contexto"}</b>.
             </p>
           </div>
         )}
@@ -2350,7 +2477,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
           </div>
         )}
         <div className="relative p-2 flex items-end gap-1">
-          {/* Popover @ arquivos — busca fuzzy + navegação por teclado */}
+          {/* Popover @ arquivos: busca fuzzy + navegação por teclado */}
           {mention && (
             <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
               <div className="px-3 py-1 flex items-center gap-2 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
@@ -2469,7 +2596,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
     });
     const fromT = board.find(b => b.id === fromCol)?.title || fromCol;
     const toT = board.find(b => b.id === toCol)?.title || toCol;
-    onChange(next, `[${now()}] "${title}" movido de ${fromT} → ${toT}`);
+    onChange(next, `[${now()}] "${title}" movido de ${fromT} para ${toT}`);
   }
 
   function addCard(colId: string) {
@@ -2493,7 +2620,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
           return k;
         }) }
       : c);
-    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" → "${t}"` : undefined);
+    onChange(next, old !== t ? `[${now()}] card renomeado "${old}" para "${t}"` : undefined);
     setEditing(null);
   }
 
@@ -2511,7 +2638,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
     if (!t) return;
     let old = "";
     const next = board.map(c => { if (c.id === colId) { old = c.title; return { ...c, title: t }; } return c; });
-    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" → "${t}"` : undefined);
+    onChange(next, old !== t ? `[${now()}] coluna renomeada "${old}" para "${t}"` : undefined);
   }
 
   return (
@@ -2623,7 +2750,7 @@ function MiniKanban({ board, onChange, onReset, log }: {
 }
 
 // =========================
-// QuickTaskDialog — cria tarefa no Kanban do cliente via slash /tarefa
+// QuickTaskDialog cria tarefa no Kanban do cliente via slash /tarefa
 // =========================
 function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
   draft: { raw: string; where: "notes"|"script"; insertAt: number; tokenLen: number };
@@ -2707,7 +2834,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
       title.trim(),
       priority !== "medium" && `!${priority}`,
       who && `@${who.full_name || who.email.split("@")[0]}`,
-      dueISO && `📅 ${dueISO}`,
+      dueISO && `Prazo ${dueISO}`,
     ].filter(Boolean).join(" ");
     toast({ title: "Tarefa criada no Kanban", description: parts });
     onCreated(parts);
@@ -2743,7 +2870,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Projeto</label>
               <select value={projectId} onChange={e => setProjectId(e.target.value)}
                 className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                {projects.length === 0 && <option value="">— sem projeto —</option>}
+                {projects.length === 0 && <option value="">sem projeto</option>}
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
@@ -2761,7 +2888,7 @@ function QuickTaskDialog({ draft, clientId, clientName, onClose, onCreated }: {
               <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Responsável</label>
               <select value={assigneeId} onChange={e => setAssigneeId(e.target.value)}
                 className="w-full h-8 bg-background border border-border rounded-md px-2 text-[12px]">
-                <option value="">— ninguém —</option>
+                <option value="">ninguém</option>
                 {staff.map(s => <option key={s.id} value={s.id}>{s.full_name || s.email}</option>)}
               </select>
             </div>
@@ -2833,8 +2960,6 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
     } finally { setLoading(false); }
   }
 
-  const scopeIcon = (p: { client_id: string | null; folder_path: string | null }) =>
-    p.folder_path ? "📁" : p.client_id ? "👤" : "🌐";
   const scopeText = (p: { client_id: string | null; folder_path: string | null }) =>
     p.folder_path ? `/${p.folder_path}` : p.client_id ? "cliente" : "global";
 
@@ -2856,7 +2981,9 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
             <div className="max-h-56 overflow-y-auto space-y-1.5 rounded-md border border-border bg-background/40 p-2">
               {list.map(p => (
                 <div key={p.id} className="flex items-start gap-2 text-[11px] p-1.5 rounded hover:bg-secondary/40">
-                  <span className="text-sm leading-none pt-0.5">{scopeIcon(p)}</span>
+                  <span className="pt-0.5 text-primary/80">
+                    {p.folder_path ? <FolderIcon className="w-3.5 h-3.5" /> : p.client_id ? <Bot className="w-3.5 h-3.5" /> : <GitBranch className="w-3.5 h-3.5" />}
+                  </span>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium text-foreground/90 truncate">{p.gpt_name || "Sem nome"}</div>
                     <div className="text-muted-foreground text-[10px] truncate">{scopeText(p)} · {p.gpt_description || p.gpt_url}</div>
@@ -2882,7 +3009,7 @@ function PersonaDialog({ open, onOpenChange, list, clientId, clientName, folderP
                     className={cn("text-[10px] px-2 py-1.5 rounded border transition",
                       scope === s ? "bg-primary text-primary-foreground border-primary" : "bg-secondary/40 border-border hover:bg-secondary",
                       disabled && "opacity-40 cursor-not-allowed")}>
-                    {s === "folder" ? "📁 Pasta" : s === "client" ? "👤 Cliente" : "🌐 Global"}
+                    {s === "folder" ? "Pasta" : s === "client" ? "Cliente" : "Global"}
                   </button>
                 );
               })}
