@@ -2841,6 +2841,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             >
               <Link2 className="w-3 h-3" />
             </button>
+            <button
+              type="button"
+              title="Navegar pastas e anexar vários arquivos"
+              onClick={() => setPickerOpen(true)}
+              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
+            >
+              <Columns3 className="w-3 h-3" />
+            </button>
           </div>
 
           <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2">
@@ -2849,6 +2857,24 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         </div>
       </div>
       </div>
+
+      <AttachPicker
+        open={pickerOpen}
+        onOpenChange={setPickerOpen}
+        clientId={clientId}
+        rootFolderId={folderId}
+        rootLabel={clientName ? `${clientName}${folderPath ? ` / ${folderPath}` : ""}` : "Workspace"}
+        alreadyAttachedIds={new Set(attached.map(a => a.id))}
+        onConfirm={(picks) => {
+          setAttached(prev => {
+            const seen = new Set(prev.map(p => p.id));
+            const merged = [...prev];
+            for (const p of picks) if (!seen.has(p.id)) { merged.push(p); seen.add(p.id); }
+            return merged;
+          });
+          picks.forEach(p => pushRecent(p.id));
+        }}
+      />
     </div>
   );
 }
