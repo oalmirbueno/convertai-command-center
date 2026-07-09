@@ -741,17 +741,18 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const isFull = dock === "full";
 
   const dockPos = isFull
-    ? "top-[72px] left-3 right-3 bottom-3"
-    : dock === "br" ? "right-4 bottom-4"
-    : dock === "bl" ? "left-4 bottom-4"
-    :                 "left-1/2 -translate-x-1/2 bottom-4";
+    ? "top-[64px] left-2 right-2 bottom-2 sm:top-[72px] sm:left-3 sm:right-3 sm:bottom-3"
+    : dock === "br" ? "left-2 right-2 bottom-2 sm:left-auto sm:right-4 sm:bottom-4"
+    : dock === "bl" ? "left-2 right-2 bottom-2 sm:right-auto sm:left-4 sm:bottom-4"
+    :                 "left-2 right-2 bottom-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
   const dockSize = isFull
     ? ""
     : minimized
-      ? "w-[280px] h-[52px]"
+      ? "h-[52px] sm:w-[280px]"
       : dock === "bc"
-        ? "w-[min(96vw,880px)] h-[min(72vh,620px)]"
-        : "w-[min(96vw,480px)] h-[min(78vh,680px)]";
+        ? "h-[min(72dvh,620px)] max-h-[calc(100dvh-80px)] sm:w-[min(96vw,880px)] sm:h-[min(72vh,620px)] sm:max-h-none"
+        : "h-[min(78dvh,680px)] max-h-[calc(100dvh-80px)] sm:w-[min(96vw,480px)] sm:h-[min(78vh,680px)] sm:max-h-none";
+
 
   return (
     <div className={cn(
@@ -771,11 +772,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         {!minimized && (
           <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
             <button onClick={() => setDock("bl")} title="Dock esquerda"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
             <button onClick={() => setDock("bc")} title="Centralizar embaixo"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
             <button onClick={() => setDock("br")} title="Dock direita"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+
             <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
               className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
               {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
