@@ -358,9 +358,11 @@ Regras:
     return new Response(outStream, {
       headers: {
         ...cors,
-        "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name",
+        "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name, X-Orq-Extra, X-Orq-Reason",
         "Content-Type": "text/plain; charset=utf-8",
         "X-Accel-Buffering": "no",
+        "X-Orq-Extra": orq.needs_extra_agent ? "1" : "0",
+        "X-Orq-Reason": encodeURIComponent(orq.reason.slice(0, 120)),
         ...(persona?.id ? { "X-Persona-Used": persona.id, "X-Persona-Name": encodeURIComponent(persona.gpt_name || "") } : {}),
       },
     });
