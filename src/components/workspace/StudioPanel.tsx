@@ -978,7 +978,6 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
             {mode === "gpt" && (
               <GptPanel
-                clientId={clientId ?? null}
                 clientName={clientName ?? null}
                 folderPath={folderPath ?? contextLabel}
                 availableFiles={availableFiles}
@@ -1766,6 +1765,112 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
+
+function GptPanel({ clientName, folderPath, availableFiles, notes, script, onAppendToNotes }: {
+  clientName: string | null;
+  folderPath: string;
+  availableFiles: FileRef[];
+  notes: string;
+  script: string;
+  onAppendToNotes: (text: string) => void;
+}) {
+  const { toast } = useToast();
+  const [pasted, setPasted] = useState("");
+
+  const contextText = useMemo(() => [
+    `# CONTEXTO ACELERIQ · ${clientName || "Global"}${folderPath ? " · /" + folderPath : ""}`,
+    notes?.trim() ? `\n## NOTAS\n${notes.slice(0, 5000)}` : "",
+    script?.trim() ? `\n## ROTEIRO\n${script.slice(0, 3000)}` : "",
+    availableFiles.length ? `\n## ARQUIVOS\n${availableFiles.slice(0, 40).map(f => `- ${f.kind === "folder" ? "Pasta" : "Arquivo"}: ${f.name}`).join("\n")}` : "",
+    "\n## ORDEM DE TRABALHO\nUse o contexto do sistema, preserve a estrutura das notas e devolva uma resposta pronta para colar no Studio.",
+  ].filter(Boolean).join("\n"), [availableFiles, clientName, folderPath, notes, script]);
+
+  const copyContext = async () => {
+    try {
+      await navigator.clipboard.writeText(contextText);
+      toast({ title: "Contexto copiado", description: "Abra o GPT e cole o contexto." });
+    } catch {
+      toast({ title: "Não foi possível copiar", description: "Copie manualmente pelo bloco de contexto.", variant: "destructive" });
+    }
+  };
+
+  const openGpt = async () => {
+    await copyContext();
+    window.open(PREPRO_GPT, "_blank", "noopener,noreferrer");
+  };
+
+  return (
+    <div className="h-full min-h-0 overflow-y-auto p-3 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Agente GPT</div>
+          <div className="text-sm font-semibold truncate">{clientName || "Contexto global"}</div>
+          <div className="text-[10px] text-muted-foreground truncate">/{folderPath || "raiz"}</div>
+        </div>
+        <div className="flex items-center gap-1 shrink-0">
+          <button
+            onClick={copyContext}
+            className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary flex items-center gap-1"
+            title="Copiar contexto para usar no GPT"
+          >
+            <Copy className="w-3 h-3" /> Copiar
+          </button>
+          <button
+            onClick={openGpt}
+            className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 flex items-center gap-1"
+            title="Abrir GPT externo com o contexto copiado"
+          >
+            <ExternalLink className="w-3 h-3" /> Abrir GPT
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+          <Brain className="w-3 h-3" /> Contexto preparado
+        </div>
+        <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap break-words p-3 text-[10.5px] leading-relaxed text-foreground/80 font-mono">
+          {contextText}
+        </pre>
+      </div>
+
+      <div className="rounded-lg border border-border bg-background overflow-hidden">
+        <div className="px-2 py-1.5 border-b border-border bg-secondary/30 text-[10px] font-medium text-muted-foreground flex items-center gap-1">
+          <ClipboardPaste className="w-3 h-3" /> Retorno do GPT
+        </div>
+        <div className="p-2 space-y-2">
+          <textarea
+            value={pasted}
+            onChange={e => setPasted(e.target.value)}
+            placeholder="Cole aqui a resposta do GPT externo para enviar às Notas."
+            className="w-full min-h-[180px] resize-y bg-background border border-border rounded-md p-2 text-[12px] leading-relaxed focus:outline-none focus:border-primary/50"
+          />
+          <div className="flex items-center justify-end gap-1">
+            <button
+              onClick={() => setPasted("")}
+              disabled={!pasted.trim()}
+              className="px-2 py-1 rounded border border-border text-[10px] text-muted-foreground hover:text-foreground hover:bg-secondary disabled:opacity-40"
+            >
+              Limpar
+            </button>
+            <button
+              onClick={() => {
+                if (!pasted.trim()) return;
+                onAppendToNotes(pasted);
+                setPasted("");
+                toast({ title: "Enviado para Notas", description: "Resposta adicionada ao documento." });
+              }}
+              disabled={!pasted.trim()}
+              className="px-2 py-1 rounded border border-primary/30 bg-primary/10 text-primary text-[10px] hover:bg-primary/20 disabled:opacity-40 flex items-center gap-1"
+            >
+              <ArrowRight className="w-3 h-3" /> Enviar para Notas
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; folderId: string | null; folderPath: string;
