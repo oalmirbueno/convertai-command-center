@@ -646,6 +646,11 @@ function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: s
       out.push(<InlineKanbanBlock key={i} clientId={clientId ?? null} clientName={clientName ?? null} />);
       return;
     }
+    if (raw.trim() === "@help") {
+      out.push(<InlineHelpBlock key={i} />);
+      return;
+    }
+
     // vídeo embed
     const v = raw.match(/^@video\[([^\]]*)\]\((https?:[^)]+)\)\s*$/);
     if (v) {
