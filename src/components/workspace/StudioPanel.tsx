@@ -4,7 +4,7 @@ import {
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
   Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
   Columns3, Pencil, GripVertical, Settings, Check, Minimize2, Maximize2, ClipboardPaste,
-  Download, Radio, Zap, ArrowRight,
+  Download, Radio, Zap, ArrowRight, ArrowLeft,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
