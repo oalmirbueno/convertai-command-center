@@ -47,8 +47,8 @@ Deno.serve(async (req) => {
 
     // ─── MODO STRUCTURE / ENRICH (não-stream, retorna JSON pronto pro doc) ───
     const preview = await req.clone().json().catch(() => ({} as any));
-    const specialMode = preview?.mode as "structure" | "enrich" | undefined;
-    if (specialMode === "structure" || specialMode === "enrich") {
+    const specialMode = preview?.mode as "structure" | "enrich" | "reflow" | undefined;
+    if (specialMode === "structure" || specialMode === "enrich" || specialMode === "reflow") {
       const raw = String(preview?.text || "").slice(0, 12000);
       const ctxName = preview?.context?.client_name || "Global";
       const folderP = preview?.context?.folder_path || "raiz";
@@ -70,26 +70,58 @@ Deno.serve(async (req) => {
 {"checklist":["item"],"next_actions":["ação com responsável e prazo"],"suggestion":"1-2 linhas sugerindo o próximo bloco"}
 Máximo 5 checklist, 4 next_actions. Sem markdown fora do JSON.`;
 
+      // REFLOW: auto-correção em tempo real. Reorganiza sem inventar. Preserva 100% do
+      // conteúdo do usuário — só reordena, corrige headline/subheadline, completa
+      // itens óbvios de checklist e ajusta racional/ações. Devolve markdown final
+      // já no layout canônico do documento executivo.
+      const sysReflow = `Você é um EDITOR EXECUTIVO. Recebe um rascunho e devolve a versão CORRIGIDA e REORGANIZADA em markdown, seguindo EXATAMENTE este layout:
+
+# {Headline curta, sem clichê, no imperativo/afirmativa}
+_{Subheadline em 1 linha, complementa a headline sem repetir}_
+
+## Racional
+{2–5 linhas de contexto do porquê / diagnóstico}
+
+## Checklist
+- [ ] {item executável}
+- [ ] {item executável}
+
+## Ações
+1. {ação} — responsável: {quem} · prazo: {relativo}
+2. {ação} — responsável: {quem} · prazo: {relativo}
+
+Regras absolutas:
+- NUNCA remova informação do usuário. Só reorganize, corrija ortografia/gramática e conecte frases soltas.
+- Se o usuário já escreveu uma seção, mantenha o conteúdo dela; só ajuste forma.
+- Se faltar seção, complete com base no que existe (não invente dados novos: use {{campo}} para lacunas).
+- Máximo 8 itens no checklist, 6 em ações.
+- Sem emoji decorativo. Sem "vamos", "juntos", "incrível". Tom direto e técnico.
+- Devolva APENAS o markdown final, sem cercas \`\`\` e sem comentários.
+- Cliente: ${ctxName}. Pasta: /${folderP}.`;
+
+      const sysMap: Record<string, string> = { structure: sysStructure, enrich: sysEnrich, reflow: sysReflow };
+
       const r = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
         body: JSON.stringify({
           model,
           messages: [
-            { role: "system", content: specialMode === "structure" ? sysStructure : sysEnrich },
+            { role: "system", content: sysMap[specialMode] },
             { role: "user", content: raw || "(vazio)" },
           ],
-          temperature: 0.2,
+          temperature: specialMode === "reflow" ? 0.15 : 0.2,
           ...(specialMode === "enrich" ? { response_format: { type: "json_object" } } : {}),
         }),
       });
       if (!r.ok) return json({ error: `ai_${r.status}`, detail: (await r.text()).slice(0, 200) }, r.status);
       const jr = await r.json();
-      const out = jr?.choices?.[0]?.message?.content || "";
+      const out = (jr?.choices?.[0]?.message?.content || "").replace(/^```(?:markdown)?\s*|\s*```$/g, "");
       if (specialMode === "enrich") {
         try { return json({ mode: "enrich", data: JSON.parse(out) }); }
         catch { return json({ mode: "enrich", data: { checklist: [], next_actions: [], suggestion: "" } }); }
       }
+      if (specialMode === "reflow") return json({ mode: "reflow", markdown: out });
       return json({ mode: "structure", markdown: out });
     }
 
