@@ -250,8 +250,10 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
-  const [dock, setDock] = useState<"br" | "bl" | "bc">(() => (localStorage.getItem("studio_dock") as any) || "br");
+  const [dock, setDock] = useState<"br" | "bl" | "bc" | "full">(() => (localStorage.getItem("studio_dock") as any) || "br");
   const [mode, setMode] = useState<Mode>("agent");
+  useEffect(() => { try { localStorage.setItem("studio_dock", dock); } catch {} }, [dock]);
+  useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
@@ -473,24 +475,31 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     );
   }
 
-  const dockPos =
-    dock === "br" ? "right-4 bottom-4" :
-    dock === "bl" ? "left-4 bottom-4" :
-                    "left-1/2 -translate-x-1/2 bottom-4";
-  const dockSize = minimized
-    ? "w-[280px] h-[52px]"
-    : dock === "bc"
-      ? "w-[min(96vw,880px)] h-[min(72vh,620px)]"
-      : "w-[min(96vw,480px)] h-[min(78vh,680px)]";
+  const isFull = dock === "full";
+  const dockPos = isFull
+    ? "inset-3"
+    : dock === "br" ? "right-4 bottom-4"
+    : dock === "bl" ? "left-4 bottom-4"
+    :                 "left-1/2 -translate-x-1/2 bottom-4";
+  const dockSize = isFull
+    ? ""
+    : minimized
+      ? "w-[280px] h-[52px]"
+      : dock === "bc"
+        ? "w-[min(96vw,880px)] h-[min(72vh,620px)]"
+        : "w-[min(96vw,480px)] h-[min(78vh,680px)]";
 
   return (
     <div className={cn(
-      "fixed z-40 bg-card border border-border rounded-2xl shadow-2xl flex flex-col overflow-hidden transition-all",
+      "fixed z-40 bg-card border border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+      isFull ? "rounded-xl" : "rounded-2xl",
       dockPos, dockSize
     )}>
       {/* Header */}
-      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-secondary/40">
-        <Sparkles className="w-4 h-4 text-primary" />
+      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
+        <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
+          <Sparkles className="w-3.5 h-3.5 text-primary" />
+        </div>
         <div className="min-w-0 flex-1">
           <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
           {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
@@ -503,6 +512,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
             <button onClick={() => setDock("br")} title="Dock direita"
               className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+            <button onClick={() => setDock(isFull ? "br" : "full")} title={isFull ? "Sair da tela cheia" : "Tela cheia"}
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>⛶</button>
           </div>
         )}
         <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
