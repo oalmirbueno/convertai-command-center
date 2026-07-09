@@ -913,14 +913,15 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                       });
                       toast({ title: "Anexos adicionados", description: `${picks.length} item(ns) enviado(s) para contexto e Notas.` });
                     }}
-                    onStructureToNotes={async () => {
+                    onStructureToNotes={async (sourceText) => {
+                      const raw = (sourceText || state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`).trim();
                       try {
                         const { data: sess } = await supabase.auth.getSession();
                         const tok = sess?.session?.access_token; if (!tok) return;
                         toast({ title: "Estruturando", description: "O agente está montando o documento executivo." });
                         const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
                           method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
-                          body: JSON.stringify({ mode: "structure", text: state.notes || `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "-"}`, context: { client_name: clientName, folder_path: folderPath } }),
+                          body: JSON.stringify({ mode: "structure", text: raw, context: { client_name: clientName, folder_path: folderPath } }),
                         });
                         if (!r.ok) throw new Error(String(r.status));
                         const j = await r.json();
@@ -1960,7 +1961,7 @@ function GptPanel({ clientName, folderPath, availableFiles, notes, script, onApp
 function AgentChat({ clientId, clientName, projectId, folderId, folderPath, availableFiles, notes, script, boardLog, onStructureToNotes, onAttachToNotes, label = "Contexto", showExternalTools = true }: {
   clientId: string | null; clientName: string | null; projectId?: string | null; folderId: string | null; folderPath: string;
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
-  onStructureToNotes?: () => void | Promise<void>;
+  onStructureToNotes?: (sourceText?: string) => void | Promise<void>;
   onAttachToNotes?: (picks: FileRef[]) => void;
   label?: string;
   showExternalTools?: boolean;
@@ -2360,27 +2361,23 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     }
   }
 
-  // Auto-puxa contexto quando abrir o painel com cliente definido: se a thread
-  // ativa está vazia, ou se ainda nem existe thread nesse escopo, o Orquestrador
-  // assume, monta o contexto e devolve as perguntas certas.
+  // Auto-puxa contexto UMA vez por escopo (persistido em localStorage), somente quando
+  // já existe uma thread ativa vazia. Sem thread ainda, aguardamos ação explícita do
+  // usuário no botão "Puxar contexto" — evita loop de criação de conversas ao alternar abas.
   useEffect(() => {
     if (!clientId) return;
     if (streaming || pulling) return;
-    if (activeId) {
-      if (msgs.length > 0) return;
-      if (autoPulledRef.current.has(activeId)) return;
-      autoPulledRef.current.add(activeId);
-      void pullDeepContext({ silent: true });
-      return;
-    }
-    // Sem thread ainda: cria uma via pullDeepContext (send cria a thread)
-    const scopeKey = `new:${clientId}:${threadScope}:${folderPath || "_root"}`;
-    if (autoPulledRef.current.has(scopeKey)) return;
-    if (threads.length > 0) return; // aguarda seleção automática de thread existente
-    autoPulledRef.current.add(scopeKey);
+    if (!activeId) return;
+    if (msgs.length > 0) return;
+    const key = `studio:autoPulled:${clientId}:${threadScope}:${folderPath || "_root"}:${activeId}`;
+    try { if (localStorage.getItem(key)) return; } catch {}
+    if (autoPulledRef.current.has(activeId)) return;
+    autoPulledRef.current.add(activeId);
+    try { localStorage.setItem(key, "1"); } catch {}
     void pullDeepContext({ silent: true });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clientId, activeId, msgs.length, threads.length, folderPath, threadScope]);
+  }, [clientId, activeId, msgs.length, folderPath, threadScope]);
+
 
 
 
@@ -2631,13 +2628,18 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </button>
             {onStructureToNotes && (
               <button
-                onClick={() => onStructureToNotes()}
+                onClick={() => {
+                  const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content?.trim() || "";
+                  if (!lastAssistant) { toast({ title: "Nada para enviar", description: "Peça uma análise ao agente primeiro." }); return; }
+                  onStructureToNotes(lastAssistant);
+                }}
                 className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-                title="Estrutura o contexto atual como documento executivo e envia para as Notas"
+                title="Envia a última resposta do agente estruturada para as Notas"
               >
                 <ArrowRight className="w-3 h-3" /> Enviar às Notas
               </button>
             )}
+
 
 
 
