@@ -11,6 +11,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 
 /**
@@ -817,6 +818,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   availableFiles: FileRef[]; notes: string; script: string; boardLog?: string[];
 }) {
   const { toast } = useToast();
+  const isMobile = useIsMobile();
   const [threads, setThreads] = useState<AgentThread[]>([]);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [msgs, setMsgs] = useState<AgentMsg[]>([]);
@@ -825,11 +827,13 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   const [showHistory, setShowHistory] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
     if (typeof window === "undefined") return true;
+    if (window.innerWidth < 768) return false;
     return localStorage.getItem("studio_agent_sidebar") !== "0";
   });
   useEffect(() => {
+    if (isMobile) return;
     try { localStorage.setItem("studio_agent_sidebar", sidebarOpen ? "1" : "0"); } catch {}
-  }, [sidebarOpen]);
+  }, [sidebarOpen, isMobile]);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -930,6 +934,29 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   }
 
   useEffect(() => { scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" }); }, [msgs, streamBuf]);
+
+  // Atalhos de teclado: Alt+↑/↓ alterna threads, Alt+N nova, Alt+B toggle sidebar, Esc fecha overlay mobile
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const tag = (e.target as HTMLElement)?.tagName;
+      const typing = tag === "INPUT" || tag === "TEXTAREA" || (e.target as HTMLElement)?.isContentEditable;
+      if (e.key === "Escape" && isMobile && sidebarOpen) { setSidebarOpen(false); return; }
+      if (!e.altKey || typing) return;
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!threads.length) return;
+        const idx = Math.max(0, threads.findIndex(t => t.id === activeId));
+        const next = e.key === "ArrowDown" ? (idx + 1) % threads.length : (idx - 1 + threads.length) % threads.length;
+        setActiveId(threads[next].id);
+      } else if (e.key.toLowerCase() === "n") {
+        e.preventDefault(); void newThread();
+      } else if (e.key.toLowerCase() === "b") {
+        e.preventDefault(); setSidebarOpen(o => !o);
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [threads, activeId, isMobile, sidebarOpen]);
 
   async function newThread() {
     const { data: sess } = await supabase.auth.getUser();
@@ -1146,19 +1173,33 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   }
 
   return (
-    <div className="flex h-full min-h-0">
-      {/* Sidebar de threads */}
+    <div className="flex h-full min-h-0 relative">
+      {/* Backdrop mobile */}
+      {sidebarOpen && isMobile && (
+        <div
+          className="absolute inset-0 bg-background/70 backdrop-blur-sm z-20 animate-in fade-in"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      {/* Sidebar de threads (overlay no mobile, inline no desktop) */}
       {sidebarOpen && (
-        <aside className="w-[180px] shrink-0 border-r border-border bg-background/60 flex flex-col min-h-0">
+        <aside
+          className={cn(
+            "border-r border-border bg-background flex flex-col min-h-0",
+            isMobile
+              ? "absolute inset-y-0 left-0 z-30 w-[78%] max-w-[280px] shadow-2xl animate-in slide-in-from-left"
+              : "w-[180px] shrink-0 bg-background/60"
+          )}
+        >
           <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
             <MessageSquare className="w-3 h-3 text-muted-foreground" />
             <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1 truncate">
               {clientName ? clientName : "Global"}
             </span>
-            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa (Alt+N)">
               <Plus className="w-3 h-3" />
             </button>
-            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher">
+            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher (Alt+B / Esc)">
               <X className="w-3 h-3" />
             </button>
           </div>
@@ -1180,12 +1221,12 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
               <div key={t.id}
                 className={cn("group flex flex-col gap-0.5 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
                   activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
-                onClick={() => setActiveId(t.id)}>
+                onClick={() => { setActiveId(t.id); if (isMobile) setSidebarOpen(false); }}>
                 <div className="flex items-center gap-1">
                   <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
                   <span className="text-[11px] truncate flex-1">{t.title}</span>
                   <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                    className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                    className={cn("p-0.5 hover:text-destructive", isMobile ? "opacity-70" : "opacity-0 group-hover:opacity-100")}>
                     <Trash2 className="w-3 h-3" />
                   </button>
                 </div>
@@ -1194,6 +1235,9 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 )}
               </div>
             ))}
+          </div>
+          <div className="px-2 py-1 border-t border-border text-[9px] text-muted-foreground/70 hidden md:block">
+            Alt+↑↓ alternar · Alt+N nova · Alt+B recolher
           </div>
         </aside>
       )}
@@ -1204,7 +1248,7 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
         <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
           {!sidebarOpen && (
             <button onClick={() => setSidebarOpen(true)}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas">
+              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas (Alt+B)">
               <History className="w-3 h-3" />
             </button>
           )}
