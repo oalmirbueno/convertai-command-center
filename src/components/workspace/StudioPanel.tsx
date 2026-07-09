@@ -595,7 +595,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 }
 
 // Preview leve das Notas: renderiza checkboxes, imagens ![](url), links, embeds de vídeo @video[nome](embedUrl) e menções wsfile.
-function NotesPreview({ src }: { src: string }) {
+function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: string | null; clientName?: string | null }) {
   const lines = src.split("\n");
   const out: React.ReactNode[] = [];
   lines.forEach((raw, i) => {
