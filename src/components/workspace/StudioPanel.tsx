@@ -398,6 +398,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <AgentChat
                 clientId={clientId ?? null}
                 clientName={clientName ?? null}
+                folderId={folderId ?? null}
                 folderPath={folderPath ?? contextLabel}
                 availableFiles={availableFiles}
                 notes={state.notes}
