@@ -804,7 +804,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       {!minimized && (
         <>
           {/* Tabs */}
-          <div className="flex items-center gap-0.5 px-2 pt-2 border-b border-border shrink-0 overflow-x-auto">
+          <div className="flex items-center justify-center gap-1 px-2 pt-2 border-b border-border shrink-0">
             {[
               { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
@@ -814,7 +814,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               const Icon = t.icon;
               return (
                 <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                  className={cn("flex items-center gap-1.5 px-2.5 py-1.5 rounded-t-md text-[11px] font-medium border-b-2 -mb-px transition-colors",
+                  className={cn("flex items-center gap-1.5 px-4 py-1.5 rounded-t-md text-[11px] font-medium border-b-2 -mb-px transition-colors",
                     active ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}>
                   <Icon className="w-3.5 h-3.5" /> {t.label}
                 </button>
@@ -823,7 +823,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
           </div>
 
           {/* Fordista bar: Projeto · Publicar · PDF */}
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 text-[11px] overflow-x-auto">
+          <div className="flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 border-b border-border bg-muted/30 shrink-0 text-[11px]">
+
             <span className="text-muted-foreground shrink-0">Projeto</span>
             <select
               value={projectId ?? ""}
