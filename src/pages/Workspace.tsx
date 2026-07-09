@@ -19,6 +19,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
+import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
+import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -60,7 +62,7 @@ export default function Workspace() {
   const [selected, setSelected] = useState<Node | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
   const [newFolderName, setNewFolderName] = useState("");
-  const [uploading, setUploading] = useState(0);
+  const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
@@ -160,33 +162,17 @@ export default function Workspace() {
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
     const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
-    setUploading(files.length);
-    let ok = 0;
-    for (const file of Array.from(files)) {
-      try {
-        const ext = file.name.split(".").pop() || "bin";
-        const key = `${scope}/${scope === "client" ? clientId : "global"}/${crypto.randomUUID()}.${ext}`;
-        const { error: upErr } = await supabase.storage.from("workspace").upload(key, file, {
-          cacheControl: "3600", upsert: false, contentType: file.type || undefined,
-        });
-        if (upErr) throw upErr;
-        const { error: insErr } = await supabase.from("workspace_nodes").insert({
-          name: file.name, kind: "file", scope,
-          client_id: scope === "client" ? clientId : null,
-          parent_id: destParent, mime: file.type || null,
-          size_bytes: file.size, storage_path: key, created_by: user.id,
-        });
-        if (insErr) throw insErr;
-        ok++;
-      } catch (e: any) {
-        toast({ title: `Falha em ${file.name}`, description: e.message, variant: "destructive" });
-      }
-    }
-    setUploading(0);
-    if (ok) toast({ title: `${ok} arquivo(s) enviado(s)` });
-    invalidate();
+    uploads.enqueue({
+      files: Array.from(files),
+      scope,
+      clientId,
+      parentId: destParent,
+      userId: user.id,
+      onDone: () => invalidate(),
+    });
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
+
 
   async function performDelete(n: Node) {
     // Recursively collect child files' storage paths if folder
@@ -455,9 +441,9 @@ export default function Workspace() {
               <Button size="sm" variant="outline" onClick={() => setNewFolderOpen(true)} className="gap-1.5 h-8">
                 <FolderPlus className="w-3.5 h-3.5" /> Pasta
               </Button>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8" disabled={uploading > 0}>
-                {uploading > 0 ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
-                {uploading > 0 ? `Enviando ${uploading}...` : "Upload"}
+              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-8">
+                <Upload className="w-3.5 h-3.5" />
+                Upload
               </Button>
               <input ref={fileInputRef} type="file" multiple hidden onChange={e => handleUpload(e.target.files)} />
             </div>
@@ -646,6 +632,14 @@ export default function Workspace() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <UploadProgressPanel
+        items={uploads.items}
+        onCancel={uploads.cancel}
+        onRetry={uploads.retry}
+        onDismiss={uploads.dismiss}
+        onClearDone={uploads.clearDone}
+      />
     </div>
   );
 }
