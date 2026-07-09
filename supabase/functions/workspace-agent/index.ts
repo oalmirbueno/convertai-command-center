@@ -67,11 +67,36 @@ Deno.serve(async (req) => {
       const model = openaiKey ? "gpt-4o-mini" : "google/gemini-2.5-flash-lite";
       if (!key) return json({ error: "sem_motor" }, 500);
 
-      const sysStructure = `Você reescreve o texto do usuário em MARKDOWN PROFISSIONAL, pronto pra colar em um documento executivo da AcelerIQ. Regras:
-- H1 curto (# Título), H2/H3 para seções (## / ###).
-- Bullets objetivos, sem enrolação.
-- Sempre inclua no fim: uma seção "## Checklist" com \`- [ ] item\` executáveis, e "## Próximas ações" com passos numerados (responsável sugerido + prazo relativo).
-- Sem emoji decorativo. Ação > teoria. Nunca invente dados; se faltar contexto, marque {{campo}}.
+      const sysStructure = `Você reescreve o texto do usuário como uma NOTA EXECUTIVA da AcelerIQ, com hierarquia visual clara. Devolva APENAS markdown, sem cercas, seguindo EXATAMENTE este layout:
+
+# {Título curto e específico}
+_{Subtítulo em 1 linha — contexto ou tese central}_
+
+## Resumo
+{3–5 linhas objetivas. O que é, para quem, por quê agora.}
+
+## Hipóteses
+- {hipótese 1 — verificável}
+- {hipótese 2}
+- {hipótese 3}
+
+## Plano
+1. {passo} — entrega: {o que sai}
+2. {passo} — entrega: {o que sai}
+3. {passo} — entrega: {o que sai}
+
+## Próximos passos
+- [ ] {ação} · responsável: {quem} · prazo: {relativo}
+- [ ] {ação} · responsável: {quem} · prazo: {relativo}
+
+## Links e anexos
+- [{nome}]({url}) — {para que serve}
+
+Regras:
+- Preserve toda informação do usuário; só reorganize e clarifique.
+- Se uma seção não tiver base no texto, mantenha o título e escreva "{{a definir}}" — nunca invente dados.
+- Máximo 5 hipóteses, 6 passos no plano, 8 próximos passos, 8 links.
+- Sem emoji decorativo, sem "vamos juntos", sem asterisco solto como enfeite.
 - Cliente: ${ctxName}. Pasta: /${folderP}.`;
 
       const sysEnrich = `Você enriquece um documento em andamento. Devolve APENAS JSON válido:
