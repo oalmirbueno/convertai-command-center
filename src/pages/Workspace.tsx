@@ -164,7 +164,8 @@ export default function Workspace() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerFilter, setPickerFilter] = useState<"all" | "az" | "za" | "recent">("all");
-  const [kindFilter, setKindFilter] = useState<"all" | MediaKind>("all");
+  const [tagFilter, setTagFilter] = useState<"all" | SmartTag>("all");
+  const [sortBy, setSortBy] = useState<"recent" | "old" | "az" | "za">("recent");
 
 
   const parent = parentStack[parentStack.length - 1] || null;
