@@ -23,6 +23,9 @@ import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
 import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
+import { TemplatePicker } from "@/components/workspace/TemplatePicker";
+import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
+import { Sparkles } from "lucide-react";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
