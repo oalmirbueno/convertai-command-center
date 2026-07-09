@@ -323,7 +323,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
               <div className="p-3 space-y-2 h-full flex flex-col">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2">
-                  <MessageSquare className="w-3 h-3" /> Digite <b>@</b> para vincular arquivos do painel atual.
+                  <MessageSquare className="w-3 h-3" /> <b>@</b> vincula arquivos · <b>/</b> insere blocos (hook, CTA, briefing, cliente…)
                 </div>
                 <div className="relative flex-1 min-h-0">
                   <textarea
