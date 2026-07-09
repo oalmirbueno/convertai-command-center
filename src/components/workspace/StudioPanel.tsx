@@ -261,6 +261,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return v;
   });
   const [mode, setMode] = useState<Mode>("context");
+  const isMobile = useIsMobile();
+  const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
