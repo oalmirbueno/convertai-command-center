@@ -285,7 +285,13 @@ Deno.serve(async (req) => {
     });
 
     return new Response(outStream, {
-      headers: { ...cors, "Content-Type": "text/plain; charset=utf-8", "X-Accel-Buffering": "no" },
+      headers: {
+        ...cors,
+        "Access-Control-Expose-Headers": "X-Persona-Used, X-Persona-Name",
+        "Content-Type": "text/plain; charset=utf-8",
+        "X-Accel-Buffering": "no",
+        ...(persona?.id ? { "X-Persona-Used": persona.id, "X-Persona-Name": encodeURIComponent(persona.gpt_name || "") } : {}),
+      },
     });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "erro" }, 500);
