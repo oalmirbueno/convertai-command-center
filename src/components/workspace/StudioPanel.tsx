@@ -2830,7 +2830,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
                 if (!url) return;
                 const clean = url.trim();
-                if (!/^https?:\/\//i.test(clean)) { toast.error("URL inválida"); return; }
+                if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
                 const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
                 const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
                 setAttached(prev => [...prev, ref]);
@@ -2839,7 +2839,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               }}
               className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
             >
-              <LinkIcon className="w-3 h-3" />
+              <Link2 className="w-3 h-3" />
             </button>
           </div>
 
