@@ -584,6 +584,13 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [input, setInput] = useState("");
   const [streaming, setStreaming] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState<boolean>(() => {
+    if (typeof window === "undefined") return true;
+    return localStorage.getItem("studio_agent_sidebar") !== "0";
+  });
+  useEffect(() => {
+    try { localStorage.setItem("studio_agent_sidebar", sidebarOpen ? "1" : "0"); } catch {}
+  }, [sidebarOpen]);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -789,42 +796,59 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header: cliente + histórico + nova */}
-      <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
-        <Bot className="w-3.5 h-3.5 text-primary" />
-        <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
-          {clientName ? `Agente · ${clientName}` : "Agente · Global"}
-          {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
-        </span>
-
-        <button onClick={() => setShowHistory(v => !v)}
-          className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Histórico">
-          <History className="w-3 h-3" />
-        </button>
-        <button onClick={newThread}
-          className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
-          <Plus className="w-3 h-3" />
-        </button>
-      </div>
-
-      {showHistory && (
-        <div className="max-h-[140px] overflow-y-auto border-b border-border bg-background/60">
-          {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
-          {threads.map(t => (
-            <div key={t.id} className={cn("group flex items-center gap-1 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer",
-              activeId === t.id && "bg-secondary")}
-              onClick={() => { setActiveId(t.id); setShowHistory(false); }}>
-              <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
-              <span className="text-[11px] truncate flex-1">{t.title}</span>
-              <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
-                <Trash2 className="w-3 h-3" />
-              </button>
-            </div>
-          ))}
-        </div>
+    <div className="flex h-full min-h-0">
+      {/* Sidebar de threads */}
+      {sidebarOpen && (
+        <aside className="w-[180px] shrink-0 border-r border-border bg-background/60 flex flex-col min-h-0">
+          <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
+            <MessageSquare className="w-3 h-3 text-muted-foreground" />
+            <span className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground flex-1">Conversas</span>
+            <button onClick={newThread} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+              <Plus className="w-3 h-3" />
+            </button>
+            <button onClick={() => setSidebarOpen(false)} className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Recolher">
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
+            {threads.map(t => (
+              <div key={t.id}
+                className={cn("group flex items-center gap-1 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
+                  activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
+                onClick={() => setActiveId(t.id)}>
+                <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
+                <span className="text-[11px] truncate flex-1">{t.title}</span>
+                <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
+                  className="opacity-0 group-hover:opacity-100 p-0.5 hover:text-destructive">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </aside>
       )}
+
+      <div className="flex flex-col h-full flex-1 min-w-0">
+        {/* Header: cliente + toggle sidebar + nova */}
+        <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
+          {!sidebarOpen && (
+            <button onClick={() => setSidebarOpen(true)}
+              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas">
+              <History className="w-3 h-3" />
+            </button>
+          )}
+          <Bot className="w-3.5 h-3.5 text-primary" />
+          <span className="text-[10px] font-medium text-foreground/80 truncate flex-1">
+            {clientName ? `Agente · ${clientName}` : "Agente · Global"}
+            {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
+          </span>
+          <button onClick={newThread}
+            className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Nova conversa">
+            <Plus className="w-3 h-3" />
+          </button>
+        </div>
+
 
       {/* Mensagens */}
       <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
@@ -923,6 +947,7 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
         </div>
+      </div>
       </div>
     </div>
   );
