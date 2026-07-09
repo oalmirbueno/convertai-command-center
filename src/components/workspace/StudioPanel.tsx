@@ -969,7 +969,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
 
-                <div className="grid h-full min-h-0 gap-3 lg:grid-cols-[minmax(0,1.05fr)_minmax(320px,0.95fr)]">
+                <div className="grid h-full min-h-0 gap-3 grid-cols-1 md:grid-cols-2">
                   <section className="min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70">
                     <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
                       <NotebookPen className="h-3.5 w-3.5 text-primary" />
