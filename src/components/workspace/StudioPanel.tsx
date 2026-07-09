@@ -85,16 +85,20 @@ function saveState(ctxKey: string, s: StudioState) {
 interface Props {
   contextKey: string;
   contextLabel: string;
+  clientId?: string | null;
+  clientName?: string | null;
+  folderPath?: string | null;
   availableFiles: FileRef[];
   onOpenFile?: (id: string) => void;
 }
 
-export function StudioPanel({ contextKey, contextLabel, availableFiles, onOpenFile }: Props) {
+export function StudioPanel({ contextKey, contextLabel, clientId, clientName, folderPath, availableFiles, onOpenFile }: Props) {
   const { toast } = useToast();
   const [open, setOpen] = useState<boolean>(() => localStorage.getItem("studio_open") === "1");
   const [minimized, setMinimized] = useState<boolean>(() => localStorage.getItem("studio_min") === "1");
-  const [mode, setMode] = useState<Mode>("notes");
+  const [mode, setMode] = useState<Mode>("agent");
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
+
   const notesRef = useRef<HTMLTextAreaElement>(null);
   const scriptRef = useRef<HTMLTextAreaElement>(null);
   const [mentionQuery, setMentionQuery] = useState<{ where: "notes" | "script"; q: string; start: number } | null>(null);
