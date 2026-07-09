@@ -2150,9 +2150,10 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
     setInput(prev => prev.replace(new RegExp(`\\s?\\[@[^\\]]+\\]\\(wsfile:${id}\\)`, "g"), "").trim());
   }
 
-  async function send() {
-    const text = input.trim();
+  async function send(override?: string) {
+    const text = (override ?? input).trim();
     if (!text || streaming) return;
+
     let tid = activeId;
     if (!tid) {
       const { data: sess } = await supabase.auth.getUser();
