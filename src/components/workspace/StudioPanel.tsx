@@ -895,7 +895,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               />
             )}
             {mode === "notes" && (
-              <div className="p-3 space-y-2 h-full flex flex-col">
+              <div className="p-3 space-y-2 h-full min-h-0 flex flex-col overflow-y-auto">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
                   <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
                   <button
