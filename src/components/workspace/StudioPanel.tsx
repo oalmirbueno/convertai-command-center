@@ -533,7 +533,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                   {state.notes.trim().length > 0 && (
                     <div className="mt-2 border-t border-border pt-2 max-h-[240px] overflow-y-auto">
                       <div className="text-[9px] uppercase tracking-wider text-muted-foreground mb-1">Preview</div>
-                      <NotesPreview src={state.notes} />
+                      <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
                     </div>
                   )}
                   {mentionQuery?.where === "notes" && mentionMatches.length > 0 && (
