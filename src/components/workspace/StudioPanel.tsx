@@ -13,6 +13,8 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
 import { useIsMobile } from "@/hooks/use-mobile";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 
 /**
