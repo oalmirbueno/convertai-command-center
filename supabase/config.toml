@@ -1,6 +1,8 @@
 project_id = "gicbrgagstyvbaaumprj"
 
 [functions]
+  [functions.workspace-inbox]
+    verify_jwt = false
   [functions.contract-public]
     verify_jwt = false
   [functions.api-gateway]

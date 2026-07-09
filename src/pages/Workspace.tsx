@@ -30,6 +30,7 @@ import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel"
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
+import { StudioPanel } from "@/components/workspace/StudioPanel";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -880,6 +881,31 @@ export default function Workspace() {
     }
   }
 
+  async function shareInbox(n: Node) {
+    if (n.kind !== "folder" || n.__virtual) return;
+    try {
+      // Buscar token existente ou gerar novo
+      const { data: current } = await (supabase as any)
+        .from("workspace_nodes").select("inbox_token").eq("id", n.id).maybeSingle();
+      let token = current?.inbox_token as string | null;
+      if (!token) {
+        token = crypto.randomUUID();
+        const { error } = await supabase.from("workspace_nodes")
+          .update({ inbox_token: token } as any).eq("id", n.id);
+        if (error) throw error;
+      }
+      const url = `${window.location.origin}/inbox/${token}`;
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link de upload copiado",
+        description: "Qualquer pessoa com este link pode enviar arquivos para " + n.name,
+      });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message, variant: "destructive" });
+    }
+  }
+
+
   function renderContextMenu(n: Node, children: React.ReactNode) {
     const isFolder = n.kind === "folder";
     const canApprove = !isFolder && !n.__virtual && !!n.storage_path && scope === "client" && !!clientId;
@@ -888,9 +914,16 @@ export default function Workspace() {
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
         <ContextMenuContent className="w-56">
           {isFolder ? (
-            <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
-              <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
-            </ContextMenuItem>
+            <>
+              <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+                <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
+              </ContextMenuItem>
+              {!n.__virtual && (
+                <ContextMenuItem onSelect={() => shareInbox(n)}>
+                  <Link2 className="w-3.5 h-3.5 mr-2" /> Compartilhar link de upload
+                </ContextMenuItem>
+              )}
+            </>
           ) : (
             <>
               <ContextMenuItem onSelect={() => setSelected(n)}>
@@ -1453,6 +1486,19 @@ export default function Workspace() {
         onRetry={uploads.retry}
         onDismiss={uploads.dismiss}
         onClearDone={uploads.clearDone}
+      />
+
+      <StudioPanel
+        contextKey={`${scope}:${clientId || "-"}:${parent?.id || "root"}`}
+        contextLabel={`${contextLabel}${parent ? ` › ${parent.name}` : ""}`}
+        availableFiles={(filtered || []).map(n => ({
+          id: n.id, name: n.name, kind: n.kind,
+          url: n.__virtual ? n.__external_url : (n.storage_path ? signedUrls[n.storage_path] : null),
+        }))}
+        onOpenFile={(id) => {
+          const found = (filtered || []).find(n => n.id === id);
+          if (found) found.kind === "folder" ? setParentStack([...parentStack, found]) : setSelected(found);
+        }}
       />
     </div>
   );

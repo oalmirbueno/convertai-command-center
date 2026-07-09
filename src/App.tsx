@@ -42,6 +42,7 @@ import UnsubscribePage from "@/pages/UnsubscribePage";
 import FirstAccess from "@/pages/FirstAccess";
 import AdminContracts from "@/pages/AdminContracts";
 import ContractPublic from "@/pages/ContractPublic";
+import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -72,6 +73,7 @@ function AppRoutes() {
       <Route path="/login" element={<Login />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
       <Route path="/contrato/:token" element={<ContractPublic />} />
+      <Route path="/inbox/:token" element={<WorkspaceInboxPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
