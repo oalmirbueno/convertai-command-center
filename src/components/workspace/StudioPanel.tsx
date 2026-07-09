@@ -1190,28 +1190,29 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [personaOpen, setPersonaOpen] = useState(false);
-  type PersonaRow = { gpt_url: string | null; gpt_name: string | null; client_id: string | null; folder_path: string | null };
-  const [persona, setPersona] = useState<{ active: PersonaRow | null; scopeLevel: "folder" | "client" | "global" | "none" }>({ active: null, scopeLevel: "none" });
+  type PersonaRow = { id: string; gpt_url: string | null; gpt_name: string | null; gpt_description?: string | null; client_id: string | null; folder_path: string | null };
+  const [persona, setPersona] = useState<{ list: PersonaRow[]; active: PersonaRow | null; scopeLevel: "folder" | "client" | "global" | "none"; forcedId: string | null; lastUsedName: string | null }>({
+    list: [], active: null, scopeLevel: "none", forcedId: null, lastUsedName: null,
+  });
   async function reloadPersona() {
     const { data } = await supabase.from("workspace_agent_personas")
-      .select("gpt_url,gpt_name,client_id,folder_path");
+      .select("id,gpt_url,gpt_name,gpt_description,client_id,folder_path");
     const rows = (data || []) as PersonaRow[];
-    const pick = (fn: (r: PersonaRow) => boolean) => rows.find(fn) || null;
+    // Filtra o que é visível no escopo atual (global + cliente + pasta)
+    const list = rows.filter(r => {
+      if (!r.client_id && !r.folder_path) return true;
+      if (clientId && r.client_id === clientId && !r.folder_path) return true;
+      if (clientId && r.client_id === clientId && folderPath && r.folder_path === folderPath) return true;
+      return false;
+    });
+    // "active" = mais específica (retrocompat p/ botão GPT quando não há override)
+    const pick = (fn: (r: PersonaRow) => boolean) => list.find(fn) || null;
     let active: PersonaRow | null = null;
     let level: "folder" | "client" | "global" | "none" = "none";
-    if (clientId && folderPath) {
-      active = pick(r => r.client_id === clientId && r.folder_path === folderPath);
-      if (active) level = "folder";
-    }
-    if (!active && clientId) {
-      active = pick(r => r.client_id === clientId && !r.folder_path);
-      if (active) level = "client";
-    }
-    if (!active) {
-      active = pick(r => !r.client_id && !r.folder_path);
-      if (active) level = "global";
-    }
-    setPersona({ active, scopeLevel: level });
+    if (clientId && folderPath) { active = pick(r => r.client_id === clientId && r.folder_path === folderPath); if (active) level = "folder"; }
+    if (!active && clientId) { active = pick(r => r.client_id === clientId && !r.folder_path); if (active) level = "client"; }
+    if (!active) { active = pick(r => !r.client_id && !r.folder_path); if (active) level = "global"; }
+    setPersona(p => ({ ...p, list, active, scopeLevel: level, forcedId: p.forcedId && list.some(x => x.id === p.forcedId) ? p.forcedId : null }));
   }
   useEffect(() => { void reloadPersona(); }, [clientId, folderPath]);
 
