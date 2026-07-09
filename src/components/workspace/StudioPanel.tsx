@@ -271,6 +271,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return () => window.removeEventListener("keydown", onKey);
   }, [dock]);
 
+  // Global open trigger (mobile bottom nav)
+  useEffect(() => {
+    const openStudio = () => { setOpen(true); setMinimized(false); };
+    window.addEventListener("studio:open", openStudio);
+    return () => window.removeEventListener("studio:open", openStudio);
+  }, []);
+
+
   const [state, setState] = useState<StudioState>(() => loadState(contextKey));
 
   const notesRef = useRef<HTMLTextAreaElement>(null);
