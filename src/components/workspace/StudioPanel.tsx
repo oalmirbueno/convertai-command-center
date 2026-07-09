@@ -1924,6 +1924,15 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ExternalLink className="w-3 h-3" /> GPT
               </button>
             )}
+            {onStructureToNotes && (
+              <button
+                onClick={() => onStructureToNotes()}
+                className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+                title="Estrutura o contexto atual como documento executivo e envia para as Notas"
+              >
+                <ArrowRight className="w-3 h-3" /> Notas
+              </button>
+            )}
             <PasteBackButton
               disabled={!activeId}
               onPaste={async (text) => {
