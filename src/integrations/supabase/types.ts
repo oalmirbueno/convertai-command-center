@@ -1894,30 +1894,47 @@ export type Database = {
       }
       workspace_agent_personas: {
         Row: {
+          client_id: string | null
+          folder_path: string | null
           gpt_description: string | null
           gpt_name: string | null
           gpt_url: string | null
+          id: string
           persona_prompt: string | null
           updated_at: string
           user_id: string
         }
         Insert: {
+          client_id?: string | null
+          folder_path?: string | null
           gpt_description?: string | null
           gpt_name?: string | null
           gpt_url?: string | null
+          id?: string
           persona_prompt?: string | null
           updated_at?: string
           user_id: string
         }
         Update: {
+          client_id?: string | null
+          folder_path?: string | null
           gpt_description?: string | null
           gpt_name?: string | null
           gpt_url?: string | null
+          id?: string
           persona_prompt?: string | null
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "workspace_agent_personas_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       workspace_agent_threads: {
         Row: {

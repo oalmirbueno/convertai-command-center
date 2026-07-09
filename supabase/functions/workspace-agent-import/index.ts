@@ -21,11 +21,18 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
-    const { url, clear } = await req.json() as { url?: string; clear?: boolean };
+    const { url, clear, client_id, folder_path } = await req.json() as {
+      url?: string; clear?: boolean; client_id?: string | null; folder_path?: string | null;
+    };
     const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const cid = client_id || null;
+    const fpath = folder_path || null;
 
     if (clear) {
-      await admin.from("workspace_agent_personas").delete().eq("user_id", user.id);
+      let q = admin.from("workspace_agent_personas").delete().eq("user_id", user.id);
+      q = cid ? q.eq("client_id", cid) : q.is("client_id", null);
+      q = fpath ? q.eq("folder_path", fpath) : q.is("folder_path", null);
+      await q;
       return json({ ok: true, cleared: true });
     }
 
@@ -101,16 +108,28 @@ Deno.serve(async (req) => {
       } catch { /* usa fallback */ }
     }
 
-    await admin.from("workspace_agent_personas").upsert({
+    // upsert manual: unique (user_id, coalesce(client_id::text,''), coalesce(folder_path,''))
+    let sel = admin.from("workspace_agent_personas").select("id").eq("user_id", user.id);
+    sel = cid ? sel.eq("client_id", cid) : sel.is("client_id", null);
+    sel = fpath ? sel.eq("folder_path", fpath) : sel.is("folder_path", null);
+    const { data: existing } = await sel.maybeSingle();
+    const row = {
       user_id: user.id,
+      client_id: cid,
+      folder_path: fpath,
       gpt_url: url,
       gpt_name: title || null,
       gpt_description: description || null,
       persona_prompt: persona,
       updated_at: new Date().toISOString(),
-    });
+    };
+    if (existing?.id) {
+      await admin.from("workspace_agent_personas").update(row).eq("id", existing.id);
+    } else {
+      await admin.from("workspace_agent_personas").insert(row);
+    }
 
-    return json({ ok: true, name: title, description, starters, persona });
+    return json({ ok: true, name: title, description, starters, persona, scope: { client_id: cid, folder_path: fpath } });
   } catch (err) {
     return json({ error: err instanceof Error ? err.message : "erro" }, 500);
   }
