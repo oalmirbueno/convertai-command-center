@@ -1361,6 +1361,24 @@ export default function Workspace() {
         </DialogContent>
       </Dialog>
 
+      {/* New folder + move */}
+      <Dialog open={!!moveCreate} onOpenChange={(o) => { if (!o) { setMoveCreate(null); setMoveCreateName(""); } }}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Nova pasta e mover</DialogTitle>
+            <DialogDescription>
+              Criar em <span className="text-foreground font-medium">{moveCreate?.parentLabel}</span> e mover “{moveCreate?.node.name}” para dentro.
+            </DialogDescription>
+          </DialogHeader>
+          <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
+            placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
+            <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Rename */}
       <Dialog open={!!renaming} onOpenChange={(o) => !o && setRaming(null)}>
         <DialogContent className="max-w-sm">
