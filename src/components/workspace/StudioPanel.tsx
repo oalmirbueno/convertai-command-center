@@ -2447,6 +2447,15 @@ function AgentChat({ clientId, clientName, folderId, folderPath, availableFiles,
                 <ArrowRight className="w-3 h-3" /> Notas
               </button>
             )}
+            <button
+              onClick={() => void pullDeepContext()}
+              disabled={pulling || streaming}
+              className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+              title="Puxa cliente, projetos, tasks, briefing, pasta e monta o contexto; o agente devolve diagnóstico + perguntas certas para avançar"
+            >
+              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Puxar tudo
+            </button>
+
             {showExternalTools && <PasteBackButton
               disabled={!activeId}
               onPaste={async (text) => {
