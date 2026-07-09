@@ -16,6 +16,7 @@ import TabDeliveries from "./tabs/TabDeliveries";
 import { summarizeProjectText } from "@/lib/projectPresentation";
 import TabUpdates from "./tabs/TabUpdates";
 import TabPayments from "./tabs/TabPayments";
+import TabDocument from "./tabs/TabDocument";
 import RequestButton from "./RequestButton";
 import { useTasks, useMilestones, useFiles, useProjectUpdates } from "@/hooks/useSupabaseData";
 import { formatDate, formatDateShort, daysUntil, relativeTime } from "./dashboardHelpers";
