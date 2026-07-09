@@ -50,6 +50,25 @@ const iconFor = (n: Node) => {
   return FileText;
 };
 
+type MediaKind = "image" | "video" | "audio" | "doc" | "other";
+function kindOf(n: Node): MediaKind {
+  if (n.kind === "folder") return "other";
+  const m = (n.mime || "").toLowerCase();
+  const name = (n.name || "").toLowerCase();
+  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/.test(name)) return "image";
+  if (m.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v)$/.test(name)) return "video";
+  if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/.test(name)) return "audio";
+  if (m.includes("pdf") || /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv)$/.test(name)) return "doc";
+  return "other";
+}
+const KIND_META: Record<MediaKind, { label: string; color: string }> = {
+  image: { label: "Imagens", color: "text-blue-400" },
+  video: { label: "Vídeos", color: "text-purple-400" },
+  audio: { label: "Áudios", color: "text-pink-400" },
+  doc:   { label: "Documentos", color: "text-amber-400" },
+  other: { label: "Outros", color: "text-muted-foreground" },
+};
+
 function virtFileNode(f: any, clientId: string): Node {
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
@@ -98,6 +117,8 @@ export default function Workspace() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [pickerQuery, setPickerQuery] = useState("");
   const [pickerFilter, setPickerFilter] = useState<"all" | "az" | "za" | "recent">("all");
+  const [kindFilter, setKindFilter] = useState<"all" | MediaKind>("all");
+
 
   const parent = parentStack[parentStack.length - 1] || null;
 
@@ -228,9 +249,56 @@ export default function Workspace() {
     }
     const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
-    if (!s) return base;
-    return base.filter(n => n.name.toLowerCase().includes(s));
-  }, [nodes, virtualNodes, search, parent]);
+    let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
+    if (kindFilter !== "all") res = res.filter(n => n.kind === "folder" || kindOf(n) === kindFilter);
+    return res;
+  }, [nodes, virtualNodes, search, parent, kindFilter]);
+
+  // Category counts for smart chips
+  const kindCounts = useMemo(() => {
+    const src = parent?.id?.startsWith(VIRT_PREFIX)
+      ? [...(virtualNodes || [])]
+      : [...(nodes || []), ...(virtualNodes || [])];
+    const c: Record<MediaKind, number> = { image: 0, video: 0, audio: 0, doc: 0, other: 0 };
+    for (const n of src) if (n.kind === "file") c[kindOf(n)]++;
+    return c;
+  }, [nodes, virtualNodes, parent]);
+
+  // Batch-prefetch signed URLs for image/video files visible in current view (for covers)
+  useEffect(() => {
+    const targets = (filtered || []).filter(n =>
+      n.kind === "file" && !n.__virtual && n.storage_path &&
+      (kindOf(n) === "image" || kindOf(n) === "video") &&
+      !signedUrls[n.storage_path!]
+    ).slice(0, 40);
+    if (!targets.length) return;
+    let alive = true;
+    (async () => {
+      const results = await Promise.all(
+        targets.map(async (n) => {
+          const { data } = await supabase.storage.from("workspace").createSignedUrl(n.storage_path!, 3600);
+          return [n.storage_path!, data?.signedUrl || ""] as const;
+        })
+      );
+      if (!alive) return;
+      setSignedUrls(prev => {
+        const next = { ...prev };
+        for (const [k, v] of results) if (v) next[k] = v;
+        return next;
+      });
+    })();
+    return () => { alive = false; };
+  }, [filtered]);
+
+  const coverFor = (n: Node): string | null => {
+    if (n.kind !== "file") return null;
+    const k = kindOf(n);
+    if (k !== "image" && k !== "video") return null;
+    if (n.__virtual) return n.__external_url || null;
+    if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
+    return null;
+  };
+
 
 
   async function signedUrl(path: string) {
@@ -640,6 +708,33 @@ export default function Workspace() {
             </div>
           </div>
 
+          {/* Smart category chips */}
+          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+            {([
+              ["all", "Todos", (nodes?.length || 0) + (virtualNodes?.length || 0)],
+              ["image", KIND_META.image.label, kindCounts.image],
+              ["video", KIND_META.video.label, kindCounts.video],
+              ["doc", KIND_META.doc.label, kindCounts.doc],
+              ["audio", KIND_META.audio.label, kindCounts.audio],
+              ["other", KIND_META.other.label, kindCounts.other],
+            ] as const).map(([k, label, count]) => (
+              <button
+                key={k}
+                onClick={() => setKindFilter(k as any)}
+                className={cn(
+                  "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
+                  kindFilter === k
+                    ? "bg-primary/15 border-primary/40 text-primary"
+                    : "bg-card border-border text-muted-foreground hover:text-foreground hover:border-primary/30"
+                )}
+              >
+                {label} <span className="opacity-60">{count}</span>
+              </button>
+            ))}
+          </div>
+
+
+
           {/* Drop zone wrapper */}
           <div
             onDragEnter={(e) => { if (e.dataTransfer.types.includes("Files")) { setDragOverArea(true); } }}
@@ -677,6 +772,8 @@ export default function Workspace() {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
                   const dragActive = dragOverId === n.id && isFolder;
+                  const cover = coverFor(n);
+                  const k = kindOf(n);
                   return (
                     <div
                       key={n.id}
@@ -687,25 +784,48 @@ export default function Workspace() {
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
                       onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
                       className={cn(
-                        "group relative rounded-xl border bg-card hover:border-primary/40 hover:bg-secondary/30 transition-all p-3 flex flex-col items-center gap-2 aspect-square cursor-pointer",
+                        "group relative rounded-xl border bg-card hover:border-primary/40 transition-all overflow-hidden flex flex-col cursor-pointer aspect-square",
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
                       )}
                     >
-                      <div className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
                         {renderActionsMenu(n)}
                       </div>
-                      <div className="flex-1 flex items-center justify-center w-full">
-                        <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : "text-muted-foreground")} />
-                      </div>
-                      <p className="text-[11px] font-medium text-foreground truncate w-full text-center">{n.name}</p>
-                      {!isFolder && <p className="text-[10px] text-muted-foreground">{fmtSize(n.size_bytes)}</p>}
                       {n.sent_for_approval_file_id && (
-                        <span className="absolute top-1.5 left-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">↗ aprovação</span>
+                        <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
+                      <div className={cn(
+                        "flex-1 flex items-center justify-center w-full relative",
+                        !cover && "bg-gradient-to-br from-secondary/40 to-secondary/10"
+                      )}>
+                        {cover ? (
+                          k === "video" ? (
+                            <>
+                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted preload="metadata" />
+                              <div className="absolute inset-0 bg-black/30 flex items-center justify-center">
+                                <Film className="w-8 h-8 text-white/90 drop-shadow" />
+                              </div>
+                            </>
+                          ) : (
+                            <img src={cover} alt={n.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                          )
+                        ) : (
+                          <Icon className={cn("w-10 h-10", isFolder ? "text-primary" : KIND_META[k].color)} />
+                        )}
+                      </div>
+                      <div className="px-2.5 py-1.5 border-t border-border/60 bg-card/95 backdrop-blur">
+                        <p className="text-[11px] font-medium text-foreground truncate">{n.name}</p>
+                        {!isFolder && (
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {KIND_META[k].label} · {fmtSize(n.size_bytes)}
+                          </p>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
+
             ) : (
               <div className="rounded-xl border border-border bg-card divide-y divide-border">
                 {filtered.map(n => {
