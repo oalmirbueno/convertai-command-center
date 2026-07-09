@@ -45,7 +45,11 @@ Deno.serve(async (req) => {
     const { thread_id, message, context } = body as {
       thread_id: string;
       message: string;
-      context?: { client_name?: string; folder_path?: string; notes?: string; script?: string; files?: { name: string; url?: string | null }[] };
+      context?: {
+        client_name?: string; folder_path?: string; notes?: string; script?: string;
+        files?: { name: string; url?: string | null }[];
+        attachments?: { id: string; name: string; kind?: string; url?: string | null }[];
+      };
     };
     if (!thread_id || !message?.trim()) return json({ error: "thread_id e message obrigatórios" }, 400);
 
@@ -64,8 +68,14 @@ Deno.serve(async (req) => {
     const ctxLines: string[] = [];
     if (context?.client_name) ctxLines.push(`Cliente atual: ${context.client_name}`);
     if (context?.folder_path) ctxLines.push(`Pasta: ${context.folder_path}`);
+    if (context?.attachments?.length) {
+      ctxLines.push("\nARQUIVOS CITADOS PELO USUÁRIO (@) — priorize estes na análise:");
+      context.attachments.slice(0, 20).forEach(a =>
+        ctxLines.push(`- [${a.kind || "file"}] ${a.name}${a.url ? ` (${a.url})` : ""} · ref=wsfile:${a.id}`)
+      );
+    }
     if (context?.files?.length) {
-      ctxLines.push("Arquivos disponíveis:");
+      ctxLines.push("\nOutros arquivos disponíveis no diretório:");
       context.files.slice(0, 20).forEach(f => ctxLines.push(`- ${f.name}${f.url ? ` (${f.url})` : ""}`));
     }
     if (context?.script) ctxLines.push(`\nROTEIRO EM CONSTRUÇÃO:\n${context.script.slice(0, 4000)}`);

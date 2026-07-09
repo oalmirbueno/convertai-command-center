@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
-  Bot, Send, Loader2, History,
+  Bot, Send, Loader2, History, Paperclip, File as FileIcon, Folder as FolderIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -551,6 +551,24 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
   const [showHistory, setShowHistory] = useState(false);
   const [streamBuf, setStreamBuf] = useState("");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // @ e / no composer do agente
+  const [mention, setMention] = useState<{ q: string; start: number } | null>(null);
+  const [slash, setSlash] = useState<{ q: string; start: number } | null>(null);
+  // arquivos anexados à próxima mensagem (sincronizam com @ do input)
+  const [attached, setAttached] = useState<FileRef[]>([]);
+
+  const AGENT_SLASH: { key: string; label: string; hint: string; prompt: string }[] = [
+    { key: "roteiro",   label: "Gerar roteiro",       hint: "Prepro 6 passos",         prompt: "Gere um roteiro completo seguindo os 6 passos do Prepro Director com base nos materiais anexados." },
+    { key: "storyboard",label: "Storyboard",          hint: "cena a cena",             prompt: "Monte um storyboard cena a cena (visual + fala + duração) usando os arquivos anexados." },
+    { key: "resumir",   label: "Resumir arquivos",    hint: "insights + próximos passos", prompt: "Analise e resuma os arquivos anexados. Traga insights e próximos passos." },
+    { key: "brief",     label: "Extrair briefing",    hint: "objetivo + público + tom", prompt: "Extraia um briefing (objetivo, público, canal, duração, tom, referências) dos anexos." },
+    { key: "checklist", label: "Checklist de pipeline", hint: "brutos → publicado",    prompt: "Gere um checklist de pipeline personalizado para este projeto (Brutos → Trilhas/SFX → Edição → Final → Publicado)." },
+    { key: "hooks",     label: "5 hooks",              hint: "aberturas 0-3s",         prompt: "Sugira 5 opções de hook (0-3s) alinhadas ao contexto e materiais anexados." },
+    { key: "cta",       label: "Variações de CTA",     hint: "3 opções",               prompt: "Escreva 3 variações de CTA para este roteiro/contexto." },
+    { key: "revisar",   label: "Revisar roteiro",      hint: "notas do Prepro",        prompt: "Revise o roteiro atual conforme a metodologia Prepro Director e liste correções priorizadas." },
+  ];
 
   // Threads escopadas por cliente + pasta. Restaura a última thread ativa do cliente ao reabrir.
   const lastThreadKey = (cid?: string | null, fp?: string | null) =>
@@ -606,6 +624,59 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
     if (activeId === id) { setActiveId(null); setMsgs([]); }
   }
 
+  const mentionMatches = useMemo(() => {
+    if (!mention) return [] as FileRef[];
+    const q = mention.q.toLowerCase();
+    return availableFiles.filter(f => f.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [mention, availableFiles]);
+
+  const slashMatches = useMemo(() => {
+    if (!slash) return [] as typeof AGENT_SLASH;
+    const q = slash.q.toLowerCase();
+    return AGENT_SLASH.filter(c => c.key.includes(q) || c.label.toLowerCase().includes(q));
+  }, [slash]);
+
+  function onInputChange(val: string, caret: number) {
+    setInput(val);
+    const before = val.slice(0, caret);
+    const mAt = /@([^\s@]{0,40})$/.exec(before);
+    const mSlash = /(^|\s)\/([^\s/]{0,20})$/.exec(before);
+    if (mAt) { setMention({ q: mAt[1], start: caret - mAt[0].length }); setSlash(null); }
+    else if (mSlash) { setSlash({ q: mSlash[2], start: caret - (mSlash[2].length + 1) }); setMention(null); }
+    else { setMention(null); setSlash(null); }
+  }
+
+  function pickMention(f: FileRef) {
+    if (!mention) return;
+    const insert = `[@${f.name}](wsfile:${f.id})`;
+    const before = input.slice(0, mention.start);
+    const after = input.slice(mention.start + 1 + mention.q.length);
+    const next = before + insert + " " + after;
+    setInput(next);
+    setAttached(prev => prev.some(x => x.id === f.id) ? prev : [...prev, f]);
+    setMention(null);
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (el) { el.focus(); const p = before.length + insert.length + 1; el.setSelectionRange(p, p); }
+    }, 10);
+  }
+
+  function pickSlash(cmd: typeof AGENT_SLASH[number]) {
+    if (!slash) return;
+    const before = input.slice(0, slash.start);
+    const after = input.slice(slash.start + 1 + slash.q.length);
+    const next = (before + cmd.prompt + " " + after).trimStart();
+    setInput(next);
+    setSlash(null);
+    setTimeout(() => inputRef.current?.focus(), 10);
+  }
+
+  function removeAttached(id: string) {
+    setAttached(prev => prev.filter(f => f.id !== id));
+    // remove todas as ocorrências do link do arquivo no input
+    setInput(prev => prev.replace(new RegExp(`\\s?\\[@[^\\]]+\\]\\(wsfile:${id}\\)`, "g"), "").trim());
+  }
+
   async function send() {
     const text = input.trim();
     if (!text || streaming) return;
@@ -622,8 +693,15 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       setThreads(t => [data as AgentThread, ...t]);
       setActiveId(tid);
     }
+    // Preserva anexos no conteúdo da mensagem — histórico da thread mantém as referências
+    const attachBlock = attached.length
+      ? `\n\n---\n📎 Anexos:\n${attached.map(a => `- [${a.name}](wsfile:${a.id})${a.url ? ` (${a.url})` : ""}`).join("\n")}`
+      : "";
+    const finalText = text + attachBlock;
+    const currentAttachments = attached;
     setInput("");
-    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: text, created_at: new Date().toISOString() }]);
+    setAttached([]);
+    setMsgs(m => [...m, { id: crypto.randomUUID(), role: "user", content: finalText, created_at: new Date().toISOString() }]);
     setStreaming(true); setStreamBuf("");
 
     try {
@@ -639,11 +717,13 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
         },
         body: JSON.stringify({
           thread_id: tid,
-          message: text,
+          message: finalText,
           context: {
             client_name: clientName,
             folder_path: folderPath,
             notes, script,
+            // arquivos citados via @ ganham prioridade e vão marcados
+            attachments: currentAttachments.map(f => ({ id: f.id, name: f.name, kind: f.kind, url: f.url })),
             files: availableFiles.slice(0, 20).map(f => ({ name: f.name, url: f.url })),
           },
         }),
@@ -742,18 +822,69 @@ function AgentChat({ clientId, clientName, folderPath, availableFiles, notes, sc
       </div>
 
       {/* Composer */}
-      <div className="border-t border-border p-2 flex items-end gap-1 bg-secondary/30">
-        <textarea
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void send(); } }}
-          placeholder="Pergunte ao agente... (Enter envia, Shift+Enter quebra linha)"
-          rows={2}
-          className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
-        />
-        <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
-          {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
-        </Button>
+      <div className="border-t border-border bg-secondary/30">
+        {attached.length > 0 && (
+          <div className="flex flex-wrap gap-1 px-2 pt-2">
+            {attached.map(a => (
+              <span key={a.id} className="inline-flex items-center gap-1 text-[10px] bg-primary/10 text-primary rounded-full pl-2 pr-1 py-0.5">
+                {a.kind === "folder" ? <FolderIcon className="w-2.5 h-2.5" /> : <FileIcon className="w-2.5 h-2.5" />}
+                <span className="max-w-[140px] truncate">{a.name}</span>
+                <button onClick={() => removeAttached(a.id)} className="hover:bg-primary/20 rounded-full p-0.5">
+                  <X className="w-2.5 h-2.5" />
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative p-2 flex items-end gap-1">
+          {/* Popover @ arquivos */}
+          {mention && mentionMatches.length > 0 && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[220px] overflow-y-auto">
+              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                Anexar do workspace
+              </div>
+              {mentionMatches.map(f => (
+                <button key={f.id} onClick={() => pickMention(f)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+                  {f.kind === "folder" ? <FolderIcon className="w-3 h-3 text-amber-400 shrink-0" /> : <FileIcon className="w-3 h-3 text-primary shrink-0" />}
+                  <span className="truncate">{f.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          {/* Popover / ações */}
+          {slash && slashMatches.length > 0 && (
+            <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[240px] overflow-y-auto">
+              <div className="px-3 py-1 text-[9px] uppercase tracking-wider text-muted-foreground bg-secondary/40 border-b border-border">
+                Ações do agente
+              </div>
+              {slashMatches.map(c => (
+                <button key={c.key} onClick={() => pickSlash(c)}
+                  className="w-full flex items-center gap-2 px-3 py-1.5 text-[12px] hover:bg-secondary text-left">
+                  <Sparkles className="w-3 h-3 text-primary shrink-0" />
+                  <span className="font-medium">{c.label}</span>
+                  <span className="text-[10px] text-muted-foreground truncate ml-auto">{c.hint}</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <textarea
+            ref={inputRef}
+            value={input}
+            onChange={e => onInputChange(e.target.value, e.target.selectionStart)}
+            onKeyUp={e => onInputChange((e.target as HTMLTextAreaElement).value, (e.target as HTMLTextAreaElement).selectionStart)}
+            onKeyDown={e => {
+              if (e.key === "Escape") { setMention(null); setSlash(null); return; }
+              if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
+            }}
+            placeholder="Pergunte ao agente... @ anexa arquivos · / dispara ações"
+            rows={2}
+            className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
+          />
+          <Button size="sm" onClick={send} disabled={streaming || !input.trim()} className="h-8 px-2">
+            {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          </Button>
+        </div>
       </div>
     </div>
   );
