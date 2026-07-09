@@ -155,6 +155,8 @@ export default function Workspace() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Node | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const [applyingTpl, setApplyingTpl] = useState<string | null>(null);
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
