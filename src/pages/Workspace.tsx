@@ -881,6 +881,31 @@ export default function Workspace() {
     }
   }
 
+  async function shareInbox(n: Node) {
+    if (n.kind !== "folder" || n.__virtual) return;
+    try {
+      // Buscar token existente ou gerar novo
+      const { data: current } = await (supabase as any)
+        .from("workspace_nodes").select("inbox_token").eq("id", n.id).maybeSingle();
+      let token = current?.inbox_token as string | null;
+      if (!token) {
+        token = crypto.randomUUID();
+        const { error } = await supabase.from("workspace_nodes")
+          .update({ inbox_token: token } as any).eq("id", n.id);
+        if (error) throw error;
+      }
+      const url = `${window.location.origin}/inbox/${token}`;
+      await navigator.clipboard.writeText(url);
+      toast({
+        title: "Link de upload copiado",
+        description: "Qualquer pessoa com este link pode enviar arquivos para " + n.name,
+      });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e?.message, variant: "destructive" });
+    }
+  }
+
+
   function renderContextMenu(n: Node, children: React.ReactNode) {
     const isFolder = n.kind === "folder";
     const canApprove = !isFolder && !n.__virtual && !!n.storage_path && scope === "client" && !!clientId;
