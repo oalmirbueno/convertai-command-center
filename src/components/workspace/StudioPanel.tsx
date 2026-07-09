@@ -551,8 +551,14 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <div className="p-3 space-y-2 h-full flex flex-col">
                 <div className="text-[10px] text-muted-foreground flex items-center gap-2 flex-wrap">
                   <MessageSquare className="w-3 h-3" /> <b>/</b> comandos · <b>@</b> arquivos · cole <b>imagem</b> (OCR) ou <b>link de vídeo</b> (embed)
+                  <button
+                    onClick={() => setState(s => ({ ...s, notes: (s.notes ? s.notes.replace(/\n?@help\n?/g, "") : "") + "\n@help\n" }))}
+                    className="ml-auto text-[10px] px-1.5 py-0.5 rounded border border-border hover:bg-secondary text-muted-foreground hover:text-foreground"
+                    title="Mostrar guia de comandos inline"
+                  >? ajuda</button>
                   {ocrBusy && <span className="text-primary flex items-center gap-1"><Loader2 className="w-3 h-3 animate-spin" /> OCR…</span>}
                 </div>
+
                 <input ref={imageInputRef} type="file" accept="image/*" className="hidden"
                   onChange={e => { const f = e.target.files?.[0]; if (f) void handleImageFile(f); e.target.value = ""; }} />
                 <div className="relative flex-1 min-h-0 grid grid-rows-[minmax(180px,1fr)_auto]">
