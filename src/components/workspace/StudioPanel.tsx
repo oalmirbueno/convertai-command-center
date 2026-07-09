@@ -2287,3 +2287,50 @@ function PersonaDialog({ open, onOpenChange, active, scopeLevel, clientId, clien
     </Dialog>
   );
 }
+
+function PasteBackButton({ onPaste, disabled }: { onPaste: (text: string) => void | Promise<void>; disabled?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [txt, setTxt] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        disabled={disabled}
+        className="p-1 rounded hover:bg-secondary text-muted-foreground disabled:opacity-40 disabled:cursor-not-allowed"
+        title="Colar resposta do ChatGPT">
+        <ClipboardPaste className="w-3 h-3" />
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="text-sm">Colar resposta do ChatGPT</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <p className="text-[11px] text-muted-foreground">
+              Copie a resposta do seu GPT externo e cole abaixo. Ela entra na conversa como mensagem do agente e vira contexto para as próximas.
+            </p>
+            <textarea
+              autoFocus
+              value={txt}
+              onChange={e => setTxt(e.target.value)}
+              placeholder="Cole aqui..."
+              className="w-full min-h-[220px] max-h-[50vh] rounded-md border border-border bg-background px-3 py-2 text-[12px] leading-relaxed resize-y"
+            />
+          </div>
+          <DialogFooter className="gap-2">
+            <Button size="sm" variant="ghost" onClick={() => setOpen(false)}>Cancelar</Button>
+            <Button size="sm" disabled={!txt.trim() || busy} onClick={async () => {
+              setBusy(true);
+              try { await onPaste(txt); setTxt(""); setOpen(false); }
+              finally { setBusy(false); }
+            }}>
+              {busy ? <Loader2 className="w-3 h-3 animate-spin mr-1" /> : <ClipboardPaste className="w-3 h-3 mr-1" />}
+              Importar para conversa
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
