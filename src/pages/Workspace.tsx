@@ -198,7 +198,10 @@ export default function Workspace() {
       return data || [];
     },
     enabled: isStaff && scope === "client" && !!clientId,
+    staleTime: 60_000,
+    placeholderData: (prev: any) => prev,
   });
+
 
   // Build virtual nodes for current view (root or inside a virtual folder)
   const virtualNodes: Node[] = useMemo(() => {
