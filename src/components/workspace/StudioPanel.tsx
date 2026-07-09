@@ -474,6 +474,9 @@ function SlashList({ items, onPick }: { items: SlashCmd[]; onPick: (c: SlashCmd)
       ))}
     </div>
   );
+}
+
+
 
 
 function MindMapView({ root, onRename, onAdd, onDelete }:
