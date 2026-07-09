@@ -1015,7 +1015,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     "min-h-0 flex flex-col overflow-hidden rounded-xl border border-border bg-background/70",
                     isMobile && mobileNotesTab !== "editor" && "hidden"
                   )}>
-                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground">
+                    <div className="flex items-center gap-2 border-b border-border px-3 py-2 text-[10px] text-muted-foreground shrink-0">
                       <NotebookPen className="h-3.5 w-3.5 text-primary" />
                       <span className="font-medium text-foreground/80">Notas de trabalho</span>
                       <span className="hidden sm:inline">/ comandos · @ arquivos · imagem ou link de vídeo</span>
