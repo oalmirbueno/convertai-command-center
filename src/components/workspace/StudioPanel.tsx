@@ -23,7 +23,7 @@ const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-pre
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null };
 
-type Mode = "agent" | "notes" | "map" | "script" | "board" | "process";
+type Mode = "agent" | "notes";
 
 
 type StudioState = {
