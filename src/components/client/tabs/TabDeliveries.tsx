@@ -351,11 +351,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={() => { setFeedbackFileId(previewGroup.parent.id); setFeedbackText(""); setPreviewGroup(null); }}>
-                ❌ Solicitar Ajuste
+                Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
                 onClick={() => { setConfirmApprove(previewGroup.parent.id); setPreviewGroup(null); }}>
-                ✅ Aprovar
+                Aprovar
               </Button>
             </DialogFooter>
           )}

@@ -265,7 +265,7 @@ export default function Kanban() {
         if (previousStatus !== column && column !== "done") {
           const { notifyAdmin } = await import("@/lib/notifyHelpers");
           if (authUser && !profile?.role?.includes("admin")) {
-            await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" → ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+            await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
           }
         }
 
@@ -402,8 +402,8 @@ export default function Kanban() {
       <select value={sortBy} onChange={(e) => setSortBy(e.target.value as any)}
         className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0" title="Ordenar">
         <option value="manual">Ordem manual</option>
-        <option value="title_asc">Título A→Z</option>
-        <option value="title_desc">Título Z→A</option>
+        <option value="title_asc">Título A-Z</option>
+        <option value="title_desc">Título Z-A</option>
         <option value="due_asc">Prazo ↑</option>
         <option value="due_desc">Prazo ↓</option>
         <option value="priority">Prioridade</option>

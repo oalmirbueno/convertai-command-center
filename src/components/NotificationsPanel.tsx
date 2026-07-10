@@ -187,7 +187,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
                           </p>
                           <p className="text-[11px] text-muted-foreground/60 mt-1">{timeAgo(n.created_at)}</p>
                           {n.link && (
-                            <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)} →</p>
+                            <p className="text-[11px] text-primary mt-1">{getLinkLabel(n)}</p>
                           )}
                         </div>
                         {!n.read && <div className="w-2 h-2 rounded-full bg-primary shrink-0 mt-2" />}

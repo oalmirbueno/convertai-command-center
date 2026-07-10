@@ -484,8 +484,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               {editing ? (
                 <select value={priority} onChange={e => setPriority(e.target.value)}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
-                  <option value="low">🟢 Baixa</option><option value="medium">🔵 Média</option>
-                  <option value="high">🟡 Alta</option><option value="urgent">🔴 Urgente</option>
+                  <option value="low">Baixa</option><option value="medium">Média</option>
+                  <option value="high">Alta</option><option value="urgent">Urgente</option>
                 </select>
               ) : (
                 <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[task.priority]}`}>{priorityLabels[task.priority]}</span>

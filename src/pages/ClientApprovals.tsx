@@ -365,11 +365,11 @@ export default function ClientApprovals() {
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
-                ❌ Solicitar Ajuste
+                Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
                 onClick={() => { setConfirmApprove(previewFile.id); setPreviewFile(null); }}>
-                ✅ Aprovar
+                Aprovar
               </Button>
             </DialogFooter>
           )}
