@@ -318,6 +318,35 @@ export default function Kanban() {
     setMobileTab(colId);
   };
 
+  const Modals = (
+    <>
+      {detailTask && (
+        <TaskDetailDrawer
+          task={detailTask}
+          onClose={() => setDetailTask(null)}
+          teamMembers={teamMembers || []}
+          projects={projects || []}
+          readOnly={isClient}
+        />
+      )}
+      {!isClient && (
+        <CreateTaskModal
+          open={!!createStatus}
+          onClose={() => setCreateStatus(null)}
+          defaultStatus={createStatus || "backlog"}
+          teamMembers={teamMembers || []}
+        />
+      )}
+      <ConfirmModal
+        open={!!deleteTask}
+        title="Excluir tarefa"
+        description={`Tem certeza que deseja excluir "${deleteTask?.title}"? Esta ação removerá comentários, checklists e anexos vinculados.`}
+        onConfirm={handleDeleteTask}
+        onCancel={() => setDeleteTask(null)}
+      />
+    </>
+  );
+
   // Filtros: extraído em variável para reuso mobile/desktop
   const FiltersBar = (
     <div className="flex flex-nowrap items-center gap-2 overflow-x-auto pb-2 scrollbar-hidden md:flex-wrap md:gap-3 md:overflow-visible md:pb-0">
