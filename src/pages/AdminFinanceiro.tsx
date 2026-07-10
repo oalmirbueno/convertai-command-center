@@ -666,7 +666,7 @@ export default function AdminFinanceiro() {
   });
 
   return (
-    <div className="-mx-4 flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:mb-6 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
         <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
@@ -852,19 +852,21 @@ export default function AdminFinanceiro() {
             </div>
             <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {allPending.map((item: any) => (
-                <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+                <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-5">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 w-full">
                     <p className="text-[13px] text-foreground truncate">{item.label}</p>
                     <p className="text-[11px] text-muted-foreground">{item.client}
                       {item.paidSoFar > 0 && <span className="ml-1 text-success">(já pago: {fmt(item.paidSoFar)})</span>}
                     </p>
                   </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
-                  <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
-                    {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
-                  </span>
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <span className="hidden text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap sm:inline-flex">{item.brand}</span>
+                    <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
+                      {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
+                    </span>
+                  </div>
                   <button
                     onClick={async () => {
                       let realId = item.id;
@@ -894,9 +896,9 @@ export default function AdminFinanceiro() {
                       setPayType("full");
                       setPayPartialAmount("");
                     }}
-                    className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
+                    className="w-full text-[10px] px-2.5 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium sm:w-auto sm:py-1"
                   >
-                    💰 Pagar
+                    Pagar
                   </button>
                 </div>
               ))}

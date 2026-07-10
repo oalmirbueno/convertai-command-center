@@ -341,11 +341,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Content */}
       <main
-        className="px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding"
-        style={{
-          paddingTop: 'calc(env(safe-area-inset-top) + 80px)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + 96px)',
-        }}
+        className="fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full max-w-[1280px] overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible"
+        style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         data-tour="finish"
       >
         {children}

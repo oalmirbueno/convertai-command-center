@@ -59,7 +59,7 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
               </span>
             )}
           </div>
-          <span>Alertas</span>
+          <span>Avisos</span>
         </button>
       </div>
     </nav>

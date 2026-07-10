@@ -421,8 +421,7 @@ export default function Kanban() {
   if (isMobile) {
     return (
       <div
-        className="flex flex-col animate-fade-in -mx-4"
-        style={{ height: "calc(100dvh - 76px - 64px - env(safe-area-inset-top) - env(safe-area-inset-bottom))" }}
+        className="flex h-full min-h-0 flex-col animate-fade-in -mx-4 overflow-hidden"
       >
         {/* Header fixo */}
         <div className="shrink-0 px-4 pt-1 pb-2 bg-background/95 backdrop-blur-sm border-b border-border/50">
@@ -439,7 +438,7 @@ export default function Kanban() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden overscroll-x-contain">
+            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden overscroll-x-contain" style={{ touchAction: "pan-x" }}>
               {columns.map(col => {
                 const count = filteredTasks.filter((t: any) => t.status === col.id).length;
                 const active = mobileTab === col.id;
@@ -502,7 +501,7 @@ export default function Kanban() {
                 <div
                   key={col.id}
                   ref={(el) => { colRefs.current[col.id] = el; }}
-                  className="snap-start shrink-0 w-screen px-4 flex flex-col min-h-0"
+                   className="snap-start shrink-0 w-full px-4 flex flex-col min-h-0"
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >

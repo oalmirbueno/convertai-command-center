@@ -20,7 +20,7 @@ import { cn } from "@/lib/utils";
 const Root: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, children, ...props }) => (
   <div
     className={cn(
-      "flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col md:block md:h-auto",
+      "flex h-full min-h-0 flex-col md:block md:h-auto",
       className
     )}
     {...props}

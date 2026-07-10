@@ -1017,7 +1017,7 @@ export default function Workspace() {
     : currentClient ? (currentClient.company_name || currentClient.full_name) : "Selecionar cliente";
 
   return (
-    <div className="flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
+    <div className="flex h-full min-h-0 flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
@@ -1230,6 +1230,7 @@ export default function Workspace() {
             onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
             className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible",
               rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
+            style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
           >
             {rootDropActive && (
               <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-dashed border-primary/50 flex items-center justify-center pointer-events-none z-10">

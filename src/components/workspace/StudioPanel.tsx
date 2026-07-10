@@ -263,6 +263,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const [mode, setMode] = useState<Mode>("context");
   const isMobile = useIsMobile();
   const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
+  useEffect(() => {
+    if (!isMobile) return;
+    setOpen(false);
+    setMinimized(false);
+    try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
+  }, [isMobile]);
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
@@ -292,8 +298,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   // reload state when context changes
   useEffect(() => { setState(loadState(contextKey)); }, [contextKey]);
   useEffect(() => { saveState(contextKey, state); }, [contextKey, state]);
-  useEffect(() => { localStorage.setItem("studio_open", open ? "1" : "0"); }, [open]);
-  useEffect(() => { localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized]);
+  useEffect(() => { if (!isMobile) localStorage.setItem("studio_open", open ? "1" : "0"); }, [open, isMobile]);
+  useEffect(() => { if (!isMobile) localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized, isMobile]);
   useEffect(() => { localStorage.setItem("studio_dock_v2", dock); }, [dock]);
 
   // ── Fordista: linkagem com projeto + publicação + PDF ──
@@ -780,7 +786,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       style={
         isMobile && isFull
           ? {
-              top: "calc(env(safe-area-inset-top) + 72px)",
+              top: "calc(env(safe-area-inset-top) + 80px)",
               bottom: "calc(env(safe-area-inset-bottom) + 72px)",
             }
           : undefined
