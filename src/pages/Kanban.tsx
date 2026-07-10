@@ -429,7 +429,7 @@ export default function Kanban() {
           <p className="heading-page text-[16px] mb-2" data-tour="kanban-create-btn">Kanban</p>
           {FiltersBar}
           {/* Tabs indicadoras */}
-          <div className="mt-1 flex items-center gap-1">
+          <div className="mt-1 flex items-center gap-1 overflow-hidden">
             <button
               type="button"
               onClick={() => stepMobileColumn(-1)}
@@ -439,7 +439,7 @@ export default function Kanban() {
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
-            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden">
+            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden overscroll-x-contain">
               {columns.map(col => {
                 const count = filteredTasks.filter((t: any) => t.status === col.id).length;
                 const active = mobileTab === col.id;
@@ -472,7 +472,7 @@ export default function Kanban() {
         {/* Carrossel de colunas com snap horizontal */}
         <div
           ref={mobileScrollerRef}
-          className="flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hidden"
+          className="flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hidden overscroll-x-contain"
           style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
           onScroll={(e) => {
             const scroller = e.currentTarget;
@@ -502,7 +502,7 @@ export default function Kanban() {
                 <div
                   key={col.id}
                   ref={(el) => { colRefs.current[col.id] = el; }}
-                  className="snap-start shrink-0 w-[calc(100vw-2rem)] mx-4 flex flex-col min-h-0"
+                  className="snap-start shrink-0 w-screen px-4 flex flex-col min-h-0"
                   onDragOver={isClient ? undefined : (e) => e.preventDefault()}
                   onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >
