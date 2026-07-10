@@ -126,7 +126,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         from: "Aceleriq <contratos@aceleriq.online>",
-        to: [client.email],
+        to: [recipient],
         subject: `📄 Contrato para assinatura: ${contract.title}`,
         html,
       }),
