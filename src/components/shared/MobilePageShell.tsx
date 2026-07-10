@@ -23,10 +23,7 @@ const BOTTOM_OFFSET = 64;   // MobileBottomNav
 const Root: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, children, ...props }) => (
   <div
     className={cn("flex flex-col md:contents", className)}
-    style={{
-      // Ocupa altura útil da tela abaixo da TopBar e acima da BottomNav
-      height: `calc(100dvh - ${TOP_OFFSET}px - ${BOTTOM_OFFSET}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
-    }}
+    style={{ height: `calc(100dvh - ${TOP_OFFSET}px - ${BOTTOM_OFFSET}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))` }}
     {...props}
   >
     {children}
