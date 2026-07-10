@@ -9,7 +9,7 @@ import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
