@@ -365,7 +365,7 @@ export default function VoiceAssistant() {
         const degraded = (data as any)._degraded;
         const auto = (data as any)._contractAutoLoaded;
         const docsCount = attachments.length;
-        const note = auto ? " · contratos lidos do sistema" : docsCount > 1 ? ` · ${docsCount} docs` : "";
+        const note = auto ? ", contratos lidos do sistema" : docsCount > 1 ? `, ${docsCount} docs` : "";
         appendLog({
           kind: degraded ? "info" : "ok",
           text: `IA${note}: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}`,
@@ -408,7 +408,7 @@ export default function VoiceAssistant() {
         const docs = Array.isArray((data as any)?.documents) ? (data as any).documents : [];
         setSystemDocs(docs);
         if (docs.length) {
-          appendLog({ kind: "ok", text: `📚 ${docs.length} documento(s) do cliente carregado(s) automaticamente.` });
+          appendLog({ kind: "ok", text: `${docs.length} documento(s) do cliente carregado(s) automaticamente.` });
           aiAttemptedRef.current = false; // libera reanálise com os novos docs
         }
       } catch (err: any) {
@@ -652,7 +652,7 @@ export default function VoiceAssistant() {
             : "Executado";
     setLastAction({ id: crypto.randomUUID(), label: resultMsg, createdAt: Date.now(), refs: finalRefs });
     appendLog({ kind: "ok", text: resultMsg });
-    toast({ title: "Concluído", description: `${resultMsg} · Disponível para desfazer.` });
+    toast({ title: "Concluído", description: `${resultMsg}. Disponível para desfazer.` });
     if (user) {
       supabase.from("voice_command_log" as any).insert({
         user_id: user.id, transcript, intent: parsed as any, status: "success", result: resultMsg,
@@ -667,7 +667,7 @@ export default function VoiceAssistant() {
     if (!stage) return;
     const blocked = isForbiddenRequest((finalText + " " + interim).trim());
     if (blocked) {
-      appendLog({ kind: "error", text: `🔒 Bloqueado: ${blocked}` });
+      appendLog({ kind: "error", text: `Bloqueado: ${blocked}` });
       toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
       return;
     }
@@ -701,7 +701,7 @@ export default function VoiceAssistant() {
             await stageCreateChecklists(ts, chk, refs);
             setStageContext((c) => ({ ...c, milestones: ms, tasks: ts, chkTemplates: chk }));
           } else {
-            appendLog({ kind: "info", text: "Projeto já possui etapas — preservadas sem duplicar." });
+            appendLog({ kind: "info", text: "Projeto já possui etapas. Preservadas sem duplicar." });
           }
         }
       } else if (stage.key === "single") {
@@ -917,7 +917,7 @@ export default function VoiceAssistant() {
     if (!task) throw new Error(`Tarefa "${p.taskHint}" não encontrada`);
     const { error } = await supabase.from("tasks").update({ status: p.status }).eq("id", task.id);
     if (error) throw error;
-    appendLog({ kind: "ok", text: `Tarefa "${(task as any).title}" → ${p.status}` });
+    appendLog({ kind: "ok", text: `Tarefa "${(task as any).title}" alterada para ${p.status}` });
   }
 
   async function execReportPending(p: Extract<ParsedIntent, { kind: "report_pending" }>) {
@@ -934,8 +934,8 @@ export default function VoiceAssistant() {
     const lines: string[] = [];
     (projects || []).forEach((pr: any) => {
       const ts = byProj[pr.id] || []; if (!ts.length) return;
-      lines.push(`📁 ${pr.name}`);
-      ts.slice(0, 8).forEach((t) => lines.push(`   • [${t.status}] ${t.title}${t.due_date ? ` — ${t.due_date}` : ""}`));
+      lines.push(`${pr.name}`);
+      ts.slice(0, 8).forEach((t) => lines.push(`   • [${t.status}] ${t.title}${t.due_date ? `, ${t.due_date}` : ""}`));
     });
     appendLog({ kind: "info", text: lines.length ? lines.join("\n") : "Sem pendências." });
   }
@@ -945,7 +945,7 @@ export default function VoiceAssistant() {
     let q = supabase.from("projects").select("name, status, progress, deadline").is("deleted_at", null);
     if (client) q = q.eq("client_id", client.id);
     const { data } = await q;
-    const lines = (data || []).map((p: any) => `📁 ${p.name} — ${p.status} · ${p.progress}%${p.deadline ? ` · ${p.deadline}` : ""}`);
+    const lines = (data || []).map((p: any) => `${p.name}: ${p.status}, ${p.progress}%${p.deadline ? `, ${p.deadline}` : ""}`);
     appendLog({ kind: "info", text: lines.join("\n") || "Nenhum projeto." });
   }
 
@@ -1027,9 +1027,9 @@ export default function VoiceAssistant() {
                     <Sparkles className="w-4 h-4 text-primary" />
                   </div>
                   <div>
-                    <p className="text-sm font-semibold text-foreground">Aceleriq OS · Agente</p>
+                    <p className="text-sm font-semibold text-foreground">Aceleriq OS: Agente</p>
                     <p className="text-[11px] text-muted-foreground">
-                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
+                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA. Arraste contratos aqui")}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
                       {phase === "confirm" && "Confirmação final"}
@@ -1054,7 +1054,7 @@ export default function VoiceAssistant() {
                       <div className="space-y-1.5">
                         <div className="flex items-center justify-between">
                           <p className="text-[10px] text-muted-foreground">
-                            Cliente {answers.client_id ? `· ✓ ${clientList.find((c) => c.id === answers.client_id)?.company_name || clientList.find((c) => c.id === answers.client_id)?.full_name}` : `(${clientList.length} disponíveis)`}
+                            Cliente {answers.client_id ? `: ${clientList.find((c) => c.id === answers.client_id)?.company_name || clientList.find((c) => c.id === answers.client_id)?.full_name}` : `(${clientList.length} disponíveis)`}
                           </p>
                           {answers.client_id && (
                             <button
@@ -1300,7 +1300,7 @@ export default function VoiceAssistant() {
                           <div key={`sys-${i}`} className="rounded-xl border border-primary/25 bg-primary/5 p-2.5 text-xs">
                             <div className="flex items-center gap-2 text-foreground">
                               <FileText className="w-3.5 h-3.5 shrink-0 text-primary" />
-                              <span className="truncate flex-1">📚 {d.fileName}</span>
+                              <span className="truncate flex-1">{d.fileName}</span>
                               <span className="text-[9px] uppercase tracking-wider text-muted-foreground">{d.source}</span>
                             </div>
                           </div>
@@ -1736,10 +1736,10 @@ export default function VoiceAssistant() {
                         </div>
                         {parsed.kind === "create_project" && (
                           <div className="text-[11px] text-muted-foreground space-y-0.5 pl-6">
-                            <p>📁 <span className="text-foreground font-medium">{answers.project_name}</span></p>
-                            <p>👤 {resolvedClient?.company_name || resolvedClient?.full_name}</p>
-                            <p>📊 {stageRefs.milestoneIds.length} milestones · {stageRefs.taskIds.length} tarefas · {stageRefs.checklistItemIds.length} itens de checklist</p>
-                            <p className="text-primary pt-1">→ Já disponível no Kanban e no drawer do projeto.</p>
+                            <p><span className="text-foreground font-medium">{answers.project_name}</span></p>
+                            <p>{resolvedClient?.company_name || resolvedClient?.full_name}</p>
+                            <p>{stageRefs.milestoneIds.length} milestones, {stageRefs.taskIds.length} tarefas, {stageRefs.checklistItemIds.length} itens de checklist</p>
+                            <p className="text-primary pt-1">Já disponível no Kanban e no drawer do projeto.</p>
                           </div>
                         )}
                       </div>

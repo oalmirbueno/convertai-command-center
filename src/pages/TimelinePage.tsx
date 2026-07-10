@@ -59,10 +59,10 @@ const priorityColors: Record<string, string> = {
 };
 
 const typeLabels: Record<string, string> = {
-  social_media: "📱 Social Media",
-  site: "🌐 Site",
-  event: "🎪 Evento",
-  automation: "⚙️ Automação",
+  social_media: "Social Media",
+  site: "Site",
+  event: "Evento",
+  automation: "Automação",
 };
 
 const statusBadge: Record<string, string> = {
@@ -212,7 +212,7 @@ export default function TimelinePage() {
     if (authUser && milestone.project_id) {
       const { data: upd } = await supabase.from("updates").insert({
         project_id: milestone.project_id, author_id: authUser.id,
-        message: `Milestone "${milestone.title}" → ${statusLabels[next]}${project ? ` (${project.name})` : ""}`,
+        message: `Milestone "${milestone.title}" alterado para ${statusLabels[next]}${project ? ` (${project.name})` : ""}`,
         update_type: "progress",
       }).select().single();
       notifyOpsUpdate(upd);
@@ -233,7 +233,7 @@ export default function TimelinePage() {
     }
     queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
     queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
-    toast.success(`Tarefa → ${taskStatusLabels[newStatus]}`);
+    toast.success(`Tarefa alterada para ${taskStatusLabels[newStatus]}`);
   };
 
   const openEditTask = (t: any) => {
@@ -844,10 +844,10 @@ export default function TimelinePage() {
                                       onChange={(e) => setNewTaskPriority(e.target.value)}
                                       className="text-[10px] bg-secondary border border-border rounded-lg px-1.5 py-1 text-foreground cursor-pointer"
                                     >
-                                      <option value="low">🟢 Baixa</option>
-                                      <option value="medium">🔵 Média</option>
-                                      <option value="high">🟡 Alta</option>
-                                      <option value="urgent">🔴 Urgente</option>
+                                      <option value="low">Baixa</option>
+                                      <option value="medium">Média</option>
+                                      <option value="high">Alta</option>
+                                      <option value="urgent">Urgente</option>
                                     </select>
                                     <select
                                       value={newTaskAssignedTo}
@@ -910,10 +910,10 @@ export default function TimelinePage() {
                 {/* Links */}
                 <div className="flex gap-3 pt-1">
                   <button onClick={() => navigate(`/kanban?project=${project.id}`)} className="text-[12px] text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
-                    Ver tarefas no Kanban →
+                    Ver tarefas no Kanban
                   </button>
                   <button onClick={() => navigate("/relatorios")} className="text-[12px] text-primary hover:underline cursor-pointer bg-transparent border-none p-0">
-                    Ver relatórios →
+                    Ver relatórios
                   </button>
                 </div>
               </div>
@@ -956,8 +956,8 @@ export default function TimelinePage() {
                     selectedMilestone.status === "completed" ? "bg-success/10 text-success" :
                     selectedMilestone.status === "in_progress" ? "bg-primary/10 text-primary" : "bg-secondary text-muted-foreground"
                   }`}>
-                    {selectedMilestone.status === "completed" ? "✅ Concluído" :
-                     selectedMilestone.status === "in_progress" ? "🔵 Em andamento" : "⬜ Pendente"}
+                    {selectedMilestone.status === "completed" ? "Concluído" :
+                     selectedMilestone.status === "in_progress" ? "Em andamento" : "Pendente"}
                   </span>
                 </div>
                 {selectedMilestone.description && (
@@ -1180,10 +1180,10 @@ export default function TimelinePage() {
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground block mb-2">Prioridade</label>
                   <select value={editTaskPriority} onChange={e => setEditTaskPriority(e.target.value)}
                     className="w-full bg-secondary border border-border rounded-xl px-4 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
-                    <option value="low">🟢 Baixa</option>
-                    <option value="medium">🔵 Média</option>
-                    <option value="high">🟡 Alta</option>
-                    <option value="urgent">🔴 Urgente</option>
+                    <option value="low">Baixa</option>
+                    <option value="medium">Média</option>
+                    <option value="high">Alta</option>
+                    <option value="urgent">Urgente</option>
                   </select>
                 </div>
                 <div>

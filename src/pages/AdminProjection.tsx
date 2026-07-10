@@ -86,7 +86,7 @@ export default function AdminProjection() {
   const recurringItems = useMemo(() =>
     showMonthly ? activeClients.map((c: any) => ({
       id: `rec-${c.id}`,
-      label: c.plan_name ? `Renovação — ${c.plan_name}` : "Renovação Mensal",
+      label: c.plan_name ? `Renovação: ${c.plan_name}` : "Renovação Mensal",
       client: c.company_name || c.full_name || "—",
       amount: Number(c.plan_value),
       due: c.plan_renewal_date || "",
@@ -105,7 +105,7 @@ export default function AdminProjection() {
           .filter((i: any) => i.status === "pending" && isNextMonth(i.due_date))
           .map((i: any) => ({
             id: `inst-${i.id}`,
-            label: `${pp.project?.name || "Projeto"} — ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
+            label: `${pp.project?.name || "Projeto"}: ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
             client: pp.client?.company_name || pp.client?.full_name || "—",
             amount: Number(i.amount),
             due: i.due_date,
@@ -229,7 +229,7 @@ export default function AdminProjection() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Projeção — {MONTHS_FULL[nextMonth]} {nextYear}</h1>
+            <h1 className="text-xl font-semibold text-foreground">Projeção: {MONTHS_FULL[nextMonth]} {nextYear}</h1>
             <p className="text-[12px] text-muted-foreground">Receita projetada e recomendações para crescimento</p>
           </div>
         </div>
@@ -268,7 +268,7 @@ export default function AdminProjection() {
           <p className="text-lg font-semibold font-mono text-info">{fmt(projectedTotal)}</p>
           <p className="text-[11px] text-muted-foreground mt-0.5">
             {showMonthly && showIndiv
-              ? `🔄 ${fmt(recurringTotal)} · 📦 ${fmt(indivTotal)}`
+              ? `Recorrente ${fmt(recurringTotal)} · Parcelas ${fmt(indivTotal)}`
               : MONTHS_FULL[nextMonth]}
           </p>
         </div>
@@ -349,8 +349,8 @@ export default function AdminProjection() {
             </span>
           </div>
           <div className="flex items-center gap-3 text-[11px] text-muted-foreground">
-            {showMonthly && <span>🔄 Recorrente: <strong className="text-foreground">{fmt(recurringTotal)}</strong></span>}
-            {showIndiv && <span>📦 Parcelas: <strong className="text-foreground">{fmt(indivTotal)}</strong></span>}
+            {showMonthly && <span>Recorrente: <strong className="text-foreground">{fmt(recurringTotal)}</strong></span>}
+            {showIndiv && <span>Parcelas: <strong className="text-foreground">{fmt(indivTotal)}</strong></span>}
           </div>
         </div>
         {allItems.length === 0 ? (
@@ -368,7 +368,7 @@ export default function AdminProjection() {
                 </div>
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
                 <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info whitespace-nowrap">
-                  {item.type === "recurring" ? "🔄 Recorrente" : "📦 Parcela"}
+                  {item.type === "recurring" ? "Recorrente" : "Parcela"}
                 </span>
                 <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
                 {item.due && (

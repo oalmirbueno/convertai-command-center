@@ -143,7 +143,7 @@ function suggestFolderName(n: Node): string {
     .replace(/\s?\(?\d{1,3}\)?\s*$/,"")
     .trim();
   if (stem && stem.length >= 3 && stem.length <= 32 && !/^[0-9\s]+$/.test(stem)) {
-    return `${base} — ${stem}`;
+    return `${base}: ${stem}`;
   }
   return base;
 }
@@ -599,7 +599,7 @@ export default function Workspace() {
       }
       toast({
         title: "Organização concluída",
-        description: `${moved} arquivo(s) movido(s) · ${created} pasta(s) criada(s)${skipped ? ` · ${skipped} ignorado(s)` : ""}`,
+        description: `${moved} arquivo(s) movido(s), ${created} pasta(s) criada(s)${skipped ? `, ${skipped} ignorado(s)` : ""}`,
       });
       invalidate();
     } catch (e: any) {
@@ -1021,7 +1021,7 @@ export default function Workspace() {
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
-          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe · arraste para mover, solte arquivos para enviar</p>
+          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe. Arraste para mover, solte arquivos para enviar</p>
         </div>
         {/* Context switcher: collapsed picker with search + filters */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -1041,8 +1041,8 @@ export default function Workspace() {
               <div className="flex items-center gap-1 mt-2">
                 {[
                   { k: "all", label: "Padrão" },
-                  { k: "az", label: "A→Z" },
-                  { k: "za", label: "Z→A" },
+                  { k: "az", label: "A-Z" },
+                  { k: "za", label: "Z-A" },
                 ].map((f) => (
                   <button
                     key={f.k}
@@ -1064,7 +1064,7 @@ export default function Workspace() {
               </button>
             </div>
             <div className="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">· {filteredClients.length}</span>}
+              <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">({filteredClients.length})</span>}
             </div>
             <div className="max-h-[320px] overflow-y-auto p-1">
               {filteredClients.map((c: any) => {
@@ -1390,7 +1390,7 @@ export default function Workspace() {
                   </Button>
                 )}
                 {selected.__virtual && (
-                  <span className="text-[11px] text-muted-foreground">📎 De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
+                  <span className="text-[11px] text-muted-foreground">De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
                 )}
                 {selected.sent_for_approval_file_id && (
                   <span className="text-[11px] text-warning">Já enviado para aprovação</span>
@@ -1435,7 +1435,7 @@ export default function Workspace() {
           <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
             onFocus={e => e.currentTarget.select()}
             placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
-          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática — edite à vontade.</p>
+          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática. Edite à vontade.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
             <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>

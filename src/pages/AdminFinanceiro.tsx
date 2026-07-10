@@ -413,7 +413,7 @@ export default function AdminFinanceiro() {
 
     // Notify client
     if (bill?.client_id) {
-      await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado ✅`, "billing", "/financeiro");
+      await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado`, "billing", "/financeiro");
     }
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["billing"] }),
@@ -477,7 +477,7 @@ export default function AdminFinanceiro() {
     }
     await supabase.from("recharge_requests").update({ status: "completed", approved_by: user?.id }).eq("id", r.id);
     // Notify client
-    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída! Saldo atualizado ✅`, "billing", "/financeiro");
+    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída. Saldo atualizado`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
     queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
     toast.success("Saldo atualizado!");
@@ -489,10 +489,10 @@ export default function AdminFinanceiro() {
 
     if (via === "whatsapp") {
       const phone = client.phone?.replace(/\D/g, "") || "";
-      const msg = encodeURIComponent(`Olá! Seu plano renova em ${renewalDate}. Os resultados estão crescendo! Para garantir a continuidade, confirme a renovação. 🚀`);
+      const msg = encodeURIComponent(`Olá! Seu plano renova em ${renewalDate}. Os resultados estão crescendo! Para garantir a continuidade, confirme a renovação.`);
       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
     } else {
-      await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados! 🚀`, "billing", "/financeiro");
+      await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados!`, "billing", "/financeiro");
       toast.success("Lembrete enviado");
     }
 
