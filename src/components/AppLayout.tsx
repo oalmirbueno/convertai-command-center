@@ -13,7 +13,7 @@ import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
-  Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
+  BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
