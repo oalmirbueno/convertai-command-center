@@ -426,7 +426,14 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-card border-l border-border w-full max-w-lg h-full animate-in slide-in-from-right duration-200 flex flex-col">
+      <div
+        className="relative bg-card border-l border-border w-full max-w-lg animate-in slide-in-from-right duration-200 flex flex-col"
+        style={{
+          height: "100dvh",
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
