@@ -76,12 +76,12 @@ export default function Clients() {
   });
 
   return (
-    <div className="-mx-4 flex h-[calc(100dvh-140px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+    <div className="-mx-4 flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Clientes</p>
         {isAdmin && (
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-2 flex-wrap justify-end">
             <button onClick={() => navigate("/ver-como-cliente")}
               className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] text-muted-foreground border border-border hover:border-muted-foreground/50 hover:text-foreground transition-colors cursor-pointer bg-transparent">
               <Eye className="w-3.5 h-3.5" />
@@ -154,7 +154,7 @@ export default function Clients() {
             <div
               key={c.id}
               onClick={() => setEditClient(c)}
-              className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer"
+              className="bg-card border border-border rounded-xl px-4 py-3.5 md:px-5 md:py-4 flex items-center gap-3 md:gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer"
             >
               <Avatar className="w-10 h-10 shrink-0">
                 {c.avatar_url && <AvatarImage src={c.avatar_url} alt={c.full_name} />}
