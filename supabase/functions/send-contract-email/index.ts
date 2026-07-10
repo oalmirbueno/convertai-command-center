@@ -20,14 +20,18 @@ Deno.serve(async (req) => {
   try {
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
+    const bearer = authHeader.slice(7).trim();
+    const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-    const supabaseAuth = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_ANON_KEY")!,
-      { global: { headers: { Authorization: authHeader } } },
-    );
-    const { data: userData, error: userErr } = await supabaseAuth.auth.getUser();
-    if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+    if (bearer !== serviceKey) {
+      const supabaseAuth = createClient(
+        Deno.env.get("SUPABASE_URL")!,
+        Deno.env.get("SUPABASE_ANON_KEY")!,
+        { global: { headers: { Authorization: authHeader } } },
+      );
+      const { data: userData, error: userErr } = await supabaseAuth.auth.getUser();
+      if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+    }
 
 
     const supabase = createClient(
@@ -35,7 +39,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { contract_id } = await req.json();
+    const { contract_id, override_email } = await req.json();
     if (!contract_id) return json({ error: "missing contract_id" }, 400);
 
     const { data: contract } = await supabase
@@ -45,7 +49,8 @@ Deno.serve(async (req) => {
 
     const { data: client } = await supabase
       .from("profiles").select("full_name, email, company_name").eq("id", contract.client_id).maybeSingle();
-    if (!client?.email) return json({ error: "client without email" }, 400);
+    const recipient = (override_email as string | undefined)?.trim() || client?.email;
+    if (!recipient) return json({ error: "client without email" }, 400);
 
     const signUrl = `${PORTAL_URL}/contrato/${contract.sign_token}`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
@@ -125,7 +130,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         from: "Aceleriq <contratos@aceleriq.online>",
-        to: [client.email],
+        to: [recipient],
         subject: `📄 Contrato para assinatura: ${contract.title}`,
         html,
       }),
