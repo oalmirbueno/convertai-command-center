@@ -1068,13 +1068,13 @@ export default function AdminFinanceiro() {
       })()}
 
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex-wrap h-auto">
-          {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md">Visão Geral</TabsTrigger>}
-          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md">💰 Fluxo de Caixa</TabsTrigger>}
-          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md">🏦 Capital</TabsTrigger>}
-          <TabsTrigger value="ads" className="text-[13px] rounded-md">Ads Wallet</TabsTrigger>
-          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md">Renovações</TabsTrigger>}
-          {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md">📋 Histórico</TabsTrigger>}
+        <TabsList className="sticky top-[64px] md:top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
+          {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
+          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
+          {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md shrink-0">Capital</TabsTrigger>}
+          <TabsTrigger value="ads" className="text-[13px] rounded-md shrink-0">Ads Wallet</TabsTrigger>
+          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md shrink-0">Renovações</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md shrink-0">Histórico</TabsTrigger>}
         </TabsList>
 
         {(isAdmin || profile?.role === "manager") && (
