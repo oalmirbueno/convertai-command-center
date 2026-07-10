@@ -666,13 +666,13 @@ export default function AdminFinanceiro() {
   });
 
   return (
-    <div className="-mx-4 flex h-[calc(100dvh-140px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto">
+    <div className="-mx-4 flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:mb-6 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
         <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
         {isAdmin && (
           <div className="flex items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
-            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
                 <button
                   key={f.value}
@@ -688,7 +688,7 @@ export default function AdminFinanceiro() {
               ))}
             </div>
             {periodFilter === "month" && (
-              <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
                 <button
                   onClick={() => {
                     const d = new Date(selYear, selMonth - 1, 1);
@@ -725,7 +725,7 @@ export default function AdminFinanceiro() {
                 )}
               </div>
             )}
-            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {BRAND_FILTERS.map((f) => (
                 <button
                   key={f.value}
