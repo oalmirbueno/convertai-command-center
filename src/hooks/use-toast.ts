@@ -1,6 +1,7 @@
 import * as React from "react";
 
 import type { ToastActionElement, ToastProps } from "@/components/ui/toast";
+import { toast as sonnerToast } from "@/components/ui/sonner";
 
 const TOAST_LIMIT = 1;
 const TOAST_REMOVE_DELAY = 1000000;
@@ -136,6 +137,17 @@ type Toast = Omit<ToasterToast, "id">;
 
 function toast({ ...props }: Toast) {
   const id = genId();
+  const title = props.title || "Aviso";
+  const sonnerOptions = {
+    description: props.description as any,
+    action: props.action as any,
+  };
+
+  if ((props as any).variant === "destructive") {
+    sonnerToast.error(title as any, sonnerOptions);
+  } else {
+    sonnerToast(title as any, sonnerOptions);
+  }
 
   const update = (props: ToasterToast) =>
     dispatch({
