@@ -285,31 +285,37 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
           <div
-            className="absolute inset-x-0 mx-3 rounded-xl bg-popover border border-border p-3 shadow-lg animate-fade-in"
-            style={{ top: 'calc(env(safe-area-inset-top) + 72px)' }}
+            className="absolute inset-x-0 mx-3 rounded-xl bg-popover border border-border shadow-lg animate-fade-in flex flex-col"
+            style={{
+              top: 'calc(env(safe-area-inset-top) + 72px)',
+              bottom: 'calc(env(safe-area-inset-bottom) + 72px)',
+              maxHeight: 'calc(100dvh - env(safe-area-inset-top) - env(safe-area-inset-bottom) - 144px)',
+            }}
           >
-            {[...mainNav, ...moreNav].map((item) => (
-              <NavLink
-                key={item.url}
-                to={item.url}
-                onClick={() => setMobileMenuOpen(false)}
-                className={({ isActive }) => cn(
-                  "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-colors",
-                  isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                <item.icon className="w-4 h-4" />
-                {item.title}
-              </NavLink>
-            ))}
-            <div className="border-t border-border mt-2 pt-2">
-              <button
-                onClick={() => { setMobileMenuOpen(false); logout(); }}
-                className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <LogOut className="w-4 h-4" />
-                Sair
-              </button>
+            <div className="overflow-y-auto p-3" style={{ WebkitOverflowScrolling: 'touch' }}>
+              {[...mainNav, ...moreNav].map((item) => (
+                <NavLink
+                  key={item.url}
+                  to={item.url}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={({ isActive }) => cn(
+                    "flex items-center gap-3 px-3 py-2.5 rounded-lg text-[13px] transition-colors",
+                    isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <item.icon className="w-4 h-4" />
+                  {item.title}
+                </NavLink>
+              ))}
+              <div className="border-t border-border mt-2 pt-2">
+                <button
+                  onClick={() => { setMobileMenuOpen(false); logout(); }}
+                  className="flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <LogOut className="w-4 h-4" />
+                  Sair
+                </button>
+              </div>
             </div>
           </div>
         </div>
