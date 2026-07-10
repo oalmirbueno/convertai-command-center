@@ -313,7 +313,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="pt-20 pb-24 md:pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding" data-tour="finish">
+      <main
+        className="px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top) + 80px)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 96px)',
+        }}
+        data-tour="finish"
+      >
         {children}
       </main>
 
