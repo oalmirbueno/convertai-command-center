@@ -14,7 +14,13 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { profile_id, new_email, new_full_name } = await req.json();
+    const {
+      profile_id,
+      new_email,
+      new_full_name,
+      send_contract_id,
+      contract_recipient_email,
+    } = await req.json();
     if (!profile_id || !new_email) throw new Error("profile_id e new_email obrigatórios");
 
     // 1. Update auth email
@@ -59,11 +65,20 @@ Deno.serve(async (req) => {
       },
     });
 
-    // 4. Optionally resend a signed contract to another email
-    const { send_contract_id, contract_recipient_email } = await (async () => ({}))().then(() => ({})) as any;
-    // (parsed above via req.json — read again from the original payload)
+    // 4. Optionally resend a signed contract to a specific email
+    let contractResult: unknown = null;
+    if (send_contract_id) {
+      const { data, error } = await admin.functions.invoke("send-contract-email", {
+        body: {
+          contract_id: send_contract_id,
+          override_email: contract_recipient_email || new_email,
+        },
+      });
+      if (error) contractResult = { error: error.message };
+      else contractResult = data;
+    }
 
-    return new Response(JSON.stringify({ success: true, firstAccessUrl }), {
+    return new Response(JSON.stringify({ success: true, firstAccessUrl, contractResult }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
