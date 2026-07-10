@@ -15,9 +15,12 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="space-y-6 animate-fade-in max-w-lg w-full">
-      <p className="heading-page">Configurações</p>
+    <div className="-mx-4 flex h-full min-h-0 w-auto flex-col animate-fade-in md:mx-0 md:block md:h-auto md:max-w-lg md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
+        <p className="heading-page">Configurações</p>
+      </div>
 
+      <div className="flex-1 min-h-0 space-y-6 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {/* Aparência */}
       <div className="space-y-2">
         <p className="label-sm">Aparência</p>
@@ -63,6 +66,7 @@ export default function SettingsPage() {
             </div>
           </button>
         ))}
+      </div>
       </div>
     </div>
   );
