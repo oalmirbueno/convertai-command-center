@@ -526,7 +526,7 @@ export default function AdminFinanceiro() {
 
   const openWhatsAppReminder = (client: any, billingItem: any) => {
     const phone = client?.phone?.replace(/\D/g, "") || "";
-    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição! 😊`);
+    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição!`);
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
@@ -586,12 +586,12 @@ export default function AdminFinanceiro() {
             type: currentBill.type || "renewal",
             amount: remaining,
             due_date: currentBill.due_date || today,
-            description: `Saldo restante · ${fmt(remaining)}`,
+            description: `Saldo restante: ${fmt(remaining)}`,
           });
         }
-        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label} · restante: ${fmt(remaining)}`);
+        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label}, restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
-          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
+          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado. Restante: ${fmt(remaining)}`, "billing", "/financeiro");
         }
         queryClient.invalidateQueries({ queryKey: ["billing"] });
         queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -803,12 +803,12 @@ export default function AdminFinanceiro() {
           >
             <div className="flex items-center gap-2 mb-2">
               <Briefcase className="w-4 h-4 text-info" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção · Próximo Mês</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção: Próximo Mês</span>
             </div>
             <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear}: {nextMonthSub}</p>
             <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
-              Ver projeção →
+              Ver projeção
             </span>
           </div>
         </div>
@@ -1736,14 +1736,14 @@ export default function AdminFinanceiro() {
                           <div className="flex items-center gap-3 mt-1">
                             {log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount && (
                               <span className="text-[11px] text-muted-foreground">
-                                {fmt(log.old_amount)} → {fmt(log.new_amount)}
+                                {fmt(log.old_amount)} para {fmt(log.new_amount)}
                               </span>
                             )}
                             {log.new_amount != null && log.old_amount === log.new_amount && (
                               <span className="text-[11px] text-muted-foreground font-mono">{fmt(log.new_amount)}</span>
                             )}
                             {log.old_status && log.new_status && log.old_status !== log.new_status && (
-                              <span className="text-[11px] text-muted-foreground">{log.old_status} → {log.new_status}</span>
+                              <span className="text-[11px] text-muted-foreground">{log.old_status} para {log.new_status}</span>
                             )}
                           </div>
                         </div>
@@ -2000,7 +2000,7 @@ export default function AdminFinanceiro() {
                     payType === "full" ? "bg-success/15 border-success/30 text-success" : "bg-secondary border-border text-muted-foreground"
                   }`}
                 >
-                  ✅ Pago Total
+                  Pago total
                 </button>
                 <button
                   onClick={() => setPayType("partial")}

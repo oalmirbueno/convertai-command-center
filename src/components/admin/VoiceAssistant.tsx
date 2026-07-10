@@ -589,7 +589,7 @@ export default function VoiceAssistant() {
     if (!parsed || parsed.kind === "unknown" || !user) return;
     const blocked = isForbiddenRequest((finalText + " " + interim).trim());
     if (blocked) {
-      appendLog({ kind: "error", text: `🔒 Bloqueado: ${blocked}` });
+      appendLog({ kind: "error", text: `Bloqueado: ${blocked}` });
       toast({ title: "Ação não permitida", description: blocked, variant: "destructive" });
       return;
     }
@@ -1270,7 +1270,7 @@ export default function VoiceAssistant() {
                                       key={c.id}
                                       onClick={() => {
                                         const verb = guessIntent?.includes("tarefa") ? "Criar tarefa para" : "Criar projeto para";
-                                        const rewritten = `${verb} ${label}${spokenText ? ` — ${spokenText}` : ""}`;
+                                        const rewritten = `${verb} ${label}${spokenText ? `: ${spokenText}` : ""}`;
                                         handleTextEdit(rewritten);
                                       }}
                                       className="text-[11px] px-2.5 py-1 rounded-full bg-primary/15 text-primary border border-primary/30 hover:bg-primary/25 transition-colors"
