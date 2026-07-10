@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Bell, FileText, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, X } from "lucide-react";
+import { Bell, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
@@ -110,15 +110,23 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col [&>button.absolute]:top-3 [&>button.absolute]:right-3"
+        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col [&>button.absolute]:hidden"
         style={{
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
-        <SheetHeader className="px-4 pt-4 pb-3 shrink-0">
-          <div className="flex items-center gap-2 min-w-0 pr-10">
+        <SheetHeader className="px-4 pt-4 pb-3 shrink-0 border-b border-border/60">
+          <div className="flex items-center gap-2 min-w-0">
             <SheetTitle className="label-sm text-foreground truncate">Notificações</SheetTitle>
+            <button
+              type="button"
+              onClick={() => onOpenChange(false)}
+              className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground"
+              aria-label="Fechar notificações"
+            >
+              <X className="h-4 w-4" />
+            </button>
           </div>
         </SheetHeader>
 
