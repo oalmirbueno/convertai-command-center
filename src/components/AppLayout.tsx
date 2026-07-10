@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
@@ -73,6 +73,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, profile, logout } = useAuth();
   const { theme, toggleTheme } = useTheme();
   const location = useLocation();
+  const navigate = useNavigate();
   const [notifOpen, setNotifOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -222,11 +223,11 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             type="button"
             onClick={() => {
               if (location.pathname !== "/workspace") {
-                window.location.assign("/workspace");
-                setTimeout(() => window.dispatchEvent(new Event("studio:open")), 300);
-              } else {
-                window.dispatchEvent(new Event("studio:open"));
+                navigate("/workspace");
+                window.setTimeout(() => window.dispatchEvent(new Event("studio:open")), 180);
+                return;
               }
+              window.dispatchEvent(new Event("studio:open"));
             }}
             className="h-8 px-3 rounded-full bg-primary/15 hover:bg-primary/25 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 border border-primary/30"
             aria-label="Abrir Studio"
@@ -250,7 +251,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
           <button
             data-tour="nav-notifications"
-            className="relative w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
+            className="relative w-8 h-8 hidden md:flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground transition-colors"
             onClick={() => setNotifOpen(true)}
           >
             <Bell className="w-4 h-4" />
@@ -340,11 +341,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       {/* Content */}
       <main
-        className="px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding"
-        style={{
-          paddingTop: 'calc(env(safe-area-inset-top) + 80px)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom) + 96px)',
-        }}
+        className="fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full max-w-[1280px] overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible"
+        style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}
         data-tour="finish"
       >
         {children}

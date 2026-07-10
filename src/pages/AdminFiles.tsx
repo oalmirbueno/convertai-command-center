@@ -25,11 +25,11 @@ import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePrev
 import AdminContracts from "@/pages/AdminContracts";
 
 const FOLDERS = [
-  { id: "estrategicos", label: "📁 Estratégicos" },
-  { id: "contratos", label: "📁 Contratos" },
-  { id: "materiais", label: "📁 Materiais Gráficos" },
-  { id: "relatorios", label: "📁 Relatórios" },
-  { id: "operacionais", label: "📁 Operacionais" },
+  { id: "estrategicos", label: "Estratégicos" },
+  { id: "contratos", label: "Contratos" },
+  { id: "materiais", label: "Materiais Gráficos" },
+  { id: "relatorios", label: "Relatórios" },
+  { id: "operacionais", label: "Operacionais" },
 ];
 
 const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
@@ -112,7 +112,7 @@ function CarouselSlider({ files }: { files: any[] }) {
         ))}
       </div>
       <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
-        🎠 {idx + 1}/{files.length}
+        {idx + 1}/{files.length}
       </span>
     </div>
   );
@@ -357,7 +357,7 @@ export default function AdminFiles() {
         const clientName = clientProfile?.company_name || clientProfile?.full_name || "cliente";
         await supabase.from("notifications").insert({
           user_id: adminId,
-          message: `${user.email} enviou ${isCarousel ? `carrossel (${totalFiles})` : "arquivo"}: ${uploadName} → ${clientName}`,
+          message: `${user.email} enviou ${isCarousel ? `carrossel (${totalFiles})` : "arquivo"}: ${uploadName} para ${clientName}`,
           notification_type: "delivery",
           link: "/arquivos",
         });
@@ -511,7 +511,7 @@ export default function AdminFiles() {
                           </p>
                           {isCarousel && (
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary whitespace-nowrap shrink-0">
-                              🎠 {carouselChildren.length + 1}
+                              {carouselChildren.length + 1}
                             </span>
                           )}
                         </div>
@@ -684,7 +684,7 @@ export default function AdminFiles() {
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  📄 Arquivo
+                  Arquivo
                 </button>
                 <button
                   onClick={() => setUploadMode("carousel")}
@@ -694,7 +694,7 @@ export default function AdminFiles() {
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  🎠 Carrossel
+                  Carrossel
                 </button>
                 <button
                   onClick={() => { setUploadMode("video_link"); setUploadFiles([]); }}
@@ -704,12 +704,12 @@ export default function AdminFiles() {
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  🎬 Link vídeo
+                  Link vídeo
                 </button>
               </div>
               {uploadMode === "video_link" && (
                 <p className="text-[11px] text-muted-foreground/70 mt-2">
-                  Cole link do YouTube, Vimeo, Loom, Drive, Wistia ou MP4 direto. Sem limite de tamanho — nada vai para o storage.
+                  Cole link do YouTube, Vimeo, Loom, Drive, Wistia ou MP4 direto. Sem limite de tamanho, nada vai para o storage.
                 </p>
               )}
             </div>

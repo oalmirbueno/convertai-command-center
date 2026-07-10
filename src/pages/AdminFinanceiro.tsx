@@ -58,7 +58,7 @@ const statusBadge = (status: string, dueDate?: string) => {
   const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
   const due = parseAppDate(dueDate);
   const isOverdue = due && due < todayStart && status === "pending";
-  if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">✅ Pago</span>;
+  if (status === "paid") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Pago</span>;
   if (status === "partial") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">◐ Parcial</span>;
   if (status === "completed") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Concluída</span>;
   if (status === "approved") return <span className="text-[11px] px-2 py-0.5 rounded-full bg-info/15 text-info">Aprovada pelo cliente</span>;
@@ -69,9 +69,9 @@ const statusBadge = (status: string, dueDate?: string) => {
 };
 
 const typeIcon = (type: string) => {
-  if (type === "renewal") return "🔄";
-  if (type === "ads_recharge") return "📢";
-  return "⭐";
+  if (type === "renewal") return "REC";
+  if (type === "ads_recharge") return "ADS";
+  return "AVU";
 };
 
 export default function AdminFinanceiro() {
@@ -413,7 +413,7 @@ export default function AdminFinanceiro() {
 
     // Notify client
     if (bill?.client_id) {
-      await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado ✅`, "billing", "/financeiro");
+      await notifyUser(bill.client_id, `Pagamento de ${fmt(Number(bill.amount))} registrado`, "billing", "/financeiro");
     }
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["billing"] }),
@@ -477,7 +477,7 @@ export default function AdminFinanceiro() {
     }
     await supabase.from("recharge_requests").update({ status: "completed", approved_by: user?.id }).eq("id", r.id);
     // Notify client
-    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída! Saldo atualizado ✅`, "billing", "/financeiro");
+    await notifyUser(r.client_id, `Recarga de ${fmt(Number(r.amount))} para ${r.platform} concluída. Saldo atualizado`, "billing", "/financeiro");
     queryClient.invalidateQueries({ queryKey: ["recharge-requests"] });
     queryClient.invalidateQueries({ queryKey: ["ads-wallet"] });
     toast.success("Saldo atualizado!");
@@ -489,10 +489,10 @@ export default function AdminFinanceiro() {
 
     if (via === "whatsapp") {
       const phone = client.phone?.replace(/\D/g, "") || "";
-      const msg = encodeURIComponent(`Olá! Seu plano renova em ${renewalDate}. Os resultados estão crescendo! Para garantir a continuidade, confirme a renovação. 🚀`);
+      const msg = encodeURIComponent(`Olá! Seu plano renova em ${renewalDate}. Os resultados estão crescendo! Para garantir a continuidade, confirme a renovação.`);
       window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
     } else {
-      await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados! 🚀`, "billing", "/financeiro");
+      await notifyUser(client.id, `Olá! Seu plano renova em ${renewalDate}. Garanta a continuidade dos seus resultados!`, "billing", "/financeiro");
       toast.success("Lembrete enviado");
     }
 
@@ -526,7 +526,7 @@ export default function AdminFinanceiro() {
 
   const openWhatsAppReminder = (client: any, billingItem: any) => {
     const phone = client?.phone?.replace(/\D/g, "") || "";
-    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição! 😊`);
+    const msg = encodeURIComponent(`Olá! Lembramos que há uma fatura de ${fmt(Number(billingItem.amount))} com vencimento em ${formatAppDate(billingItem.due_date)}. Qualquer dúvida estamos à disposição!`);
     window.open(`https://wa.me/${phone}?text=${msg}`, "_blank");
   };
 
@@ -586,12 +586,12 @@ export default function AdminFinanceiro() {
             type: currentBill.type || "renewal",
             amount: remaining,
             due_date: currentBill.due_date || today,
-            description: `Saldo restante · ${fmt(remaining)}`,
+            description: `Saldo restante: ${fmt(remaining)}`,
           });
         }
-        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label} · restante: ${fmt(remaining)}`);
+        await logAudit("billing", payModal.id, "paid_partial", "pending", isFullyPaidNow ? "paid" : "partial", payModal.amount, paidAmount, `${payModal.label}, restante: ${fmt(remaining)}`);
         if (payModal.clientId) {
-          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado ✅ (restante: ${fmt(remaining)})`, "billing", "/financeiro");
+          await notifyUser(payModal.clientId, `Pagamento parcial de ${fmt(paidAmount)} registrado. Restante: ${fmt(remaining)}`, "billing", "/financeiro");
         }
         queryClient.invalidateQueries({ queryKey: ["billing"] });
         queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -666,12 +666,13 @@ export default function AdminFinanceiro() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:mb-6 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
+        <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
         {isAdmin && (
-          <div className="flex items-center gap-3 flex-wrap">
-            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
                 <button
                   key={f.value}
@@ -687,7 +688,7 @@ export default function AdminFinanceiro() {
               ))}
             </div>
             {periodFilter === "month" && (
-              <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+              <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
                 <button
                   onClick={() => {
                     const d = new Date(selYear, selMonth - 1, 1);
@@ -724,7 +725,7 @@ export default function AdminFinanceiro() {
                 )}
               </div>
             )}
-            <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
+            <div className="flex shrink-0 items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {BRAND_FILTERS.map((f) => (
                 <button
                   key={f.value}
@@ -742,6 +743,9 @@ export default function AdminFinanceiro() {
           </div>
         )}
       </div>
+      </div>
+
+      <div className="flex-1 min-h-0 space-y-5 overflow-y-auto px-4 pt-3 pb-4 md:block md:space-y-6 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
 
       {/* Stats - only admin sees revenue/pending/overdue */}
       {isAdmin && (() => {
@@ -799,12 +803,12 @@ export default function AdminFinanceiro() {
           >
             <div className="flex items-center gap-2 mb-2">
               <Briefcase className="w-4 h-4 text-info" />
-              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção · Próximo Mês</span>
+              <span className="text-[11px] text-muted-foreground uppercase tracking-wider">Projeção: Próximo Mês</span>
             </div>
             <p className="text-lg font-semibold font-mono text-foreground">{fmt(nextMonthTotal)}</p>
-            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear} · {nextMonthSub}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{nextMonthFull} {nextYear}: {nextMonthSub}</p>
             <span className="absolute top-3 right-3 text-[10px] text-info opacity-0 group-hover:opacity-100 transition-opacity">
-              Ver projeção →
+              Ver projeção
             </span>
           </div>
         </div>
@@ -848,19 +852,21 @@ export default function AdminFinanceiro() {
             </div>
             <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {allPending.map((item: any) => (
-                <div key={item.id} className="flex items-center gap-3 px-5 py-3">
+                <div key={item.id} className="flex flex-col gap-2 px-4 py-3 sm:flex-row sm:items-center sm:gap-3 sm:px-5">
                   <div className={`w-2 h-2 rounded-full shrink-0 ${item.isOverdue ? "bg-destructive" : "bg-warning"}`} />
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 w-full">
                     <p className="text-[13px] text-foreground truncate">{item.label}</p>
                     <p className="text-[11px] text-muted-foreground">{item.client}
                       {item.paidSoFar > 0 && <span className="ml-1 text-success">(já pago: {fmt(item.paidSoFar)})</span>}
                     </p>
                   </div>
-                  <span className="text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap">{item.brand}</span>
-                  <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
-                    {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
-                  </span>
+                  <div className="flex w-full items-center gap-2 sm:w-auto">
+                    <span className="hidden text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground whitespace-nowrap sm:inline-flex">{item.brand}</span>
+                    <p className="text-sm font-mono text-foreground whitespace-nowrap">{fmt(item.amount)}</p>
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full whitespace-nowrap ${item.isOverdue ? "bg-destructive/10 text-destructive" : "bg-warning/10 text-warning"}`}>
+                      {item.isOverdue ? "Atrasado" : formatAppDate(item.due)}
+                    </span>
+                  </div>
                   <button
                     onClick={async () => {
                       let realId = item.id;
@@ -890,9 +896,9 @@ export default function AdminFinanceiro() {
                       setPayType("full");
                       setPayPartialAmount("");
                     }}
-                    className="text-[10px] px-2.5 py-1 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium"
+                    className="w-full text-[10px] px-2.5 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors whitespace-nowrap font-medium sm:w-auto sm:py-1"
                   >
-                    💰 Pagar
+                    Pagar
                   </button>
                 </div>
               ))}
@@ -1068,7 +1074,7 @@ export default function AdminFinanceiro() {
       })()}
 
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
-        <TabsList className="sticky top-[64px] md:top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
+        <TabsList className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md shrink-0">Capital</TabsTrigger>}
@@ -1179,7 +1185,7 @@ export default function AdminFinanceiro() {
                       totalAmount: Number(i.amount) || 0,
                       isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
                       date: i.paid_date || i.due_date,
-                      icon: "💼",
+                      icon: "PRJ",
                     }))
                 )
               : [];
@@ -1409,7 +1415,7 @@ export default function AdminFinanceiro() {
                 ))}
               </div>
               {totalInvested > 0 && (
-                <p className="text-[11px] text-muted-foreground">💰 Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
+                <p className="text-[11px] text-muted-foreground">Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
               )}
               {clientWallets[0]?.last_recharge_date && (
                 <p className="text-[11px] text-muted-foreground">Última recarga: {new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}</p>
@@ -1521,9 +1527,9 @@ export default function AdminFinanceiro() {
                           <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">🟢 Ativo</span>}
-                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">🟡 Renovação em breve</span>}
-                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">🔴 Pendente</span>}
+                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Ativo</span>}
+                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Renovação em breve</span>}
+                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Pendente</span>}
                               {planStatus === "unknown" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Sem data</span>}
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -1656,7 +1662,7 @@ export default function AdminFinanceiro() {
                           const isFull = paid >= total && total > 0;
                           return (
                             <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">📦 {pp.project?.name || "Projeto"}</span>
+                              <span className="flex-1 truncate">{pp.project?.name || "Projeto"}</span>
                               <span className={`text-[10px] font-mono ${isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
                               <span className="font-mono">
                                 <span className={isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
@@ -1673,7 +1679,7 @@ export default function AdminFinanceiro() {
                           const isPaid = b.status === "paid" && paid >= total;
                           return (
                             <div key={b.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">💸 {b.description || "Cobrança avulsa"}</span>
+                              <span className="flex-1 truncate">{b.description || "Cobrança avulsa"}</span>
                               <span className={`text-[10px] font-mono ${isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
                               <span className="font-mono">
                                 <span className={isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
@@ -1730,14 +1736,14 @@ export default function AdminFinanceiro() {
                           <div className="flex items-center gap-3 mt-1">
                             {log.old_amount != null && log.new_amount != null && log.old_amount !== log.new_amount && (
                               <span className="text-[11px] text-muted-foreground">
-                                {fmt(log.old_amount)} → {fmt(log.new_amount)}
+                                {fmt(log.old_amount)} para {fmt(log.new_amount)}
                               </span>
                             )}
                             {log.new_amount != null && log.old_amount === log.new_amount && (
                               <span className="text-[11px] text-muted-foreground font-mono">{fmt(log.new_amount)}</span>
                             )}
                             {log.old_status && log.new_status && log.old_status !== log.new_status && (
-                              <span className="text-[11px] text-muted-foreground">{log.old_status} → {log.new_status}</span>
+                              <span className="text-[11px] text-muted-foreground">{log.old_status} para {log.new_status}</span>
                             )}
                           </div>
                         </div>
@@ -1761,6 +1767,7 @@ export default function AdminFinanceiro() {
           </TabsContent>
         )}
       </Tabs>
+      </div>
 
       {/* New Billing Modal */}
       <Dialog open={newBillingOpen} onOpenChange={setNewBillingOpen}>
@@ -1861,7 +1868,7 @@ export default function AdminFinanceiro() {
                         : "bg-transparent border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {p === "semanal" ? "📅 Semanal" : "📆 Mensal"}
+                    {p === "semanal" ? "Semanal" : "Mensal"}
                   </button>
                 ))}
               </div>
@@ -1993,7 +2000,7 @@ export default function AdminFinanceiro() {
                     payType === "full" ? "bg-success/15 border-success/30 text-success" : "bg-secondary border-border text-muted-foreground"
                   }`}
                 >
-                  ✅ Pago Total
+                  Pago total
                 </button>
                 <button
                   onClick={() => setPayType("partial")}
@@ -2001,7 +2008,7 @@ export default function AdminFinanceiro() {
                     payType === "partial" ? "bg-warning/15 border-warning/30 text-warning" : "bg-secondary border-border text-muted-foreground"
                   }`}
                 >
-                  💳 Pagou Parte
+                  Pagou parte
                 </button>
               </div>
 

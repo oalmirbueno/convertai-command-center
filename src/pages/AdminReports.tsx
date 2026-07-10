@@ -74,14 +74,17 @@ export default function AdminReports() {
   }
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold text-foreground">Relatórios</h1>
         <button onClick={() => navigate("/relatorios/novo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer">
           <Plus className="w-4 h-4" /> Novo Relatório
         </button>
       </div>
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {(!reports || reports.length === 0) ? (
         <div className="text-center py-16">
           <FileText className="w-10 h-10 text-muted-foreground/20 mx-auto mb-3" />
@@ -97,6 +100,7 @@ export default function AdminReports() {
           onSend={handleSendToClient}
         />
       )}
+      </div>
     </div>
   );
 }
@@ -161,7 +165,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
                               <div key={r.id} className="bg-card border border-border rounded-xl p-4">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="text-[13px] font-semibold text-foreground truncate">📊 {r.title}</p>
+                                    <p className="text-[13px] font-semibold text-foreground truncate">{r.title}</p>
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
                                       {r.project?.name}
                                       {r.period_start && r.period_end && ` • ${formatDate(r.period_start)}-${formatDate(r.period_end)}`}

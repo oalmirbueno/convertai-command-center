@@ -50,7 +50,8 @@ export default function Projects() {
   };
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between">
         <p className="heading-page">Projetos</p>
         {isAdmin && (
@@ -69,7 +70,7 @@ export default function Projects() {
       </div>
 
       {/* Filters */}
-      <div className="flex gap-1.5 overflow-x-auto pb-2 scrollbar-hidden md:flex-wrap md:overflow-visible md:pb-0">
+      <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1 scrollbar-hidden md:flex-wrap md:overflow-visible md:pb-0">
         {STATUS_OPTIONS.map(s => (
           <button key={s.value} onClick={() => setFilter(s.value)}
             className={`px-3 py-1.5 rounded-full text-[12px] cursor-pointer transition-colors border flex-shrink-0 whitespace-nowrap ${filter === s.value ? "bg-primary text-primary-foreground border-primary" : "bg-transparent text-muted-foreground border-border hover:text-foreground"}`}>
@@ -77,7 +78,9 @@ export default function Projects() {
           </button>
         ))}
       </div>
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : filtered.length === 0 ? (
@@ -119,6 +122,7 @@ export default function Projects() {
           ))}
         </div>
       )}
+      </div>
 
       <CreateProjectModal open={createOpen || !!editProject} onClose={() => { setCreateOpen(false); setEditProject(null); }} editProject={editProject} />
       <MeetingToProjectModal open={meetingModalOpen} onClose={() => setMeetingModalOpen(false)} />

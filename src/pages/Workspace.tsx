@@ -143,7 +143,7 @@ function suggestFolderName(n: Node): string {
     .replace(/\s?\(?\d{1,3}\)?\s*$/,"")
     .trim();
   if (stem && stem.length >= 3 && stem.length <= 32 && !/^[0-9\s]+$/.test(stem)) {
-    return `${base} — ${stem}`;
+    return `${base}: ${stem}`;
   }
   return base;
 }
@@ -599,7 +599,7 @@ export default function Workspace() {
       }
       toast({
         title: "Organização concluída",
-        description: `${moved} arquivo(s) movido(s) · ${created} pasta(s) criada(s)${skipped ? ` · ${skipped} ignorado(s)` : ""}`,
+        description: `${moved} arquivo(s) movido(s), ${created} pasta(s) criada(s)${skipped ? `, ${skipped} ignorado(s)` : ""}`,
       });
       invalidate();
     } catch (e: any) {
@@ -1017,16 +1017,16 @@ export default function Workspace() {
     : currentClient ? (currentClient.company_name || currentClient.full_name) : "Selecionar cliente";
 
   return (
-    <div className="pt-20 pb-8 px-4 md:px-6 max-w-[1400px] mx-auto animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <div className="flex h-full min-h-0 flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
-          <p className="text-xs text-muted-foreground mt-1">Drive interno da equipe · arraste para mover, solte arquivos para enviar</p>
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
+          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe. Arraste para mover, solte arquivos para enviar</p>
         </div>
         {/* Context switcher: collapsed picker with search + filters */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[220px] max-w-[320px]">
+            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[160px] max-w-[220px] md:max-w-[320px]">
               {scope === "global" ? <Globe2 className="w-4 h-4 text-primary shrink-0" /> : <Folder className="w-4 h-4 text-primary shrink-0" />}
               <span className="text-sm truncate flex-1 text-left">{contextLabel}</span>
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -1041,8 +1041,8 @@ export default function Workspace() {
               <div className="flex items-center gap-1 mt-2">
                 {[
                   { k: "all", label: "Padrão" },
-                  { k: "az", label: "A→Z" },
-                  { k: "za", label: "Z→A" },
+                  { k: "az", label: "A-Z" },
+                  { k: "za", label: "Z-A" },
                 ].map((f) => (
                   <button
                     key={f.k}
@@ -1064,7 +1064,7 @@ export default function Workspace() {
               </button>
             </div>
             <div className="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
-              <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">· {filteredClients.length}</span>}
+              <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">({filteredClients.length})</span>}
             </div>
             <div className="max-h-[320px] overflow-y-auto p-1">
               {filteredClients.map((c: any) => {
@@ -1090,12 +1090,12 @@ export default function Workspace() {
         </Popover>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 overflow-hidden md:overflow-visible">
         {/* Main */}
-        <main className="space-y-4 min-w-0">
+        <main className="min-h-0 min-w-0 flex flex-col md:block md:space-y-4">
           {/* Breadcrumb + actions */}
-          <div className="flex flex-wrap items-center gap-2 justify-between">
-            <div className="flex items-center gap-1 text-sm flex-wrap min-w-0">
+          <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between py-3 md:py-0">
+            <div className="flex w-full items-center gap-1 overflow-x-auto text-sm scrollbar-hidden md:w-auto md:flex-wrap md:overflow-visible min-w-0">
               {parent && (
                 <button onClick={() => setParentStack(parentStack.slice(0, -1))}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground mr-1"><ArrowLeft className="w-3.5 h-3.5" /></button>
@@ -1122,7 +1122,7 @@ export default function Workspace() {
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-nowrap w-full overflow-x-auto scrollbar-hidden sm:w-auto sm:flex-wrap sm:overflow-visible">
               <div className="relative flex-1 sm:flex-none min-w-[140px]">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="h-9 sm:h-8 pl-8 w-full sm:w-[180px] text-xs" />
@@ -1152,7 +1152,7 @@ export default function Workspace() {
                 {organizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                 <span className="hidden sm:inline">Auto-organizar</span>
               </Button>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0">
+              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0 shrink-0">
                 <Upload className="w-3.5 h-3.5" />
                 Upload
               </Button>
@@ -1162,7 +1162,7 @@ export default function Workspace() {
           </div>
 
           {/* Smart tag chips + sort */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <div className="shrink-0 flex flex-nowrap md:flex-wrap items-center gap-1.5 mb-3 overflow-x-auto scrollbar-hidden pb-1 md:overflow-visible md:pb-0">
             <button
               onClick={() => setTagFilter("all")}
               className={cn(
@@ -1189,7 +1189,7 @@ export default function Workspace() {
                 {t.label} <span className="opacity-60">{tagCounts[t.key]}</span>
               </button>
             ))}
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               {([
                 ["recent", "Recentes"],
                 ["old", "Antigos"],
@@ -1228,8 +1228,9 @@ export default function Workspace() {
               if (e.currentTarget === e.target) setDragOverArea(false);
             }}
             onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
-            className={cn("relative rounded-xl transition-all",
+            className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible",
               rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
+            style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
           >
             {rootDropActive && (
               <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-dashed border-primary/50 flex items-center justify-center pointer-events-none z-10">
@@ -1247,7 +1248,7 @@ export default function Workspace() {
                 Pasta vazia. Arraste arquivos aqui, envie ou crie uma subpasta.
               </div>
             ) : view === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pb-3 md:pb-0">
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
@@ -1389,7 +1390,7 @@ export default function Workspace() {
                   </Button>
                 )}
                 {selected.__virtual && (
-                  <span className="text-[11px] text-muted-foreground">📎 De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
+                  <span className="text-[11px] text-muted-foreground">De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
                 )}
                 {selected.sent_for_approval_file_id && (
                   <span className="text-[11px] text-warning">Já enviado para aprovação</span>
@@ -1434,7 +1435,7 @@ export default function Workspace() {
           <Input autoFocus value={moveCreateName} onChange={e => setMoveCreateName(e.target.value)}
             onFocus={e => e.currentTarget.select()}
             placeholder="Nome da pasta" onKeyDown={e => e.key === "Enter" && createFolderAndMove()} />
-          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática — edite à vontade.</p>
+          <p className="text-[11px] text-muted-foreground -mt-1">Sugestão automática. Edite à vontade.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => { setMoveCreate(null); setMoveCreateName(""); }}>Cancelar</Button>
             <Button onClick={createFolderAndMove} disabled={!moveCreateName.trim()}>Criar e mover</Button>

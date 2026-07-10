@@ -17,16 +17,12 @@ import { cn } from "@/lib/utils";
  * como fallback ou usa-se o componente apenas dentro de bloco `md:hidden`.
  */
 
-const TOP_OFFSET = 76;      // TopBar (52) + margem
-const BOTTOM_OFFSET = 64;   // MobileBottomNav
-
 const Root: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, children, ...props }) => (
   <div
-    className={cn("flex flex-col md:contents", className)}
-    style={{
-      // Ocupa altura útil da tela abaixo da TopBar e acima da BottomNav
-      height: `calc(100dvh - ${TOP_OFFSET}px - ${BOTTOM_OFFSET}px - env(safe-area-inset-top) - env(safe-area-inset-bottom))`,
-    }}
+    className={cn(
+      "flex h-full min-h-0 flex-col md:block md:h-auto",
+      className
+    )}
     {...props}
   >
     {children}

@@ -131,7 +131,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       setParsedSource({ source: parsed.source, label: parsed.sourceLabel, rows: parsed.rows, dimensionKey: parsed.dimensionKey });
       const mappedCount = Object.keys(parsed.metrics).length;
       const customCount = parsed.customMetrics?.length || 0;
-      toast.success(`${parsed.sourceLabel} · ${parsed.rows.length} linhas · ${mappedCount} métricas mapeadas${customCount ? ` + ${customCount} personalizadas` : ""}`);
+      toast.success(`${parsed.sourceLabel}: ${parsed.rows.length} linhas, ${mappedCount} métricas mapeadas${customCount ? ` + ${customCount} personalizadas` : ""}`);
     } catch (err: any) {
       console.error(err);
       toast.error("Erro ao processar arquivo: " + (err?.message || "desconhecido"));
@@ -282,7 +282,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         </div>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Título</Label>
-          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Relatório Semanal — Redes Sociais" />
+          <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="Relatório Semanal de Redes Sociais" />
         </div>
         <div className="grid grid-cols-2 gap-4">
           <div>
@@ -310,13 +310,13 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         </div>
 
         <p className="text-[11px] text-muted-foreground -mt-2">
-          Importe export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX) — o sistema detecta o tipo, normaliza colunas e gera o dashboard automaticamente.
+          Importe export do Google Ads, Meta Ads, Social Media ou Vendas (CSV/XLSX). O sistema detecta o tipo, normaliza colunas e gera o dashboard automaticamente.
         </p>
         {parsedSource && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-primary/5 border border-primary/20 text-[12px] text-foreground">
             <Sparkles className="w-3.5 h-3.5 text-primary" />
             Fonte detectada: <span className="font-semibold text-primary">{parsedSource.label}</span>
-            <span className="text-muted-foreground">· {parsedSource.rows.length} linhas · dimensão: {parsedSource.dimensionKey}</span>
+            <span className="text-muted-foreground">{parsedSource.rows.length} linhas, dimensão: {parsedSource.dimensionKey}</span>
           </div>
         )}
 
@@ -450,11 +450,11 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         </div>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Destaques do Período</Label>
-          <Textarea value={highlights} onChange={e => setHighlights(e.target.value)} rows={4} placeholder="🏆 Post com mais engajamento: ...&#10;📈 Melhor dia: ...&#10;🎯 Meta superada: ..." className="bg-secondary" />
+          <Textarea value={highlights} onChange={e => setHighlights(e.target.value)} rows={4} placeholder="Post com mais engajamento: ...&#10;Melhor dia: ...&#10;Meta superada: ..." className="bg-secondary" />
         </div>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Próximos Passos</Label>
-          <Textarea value={nextSteps} onChange={e => setNextSteps(e.target.value)} rows={4} placeholder="→ Aumentar frequência de Reels...&#10;→ Testar novos horários..." className="bg-secondary" />
+          <Textarea value={nextSteps} onChange={e => setNextSteps(e.target.value)} rows={4} placeholder="Aumentar frequência de Reels...&#10;Testar novos horários..." className="bg-secondary" />
         </div>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">
@@ -471,7 +471,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Upload de Relatório Externo (PDF/PPTX)</Label>
           {fileName ? (
             <div className="flex items-center gap-2 mt-2 text-sm text-foreground">
-              <span>📄 {fileName}</span>
+              <span>{fileName}</span>
               <button onClick={() => { setFileUrl(""); setFileName(""); }} className="text-destructive text-xs hover:underline cursor-pointer bg-transparent border-none">Remover</button>
             </div>
           ) : (

@@ -148,8 +148,6 @@ export default function ClientFinanceiro() {
       : planStatus === "warning"
         ? "Renova em breve"
         : "Pendente";
-  const planStatusEmoji =
-    planStatus === "active" ? "🟢" : planStatus === "warning" ? "🟡" : "🔴";
   const planStatusColor =
     planStatus === "active"
       ? "bg-success/10 text-success"
@@ -248,7 +246,7 @@ export default function ClientFinanceiro() {
                 <span
                   className={`text-xs px-2.5 py-1 rounded-full font-medium ${planStatusColor}`}
                 >
-                  {planStatusEmoji} {planStatusLabel}
+                  {planStatusLabel}
                 </span>
                 {renewalDate && (
                   <span className="text-sm text-muted-foreground">
@@ -312,12 +310,12 @@ export default function ClientFinanceiro() {
                     : "bg-destructive";
               const statusText =
                 balance > 500
-                  ? "Saldo OK ✓"
+                  ? "Saldo OK"
                   : balance > 100
-                    ? "Saldo baixo ⚠"
+                    ? "Saldo baixo"
                     : balance === 0
-                      ? "Sem saldo ❌"
-                      : "Saldo crítico ⚠";
+                      ? "Sem saldo"
+                      : "Saldo crítico";
               const statusTextColor =
                 balance > 500
                   ? "text-success"

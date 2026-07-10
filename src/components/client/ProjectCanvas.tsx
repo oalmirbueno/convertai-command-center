@@ -115,7 +115,7 @@ export default function ProjectCanvas({ onSelectProject }: ProjectCanvasProps) {
 
                 {/* Hover CTA */}
                 <p className="text-[11px] text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity duration-200">
-                  Clique para explorar →
+                  Clique para explorar
                 </p>
               </div>
             ))}

@@ -93,12 +93,12 @@ export default function WelcomeScreen({ onStart, hasRestoredProgress }: Props) {
           className="w-full py-[18px] rounded-xl text-base font-bold bg-primary text-primary-foreground hover:opacity-90 transition-all cursor-pointer border-none login-btn btn-interactive"
           style={{ animation: "fadeIn 0.5s ease-out 1.1s both" }}
         >
-          {hasRestoredProgress ? "Continuar Diagnóstico →" : "Iniciar Diagnóstico →"}
+          {hasRestoredProgress ? "Continuar Diagnóstico" : "Iniciar Diagnóstico"}
         </button>
 
         <p className="text-center text-[13px] text-muted-foreground/50 mt-5" style={{ animation: "fadeIn 0.5s ease-out 1.3s both" }}>
           Prefere falar com alguém?{" "}
-          <a href="#" className="text-primary hover:underline">Agende uma call →</a>
+          <a href="#" className="text-primary hover:underline">Agende uma call</a>
         </p>
       </div>
 

@@ -72,17 +72,17 @@ function CarouselSlider({ files }: { files: any[] }) {
         ))}
       </div>
       <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
-        🎠 {idx + 1}/{files.length}
+        {idx + 1}/{files.length}
       </span>
     </div>
   );
 }
 
 const CLIENT_FOLDERS = [
-  { id: "estrategicos", label: "📁 Estratégicos" },
-  { id: "contratos", label: "📁 Contratos" },
-  { id: "materiais", label: "📁 Materiais Gráficos" },
-  { id: "relatorios", label: "📁 Relatórios" },
+  { id: "estrategicos", label: "Estratégicos" },
+  { id: "contratos", label: "Contratos" },
+  { id: "materiais", label: "Materiais Gráficos" },
+  { id: "relatorios", label: "Relatórios" },
 ];
 
 const fileIcon = (name: string) => {
@@ -356,11 +356,11 @@ export default function ClientDocuments() {
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
                 onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
-                ❌ Solicitar Ajuste
+                Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
                 onClick={() => { setConfirmApprove(previewFile.id); setPreviewFile(null); }}>
-                ✅ Aprovar
+                Aprovar
               </Button>
             </DialogFooter>
           )}

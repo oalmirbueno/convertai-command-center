@@ -114,7 +114,8 @@ export default function Team() {
   const isModalOpen = createOpen || !!editMember;
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Equipe</p>
         <button onClick={() => { closeModal(); setCreateOpen(true); }}
@@ -122,7 +123,9 @@ export default function Team() {
           <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Novo</span> Membro
         </button>
       </div>
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : (members || []).length === 0 ? (
@@ -164,6 +167,7 @@ export default function Team() {
           })}
         </div>
       )}
+      </div>
 
       {/* Create / Edit Modal */}
       {isModalOpen && (

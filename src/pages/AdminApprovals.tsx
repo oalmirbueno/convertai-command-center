@@ -169,7 +169,8 @@ export default function AdminApprovals() {
     new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <p className="heading-page">Aprovações</p>
@@ -181,7 +182,7 @@ export default function AdminApprovals() {
         </div>
       </div>
 
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
+      <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hidden">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -196,7 +197,9 @@ export default function AdminApprovals() {
           </button>
         ))}
       </div>
+      </div>
 
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
       {isLoading ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[1,2,3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
@@ -260,6 +263,7 @@ export default function AdminApprovals() {
           })}
         </div>
       )}
+      </div>
 
       {/* Preview Modal */}
       <Dialog open={!!previewFile} onOpenChange={() => setPreviewFile(null)}>

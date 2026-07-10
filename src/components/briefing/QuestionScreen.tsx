@@ -325,7 +325,7 @@ export default function QuestionScreen({ answers, onUpdate, onComplete, storageK
               disabled={q.required && !canAdvance()}
               className="w-full sm:w-auto px-8 py-3 rounded-xl text-sm font-semibold transition-all cursor-pointer border-none disabled:opacity-40 bg-primary text-primary-foreground hover:opacity-90 btn-interactive"
             >
-              {idx === total - 1 ? "Finalizar ✓" : "Próxima →"}
+              {idx === total - 1 ? "Finalizar" : "Próxima"}
             </button>
           </div>
         </div>
