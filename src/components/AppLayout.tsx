@@ -284,7 +284,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute inset-x-0 top-[68px] mx-3 rounded-xl bg-popover border border-border p-3 shadow-lg animate-fade-in">
+          <div
+            className="absolute inset-x-0 mx-3 rounded-xl bg-popover border border-border p-3 shadow-lg animate-fade-in"
+            style={{ top: 'calc(env(safe-area-inset-top) + 72px)' }}
+          >
             {[...mainNav, ...moreNav].map((item) => (
               <NavLink
                 key={item.url}
