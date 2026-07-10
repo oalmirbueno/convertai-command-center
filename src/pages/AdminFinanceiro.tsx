@@ -666,11 +666,12 @@ export default function AdminFinanceiro() {
   });
 
   return (
-    <div className="space-y-6 animate-fade-in">
-      <div className="flex items-center justify-between flex-wrap gap-3">
+    <div className="-mx-4 flex h-[calc(100dvh-140px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:mx-0 md:block md:h-auto">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:mb-6 md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
+        <div className="flex items-center justify-between flex-wrap gap-3">
         <p className="heading-page">Financeiro</p>
         {isAdmin && (
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
             <div className="flex items-center gap-1 bg-secondary/50 border border-border rounded-lg p-0.5">
               {[{ value: "month" as const, label: "Este Mês" }, { value: "all" as const, label: "Geral" }].map((f) => (
                 <button
@@ -742,6 +743,9 @@ export default function AdminFinanceiro() {
           </div>
         )}
       </div>
+      </div>
+
+      <div className="flex-1 min-h-0 space-y-5 overflow-y-auto px-4 pt-3 pb-4 md:block md:space-y-6 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
 
       {/* Stats - only admin sees revenue/pending/overdue */}
       {isAdmin && (() => {
@@ -1068,7 +1072,7 @@ export default function AdminFinanceiro() {
       })()}
 
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
-        <TabsList className="sticky top-[64px] md:top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
+        <TabsList className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md shrink-0">Capital</TabsTrigger>}
@@ -1761,6 +1765,7 @@ export default function AdminFinanceiro() {
           </TabsContent>
         )}
       </Tabs>
+      </div>
 
       {/* New Billing Modal */}
       <Dialog open={newBillingOpen} onOpenChange={setNewBillingOpen}>
