@@ -1017,7 +1017,7 @@ export default function Workspace() {
     : currentClient ? (currentClient.company_name || currentClient.full_name) : "Selecionar cliente";
 
   return (
-    <div className="flex h-[calc(100dvh-140px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
+    <div className="flex h-[calc(100dvh-176px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
           <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
@@ -1026,7 +1026,7 @@ export default function Workspace() {
         {/* Context switcher: collapsed picker with search + filters */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[180px] max-w-[320px]">
+            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[160px] max-w-[220px] md:max-w-[320px]">
               {scope === "global" ? <Globe2 className="w-4 h-4 text-primary shrink-0" /> : <Folder className="w-4 h-4 text-primary shrink-0" />}
               <span className="text-sm truncate flex-1 text-left">{contextLabel}</span>
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -1095,7 +1095,7 @@ export default function Workspace() {
         <main className="min-h-0 min-w-0 flex flex-col md:block md:space-y-4">
           {/* Breadcrumb + actions */}
           <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between py-3 md:py-0">
-            <div className="flex items-center gap-1 text-sm flex-wrap min-w-0">
+            <div className="flex w-full items-center gap-1 overflow-x-auto text-sm scrollbar-hidden md:w-auto md:flex-wrap md:overflow-visible min-w-0">
               {parent && (
                 <button onClick={() => setParentStack(parentStack.slice(0, -1))}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground mr-1"><ArrowLeft className="w-3.5 h-3.5" /></button>
@@ -1122,7 +1122,7 @@ export default function Workspace() {
                 </span>
               ))}
             </div>
-            <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
+            <div className="flex items-center gap-2 flex-nowrap w-full overflow-x-auto scrollbar-hidden sm:w-auto sm:flex-wrap sm:overflow-visible">
               <div className="relative flex-1 sm:flex-none min-w-[140px]">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
                 <Input value={search} onChange={e => setSearch(e.target.value)} placeholder="Buscar..." className="h-9 sm:h-8 pl-8 w-full sm:w-[180px] text-xs" />
@@ -1152,7 +1152,7 @@ export default function Workspace() {
                 {organizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                 <span className="hidden sm:inline">Auto-organizar</span>
               </Button>
-              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0">
+              <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0 shrink-0">
                 <Upload className="w-3.5 h-3.5" />
                 Upload
               </Button>
@@ -1247,7 +1247,7 @@ export default function Workspace() {
                 Pasta vazia. Arraste arquivos aqui, envie ou crie uma subpasta.
               </div>
             ) : view === "grid" ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pb-3 md:pb-0">
                 {filtered.map(n => {
                   const Icon = iconFor(n);
                   const isFolder = n.kind === "folder";
