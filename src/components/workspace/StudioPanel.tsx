@@ -755,11 +755,11 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
   const dockPos = isFull
     ? (isMobile
-        ? "inset-0"
+        ? "left-2 right-2"
         : "top-[64px] left-0 right-0 bottom-0 sm:top-[72px]")
-    : dock === "br" ? "left-2 right-2 bottom-2 sm:left-auto sm:right-4 sm:bottom-4"
-    : dock === "bl" ? "left-2 right-2 bottom-2 sm:right-auto sm:left-4 sm:bottom-4"
-    :                 "left-2 right-2 bottom-2 sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
+    : dock === "br" ? "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:left-auto sm:right-4 sm:bottom-4"
+    : dock === "bl" ? "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:right-auto sm:left-4 sm:bottom-4"
+    :                 "left-2 right-2 bottom-[calc(env(safe-area-inset-bottom)+72px)] sm:left-1/2 sm:right-auto sm:-translate-x-1/2 sm:bottom-4";
   const dockSize = isFull
     ? ""
     : minimized
@@ -780,8 +780,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       style={
         isMobile && isFull
           ? {
-              top: "env(safe-area-inset-top)",
-              bottom: "env(safe-area-inset-bottom)",
+              top: "calc(env(safe-area-inset-top) + 72px)",
+              bottom: "calc(env(safe-area-inset-bottom) + 72px)",
             }
           : undefined
       }
