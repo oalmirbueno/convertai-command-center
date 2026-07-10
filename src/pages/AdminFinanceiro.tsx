@@ -69,9 +69,9 @@ const statusBadge = (status: string, dueDate?: string) => {
 };
 
 const typeIcon = (type: string) => {
-  if (type === "renewal") return "🔄";
-  if (type === "ads_recharge") return "📢";
-  return "⭐";
+  if (type === "renewal") return "REC";
+  if (type === "ads_recharge") return "ADS";
+  return "AVU";
 };
 
 export default function AdminFinanceiro() {
@@ -1185,7 +1185,7 @@ export default function AdminFinanceiro() {
                       totalAmount: Number(i.amount) || 0,
                       isPartial: i.status === "partial" || (Number(i.paid_amount) > 0 && Number(i.paid_amount) < Number(i.amount)),
                       date: i.paid_date || i.due_date,
-                      icon: "💼",
+                      icon: "PRJ",
                     }))
                 )
               : [];
@@ -1415,7 +1415,7 @@ export default function AdminFinanceiro() {
                 ))}
               </div>
               {totalInvested > 0 && (
-                <p className="text-[11px] text-muted-foreground">💰 Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
+                <p className="text-[11px] text-muted-foreground">Total já investido: <span className="font-mono text-foreground">{fmt(totalInvested)}</span> ({clientRecharges.length} recargas)</p>
               )}
               {clientWallets[0]?.last_recharge_date && (
                 <p className="text-[11px] text-muted-foreground">Última recarga: {new Date(clientWallets[0].last_recharge_date).toLocaleDateString("pt-BR")}</p>
@@ -1527,9 +1527,9 @@ export default function AdminFinanceiro() {
                           <div key={c.id} className="bg-card border border-border rounded-xl p-4 sm:p-5 space-y-2">
                             <div className="flex items-center justify-between flex-wrap gap-2">
                               <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">🟢 Ativo</span>}
-                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">🟡 Renovação em breve</span>}
-                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">🔴 Pendente</span>}
+                              {planStatus === "active" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-success/15 text-success">Ativo</span>}
+                              {planStatus === "soon" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Renovação em breve</span>}
+                              {planStatus === "overdue" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">Pendente</span>}
                               {planStatus === "unknown" && <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">Sem data</span>}
                             </div>
                             <p className="text-xs text-muted-foreground">
@@ -1662,7 +1662,7 @@ export default function AdminFinanceiro() {
                           const isFull = paid >= total && total > 0;
                           return (
                             <div key={pp.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">📦 {pp.project?.name || "Projeto"}</span>
+                              <span className="flex-1 truncate">{pp.project?.name || "Projeto"}</span>
                               <span className={`text-[10px] font-mono ${isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
                               <span className="font-mono">
                                 <span className={isFull ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
@@ -1679,7 +1679,7 @@ export default function AdminFinanceiro() {
                           const isPaid = b.status === "paid" && paid >= total;
                           return (
                             <div key={b.id} className="flex items-center gap-3 text-xs text-muted-foreground px-2 py-1.5 rounded bg-secondary/30">
-                              <span className="flex-1 truncate">💸 {b.description || "Cobrança avulsa"}</span>
+                              <span className="flex-1 truncate">{b.description || "Cobrança avulsa"}</span>
                               <span className={`text-[10px] font-mono ${isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}`}>{pct}%</span>
                               <span className="font-mono">
                                 <span className={isPaid ? "text-success" : isPartial ? "text-warning" : "text-muted-foreground"}>{fmt(paid)}</span>
@@ -1868,7 +1868,7 @@ export default function AdminFinanceiro() {
                         : "bg-transparent border-border text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    {p === "semanal" ? "📅 Semanal" : "📆 Mensal"}
+                    {p === "semanal" ? "Semanal" : "Mensal"}
                   </button>
                 ))}
               </div>
@@ -2008,7 +2008,7 @@ export default function AdminFinanceiro() {
                     payType === "partial" ? "bg-warning/15 border-warning/30 text-warning" : "bg-secondary border-border text-muted-foreground"
                   }`}
                 >
-                  💳 Pagou Parte
+                  Pagou parte
                 </button>
               </div>
 

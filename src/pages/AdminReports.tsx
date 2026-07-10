@@ -165,7 +165,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
                               <div key={r.id} className="bg-card border border-border rounded-xl p-4">
                                 <div className="flex items-start justify-between gap-3">
                                   <div className="min-w-0">
-                                    <p className="text-[13px] font-semibold text-foreground truncate">📊 {r.title}</p>
+                                    <p className="text-[13px] font-semibold text-foreground truncate">{r.title}</p>
                                     <p className="text-[11px] text-muted-foreground mt-0.5">
                                       {r.project?.name}
                                       {r.period_start && r.period_end && ` • ${formatDate(r.period_start)}-${formatDate(r.period_end)}`}
