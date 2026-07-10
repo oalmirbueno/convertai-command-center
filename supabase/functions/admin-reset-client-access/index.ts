@@ -14,7 +14,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
-    const { profile_id, new_email } = await req.json();
+    const { profile_id, new_email, new_full_name } = await req.json();
     if (!profile_id || !new_email) throw new Error("profile_id e new_email obrigatórios");
 
     // 1. Update auth email
@@ -26,14 +26,18 @@ Deno.serve(async (req) => {
 
     // 2. Reset first-access token
     const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+    const updatePayload: Record<string, unknown> = {
+      email: new_email,
+      first_access_token: token,
+      first_access_used_at: null,
+      portal_password: null,
+    };
+    if (typeof new_full_name === "string" && new_full_name.trim()) {
+      updatePayload.full_name = new_full_name.trim();
+    }
     const { data: prof, error: profErr } = await admin
       .from("profiles")
-      .update({
-        email: new_email,
-        first_access_token: token,
-        first_access_used_at: null,
-        portal_password: null,
-      })
+      .update(updatePayload)
       .eq("id", profile_id)
       .select("full_name, company_name")
       .single();
