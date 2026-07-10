@@ -743,7 +743,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return (
       <button
         onClick={() => { setOpen(true); setMinimized(false); }}
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 h-11 px-4 rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 flex items-center gap-2 text-sm font-medium"
+        className="hidden md:flex fixed bottom-4 left-1/2 -translate-x-1/2 z-40 h-11 px-4 rounded-full bg-primary text-primary-foreground shadow-lg hover:opacity-90 items-center gap-2 text-sm font-medium"
         title="Abrir Studio (notas, mapa mental, roteiro)"
       >
         <Sparkles className="w-4 h-4" /> Studio
