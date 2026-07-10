@@ -8,7 +8,7 @@ import { notifyOpsTaskUpdated, notifyOpsTaskDeleted } from "@/lib/opsTaskSync";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2, ChevronUp, ChevronDown, MoreVertical, ArrowRight } from "lucide-react";
+import { Clock, Plus, Filter, X, Paperclip, CalendarIcon, Trash2, ChevronUp, ChevronDown, MoreVertical, ArrowRight, ChevronLeft, ChevronRight } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import CreateTaskModal from "@/components/admin/CreateTaskModal";
@@ -312,10 +312,16 @@ export default function Kanban() {
   // Mobile: carousel refs para permitir tap na aba mover o carrossel horizontalmente
   const mobileScrollerRef = useRef<HTMLDivElement | null>(null);
   const colRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const mobileScrollRaf = useRef<number | null>(null);
   const scrollToCol = (colId: string) => {
     const el = colRefs.current[colId];
-    if (el) el.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
     setMobileTab(colId);
+    if (el) el.scrollIntoView({ behavior: "smooth", inline: "start", block: "nearest" });
+  };
+  const stepMobileColumn = (dir: -1 | 1) => {
+    const idx = Math.max(0, columns.findIndex(c => c.id === mobileTab));
+    const next = columns[Math.min(columns.length - 1, Math.max(0, idx + dir))];
+    if (next) scrollToCol(next.id);
   };
 
   const Modals = (
@@ -423,23 +429,43 @@ export default function Kanban() {
           <p className="heading-page text-[16px] mb-2" data-tour="kanban-create-btn">Kanban</p>
           {FiltersBar}
           {/* Tabs indicadoras */}
-          <div className="flex overflow-x-auto scrollbar-hidden -mx-4 px-4 mt-1">
-            {columns.map(col => {
-              const count = filteredTasks.filter((t: any) => t.status === col.id).length;
-              const active = mobileTab === col.id;
-              return (
-                <button
-                  key={col.id}
-                  onClick={() => scrollToCol(col.id)}
-                  className={cn(
-                    "flex-shrink-0 px-4 py-2.5 text-[13px] font-semibold whitespace-nowrap border-b-2 transition-colors bg-transparent",
-                    active ? "text-foreground border-primary" : "text-muted-foreground border-transparent"
-                  )}
-                >
-                  {col.title} <span className="text-[10px] font-mono opacity-70 ml-1">({count})</span>
-                </button>
-              );
-            })}
+          <div className="mt-1 flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => stepMobileColumn(-1)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground disabled:opacity-30"
+              disabled={mobileTab === columns[0].id}
+              aria-label="Coluna anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="flex min-w-0 flex-1 overflow-x-auto scrollbar-hidden">
+              {columns.map(col => {
+                const count = filteredTasks.filter((t: any) => t.status === col.id).length;
+                const active = mobileTab === col.id;
+                return (
+                  <button
+                    key={col.id}
+                    onClick={() => scrollToCol(col.id)}
+                    className={cn(
+                      "flex-shrink-0 px-3 py-2.5 text-[13px] font-semibold whitespace-nowrap border-b-2 transition-colors bg-transparent",
+                      active ? "text-foreground border-primary" : "text-muted-foreground border-transparent"
+                    )}
+                  >
+                    {col.title} <span className="text-[10px] font-mono opacity-70 ml-1">({count})</span>
+                  </button>
+                );
+              })}
+            </div>
+            <button
+              type="button"
+              onClick={() => stepMobileColumn(1)}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-card text-muted-foreground disabled:opacity-30"
+              disabled={mobileTab === columns[columns.length - 1].id}
+              aria-label="Próxima coluna"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
 
@@ -447,21 +473,24 @@ export default function Kanban() {
         <div
           ref={mobileScrollerRef}
           className="flex-1 min-h-0 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scrollbar-hidden"
-          style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+          style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch", touchAction: "pan-x" }}
           onScroll={(e) => {
-            // Atualiza tab ativa conforme scroll
             const scroller = e.currentTarget;
-            const center = scroller.scrollLeft + scroller.clientWidth / 2;
-            let closest = columns[0].id;
-            let bestDist = Infinity;
-            columns.forEach(col => {
-              const el = colRefs.current[col.id];
-              if (!el) return;
-              const mid = el.offsetLeft + el.offsetWidth / 2;
-              const d = Math.abs(mid - center);
-              if (d < bestDist) { bestDist = d; closest = col.id; }
+            if (mobileScrollRaf.current) return;
+            mobileScrollRaf.current = window.requestAnimationFrame(() => {
+              mobileScrollRaf.current = null;
+              const center = scroller.scrollLeft + scroller.clientWidth / 2;
+              let closest = columns[0].id;
+              let bestDist = Infinity;
+              columns.forEach(col => {
+                const el = colRefs.current[col.id];
+                if (!el) return;
+                const mid = el.offsetLeft + el.offsetWidth / 2;
+                const d = Math.abs(mid - center);
+                if (d < bestDist) { bestDist = d; closest = col.id; }
+              });
+              setMobileTab(prev => prev === closest ? prev : closest);
             });
-            if (closest !== mobileTab) setMobileTab(closest);
           }}
         >
           {isLoading ? (
@@ -473,7 +502,9 @@ export default function Kanban() {
                 <div
                   key={col.id}
                   ref={(el) => { colRefs.current[col.id] = el; }}
-                  className="snap-center shrink-0 w-[92vw] mx-1 first:ml-4 last:mr-4 flex flex-col min-h-0"
+                  className="snap-start shrink-0 w-[calc(100vw-2rem)] mx-4 flex flex-col min-h-0"
+                  onDragOver={isClient ? undefined : (e) => e.preventDefault()}
+                  onDrop={isClient ? undefined : () => handleDrop(col.id)}
                 >
                   {/* Header da coluna (sticky dentro do próprio card) */}
                   <div className="flex items-center gap-2 px-1 pt-3 pb-2 shrink-0">
@@ -499,9 +530,14 @@ export default function Kanban() {
                     {colTasks.map((task: any) => (
                       <div
                         key={task.id}
+                        draggable={!isClient}
+                        onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                        onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                         onClick={() => handleCardClick(task)}
                         className={cn(
                           "bg-card border border-border rounded-[10px] border-l-[3px] cursor-pointer active:scale-[0.99] transition-transform",
+                          !isClient && "cursor-grab active:cursor-grabbing",
+                          draggedTask === task.id && "opacity-40",
                           priorityBorderColors[task.priority] || "border-l-border"
                         )}
                       >
