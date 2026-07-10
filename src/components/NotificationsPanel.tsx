@@ -110,31 +110,15 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent
         side="right"
-        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col"
+        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col [&>button.absolute]:top-3 [&>button.absolute]:right-3"
         style={{
           paddingTop: "env(safe-area-inset-top)",
           paddingBottom: "env(safe-area-inset-bottom)",
         }}
       >
         <SheetHeader className="px-4 pt-4 pb-3 shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 min-w-0">
-              <button
-                onClick={() => onOpenChange(false)}
-                className="sm:hidden -ml-1 h-9 w-9 flex items-center justify-center rounded-md hover:bg-secondary text-foreground"
-                aria-label="Voltar"
-              >
-                <X className="w-4 h-4" />
-              </button>
-              <SheetTitle className="label-sm text-foreground truncate">Notificações</SheetTitle>
-            </div>
-            <button
-              onClick={() => onOpenChange(false)}
-              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-md hover:bg-secondary text-muted-foreground"
-              aria-label="Fechar"
-            >
-              <X className="w-4 h-4" />
-            </button>
+          <div className="flex items-center gap-2 min-w-0 pr-10">
+            <SheetTitle className="label-sm text-foreground truncate">Notificações</SheetTitle>
           </div>
         </SheetHeader>
 

@@ -9,11 +9,11 @@ import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
 import { adminTourSteps, clientTourSteps, teamTourSteps, getPageTour, pageTours } from "@/components/onboarding/tourConfigs";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon } from "lucide-react";
+import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles } from "lucide-react";
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
-  Sparkles, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
+  BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -216,8 +216,25 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile hamburger */}
-        <div className="flex-1 md:hidden" />
+        {/* Mobile: centered Studio launcher */}
+        <div className="flex-1 md:hidden flex items-center justify-center">
+          <button
+            type="button"
+            onClick={() => {
+              if (location.pathname !== "/workspace") {
+                window.location.assign("/workspace");
+                setTimeout(() => window.dispatchEvent(new Event("studio:open")), 300);
+              } else {
+                window.dispatchEvent(new Event("studio:open"));
+              }
+            }}
+            className="h-8 px-3 rounded-full bg-primary/15 hover:bg-primary/25 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 border border-primary/30"
+            aria-label="Abrir Studio"
+          >
+            <Sparkles className="w-3.5 h-3.5" />
+            Studio
+          </button>
+        </div>
 
         {/* Right: Icons */}
         <div className="flex items-center gap-1 shrink-0">
