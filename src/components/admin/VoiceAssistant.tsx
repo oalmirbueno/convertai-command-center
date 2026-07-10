@@ -992,7 +992,7 @@ export default function VoiceAssistant() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-6 left-6 z-40 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform"
+        className="fixed left-4 md:left-6 z-40 w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform bottom-[calc(env(safe-area-inset-bottom)+104px)] md:bottom-6"
         title="Assistente"
       >
         <Sparkles className="w-6 h-6" />
