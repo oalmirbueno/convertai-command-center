@@ -781,9 +781,9 @@ export default function AdminFinanceiro() {
           }] : []),
         ];
         return (
-        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="flex md:grid md:grid-cols-2 lg:grid-cols-3 gap-3 overflow-x-auto snap-x snap-mandatory md:overflow-visible -mx-4 px-4 md:mx-0 md:px-0 pb-2 scrollbar-hidden">
           {cards.map((s: any, i: number) => (
-            <div key={i} className="bg-card border border-border rounded-xl p-4">
+            <div key={i} className="bg-card border border-border rounded-xl p-4 shrink-0 w-[80%] snap-center md:w-auto md:shrink">
               <div className="flex items-center gap-2 mb-2">
                 <s.icon className={`w-4 h-4 ${s.color}`} />
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
