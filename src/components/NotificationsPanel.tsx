@@ -108,16 +108,39 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0">
-        <SheetHeader className="px-5 pt-5 pb-3">
-          <div className="flex items-center justify-between">
-            <SheetTitle className="label-sm text-foreground">Notificações</SheetTitle>
+      <SheetContent
+        side="right"
+        className="w-full sm:w-[370px] sm:max-w-[370px] bg-card border-l border-border p-0 flex flex-col"
+        style={{
+          paddingTop: "env(safe-area-inset-top)",
+          paddingBottom: "env(safe-area-inset-bottom)",
+        }}
+      >
+        <SheetHeader className="px-4 pt-4 pb-3 shrink-0">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <button
+                onClick={() => onOpenChange(false)}
+                className="sm:hidden -ml-1 h-9 w-9 flex items-center justify-center rounded-md hover:bg-secondary text-foreground"
+                aria-label="Voltar"
+              >
+                <X className="w-4 h-4" />
+              </button>
+              <SheetTitle className="label-sm text-foreground truncate">Notificações</SheetTitle>
+            </div>
+            <button
+              onClick={() => onOpenChange(false)}
+              className="hidden sm:flex h-8 w-8 items-center justify-center rounded-md hover:bg-secondary text-muted-foreground"
+              aria-label="Fechar"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
         </SheetHeader>
 
         {/* Tabs + Mark all */}
-        <div className="px-5 pb-3 space-y-3">
-          <div className="flex items-center gap-2">
+        <div className="px-5 pb-3 space-y-3 shrink-0">
+          <div className="flex items-center gap-2 flex-wrap">
             <button
               onClick={() => setTab("all")}
               className={`text-[12px] px-3 py-1.5 rounded-full border cursor-pointer transition-colors ${
@@ -143,7 +166,7 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
         </div>
 
         {/* Notifications list */}
-        <div className="overflow-y-auto" style={{ maxHeight: "calc(100vh - 140px)", scrollbarWidth: "none" }}>
+        <div className="flex-1 overflow-y-auto" style={{ scrollbarWidth: "none", WebkitOverflowScrolling: "touch" }}>
           {groups.length === 0 ? (
             <p className="text-sm text-muted-foreground py-8 text-center">Nenhuma notificação.</p>
           ) : (

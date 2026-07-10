@@ -31,7 +31,7 @@ export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: He
   return (
     <div
       ref={ref}
-      className="fixed right-4 z-[100] bottom-[calc(env(safe-area-inset-bottom)+80px)] md:bottom-5 md:right-5"
+      className="fixed right-4 z-[100] bottom-[calc(env(safe-area-inset-bottom)+104px)] md:bottom-5 md:right-5"
     >
 
       {/* Menu */}

@@ -770,13 +770,22 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
 
   return (
-    <div className={cn(
-      "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
-      isMobile && isFull ? "z-[60]" : "z-40",
-      isFull ? "rounded-none border-t" : "rounded-2xl border",
-
-      dockPos, dockSize
-    )}>
+    <div
+      className={cn(
+        "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
+        isMobile && isFull ? "z-[60]" : "z-40",
+        isFull ? "rounded-none border-t" : "rounded-2xl border",
+        dockPos, dockSize
+      )}
+      style={
+        isMobile && isFull
+          ? {
+              top: "env(safe-area-inset-top)",
+              bottom: "env(safe-area-inset-bottom)",
+            }
+          : undefined
+      }
+    >
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
         {isMobile && !minimized ? (
