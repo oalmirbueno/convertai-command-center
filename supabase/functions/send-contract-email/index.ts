@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    const { contract_id } = await req.json();
+    const { contract_id, override_email } = await req.json();
     if (!contract_id) return json({ error: "missing contract_id" }, 400);
 
     const { data: contract } = await supabase
@@ -45,7 +45,8 @@ Deno.serve(async (req) => {
 
     const { data: client } = await supabase
       .from("profiles").select("full_name, email, company_name").eq("id", contract.client_id).maybeSingle();
-    if (!client?.email) return json({ error: "client without email" }, 400);
+    const recipient = (override_email as string | undefined)?.trim() || client?.email;
+    if (!recipient) return json({ error: "client without email" }, 400);
 
     const signUrl = `${PORTAL_URL}/contrato/${contract.sign_token}`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
