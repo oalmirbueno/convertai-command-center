@@ -270,7 +270,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
   }, [isMobile]);
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
-  useEffect(() => { try { localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized]);
+  useEffect(() => { try { if (!isMobile) localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized, isMobile]);
   // Escape sai da tela cheia. Precisa ficar ANTES de qualquer early return para respeitar as regras de hooks.
   useEffect(() => {
     if (dock !== "full") return;
