@@ -144,8 +144,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav */}
-      <nav className="dark fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4 text-foreground"
+      <nav className="dark fixed left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4 text-foreground"
         style={{
+          top: 'calc(env(safe-area-inset-top) + 12px)',
           background: 'rgba(17, 17, 19, 0.85)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',
@@ -283,7 +284,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {mobileMenuOpen && (
         <div className="fixed inset-0 z-40 md:hidden">
           <div className="absolute inset-0 bg-background/90 backdrop-blur-sm" onClick={() => setMobileMenuOpen(false)} />
-          <div className="absolute inset-x-0 top-[68px] mx-3 rounded-xl bg-popover border border-border p-3 shadow-lg animate-fade-in">
+          <div
+            className="absolute inset-x-0 mx-3 rounded-xl bg-popover border border-border p-3 shadow-lg animate-fade-in"
+            style={{ top: 'calc(env(safe-area-inset-top) + 72px)' }}
+          >
             {[...mainNav, ...moreNav].map((item) => (
               <NavLink
                 key={item.url}
@@ -312,7 +316,14 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       )}
 
       {/* Content */}
-      <main className="pt-20 pb-24 md:pb-8 px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding" data-tour="finish">
+      <main
+        className="px-4 md:px-6 max-w-[1280px] mx-auto safe-area-padding"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top) + 80px)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 96px)',
+        }}
+        data-tour="finish"
+      >
         {children}
       </main>
 
