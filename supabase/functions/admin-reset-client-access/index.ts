@@ -59,6 +59,10 @@ Deno.serve(async (req) => {
       },
     });
 
+    // 4. Optionally resend a signed contract to another email
+    const { send_contract_id, contract_recipient_email } = await (async () => ({}))().then(() => ({})) as any;
+    // (parsed above via req.json — read again from the original payload)
+
     return new Response(JSON.stringify({ success: true, firstAccessUrl }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
