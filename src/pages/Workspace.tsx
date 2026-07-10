@@ -1017,16 +1017,16 @@ export default function Workspace() {
     : currentClient ? (currentClient.company_name || currentClient.full_name) : "Selecionar cliente";
 
   return (
-    <div className="pt-20 pb-8 px-4 md:px-6 max-w-[1400px] mx-auto animate-fade-in">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
+    <div className="flex h-[calc(100dvh-140px-env(safe-area-inset-top)-env(safe-area-inset-bottom))] flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
+      <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
-          <h1 className="text-2xl font-bold tracking-tight">Workspace</h1>
-          <p className="text-xs text-muted-foreground mt-1">Drive interno da equipe · arraste para mover, solte arquivos para enviar</p>
+          <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
+          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe · arraste para mover, solte arquivos para enviar</p>
         </div>
         {/* Context switcher: collapsed picker with search + filters */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
           <PopoverTrigger asChild>
-            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[220px] max-w-[320px]">
+            <button className="flex items-center gap-2 px-3 h-10 rounded-xl border border-border bg-card hover:border-primary/40 transition-colors min-w-[180px] max-w-[320px]">
               {scope === "global" ? <Globe2 className="w-4 h-4 text-primary shrink-0" /> : <Folder className="w-4 h-4 text-primary shrink-0" />}
               <span className="text-sm truncate flex-1 text-left">{contextLabel}</span>
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
@@ -1090,11 +1090,11 @@ export default function Workspace() {
         </Popover>
       </div>
 
-      <div className="grid grid-cols-1 gap-4">
+      <div className="flex-1 min-h-0 grid grid-cols-1 gap-4 overflow-hidden md:overflow-visible">
         {/* Main */}
-        <main className="space-y-4 min-w-0">
+        <main className="min-h-0 min-w-0 flex flex-col md:block md:space-y-4">
           {/* Breadcrumb + actions */}
-          <div className="flex flex-wrap items-center gap-2 justify-between">
+          <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between py-3 md:py-0">
             <div className="flex items-center gap-1 text-sm flex-wrap min-w-0">
               {parent && (
                 <button onClick={() => setParentStack(parentStack.slice(0, -1))}
@@ -1162,7 +1162,7 @@ export default function Workspace() {
           </div>
 
           {/* Smart tag chips + sort */}
-          <div className="flex flex-wrap items-center gap-1.5 mb-3">
+          <div className="shrink-0 flex flex-nowrap md:flex-wrap items-center gap-1.5 mb-3 overflow-x-auto scrollbar-hidden pb-1 md:overflow-visible md:pb-0">
             <button
               onClick={() => setTagFilter("all")}
               className={cn(
@@ -1189,7 +1189,7 @@ export default function Workspace() {
                 {t.label} <span className="opacity-60">{tagCounts[t.key]}</span>
               </button>
             ))}
-            <div className="ml-auto flex items-center gap-1">
+            <div className="ml-auto flex shrink-0 items-center gap-1">
               {([
                 ["recent", "Recentes"],
                 ["old", "Antigos"],
@@ -1228,7 +1228,7 @@ export default function Workspace() {
               if (e.currentTarget === e.target) setDragOverArea(false);
             }}
             onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
-            className={cn("relative rounded-xl transition-all",
+            className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible",
               rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
           >
             {rootDropActive && (
