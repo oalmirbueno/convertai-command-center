@@ -457,7 +457,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         </div>
 
         {/* Body */}
-        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto px-6 py-5 space-y-6" style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}>
           {/* Title */}
           {editing ? (
             <input value={title} onChange={e => setTitle(e.target.value)}
