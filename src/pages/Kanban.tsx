@@ -569,6 +569,7 @@ export default function Kanban() {
             })
           )}
         </div>
+        {Modals}
       </div>
     );
   }
