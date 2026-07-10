@@ -144,8 +144,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-background tech-grid-bg" data-tour="welcome">
       {/* Floating TopNav */}
-      <nav className="dark fixed top-3 left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4 text-foreground"
+      <nav className="dark fixed left-1/2 -translate-x-1/2 w-[95%] max-w-[1400px] z-50 h-[52px] rounded-xl flex items-center px-4 gap-4 text-foreground"
         style={{
+          top: 'calc(env(safe-area-inset-top) + 12px)',
           background: 'rgba(17, 17, 19, 0.85)',
           backdropFilter: 'blur(20px)',
           WebkitBackdropFilter: 'blur(20px)',

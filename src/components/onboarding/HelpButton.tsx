@@ -29,7 +29,11 @@ export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: He
   };
 
   return (
-    <div ref={ref} className="fixed bottom-5 right-5 z-[100]">
+    <div
+      ref={ref}
+      className="fixed right-4 z-[100] bottom-[calc(env(safe-area-inset-bottom)+80px)] md:bottom-5 md:right-5"
+    >
+
       {/* Menu */}
       {open && onPageTour && (
         <div className="absolute bottom-14 right-0 w-56 rounded-xl bg-popover border border-border p-1.5 shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-200">
