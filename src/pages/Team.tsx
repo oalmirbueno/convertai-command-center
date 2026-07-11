@@ -1,9 +1,9 @@
-import { useState } from "react";
-import { useTeamMembers, useTasks } from "@/hooks/useSupabaseData";
+import { useEffect, useState } from "react";
+import { useTeamMembers, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle } from "lucide-react";
+import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle, Check, Search } from "lucide-react";
 import { toast } from "sonner";
 
 const roleBadge: Record<string, { cls: string; label: string }> = {
