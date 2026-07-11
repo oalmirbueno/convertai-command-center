@@ -16,6 +16,7 @@ const roleBadge: Record<string, { cls: string; label: string }> = {
 export default function Team() {
   const { data: members, isLoading } = useTeamMembers();
   const { data: allTasks } = useTasks();
+  const { data: clients } = useClients();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [editMember, setEditMember] = useState<any>(null);
@@ -26,6 +27,10 @@ export default function Team() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState("design");
+  const [assignedClientIds, setAssignedClientIds] = useState<string[]>([]);
+  const [initialAssignedIds, setInitialAssignedIds] = useState<string[]>([]);
+  const [clientSearch, setClientSearch] = useState("");
+  const [assignments, setAssignments] = useState<Record<string, string[]>>({});
 
   const taskCountFor = (userId: string) => (allTasks || []).filter((t: any) => t.assigned_to === userId && t.status !== "done").length;
 
