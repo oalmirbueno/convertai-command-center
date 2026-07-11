@@ -895,23 +895,42 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
       {!minimized && (
         <>
-          {/* Barra de contexto: escopo + projeto pill + ações slim */}
-          <div className="border-b border-border/70 bg-muted/20 shrink-0 px-2 sm:px-3 py-2 sm:py-1.5 flex items-center gap-2 text-[11px]">
-            {/* Escopo (chip) */}
-            <div className="hidden sm:flex items-center gap-1.5 shrink-0 px-2 h-7 rounded-full bg-background/70 border border-border/70">
-              <FolderIcon className="w-3 h-3 text-muted-foreground" />
-              <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/90 truncate max-w-[160px]" title={contextLabel}>
+          {/* Barra de contexto: chip único de escopo + projeto + ações */}
+          <div className="border-b border-border/70 bg-muted/20 shrink-0 px-2 sm:px-3 py-2 sm:py-1.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[11px]">
+            {/* Escopo · label limpo + 2 ações inline (recarregar / copiar contexto) */}
+            <div className="flex items-center h-8 sm:h-7 rounded-full border border-border/70 bg-background/70 pl-2.5 pr-1 shrink-0 max-w-full">
+              <Globe2 className="w-3.5 h-3.5 text-primary/80 shrink-0" />
+              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[200px] sm:max-w-[240px]" title={contextLabel}>
                 {contextLabel}
               </span>
+              <span className="mx-1.5 h-4 w-px bg-border/70 shrink-0" />
+              <button
+                onClick={() => { try { window.dispatchEvent(new CustomEvent("studio:pull-context")); } catch {} toast({ title: "Contexto atualizado", description: "Recarreguei os dados do escopo." }); }}
+                title="Puxar contexto (recarregar dados do escopo)"
+                className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Brain className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={async () => {
+                  const project = projects.find(p => p.id === projectId)?.name;
+                  const payload = `${contextLabel}${project ? ` › ${project}` : ""}`;
+                  try { await navigator.clipboard.writeText(payload); toast({ title: "Contexto copiado", description: payload }); } catch { /* ignore */ }
+                }}
+                title="Enviar contexto (copiar caminho para colar em outro lugar)"
+                className="h-6 w-6 rounded-full flex items-center justify-center text-muted-foreground hover:text-primary hover:bg-primary/10 transition-colors"
+              >
+                <Send className="w-3.5 h-3.5" />
+              </button>
             </div>
 
-            {/* Projeto (pill combobox) */}
-            <div className="relative flex-1 min-w-0 max-w-full sm:max-w-[280px]">
+            {/* Projeto (pill combobox) — largura contida, não estoura */}
+            <div className="relative min-w-0 flex-1 sm:flex-none sm:w-[220px] max-w-full">
               <FolderIcon className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={projectId ?? ""}
                 onChange={e => setProjectId(e.target.value || null)}
-                className="w-full appearance-none bg-background/80 border border-border/70 rounded-full pl-8 pr-8 h-8 sm:h-7 text-[12px] sm:text-[11.5px] font-medium text-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 truncate"
+                className="w-full appearance-none bg-background/70 border border-border/70 rounded-full pl-8 pr-7 h-8 sm:h-7 text-[11.5px] font-medium text-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 truncate"
                 title="Vincule um projeto para publicar/espelhar ao cliente"
               >
                 <option value="">Sem projeto</option>
@@ -921,7 +940,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             </div>
 
             {projectId && (
-              <span className={cn("hidden sm:flex text-[10px] items-center gap-1 shrink-0",
+              <span className={cn("hidden sm:flex text-[10px] items-center gap-1 shrink-0 px-1",
                 docSyncing === "saving" && "text-amber-500",
                 docSyncing === "saved" && "text-primary",
                 docSyncing === "error" && "text-destructive",
@@ -933,8 +952,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </span>
             )}
 
-            {/* Ações slim agrupadas em um único pill */}
-            <div className="flex items-center shrink-0 ml-auto rounded-full border border-border/70 bg-background/70 overflow-hidden h-8 sm:h-7 divide-x divide-border/70">
+            {/* Ações agrupadas — sem ml-auto pra não deixar buraco visual */}
+            <div className="flex items-center shrink-0 rounded-full border border-border/70 bg-background/70 overflow-hidden h-8 sm:h-7 divide-x divide-border/70 ml-auto sm:ml-0">
               <button
                 onClick={() => setAutoFix(v => !v)}
                 title={`Auto-fix ${autoFix ? "ativo" : "inativo"}`}
@@ -956,6 +975,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </button>
             </div>
           </div>
+
 
 
 
