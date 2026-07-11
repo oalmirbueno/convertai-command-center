@@ -263,11 +263,23 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const [mode, setMode] = useState<Mode>("context");
   const isMobile = useIsMobile();
   const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
+  // Mobile: só reseta o estado UMA vez (primeira detecção). Reset a cada mudança
+  // deixava o Studio fechando sozinho quando o evento "studio:open" chegava durante o mount.
+  const mobileResetRef = useRef(false);
   useEffect(() => {
-    if (!isMobile) return;
-    setOpen(false);
-    setMinimized(false);
-    try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
+    if (!isMobile || mobileResetRef.current) return;
+    mobileResetRef.current = true;
+    // Se houver um open pendente (disparado antes do mount), respeita-o.
+    const pending = (window as any).__studioOpenPending === true;
+    if (!pending) {
+      setOpen(false);
+      setMinimized(false);
+      try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
+    } else {
+      (window as any).__studioOpenPending = false;
+      setOpen(true);
+      setMinimized(false);
+    }
   }, [isMobile]);
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { if (!isMobile) localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized, isMobile]);
@@ -279,10 +291,17 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return () => window.removeEventListener("keydown", onKey);
   }, [dock]);
 
-  // Global open trigger (mobile bottom nav)
+  // Global open trigger. Se o listener ainda não montou quando o evento chega
+  // (ex.: navegação para /workspace + dispatch imediato), guardamos flag pendente
+  // que o mount consome.
   useEffect(() => {
-    const openStudio = () => { setOpen(true); setMinimized(false); };
+    const openStudio = () => { (window as any).__studioOpenPending = false; setOpen(true); setMinimized(false); };
     window.addEventListener("studio:open", openStudio);
+    // Consome flag pendente caso já tenha sido setada antes do listener registrar.
+    if ((window as any).__studioOpenPending === true) {
+      (window as any).__studioOpenPending = false;
+      setOpen(true); setMinimized(false);
+    }
     return () => window.removeEventListener("studio:open", openStudio);
   }, []);
 
