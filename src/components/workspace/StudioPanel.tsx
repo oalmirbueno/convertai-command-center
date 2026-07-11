@@ -2744,16 +2744,16 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
 
 
       <div className="flex flex-col h-full flex-1 min-w-0">
-        {/* Header: cliente + toggle sidebar + nova */}
-        <div className="flex items-center gap-1 px-2 py-1.5 border-b border-border bg-secondary/30">
+        {/* Header: cliente + toggle sidebar + nova — no mobile empilha em 2 linhas */}
+        <div className="flex flex-wrap items-center gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 border-b border-border bg-secondary/30">
           {!sidebarOpen && (
             <button onClick={() => setSidebarOpen(true)}
-              className="p-1 rounded hover:bg-secondary text-muted-foreground" title="Mostrar conversas (Alt+B)">
-              <History className="w-3 h-3" />
+              className="h-8 w-8 sm:h-6 sm:w-6 rounded hover:bg-secondary text-muted-foreground flex items-center justify-center shrink-0" title="Mostrar conversas (Alt+B)">
+              <History className="w-4 h-4 sm:w-3 sm:h-3" />
             </button>
           )}
-          <Bot className="w-3.5 h-3.5 text-primary" />
-          <span className="text-[10px] font-medium text-foreground/80 truncate">
+          <Bot className="w-4 h-4 sm:w-3.5 sm:h-3.5 text-primary shrink-0" />
+          <span className="text-[11px] sm:text-[10px] font-medium text-foreground/80 truncate min-w-0 flex-1 sm:flex-none">
             {clientName ? `${label} · ${clientName}` : `${label} · Global`}
             {folderPath && <span className="text-muted-foreground"> · /{folderPath.split("/").slice(-2).join("/")}</span>}
           </span>
