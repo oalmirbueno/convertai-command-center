@@ -3086,8 +3086,8 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </PopoverContent>
           </Popover>
 
-          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2 shrink-0">
-            {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
+          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-10 sm:h-8 px-3 sm:px-2 shrink-0">
+            {streaming ? <Loader2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Send className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
           </Button>
 
         </div>
