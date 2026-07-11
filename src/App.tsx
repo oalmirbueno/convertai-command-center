@@ -45,13 +45,37 @@ import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      refetchOnWindowFocus: false,
+      retry: 1,
+    },
+  },
+});
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-      <img src={aceleriqLogo} alt="Aceleriq" className="h-36 w-auto animate-pulse" />
-      <p className="text-xs text-muted-foreground">Carregando...</p>
+    <div className="min-h-screen flex items-center justify-center bg-background">
+      <div className="relative flex items-center justify-center">
+        {/* halo pulsante */}
+        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/15 blur-2xl animate-[ping_1.6s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
+        <span className="absolute inline-flex h-24 w-24 rounded-full bg-primary/25 blur-xl animate-[ping_2.2s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
+        {/* logo com respiração suave */}
+        <img
+          src={aceleriqLogo}
+          alt="Aceleriq"
+          className="relative h-24 w-auto drop-shadow-[0_0_28px_hsl(var(--primary)/0.55)] animate-[breathe_1.8s_ease-in-out_infinite]"
+        />
+      </div>
+      <style>{`
+        @keyframes breathe {
+          0%, 100% { transform: scale(1);    opacity: .95; filter: drop-shadow(0 0 22px hsl(var(--primary)/.45)); }
+          50%      { transform: scale(1.06); opacity: 1;   filter: drop-shadow(0 0 38px hsl(var(--primary)/.75)); }
+        }
+      `}</style>
     </div>
   );
 }
