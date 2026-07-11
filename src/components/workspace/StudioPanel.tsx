@@ -2948,7 +2948,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             ))}
           </div>
         )}
-        <div className="relative p-2 flex items-end gap-1">
+        <div className="relative p-2.5 sm:p-2 pb-3 sm:pb-2 flex items-end gap-1.5 sm:gap-1">
           {/* Popover @ arquivos: busca fuzzy + navegação por teclado */}
           {mention && (
             <div className="absolute bottom-full left-2 right-2 mb-1 bg-popover border border-border rounded-lg shadow-xl overflow-hidden z-20 max-h-[260px] overflow-y-auto">
