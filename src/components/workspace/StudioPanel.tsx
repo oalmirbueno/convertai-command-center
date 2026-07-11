@@ -1201,6 +1201,45 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         />
       )}
       {/* KanbanInlineDialog removido: agora o /kanban insere @kanban no texto e vira bloco vivo no preview */}
+      {pdfPreview && (
+        <PdfPreviewModal html={pdfPreview} onClose={() => setPdfPreview(null)} />
+      )}
+    </div>
+  );
+}
+
+function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const doPrint = () => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try { win.focus(); win.print(); } catch {}
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[130] flex flex-col bg-background" style={{
+      paddingTop: "env(safe-area-inset-top)",
+      paddingBottom: "env(safe-area-inset-bottom)",
+    }}>
+      <div className="flex items-center justify-between gap-2 px-3 h-12 border-b border-border shrink-0 bg-card">
+        <button onClick={onClose} className="flex items-center gap-1.5 h-9 px-2.5 rounded-md hover:bg-secondary text-foreground text-[13px]">
+          <ArrowLeft className="w-4 h-4" /> Voltar
+        </button>
+        <p className="text-[12px] font-semibold truncate flex-1 text-center">Pré-visualização do PDF</p>
+        <button onClick={doPrint} className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium">
+          <Download className="w-4 h-4" /> Baixar
+        </button>
+      </div>
+      <iframe
+        ref={iframeRef}
+        srcDoc={html}
+        title="PDF preview"
+        className="flex-1 w-full bg-white border-0"
+      />
     </div>
   );
 }
