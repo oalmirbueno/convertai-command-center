@@ -818,7 +818,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         isMobile && isFull
           ? {
               top: "calc(env(safe-area-inset-top) + 72px)",
-              bottom: "calc(env(safe-area-inset-bottom) + 80px)",
+              bottom: "calc(env(safe-area-inset-bottom) + 96px)",
             }
           : undefined
       }
