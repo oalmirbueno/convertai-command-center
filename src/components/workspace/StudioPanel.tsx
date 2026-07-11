@@ -2759,7 +2759,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           </span>
 
           {/* Seletor de persona: Auto ou manual */}
-          <div className="flex-1 flex items-center justify-end gap-1">
+          <div className="flex items-center justify-end gap-1.5 flex-1 basis-full sm:basis-auto sm:flex-1 min-w-0">
             {showExternalTools && (
               <select
                 value={persona.forcedId || "__auto__"}
@@ -2767,7 +2767,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                   const v = e.target.value;
                   setPersona(p => ({ ...p, forcedId: v === "__auto__" ? null : v }));
                 }}
-                className="max-w-[180px] text-[10px] h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
+                className="flex-1 min-w-0 sm:flex-none sm:max-w-[180px] text-[11px] sm:text-[10px] h-8 sm:h-6 rounded border border-border bg-background px-1.5 text-foreground/90 focus:outline-none focus:ring-1 focus:ring-primary"
                 title={persona.forcedId ? "Persona travada manualmente" : "Auto: o roteador escolhe conforme sua pergunta"}>
                 <option value="__auto__">
                   Auto{persona.lastUsedName ? ` · usado: ${persona.lastUsedName}` : persona.list.length ? ` (${persona.list.length})` : ""}
