@@ -1391,7 +1391,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 <section class="cover-page">
   <div>
     ${logoUrl
-      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:44px;width:auto;display:block;margin-bottom:4px;" />`
+      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:72px;width:auto;display:block;margin-bottom:8px;" />`
       : `<div class="brand">aceler<span class="dot">iq</span></div>`}
     <div class="rule"></div>
     <div class="kicker">Documento executivo</div>
