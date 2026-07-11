@@ -302,6 +302,15 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => { if (!isMobile) localStorage.setItem("studio_min", minimized ? "1" : "0"); }, [minimized, isMobile]);
   useEffect(() => { localStorage.setItem("studio_dock_v2", dock); }, [dock]);
 
+  // Sinaliza ao HelpButton (e outros overlays) que o Studio está aberto em tela cheia mobile,
+  // para que sumam da tela e não sobreponham o input/enviar.
+  useEffect(() => {
+    const active = open && !minimized;
+    if (active) document.body.dataset.studioOpen = "1";
+    else delete document.body.dataset.studioOpen;
+    return () => { delete document.body.dataset.studioOpen; };
+  }, [open, minimized]);
+
   // ── Fordista: linkagem com projeto + publicação + PDF ──
   const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [projectId, setProjectId] = useState<string | null>(() => {
