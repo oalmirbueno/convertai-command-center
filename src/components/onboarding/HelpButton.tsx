@@ -9,6 +9,7 @@ interface HelpButtonProps {
 
 export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: HelpButtonProps) {
   const [open, setOpen] = useState(false);
+  const [hidden, setHidden] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -19,6 +20,16 @@ export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: He
     return () => document.removeEventListener("mousedown", handler);
   }, []);
 
+  // Observa quando o Studio abre em tela cheia mobile — nesse caso o botão some
+  // para não sobrepor o input/enviar do agente.
+  useEffect(() => {
+    const check = () => setHidden(document.body.dataset.studioOpen === "1");
+    check();
+    const obs = new MutationObserver(check);
+    obs.observe(document.body, { attributes: true, attributeFilter: ["data-studio-open"] });
+    return () => obs.disconnect();
+  }, []);
+
   // If no page tour, just trigger full tour directly
   const handleClick = () => {
     if (!onPageTour) {
@@ -27,6 +38,8 @@ export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: He
       setOpen(!open);
     }
   };
+
+  if (hidden) return null;
 
   return (
     <div
