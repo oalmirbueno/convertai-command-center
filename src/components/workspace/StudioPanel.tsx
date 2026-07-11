@@ -1430,36 +1430,40 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
   }
 </style></head><body>
 
-<section class="cover-page">
-  <div>
-    ${logoUrl
-      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:72px;width:auto;display:block;margin-bottom:8px;" />`
-      : `<div class="brand">aceler<span class="dot">iq</span></div>`}
-    <div class="rule"></div>
-    <div class="kicker">Documento executivo</div>
-    <h1>${escapeHtml(projectName)}</h1>
-    <div class="subtitle">Registro consolidado do trabalho estratégico e criativo entregue pela AcelerIQ.</div>
-  </div>
-  <div class="meta">
-    <div>Cliente<strong>${escapeHtml(clientName)}</strong></div>
-    <div>Projeto<strong>${escapeHtml(projectName)}</strong></div>
-    <div>Emissão<strong>${date} · ${time}</strong></div>
-    <div>Confidencialidade<strong>Uso interno / cliente</strong></div>
+<section class="sheet cover">
+  <div class="cover-page">
+    <div>
+      ${logoUrl
+        ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:72px;width:auto;display:block;margin-bottom:8px;" />`
+        : `<div class="brand">aceler<span class="dot">iq</span></div>`}
+      <div class="rule"></div>
+      <div class="kicker">Documento executivo</div>
+      <h1>${escapeHtml(projectName)}</h1>
+      <div class="subtitle">Registro consolidado do trabalho estratégico e criativo entregue pela AcelerIQ.</div>
+    </div>
+    <div class="meta">
+      <div>Cliente<strong>${escapeHtml(clientName)}</strong></div>
+      <div>Projeto<strong>${escapeHtml(projectName)}</strong></div>
+      <div>Emissão<strong>${date} · ${time}</strong></div>
+      <div>Confidencialidade<strong>Uso interno / cliente</strong></div>
+    </div>
   </div>
 </section>
 
-<div class="doc-header">
-  ${logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:32px;width:auto;" />`
-    : `<div class="brand">aceler<span class="dot">iq</span></div>`}
-  <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
-</div>
+<section class="sheet">
+  <div class="doc-header">
+    ${logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:32px;width:auto;" />`
+      : `<div class="brand">aceler<span class="dot">iq</span></div>`}
+    <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
+  </div>
 
-<div class="content">
+  <div class="content">
 ${html}
-</div>
+  </div>
 
-<div class="doc-footer"><span>aceleriq.online</span><span>Confidencial · ${date}</span></div>
+  <div class="doc-footer"><span>aceleriq.online</span><span>Confidencial · ${date}</span></div>
+</section>
 </body></html>`;
 }
 
