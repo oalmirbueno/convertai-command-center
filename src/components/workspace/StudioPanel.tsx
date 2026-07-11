@@ -16,6 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 
 /**
