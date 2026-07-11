@@ -2805,11 +2805,10 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             <button
               onClick={() => pullDeepContext({ silent: false })}
               disabled={pulling || streaming}
-              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50"
-              title="Reunir cliente, projetos, tasks, briefing e pasta em um dossiê e pedir diagnóstico ao agente"
+              className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50 shrink-0"
+              title="Puxar contexto: reunir cliente, projetos, tasks, briefing e pasta em um dossiê"
             >
-              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
-              Puxar contexto
+              {pulling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
             </button>
             {onStructureToNotes && (
               <button
@@ -2818,10 +2817,10 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                   if (!lastAssistant) { toast({ title: "Nada para enviar", description: "Peça uma análise ao agente primeiro." }); return; }
                   onStructureToNotes(lastAssistant);
                 }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-                title="Envia a última resposta do agente estruturada para as Notas"
+                className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shrink-0"
+                title="Enviar última resposta do agente para as Notas"
               >
-                <ArrowRight className="w-3 h-3" /> Enviar às Notas
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
 
