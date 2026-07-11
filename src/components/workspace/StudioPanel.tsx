@@ -1301,6 +1301,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
   const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
 <title>${escapeHtml(projectName)} · AcelerIQ</title>
+<meta name="viewport" content="width=794, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
