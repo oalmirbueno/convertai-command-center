@@ -1086,7 +1086,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                     </div>
                     <div className="flex-1 min-h-0 overflow-y-auto p-4">
                       {state.notes.trim().length > 0 ? (
-                        <NotesPreview src={state.notes} clientId={clientId ?? null} clientName={clientName ?? null} />
+                        <NotesPreview
+                          src={state.notes}
+                          clientId={clientId ?? null}
+                          clientName={clientName ?? null}
+                          onChange={(next) => setState(s => ({ ...s, notes: next }))}
+                        />
                       ) : (
                         <div className="flex h-full min-h-[220px] items-center justify-center rounded-lg border border-dashed border-border text-center text-[12px] leading-relaxed text-muted-foreground">
                           O preview aparece aqui conforme você escreve.
