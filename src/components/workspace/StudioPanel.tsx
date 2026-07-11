@@ -1427,8 +1427,17 @@ function mdToHtml(md: string): string {
   return out.join("\n");
 }
 
-export function NotesPreview({ src, clientId, clientName }: { src: string; clientId?: string | null; clientName?: string | null }) {
+export function NotesPreview({ src, clientId, clientName, onChange }: { src: string; clientId?: string | null; clientName?: string | null; onChange?: (next: string) => void }) {
   const lines = src.split("\n");
+  const toggleAt = (idx: number) => {
+    if (!onChange) return;
+    const copy = [...lines];
+    const m = copy[idx]?.match(/^(\s*)- \[( |x|X)\] (.+)$/);
+    if (!m) return;
+    const checked = m[2].toLowerCase() === "x";
+    copy[idx] = `${m[1]}- [${checked ? " " : "x"}] ${m[3]}`;
+    onChange(copy.join("\n"));
+  };
   const out: React.ReactNode[] = [];
   lines.forEach((raw, i) => {
     // bloco kanban inline (funcional, dentro do texto)
@@ -1457,17 +1466,23 @@ export function NotesPreview({ src, clientId, clientName }: { src: string; clien
       out.push(<img key={i} src={img[2]} alt={img[1]} className="my-2 max-h-48 rounded border border-border" />);
       return;
     }
-    // checkbox
+    // checkbox — clicável quando onChange existe
     const cb = raw.match(/^(\s*)- \[( |x|X)\] (.+)$/);
     if (cb) {
       const checked = cb[2].toLowerCase() === "x";
       out.push(
-        <div key={i} className="flex items-start gap-2 text-[12px] py-0.5" style={{ paddingLeft: cb[1].length * 6 }}>
-          <span className={cn("mt-[3px] w-3 h-3 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/40")}>
-            {checked && <Check className="w-2 h-2 text-primary-foreground" />}
+        <button
+          key={i}
+          type="button"
+          onClick={() => toggleAt(i)}
+          className="flex items-start gap-2 text-[13px] py-1 w-full text-left bg-transparent border-0 hover:bg-secondary/40 rounded px-1 -mx-1 cursor-pointer touch-manipulation"
+          style={{ paddingLeft: cb[1].length * 6 + 4 }}
+        >
+          <span className={cn("mt-[3px] w-4 h-4 border rounded-sm flex items-center justify-center shrink-0", checked ? "bg-primary border-primary" : "border-muted-foreground/50")}>
+            {checked && <Check className="w-3 h-3 text-primary-foreground" />}
           </span>
-          <span className={checked ? "line-through text-muted-foreground" : ""}>{cb[3]}</span>
-        </div>
+          <span className={checked ? "line-through text-muted-foreground" : "text-foreground"}>{cb[3]}</span>
+        </button>
       );
       return;
     }
