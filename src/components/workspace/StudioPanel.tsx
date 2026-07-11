@@ -1252,24 +1252,48 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
     if (!win) return;
     try { win.focus(); win.print(); } catch {}
   };
+  const doDownload = () => {
+    // Download real (Blob → anchor). Funciona em mobile onde window.print() falha.
+    try {
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aceleriq-documento-${Date.now()}.html`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch {}
+  };
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    // Trava scroll do body enquanto o modal está aberto
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
   }, [onClose]);
-  return (
-    <div className="fixed inset-0 z-[130] flex flex-col bg-background" style={{
+
+  const content = (
+    <div className="fixed inset-0 z-[200] flex flex-col bg-background" style={{
       paddingTop: "env(safe-area-inset-top)",
       paddingBottom: "env(safe-area-inset-bottom)",
     }}>
-      <div className="flex items-center justify-between gap-2 px-3 h-12 border-b border-border shrink-0 bg-card">
-        <button onClick={onClose} className="flex items-center gap-1.5 h-9 px-2.5 rounded-md hover:bg-secondary text-foreground text-[13px]">
+      <div className="flex items-center justify-between gap-2 px-2 sm:px-3 h-14 border-b border-border shrink-0 bg-card">
+        <button onClick={onClose} className="flex items-center gap-1.5 h-10 px-3 rounded-md hover:bg-secondary text-foreground text-[13px] font-medium">
           <ArrowLeft className="w-4 h-4" /> Voltar
         </button>
-        <p className="text-[12px] font-semibold truncate flex-1 text-center">Pré-visualização do PDF</p>
-        <button onClick={doPrint} className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium">
-          <Download className="w-4 h-4" /> Baixar
-        </button>
+        <p className="text-[12px] font-semibold truncate flex-1 text-center hidden sm:block">Pré-visualização do PDF</p>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <button onClick={doDownload} className="flex items-center gap-1.5 h-10 px-3 rounded-md border border-border hover:bg-secondary text-foreground text-[13px] font-medium">
+            <Download className="w-4 h-4" /> Salvar
+          </button>
+          <button onClick={doPrint} className="flex items-center gap-1.5 h-10 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium">
+            <Download className="w-4 h-4" /> Imprimir
+          </button>
+        </div>
       </div>
       <iframe
         ref={iframeRef}
@@ -1279,7 +1303,11 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
       />
     </div>
   );
+
+  if (typeof document === "undefined") return null;
+  return createPortal(content, document.body);
 }
+
 
 // ── PDF branded AcelerIQ (via window.print) ──
 function renderBrandedDoc(md: string, clientName: string, projectName: string, logoUrl?: string) {
