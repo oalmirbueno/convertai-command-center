@@ -823,59 +823,26 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       }
 
     >
-      {/* Header */}
-      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
+      {/* Header unificado: nome + tabs + controles */}
+      <div className="flex items-center gap-1.5 px-2 sm:px-3 h-[48px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
         {isMobile && !minimized ? (
           <button
             onClick={() => setOpen(false)}
             title="Voltar"
-            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground"
+            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
         ) : (
-          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-primary" />
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
-          {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
-        </div>
-        {!minimized && !isMobile && (
-          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
-            <button onClick={() => setDock("bl")} title="Dock esquerda"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
-            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
-            <button onClick={() => setDock("br")} title="Dock direita"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+        <p className="text-[13px] font-semibold leading-tight shrink-0">Studio</p>
 
-            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
-              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
-              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-            </button>
-          </div>
-        )}
-        {isFull && !minimized && !isMobile && (
-          <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
-            className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
-            <Minimize2 className="w-3 h-3" /> Sair
-          </button>
-        )}
-        <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
-          {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
-        </button>
-
-        <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Fechar">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {!minimized && (
-        <>
-          {/* Tabs */}
-          <div className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 pt-1.5 sm:pt-2 border-b border-border shrink-0 bg-background/40">
+        {/* Tabs inline no header */}
+        {!minimized && (
+          <div className="flex items-center gap-0.5 ml-1 sm:ml-2 border border-border rounded-md p-0.5 bg-background/60">
             {[
               { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
@@ -885,13 +852,49 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               const Icon = t.icon;
               return (
                 <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                  className={cn("flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 py-1.5 sm:py-2 rounded-t-lg text-[12px] sm:text-[12.5px] font-medium border-b-2 -mb-px transition-colors",
-                    active ? "border-primary text-foreground bg-secondary/30" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/20")}>
-                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className={cn(isMobile && !active && "hidden")}>{t.label}</span>
+                  title={t.label}
+                  className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors",
+                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}>
+                  <Icon className="w-3 h-3" />
+                  <span className="hidden sm:inline">{t.label}</span>
                 </button>
               );
             })}
+          </div>
+        )}
+
+        <div className="flex-1" />
+
+        {!minimized && !isMobile && (
+          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
+            <button onClick={() => setDock("bl")} title="Dock esquerda"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+            <button onClick={() => setDock("br")} title="Dock direita"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
+              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            </button>
+          </div>
+        )}
+        <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
+          {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
+        </button>
+        {/* Botão fechar mantido apenas quando não há Voltar (desktop). No mobile Voltar já cumpre esse papel. */}
+        {!isMobile && (
+          <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hidden" title="Fechar">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {!minimized && (
+        <>
+          {/* Sub-header discreto com contexto atual */}
+          <div className="px-3 py-1 border-b border-border shrink-0 bg-background/40">
+            <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>
           </div>
 
           {/* Fordista bar (desktop) / compact (mobile) */}
