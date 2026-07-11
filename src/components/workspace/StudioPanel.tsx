@@ -814,11 +814,12 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       style={
         isMobile && isFull
           ? {
-              top: "calc(env(safe-area-inset-top) + 80px)",
-              bottom: "calc(env(safe-area-inset-bottom) + 72px)",
+              top: "calc(env(safe-area-inset-top) + 72px)",
+              bottom: "calc(env(safe-area-inset-bottom) + 80px)",
             }
           : undefined
       }
+
     >
       {/* Header */}
       <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
