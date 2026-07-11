@@ -3015,58 +3015,79 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
             }}
             placeholder="Converse com o agente. @ anexa arquivo · / dispara ação · cole um link que ele lê"
-            rows={2}
-            className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
+            rows={3}
+            className="flex-1 resize-none bg-background border border-border rounded-lg px-3 py-2 text-[13px] leading-[1.55] min-h-[68px] focus:outline-none focus:border-primary/50"
           />
 
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              title="Anexar arquivo ou pasta do workspace"
-              onClick={() => {
-                const el = inputRef.current;
-                if (!el) return;
-                const caret = el.selectionStart ?? input.length;
-                const next = input.slice(0, caret) + "@" + input.slice(caret);
-                setInput(next);
-                setMention({ q: "", start: caret });
-                setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
-              }}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Paperclip className="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              title="Anexar link (o agente lê o conteúdo)"
-              onClick={() => {
-                const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
-                if (!url) return;
-                const clean = url.trim();
-                if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
-                const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
-                const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
-                setAttached(prev => [...prev, ref]);
-                setInput(prev => (prev ? prev + " " : "") + clean + " ");
-                setTimeout(() => inputRef.current?.focus(), 10);
-              }}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Link2 className="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              title="Navegar pastas e anexar vários arquivos"
-              onClick={() => setPickerOpen(true)}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Columns3 className="w-3 h-3" />
-            </button>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title="Anexar (arquivo, link, workspace)"
+                className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" side="top" className="w-56 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = inputRef.current;
+                  if (!el) return;
+                  const caret = el.selectionStart ?? input.length;
+                  const next = input.slice(0, caret) + "@" + input.slice(caret);
+                  setInput(next);
+                  setMention({ q: "", start: caret });
+                  setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Paperclip className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Arquivo do workspace</p>
+                  <p className="text-[10px] text-muted-foreground">busca rápida com @</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
+                  if (!url) return;
+                  const clean = url.trim();
+                  if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
+                  const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
+                  const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
+                  setAttached(prev => [...prev, ref]);
+                  setInput(prev => (prev ? prev + " " : "") + clean + " ");
+                  setTimeout(() => inputRef.current?.focus(), 10);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Link2 className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Link externo</p>
+                  <p className="text-[10px] text-muted-foreground">o agente lê o conteúdo</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Columns3 className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Navegar pastas</p>
+                  <p className="text-[10px] text-muted-foreground">seleção múltipla</p>
+                </div>
+              </button>
+            </PopoverContent>
+          </Popover>
 
-          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2">
+          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2 shrink-0">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
+
         </div>
       </div>
       </div>
