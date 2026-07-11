@@ -11,6 +11,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -823,59 +824,26 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       }
 
     >
-      {/* Header */}
-      <div className="flex items-center gap-1.5 px-3 h-[52px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
+      {/* Header unificado: nome + tabs + controles */}
+      <div className="flex items-center gap-1.5 px-2 sm:px-3 h-[48px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
         {isMobile && !minimized ? (
           <button
             onClick={() => setOpen(false)}
             title="Voltar"
-            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground"
+            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground shrink-0"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
         ) : (
-          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center">
+          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
             <Sparkles className="w-3.5 h-3.5 text-primary" />
           </div>
         )}
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold leading-tight truncate">Studio</p>
-          {!minimized && <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>}
-        </div>
-        {!minimized && !isMobile && (
-          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
-            <button onClick={() => setDock("bl")} title="Dock esquerda"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
-            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
-            <button onClick={() => setDock("br")} title="Dock direita"
-              className={cn("hidden sm:block px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+        <p className="text-[13px] font-semibold leading-tight shrink-0">Studio</p>
 
-            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
-              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
-              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
-            </button>
-          </div>
-        )}
-        {isFull && !minimized && !isMobile && (
-          <button onClick={() => setDock("bc")} title="Sair da tela cheia (Esc)"
-            className="flex items-center gap-1 px-2 py-1 mr-1 rounded-md bg-primary/10 hover:bg-primary/20 text-primary text-[10px] font-medium border border-primary/30">
-            <Minimize2 className="w-3 h-3" /> Sair
-          </button>
-        )}
-        <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
-          {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
-        </button>
-
-        <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title="Fechar">
-          <X className="w-3.5 h-3.5" />
-        </button>
-      </div>
-
-      {!minimized && (
-        <>
-          {/* Tabs */}
-          <div className="flex items-center justify-center gap-1 sm:gap-2 px-2 sm:px-3 pt-1.5 sm:pt-2 border-b border-border shrink-0 bg-background/40">
+        {/* Tabs inline no header */}
+        {!minimized && (
+          <div className="flex items-center gap-0.5 ml-1 sm:ml-2 border border-border rounded-md p-0.5 bg-background/60">
             {[
               { k: "context", icon: Brain,       label: "Contexto" },
               { k: "notes",   icon: NotebookPen, label: "Notas" },
@@ -885,95 +853,95 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               const Icon = t.icon;
               return (
                 <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                  className={cn("flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-5 py-1.5 sm:py-2 rounded-t-lg text-[12px] sm:text-[12.5px] font-medium border-b-2 -mb-px transition-colors",
-                    active ? "border-primary text-foreground bg-secondary/30" : "border-transparent text-muted-foreground hover:text-foreground hover:bg-secondary/20")}>
-                  <Icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                  <span className={cn(isMobile && !active && "hidden")}>{t.label}</span>
+                  title={t.label}
+                  className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors",
+                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}>
+                  <Icon className="w-3 h-3" />
+                  <span className="hidden sm:inline">{t.label}</span>
                 </button>
               );
             })}
           </div>
+        )}
 
-          {/* Fordista bar (desktop) / compact (mobile) */}
-          {isMobile ? (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border bg-muted/25 shrink-0 text-[11px] overflow-x-auto scrollbar-hidden">
-              <select
-                value={projectId ?? ""}
-                onChange={e => setProjectId(e.target.value || null)}
-                className="bg-background border border-border rounded-md px-2 py-1 text-[11px] flex-1 min-w-0 max-w-[55vw]"
-                title="Vincule um projeto"
-              >
-                <option value="">sem projeto</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+        <div className="flex-1" />
+
+        {!minimized && !isMobile && (
+          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
+            <button onClick={() => setDock("bl")} title="Dock esquerda"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+            <button onClick={() => setDock("br")} title="Dock direita"
+              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
+              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+            </button>
+          </div>
+        )}
+        <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
+          {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
+        </button>
+        {/* Botão fechar mantido apenas quando não há Voltar (desktop). No mobile Voltar já cumpre esse papel. */}
+        {!isMobile && (
+          <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hidden" title="Fechar">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        )}
+      </div>
+
+      {!minimized && (
+        <>
+          {/* Barra de contexto compacta: rótulo + projeto + ações rápidas em ícones */}
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border-b border-border bg-muted/25 shrink-0 text-[11px] overflow-x-auto scrollbar-hidden">
+            <span className="text-[10px] text-muted-foreground truncate max-w-[38%] shrink-0" title={contextLabel}>
+              {contextLabel}
+            </span>
+            <select
+              value={projectId ?? ""}
+              onChange={e => setProjectId(e.target.value || null)}
+              className="bg-background border border-border rounded-md px-2 h-7 text-[11px] flex-1 min-w-[120px] max-w-[240px]"
+              title="Vincule um projeto para publicar/espelhar ao cliente"
+            >
+              <option value="">sem projeto</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {projectId && (
+              <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
+                docSyncing === "saving" && "text-amber-500",
+                docSyncing === "saved" && "text-primary",
+                docSyncing === "error" && "text-destructive",
+                docSyncing === "idle" && "text-muted-foreground")}
+                title={docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}>
+                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {docSyncing === "saved" && <Check className="w-3 h-3" />}
+                {docSyncing === "error" && <X className="w-3 h-3" />}
+              </span>
+            )}
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
               <button
                 onClick={() => setAutoFix(v => !v)}
-                title="Auto-fix"
+                title={`Auto-fix ${autoFix ? "ativo" : "inativo"}`}
                 className={cn("h-7 w-7 rounded flex items-center justify-center border shrink-0",
-                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground")}
+                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
               >
                 {reflowBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
               </button>
               <button onClick={togglePublish}
-                title={docPublished ? "Ao vivo" : "Publicar"}
+                title={docPublished ? "Publicado ao vivo" : "Publicar para o cliente"}
                 className={cn("h-7 w-7 rounded flex items-center justify-center border shrink-0",
-                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground")}>
+                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}>
                 <Radio className="w-3.5 h-3.5" />
               </button>
               <button onClick={downloadPDF}
-                title="PDF"
-                className="h-7 w-7 rounded flex items-center justify-center border border-border text-muted-foreground shrink-0">
+                title="Exportar PDF"
+                className="h-7 w-7 rounded flex items-center justify-center border border-border text-muted-foreground hover:text-foreground shrink-0">
                 <Download className="w-3.5 h-3.5" />
               </button>
             </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 border-b border-border bg-muted/25 shrink-0 text-[12px]">
-              <span className="text-muted-foreground shrink-0">Projeto</span>
-              <select
-                value={projectId ?? ""}
-                onChange={e => setProjectId(e.target.value || null)}
-                className="bg-background border border-border rounded-md px-2 py-1 text-[12px] w-[min(360px,52vw)]"
-                title="Vincule um projeto para publicar/espelhar ao cliente"
-              >
-                <option value="">sem projeto</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {projectId && (
-                <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
-                  docSyncing === "saving" && "text-amber-500",
-                  docSyncing === "saved" && "text-primary",
-                  docSyncing === "error" && "text-destructive",
-                  docSyncing === "idle" && "text-muted-foreground")}>
-                  {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {docSyncing === "saved" && <Check className="w-3 h-3" />}
-                  {docSyncing === "error" && <X className="w-3 h-3" />}
-                  {docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}
-                </span>
-              )}
-              <button
-                onClick={() => setAutoFix(v => !v)}
-                title="Auto-correção: reorganiza headline, checklist e ações quando você pausa"
-                className={cn("px-2 py-[3px] rounded flex items-center gap-1 text-[10px] font-medium border shrink-0",
-                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-              >
-                {reflowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                Auto-fix {autoFix ? "on" : "off"}
-              </button>
-              <div className="flex items-center gap-1 shrink-0 sm:ml-2">
-                <button onClick={togglePublish}
-                  className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
-                    docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-                  title={docPublished ? "Publicado: cliente vê ao vivo" : "Publicar para o cliente"}>
-                  <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
-                </button>
-                <button onClick={downloadPDF}
-                  className="px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
-                  title="Exportar PDF com marca AcelerIQ">
-                  <Download className="w-3 h-3" /> PDF
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
+
 
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
@@ -2837,11 +2805,10 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             <button
               onClick={() => pullDeepContext({ silent: false })}
               disabled={pulling || streaming}
-              className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50"
-              title="Reunir cliente, projetos, tasks, briefing e pasta em um dossiê e pedir diagnóstico ao agente"
+              className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 disabled:opacity-50 shrink-0"
+              title="Puxar contexto: reunir cliente, projetos, tasks, briefing e pasta em um dossiê"
             >
-              {pulling ? <Loader2 className="w-3 h-3 animate-spin" /> : <Brain className="w-3 h-3" />}
-              Puxar contexto
+              {pulling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Brain className="w-3.5 h-3.5" />}
             </button>
             {onStructureToNotes && (
               <button
@@ -2850,10 +2817,10 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                   if (!lastAssistant) { toast({ title: "Nada para enviar", description: "Peça uma análise ao agente primeiro." }); return; }
                   onStructureToNotes(lastAssistant);
                 }}
-                className="flex items-center gap-1 px-2 py-0.5 rounded text-[10px] bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
-                title="Envia a última resposta do agente estruturada para as Notas"
+                className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shrink-0"
+                title="Enviar última resposta do agente para as Notas"
               >
-                <ArrowRight className="w-3 h-3" /> Enviar às Notas
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             )}
 
@@ -3048,58 +3015,79 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               if (e.key === "Enter" && !e.shiftKey && !mention && !slash) { e.preventDefault(); void send(); }
             }}
             placeholder="Converse com o agente. @ anexa arquivo · / dispara ação · cole um link que ele lê"
-            rows={2}
-            className="flex-1 resize-none bg-background border border-border rounded-lg px-2.5 py-1.5 text-[12px] focus:outline-none focus:border-primary/50"
+            rows={3}
+            className="flex-1 resize-none bg-background border border-border rounded-lg px-3 py-2 text-[13px] leading-[1.55] min-h-[68px] focus:outline-none focus:border-primary/50"
           />
 
-          <div className="flex flex-col gap-1">
-            <button
-              type="button"
-              title="Anexar arquivo ou pasta do workspace"
-              onClick={() => {
-                const el = inputRef.current;
-                if (!el) return;
-                const caret = el.selectionStart ?? input.length;
-                const next = input.slice(0, caret) + "@" + input.slice(caret);
-                setInput(next);
-                setMention({ q: "", start: caret });
-                setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
-              }}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Paperclip className="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              title="Anexar link (o agente lê o conteúdo)"
-              onClick={() => {
-                const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
-                if (!url) return;
-                const clean = url.trim();
-                if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
-                const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
-                const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
-                setAttached(prev => [...prev, ref]);
-                setInput(prev => (prev ? prev + " " : "") + clean + " ");
-                setTimeout(() => inputRef.current?.focus(), 10);
-              }}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Link2 className="w-3 h-3" />
-            </button>
-            <button
-              type="button"
-              title="Navegar pastas e anexar vários arquivos"
-              onClick={() => setPickerOpen(true)}
-              className="h-[18px] w-8 flex items-center justify-center rounded border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground"
-            >
-              <Columns3 className="w-3 h-3" />
-            </button>
-          </div>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title="Anexar (arquivo, link, workspace)"
+                className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground shrink-0"
+              >
+                <Paperclip className="w-3.5 h-3.5" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent align="end" side="top" className="w-56 p-1">
+              <button
+                type="button"
+                onClick={() => {
+                  const el = inputRef.current;
+                  if (!el) return;
+                  const caret = el.selectionStart ?? input.length;
+                  const next = input.slice(0, caret) + "@" + input.slice(caret);
+                  setInput(next);
+                  setMention({ q: "", start: caret });
+                  setTimeout(() => { el.focus(); el.setSelectionRange(caret + 1, caret + 1); }, 10);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Paperclip className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Arquivo do workspace</p>
+                  <p className="text-[10px] text-muted-foreground">busca rápida com @</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
+                  if (!url) return;
+                  const clean = url.trim();
+                  if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
+                  const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
+                  const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
+                  setAttached(prev => [...prev, ref]);
+                  setInput(prev => (prev ? prev + " " : "") + clean + " ");
+                  setTimeout(() => inputRef.current?.focus(), 10);
+                }}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Link2 className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Link externo</p>
+                  <p className="text-[10px] text-muted-foreground">o agente lê o conteúdo</p>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                className="w-full flex items-center gap-2 px-2 py-2 text-[12px] rounded hover:bg-secondary text-left"
+              >
+                <Columns3 className="w-3.5 h-3.5 text-primary" />
+                <div className="flex-1 min-w-0">
+                  <p className="font-medium text-foreground">Navegar pastas</p>
+                  <p className="text-[10px] text-muted-foreground">seleção múltipla</p>
+                </div>
+              </button>
+            </PopoverContent>
+          </Popover>
 
-          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2">
+          <Button size="sm" onClick={() => send()} disabled={streaming || !input.trim()} className="h-8 px-2 shrink-0">
             {streaming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Send className="w-3.5 h-3.5" />}
           </Button>
+
         </div>
       </div>
       </div>
