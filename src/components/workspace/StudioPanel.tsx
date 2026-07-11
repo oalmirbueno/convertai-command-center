@@ -1298,12 +1298,12 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
           </button>
         </div>
       </div>
-      <div className="flex-1 min-h-0 overflow-auto bg-neutral-200 dark:bg-neutral-900 flex justify-center">
+      <div className="flex-1 min-h-0 overflow-hidden bg-neutral-200 dark:bg-neutral-900 flex justify-center p-0 sm:p-4">
         <iframe
           ref={iframeRef}
           srcDoc={html}
           title="PDF preview"
-          className="w-full max-w-[820px] h-full bg-white border-0 shadow-xl"
+          className="w-full max-w-[820px] h-full bg-white border-0 shadow-2xl rounded-none sm:rounded-md"
         />
       </div>
     </div>
