@@ -558,12 +558,11 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
   }
 
+  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
   function downloadPDF() {
-    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel);
-    const w = window.open("", "_blank", "width=900,height=1000");
-    if (!w) { toast({ title: "Bloqueado", description: "Habilite pop-ups pra imprimir o PDF." }); return; }
-    w.document.open(); w.document.write(html); w.document.close();
-    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 500);
+    const logoUrl = new URL(aceleriqLogo, window.location.origin).href;
+    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel, logoUrl);
+    setPdfPreview(html);
   }
 
   function acceptEnrichChecklist() {
