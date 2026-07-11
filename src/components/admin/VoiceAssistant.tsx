@@ -1029,25 +1029,35 @@ export default function VoiceAssistant() {
               }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-primary" />
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border/70 bg-gradient-to-b from-secondary/50 to-transparent">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.6)]">
+                      <Sparkles className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    {aiThinking && (
+                      <span className="absolute inset-0 rounded-full ring-2 ring-primary/50 animate-ping" />
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Aceleriq OS: Agente</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA. Arraste contratos aqui")}
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-foreground leading-tight tracking-tight">Aceleriq OS · Agente</p>
+                    <p className="text-[10.5px] text-muted-foreground leading-tight mt-0.5 truncate">
+                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
                       {phase === "confirm" && "Confirmação final"}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
+                  aria-label="Fechar"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
 
               <div className="px-5 py-4 space-y-3 flex-1 overflow-y-auto">
                 {/* ---------- INPUT PHASE ---------- */}
