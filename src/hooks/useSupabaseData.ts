@@ -115,33 +115,41 @@ export function useClients() {
     queryKey: ["clients", user?.id, profile?.role],
     queryFn: async () => {
       if (isTeam) {
-        // Team members: only clients from projects where they have assigned tasks
-        const { data: myTasks } = await supabase
-          .from("tasks")
-          .select("project_id")
-          .eq("assigned_to", user!.id)
-          .is("deleted_at", null);
+        // Team members: clients from assigned tasks OR direct client assignments
+        const [{ data: myTasks }, { data: assigns }] = await Promise.all([
+          supabase.from("tasks").select("project_id").eq("assigned_to", user!.id).is("deleted_at", null),
+          supabase.from("team_client_assignments").select("client_id").eq("user_id", user!.id),
+        ]);
         const projectIds = [...new Set((myTasks || []).map((t: any) => t.project_id))];
-        if (projectIds.length === 0) return [];
+        const clientIds = new Set<string>((assigns || []).map((a: any) => a.client_id));
 
-        const { data: projects } = await supabase
-          .from("projects")
-          .select("id, client_id")
-          .in("id", projectIds)
-          .is("deleted_at", null);
-        const clientIds = [...new Set((projects || []).map((p: any) => p.client_id))];
-        if (clientIds.length === 0) return [];
+        if (projectIds.length > 0) {
+          const { data: projects } = await supabase
+            .from("projects")
+            .select("id, client_id")
+            .in("id", projectIds)
+            .is("deleted_at", null);
+          (projects || []).forEach((p: any) => p.client_id && clientIds.add(p.client_id));
+        }
+        if (clientIds.size === 0) return [];
 
+        const idArr = Array.from(clientIds);
         const { data, error } = await supabase
           .from("profiles")
           .select("*")
-          .in("id", clientIds)
+          .in("id", idArr)
           .is("deleted_at", null);
         if (error) throw error;
 
+        const { data: allProjects } = await supabase
+          .from("projects")
+          .select("client_id")
+          .in("client_id", idArr)
+          .is("deleted_at", null);
+
         return (data || []).map((p: any) => ({
           ...p,
-          projectCount: (projects || []).filter((pr: any) => pr.client_id === p.id).length,
+          projectCount: (allProjects || []).filter((pr: any) => pr.client_id === p.id).length,
         }));
       }
 
