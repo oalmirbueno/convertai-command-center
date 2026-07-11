@@ -788,7 +788,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     <div
       className={cn(
         "fixed bg-card border-border shadow-2xl flex flex-col overflow-hidden transition-all",
-        isMobile && isFull ? "z-[60]" : "z-40",
+        isMobile && isFull ? "z-[120]" : "z-40",
         isFull ? "rounded-none border-t" : "rounded-2xl border",
         dockPos, dockSize
       )}
