@@ -259,6 +259,61 @@ export default function Team() {
                   <option value="manager">Manager</option>
                 </select>
               </div>
+
+              {showClientPicker && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                      Clientes atribuídos
+                    </label>
+                    <span className="text-[10px] text-muted-foreground">
+                      {assignedClientIds.length} selecionado{assignedClientIds.length === 1 ? "" : "s"}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Este membro poderá acessar apenas os clientes marcados. Sem seleção, ele só verá clientes de tarefas atribuídas a ele.
+                  </p>
+                  <div className="relative">
+                    <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" />
+                    <input
+                      value={clientSearch}
+                      onChange={(e) => setClientSearch(e.target.value)}
+                      placeholder="Buscar cliente..."
+                      className="w-full bg-secondary border border-border rounded-[10px] pl-9 pr-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors"
+                    />
+                  </div>
+                  <div className="max-h-56 overflow-y-auto border border-border rounded-[10px] divide-y divide-border/60 bg-background/40">
+                    {filteredClients.length === 0 ? (
+                      <div className="px-3 py-4 text-center text-[12px] text-muted-foreground">
+                        Nenhum cliente encontrado
+                      </div>
+                    ) : (
+                      filteredClients.map((c: any) => {
+                        const checked = assignedClientIds.includes(c.id);
+                        return (
+                          <button
+                            type="button"
+                            key={c.id}
+                            onClick={() => toggleClient(c.id)}
+                            className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-secondary/60 transition-colors cursor-pointer bg-transparent border-none"
+                          >
+                            <div className={`w-4 h-4 rounded-[5px] border flex items-center justify-center shrink-0 transition-colors ${checked ? "bg-primary border-primary" : "border-border bg-transparent"}`}>
+                              {checked && <Check className="w-3 h-3 text-primary-foreground" />}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-[13px] text-foreground truncate">{c.full_name || "(sem nome)"}</p>
+                              {c.company_name && (
+                                <p className="text-[11px] text-muted-foreground truncate">{c.company_name}</p>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   {editMember ? "Nova Senha" : "Senha Inicial"}
