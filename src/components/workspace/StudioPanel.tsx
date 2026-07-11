@@ -1326,10 +1326,26 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <style>
-  @page { size: A4; margin: 20mm 16mm 22mm 16mm; }
+  @page { size: A4; margin: 20mm 18mm 22mm 18mm; }
   @page :first { margin: 0; }
   * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  html, body { margin: 0; padding: 0; background: #fff; color: #0D0D0D; font-family: 'Outfit', -apple-system, sans-serif; font-size: 12.5px; line-height: 1.6; }
+  html, body { margin: 0; padding: 0; background: #ececec; color: #0D0D0D; font-family: 'Outfit', -apple-system, sans-serif; font-size: 12.5px; line-height: 1.6; }
+  body { display: flex; flex-direction: column; align-items: center; padding: 12px 0; }
+
+  /* Scrollbar minimalista */
+  html { scrollbar-width: thin; scrollbar-color: #b4b4b4 transparent; }
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: #c4c4c4; border-radius: 8px; border: 2px solid transparent; background-clip: padding-box; }
+  ::-webkit-scrollbar-thumb:hover { background: #9a9a9a; background-clip: padding-box; }
+
+  /* Folha A4 branca centralizada (preview) */
+  .sheet {
+    width: 210mm; min-height: 297mm; background: #fff;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05), 0 10px 30px rgba(0,0,0,0.10);
+    margin: 0 auto 14px; padding: 20mm 18mm; overflow: hidden;
+  }
+  .sheet.cover { padding: 0; overflow: hidden; }
 
   .cover-page {
     height: 297mm; width: 210mm; padding: 28mm 22mm; background: #0D0D0D; color: #fff;
@@ -1350,7 +1366,13 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
   .doc-header .brand .dot { color: #00FF66; }
   .doc-header .crumbs { font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #737373; text-transform: uppercase; letter-spacing: 0.1em; text-align: right; }
 
-  .content { max-width: 178mm; margin: 0 auto; }
+  .content { width: 100%; }
+
+  @media print {
+    html, body { background: #fff; padding: 0; display: block; }
+    .sheet { width: auto; min-height: 0; box-shadow: none; margin: 0; padding: 0; overflow: visible; }
+    .sheet.cover { padding: 0; }
+  }
 
   h1 { font-size: 26px; letter-spacing: -0.02em; margin: 8px 0 12px; font-weight: 600; page-break-after: avoid; break-after: avoid-page; page-break-inside: avoid; break-inside: avoid; }
   h2 {
