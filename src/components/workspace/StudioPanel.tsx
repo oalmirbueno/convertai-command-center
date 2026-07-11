@@ -892,91 +892,55 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 
       {!minimized && (
         <>
-          {/* Sub-header discreto com contexto atual */}
-          <div className="px-3 py-1 border-b border-border shrink-0 bg-background/40">
-            <p className="text-[10px] text-muted-foreground truncate">{contextLabel}</p>
-          </div>
-
-          {/* Fordista bar (desktop) / compact (mobile) */}
-          {isMobile ? (
-            <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-border bg-muted/25 shrink-0 text-[11px] overflow-x-auto scrollbar-hidden">
-              <select
-                value={projectId ?? ""}
-                onChange={e => setProjectId(e.target.value || null)}
-                className="bg-background border border-border rounded-md px-2 py-1 text-[11px] flex-1 min-w-0 max-w-[55vw]"
-                title="Vincule um projeto"
-              >
-                <option value="">sem projeto</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
+          {/* Barra de contexto compacta: rótulo + projeto + ações rápidas em ícones */}
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border-b border-border bg-muted/25 shrink-0 text-[11px] overflow-x-auto scrollbar-hidden">
+            <span className="text-[10px] text-muted-foreground truncate max-w-[38%] shrink-0" title={contextLabel}>
+              {contextLabel}
+            </span>
+            <select
+              value={projectId ?? ""}
+              onChange={e => setProjectId(e.target.value || null)}
+              className="bg-background border border-border rounded-md px-2 h-7 text-[11px] flex-1 min-w-[120px] max-w-[240px]"
+              title="Vincule um projeto para publicar/espelhar ao cliente"
+            >
+              <option value="">sem projeto</option>
+              {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {projectId && (
+              <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
+                docSyncing === "saving" && "text-amber-500",
+                docSyncing === "saved" && "text-primary",
+                docSyncing === "error" && "text-destructive",
+                docSyncing === "idle" && "text-muted-foreground")}
+                title={docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}>
+                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {docSyncing === "saved" && <Check className="w-3 h-3" />}
+                {docSyncing === "error" && <X className="w-3 h-3" />}
+              </span>
+            )}
+            <div className="flex items-center gap-1 shrink-0 ml-auto">
               <button
                 onClick={() => setAutoFix(v => !v)}
-                title="Auto-fix"
+                title={`Auto-fix ${autoFix ? "ativo" : "inativo"}`}
                 className={cn("h-7 w-7 rounded flex items-center justify-center border shrink-0",
-                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground")}
+                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
               >
                 {reflowBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
               </button>
               <button onClick={togglePublish}
-                title={docPublished ? "Ao vivo" : "Publicar"}
+                title={docPublished ? "Publicado ao vivo" : "Publicar para o cliente"}
                 className={cn("h-7 w-7 rounded flex items-center justify-center border shrink-0",
-                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground")}>
+                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}>
                 <Radio className="w-3.5 h-3.5" />
               </button>
               <button onClick={downloadPDF}
-                title="PDF"
-                className="h-7 w-7 rounded flex items-center justify-center border border-border text-muted-foreground shrink-0">
+                title="Exportar PDF"
+                className="h-7 w-7 rounded flex items-center justify-center border border-border text-muted-foreground hover:text-foreground shrink-0">
                 <Download className="w-3.5 h-3.5" />
               </button>
             </div>
-          ) : (
-            <div className="flex flex-wrap items-center justify-center gap-2 px-4 py-2 border-b border-border bg-muted/25 shrink-0 text-[12px]">
-              <span className="text-muted-foreground shrink-0">Projeto</span>
-              <select
-                value={projectId ?? ""}
-                onChange={e => setProjectId(e.target.value || null)}
-                className="bg-background border border-border rounded-md px-2 py-1 text-[12px] w-[min(360px,52vw)]"
-                title="Vincule um projeto para publicar/espelhar ao cliente"
-              >
-                <option value="">sem projeto</option>
-                {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-              </select>
-              {projectId && (
-                <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
-                  docSyncing === "saving" && "text-amber-500",
-                  docSyncing === "saved" && "text-primary",
-                  docSyncing === "error" && "text-destructive",
-                  docSyncing === "idle" && "text-muted-foreground")}>
-                  {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {docSyncing === "saved" && <Check className="w-3 h-3" />}
-                  {docSyncing === "error" && <X className="w-3 h-3" />}
-                  {docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}
-                </span>
-              )}
-              <button
-                onClick={() => setAutoFix(v => !v)}
-                title="Auto-correção: reorganiza headline, checklist e ações quando você pausa"
-                className={cn("px-2 py-[3px] rounded flex items-center gap-1 text-[10px] font-medium border shrink-0",
-                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-              >
-                {reflowBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />}
-                Auto-fix {autoFix ? "on" : "off"}
-              </button>
-              <div className="flex items-center gap-1 shrink-0 sm:ml-2">
-                <button onClick={togglePublish}
-                  className={cn("px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border",
-                    docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
-                  title={docPublished ? "Publicado: cliente vê ao vivo" : "Publicar para o cliente"}>
-                  <Radio className="w-3 h-3" />{docPublished ? "Ao vivo" : "Publicar"}
-                </button>
-                <button onClick={downloadPDF}
-                  className="px-2 py-1 rounded flex items-center gap-1 text-[10px] font-medium border border-border text-muted-foreground hover:text-foreground"
-                  title="Exportar PDF com marca AcelerIQ">
-                  <Download className="w-3 h-3" /> PDF
-                </button>
-              </div>
-            </div>
-          )}
+          </div>
+
 
 
           <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
