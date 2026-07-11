@@ -992,11 +992,19 @@ export default function VoiceAssistant() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed left-4 md:left-6 z-40 w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform bottom-[calc(env(safe-area-inset-bottom)+104px)] md:bottom-6"
-        title="Assistente"
+        title="Aceleriq OS · Agente"
+        aria-label="Abrir agente"
+        className="group fixed left-4 md:left-6 z-40 h-14 w-14 md:h-[60px] md:w-[60px] rounded-full flex items-center justify-center transition-all duration-300 bottom-[calc(env(safe-area-inset-bottom)+128px)] md:bottom-8 hover:scale-[1.06] active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary/50"
+        style={{
+          background: "radial-gradient(circle at 30% 25%, hsl(var(--primary)) 0%, hsl(var(--primary)/0.85) 60%, hsl(var(--primary)/0.7) 100%)",
+          boxShadow: "0 10px 30px -6px hsl(var(--primary)/0.55), 0 0 0 1px hsl(var(--primary)/0.35) inset, 0 2px 0 hsl(0 0% 100% / 0.15) inset",
+        }}
       >
-        <Sparkles className="w-6 h-6" />
+        <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 animate-ping opacity-60 group-hover:opacity-90 pointer-events-none" />
+        <span className="absolute -inset-1 rounded-full bg-primary/25 blur-md opacity-70 pointer-events-none" />
+        <Sparkles className="relative w-[22px] h-[22px] md:w-6 md:h-6 text-primary-foreground drop-shadow" />
       </button>
+
 
       <AnimatePresence>
         {open && (
