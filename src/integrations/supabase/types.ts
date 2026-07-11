@@ -1799,6 +1799,30 @@ export type Database = {
           },
         ]
       }
+      team_client_assignments: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       updates: {
         Row: {
           author_id: string
