@@ -1206,7 +1206,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
 }
 
 // ── PDF branded AcelerIQ (via window.print) ──
-function renderBrandedDoc(md: string, clientName: string, projectName: string) {
+function renderBrandedDoc(md: string, clientName: string, projectName: string, logoUrl?: string) {
   const html = mdToHtml(md);
   const date = new Date().toLocaleDateString("pt-BR");
   const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
