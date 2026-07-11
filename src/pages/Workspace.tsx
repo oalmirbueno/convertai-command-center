@@ -1228,9 +1228,10 @@ export default function Workspace() {
               if (e.currentTarget === e.target) setDragOverArea(false);
             }}
             onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
-            className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible",
+            className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible px-0.5 pb-[max(1rem,env(safe-area-inset-bottom))]",
               rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
             style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
+
           >
             {rootDropActive && (
               <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-dashed border-primary/50 flex items-center justify-center pointer-events-none z-10">
