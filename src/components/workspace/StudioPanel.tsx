@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+
 import {
   NotebookPen, Brain, Sparkles, ChevronDown, Minus, X, Plus,
   Trash2, GitBranch, ExternalLink, Copy, Wand2, FileText, Link2, MessageSquare,
