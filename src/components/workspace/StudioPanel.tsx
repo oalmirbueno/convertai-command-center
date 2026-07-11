@@ -3026,9 +3026,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               <button
                 type="button"
                 title="Anexar (arquivo, link, workspace)"
-                className="h-8 w-8 flex items-center justify-center rounded-md border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground shrink-0"
+                className="h-10 w-10 sm:h-8 sm:w-8 flex items-center justify-center rounded-md border border-border bg-secondary/60 hover:bg-secondary text-muted-foreground hover:text-foreground shrink-0"
               >
-                <Paperclip className="w-3.5 h-3.5" />
+                <Paperclip className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" side="top" className="w-56 p-1">
