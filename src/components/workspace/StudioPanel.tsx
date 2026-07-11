@@ -16,6 +16,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
+import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 
 /**
@@ -263,11 +264,23 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   const [mode, setMode] = useState<Mode>("context");
   const isMobile = useIsMobile();
   const [mobileNotesTab, setMobileNotesTab] = useState<"editor" | "preview">("editor");
+  // Mobile: só reseta o estado UMA vez (primeira detecção). Reset a cada mudança
+  // deixava o Studio fechando sozinho quando o evento "studio:open" chegava durante o mount.
+  const mobileResetRef = useRef(false);
   useEffect(() => {
-    if (!isMobile) return;
-    setOpen(false);
-    setMinimized(false);
-    try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
+    if (!isMobile || mobileResetRef.current) return;
+    mobileResetRef.current = true;
+    // Se houver um open pendente (disparado antes do mount), respeita-o.
+    const pending = (window as any).__studioOpenPending === true;
+    if (!pending) {
+      setOpen(false);
+      setMinimized(false);
+      try { localStorage.setItem("studio_open", "0"); localStorage.setItem("studio_min", "0"); } catch {}
+    } else {
+      (window as any).__studioOpenPending = false;
+      setOpen(true);
+      setMinimized(false);
+    }
   }, [isMobile]);
   useEffect(() => { try { localStorage.setItem("studio_dock_v3", dock); } catch {} }, [dock]);
   useEffect(() => { try { if (!isMobile) localStorage.setItem("studio_min", minimized ? "1" : "0"); } catch {} }, [minimized, isMobile]);
@@ -279,10 +292,17 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     return () => window.removeEventListener("keydown", onKey);
   }, [dock]);
 
-  // Global open trigger (mobile bottom nav)
+  // Global open trigger. Se o listener ainda não montou quando o evento chega
+  // (ex.: navegação para /workspace + dispatch imediato), guardamos flag pendente
+  // que o mount consome.
   useEffect(() => {
-    const openStudio = () => { setOpen(true); setMinimized(false); };
+    const openStudio = () => { (window as any).__studioOpenPending = false; setOpen(true); setMinimized(false); };
     window.addEventListener("studio:open", openStudio);
+    // Consome flag pendente caso já tenha sido setada antes do listener registrar.
+    if ((window as any).__studioOpenPending === true) {
+      (window as any).__studioOpenPending = false;
+      setOpen(true); setMinimized(false);
+    }
     return () => window.removeEventListener("studio:open", openStudio);
   }, []);
 
@@ -538,12 +558,11 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
   }
 
+  const [pdfPreview, setPdfPreview] = useState<string | null>(null);
   function downloadPDF() {
-    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel);
-    const w = window.open("", "_blank", "width=900,height=1000");
-    if (!w) { toast({ title: "Bloqueado", description: "Habilite pop-ups pra imprimir o PDF." }); return; }
-    w.document.open(); w.document.write(html); w.document.close();
-    setTimeout(() => { try { w.focus(); w.print(); } catch {} }, 500);
+    const logoUrl = new URL(aceleriqLogo, window.location.origin).href;
+    const html = renderBrandedDoc(state.notes || "(vazio)", clientName || "AcelerIQ", projects.find(p => p.id === projectId)?.name || contextLabel, logoUrl);
+    setPdfPreview(html);
   }
 
   function acceptEnrichChecklist() {
@@ -1182,12 +1201,51 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         />
       )}
       {/* KanbanInlineDialog removido: agora o /kanban insere @kanban no texto e vira bloco vivo no preview */}
+      {pdfPreview && (
+        <PdfPreviewModal html={pdfPreview} onClose={() => setPdfPreview(null)} />
+      )}
+    </div>
+  );
+}
+
+function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void }) {
+  const iframeRef = useRef<HTMLIFrameElement>(null);
+  const doPrint = () => {
+    const win = iframeRef.current?.contentWindow;
+    if (!win) return;
+    try { win.focus(); win.print(); } catch {}
+  };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-[130] flex flex-col bg-background" style={{
+      paddingTop: "env(safe-area-inset-top)",
+      paddingBottom: "env(safe-area-inset-bottom)",
+    }}>
+      <div className="flex items-center justify-between gap-2 px-3 h-12 border-b border-border shrink-0 bg-card">
+        <button onClick={onClose} className="flex items-center gap-1.5 h-9 px-2.5 rounded-md hover:bg-secondary text-foreground text-[13px]">
+          <ArrowLeft className="w-4 h-4" /> Voltar
+        </button>
+        <p className="text-[12px] font-semibold truncate flex-1 text-center">Pré-visualização do PDF</p>
+        <button onClick={doPrint} className="flex items-center gap-1.5 h-9 px-3 rounded-md bg-primary text-primary-foreground text-[13px] font-medium">
+          <Download className="w-4 h-4" /> Baixar
+        </button>
+      </div>
+      <iframe
+        ref={iframeRef}
+        srcDoc={html}
+        title="PDF preview"
+        className="flex-1 w-full bg-white border-0"
+      />
     </div>
   );
 }
 
 // ── PDF branded AcelerIQ (via window.print) ──
-function renderBrandedDoc(md: string, clientName: string, projectName: string) {
+function renderBrandedDoc(md: string, clientName: string, projectName: string, logoUrl?: string) {
   const html = mdToHtml(md);
   const date = new Date().toLocaleDateString("pt-BR");
   const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
@@ -1281,7 +1339,9 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
 
 <section class="cover-page">
   <div>
-    <div class="brand">aceler<span class="dot">iq</span></div>
+    ${logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:44px;width:auto;display:block;margin-bottom:4px;" />`
+      : `<div class="brand">aceler<span class="dot">iq</span></div>`}
     <div class="rule"></div>
     <div class="kicker">Documento executivo</div>
     <h1>${escapeHtml(projectName)}</h1>
@@ -1296,7 +1356,9 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string) {
 </section>
 
 <div class="doc-header">
-  <div class="brand">aceler<span class="dot">iq</span></div>
+  ${logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:20px;width:auto;" />`
+    : `<div class="brand">aceler<span class="dot">iq</span></div>`}
   <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
 </div>
 
