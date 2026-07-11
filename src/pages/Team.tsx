@@ -200,7 +200,12 @@ export default function Team() {
                 </Avatar>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-foreground">{m.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{m.email}</p>
+                  <p className="text-[11px] text-muted-foreground truncate">{m.email}</p>
+                  {m.role !== "admin" && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5">
+                      {(assignments[m.id]?.length || 0)} {assignments[m.id]?.length === 1 ? "cliente" : "clientes"}
+                    </p>
+                  )}
                 </div>
                 <span className={`text-[10px] px-2.5 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                 <div className="text-right hidden md:block">
