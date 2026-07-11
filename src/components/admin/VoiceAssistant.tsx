@@ -992,11 +992,19 @@ export default function VoiceAssistant() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed left-4 md:left-6 z-40 w-12 h-12 md:w-14 md:h-14 rounded-full bg-primary text-primary-foreground shadow-lg shadow-primary/30 flex items-center justify-center hover:scale-105 transition-transform bottom-[calc(env(safe-area-inset-bottom)+104px)] md:bottom-6"
-        title="Assistente"
+        title="Aceleriq OS · Agente"
+        aria-label="Abrir agente"
+        className="group fixed left-4 md:left-6 z-40 h-14 w-14 md:h-[60px] md:w-[60px] rounded-full flex items-center justify-center transition-all duration-300 bottom-[calc(env(safe-area-inset-bottom)+128px)] md:bottom-8 hover:scale-[1.06] active:scale-95 focus:outline-none focus:ring-2 focus:ring-primary/50"
+        style={{
+          background: "radial-gradient(circle at 30% 25%, hsl(var(--primary)) 0%, hsl(var(--primary)/0.85) 60%, hsl(var(--primary)/0.7) 100%)",
+          boxShadow: "0 10px 30px -6px hsl(var(--primary)/0.55), 0 0 0 1px hsl(var(--primary)/0.35) inset, 0 2px 0 hsl(0 0% 100% / 0.15) inset",
+        }}
       >
-        <Sparkles className="w-6 h-6" />
+        <span className="absolute inset-0 rounded-full ring-2 ring-primary/40 animate-ping opacity-60 group-hover:opacity-90 pointer-events-none" />
+        <span className="absolute -inset-1 rounded-full bg-primary/25 blur-md opacity-70 pointer-events-none" />
+        <Sparkles className="relative w-[22px] h-[22px] md:w-6 md:h-6 text-primary-foreground drop-shadow" />
       </button>
+
 
       <AnimatePresence>
         {open && (
@@ -1021,25 +1029,35 @@ export default function VoiceAssistant() {
               }}
             >
               {/* Header */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-primary/15 flex items-center justify-center">
-                    <Sparkles className="w-4 h-4 text-primary" />
+              <div className="flex items-center justify-between px-4 sm:px-5 py-3.5 border-b border-border/70 bg-gradient-to-b from-secondary/50 to-transparent">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="relative shrink-0">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-[0_4px_14px_-4px_hsl(var(--primary)/0.6)]">
+                      <Sparkles className="w-4 h-4 text-primary-foreground" />
+                    </div>
+                    {aiThinking && (
+                      <span className="absolute inset-0 rounded-full ring-2 ring-primary/50 animate-ping" />
+                    )}
                   </div>
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Aceleriq OS: Agente</p>
-                    <p className="text-[11px] text-muted-foreground">
-                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA. Arraste contratos aqui")}
+                  <div className="min-w-0">
+                    <p className="text-[13px] font-semibold text-foreground leading-tight tracking-tight">Aceleriq OS · Agente</p>
+                    <p className="text-[10.5px] text-muted-foreground leading-tight mt-0.5 truncate">
+                      {phase === "input" && (aiThinking ? "Analisando contrato…" : "Voz + IA · arraste contratos aqui")}
                       {phase === "clarify" && "Confirme os detalhes"}
                       {phase === "preview" && "Revisão do escopo"}
                       {phase === "confirm" && "Confirmação final"}
                     </p>
                   </div>
                 </div>
-                <button onClick={() => setOpen(false)} className="text-muted-foreground hover:text-foreground">
+                <button
+                  onClick={() => setOpen(false)}
+                  className="w-8 h-8 rounded-full flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors shrink-0"
+                  aria-label="Fechar"
+                >
                   <X className="w-4 h-4" />
                 </button>
               </div>
+
 
               <div className="px-5 py-4 space-y-3 flex-1 overflow-y-auto">
                 {/* ---------- INPUT PHASE ---------- */}
