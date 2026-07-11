@@ -34,6 +34,18 @@ export default function Team() {
 
   const taskCountFor = (userId: string) => (allTasks || []).filter((t: any) => t.assigned_to === userId && t.status !== "done").length;
 
+  // Load assignments map for all team members (badge counts on list)
+  useEffect(() => {
+    (async () => {
+      const { data } = await supabase.from("team_client_assignments").select("user_id, client_id");
+      const map: Record<string, string[]> = {};
+      (data || []).forEach((r: any) => {
+        (map[r.user_id] ||= []).push(r.client_id);
+      });
+      setAssignments(map);
+    })();
+  }, [members]);
+
   const callManageTeam = async (body: any) => {
     const { data: { session } } = await supabase.auth.getSession();
     if (!session) throw new Error("Não autenticado");
@@ -46,16 +58,34 @@ export default function Team() {
     return res.data;
   };
 
+  const persistAssignments = async (userId: string) => {
+    if (role === "admin") return; // admin sees everything
+    const toRemove = initialAssignedIds.filter((id) => !assignedClientIds.includes(id));
+    const toAdd = assignedClientIds.filter((id) => !initialAssignedIds.includes(id));
+    if (toRemove.length) {
+      await supabase.from("team_client_assignments").delete().eq("user_id", userId).in("client_id", toRemove);
+    }
+    if (toAdd.length) {
+      await supabase.from("team_client_assignments").insert(toAdd.map((cid) => ({ user_id: userId, client_id: cid })));
+    }
+  };
+
   const handleCreate = async () => {
     if (!name.trim() || !email.trim()) { toast.error("Preencha nome e email"); return; }
     if (password && password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
     setSaving(true);
     try {
-      await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password: password || undefined });
+      const res = await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password: password || undefined });
+      const newUserId = res?.user_id || res?.user?.id;
+      if (newUserId && role !== "admin" && assignedClientIds.length) {
+        await supabase.from("team_client_assignments").insert(
+          assignedClientIds.map((cid) => ({ user_id: newUserId, client_id: cid }))
+        );
+      }
       toast.success(password ? "Membro criado com a senha definida!" : "Membro criado! Senha temporária: Temp@2026!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setCreateOpen(false);
-      setName(""); setEmail(""); setPassword(""); setRole("design");
+      resetForm();
     } catch (err: any) {
       toast.error(err.message || "Erro ao criar membro");
     }
@@ -69,20 +99,22 @@ export default function Team() {
     try {
       await supabase.from("profiles").update({ full_name: name.trim() }).eq("id", editMember.id);
 
-      // Update role if changed
       if (role !== editMember.role) {
         await supabase.from("user_roles").update({ role: role as any }).eq("user_id", editMember.id);
       }
 
-      // Update password if provided
       if (password) {
         await callManageTeam({ action: "update_password", user_id: editMember.id, password });
       }
 
+      await persistAssignments(editMember.id);
+
       toast.success("Membro atualizado!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      queryClient.invalidateQueries({ queryKey: ["clients"] });
       setEditMember(null);
-      setName(""); setEmail(""); setPassword(""); setRole("design");
+      resetForm();
     } catch (err: any) {
       toast.error(err.message || "Erro ao salvar");
     }
@@ -108,15 +140,35 @@ export default function Team() {
     setName(m.full_name || "");
     setEmail(m.email || "");
     setRole(m.role || "design");
+    const current = assignments[m.id] || [];
+    setAssignedClientIds(current);
+    setInitialAssignedIds(current);
+    setClientSearch("");
+  };
+
+  const resetForm = () => {
+    setName(""); setEmail(""); setPassword(""); setRole("design");
+    setAssignedClientIds([]); setInitialAssignedIds([]); setClientSearch("");
   };
 
   const closeModal = () => {
     setCreateOpen(false);
     setEditMember(null);
-    setName(""); setEmail(""); setPassword(""); setRole("design");
+    resetForm();
+  };
+
+  const toggleClient = (id: string) => {
+    setAssignedClientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
   };
 
   const isModalOpen = createOpen || !!editMember;
+  const showClientPicker = role !== "admin";
+  const filteredClients = (clients || []).filter((c: any) => {
+    const q = clientSearch.trim().toLowerCase();
+    if (!q) return true;
+    return (c.full_name || "").toLowerCase().includes(q) || (c.company_name || "").toLowerCase().includes(q);
+  });
+
 
   return (
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
