@@ -1300,7 +1300,9 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 
 <section class="cover-page">
   <div>
-    <div class="brand">aceler<span class="dot">iq</span></div>
+    ${logoUrl
+      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:44px;width:auto;display:block;margin-bottom:4px;" />`
+      : `<div class="brand">aceler<span class="dot">iq</span></div>`}
     <div class="rule"></div>
     <div class="kicker">Documento executivo</div>
     <h1>${escapeHtml(projectName)}</h1>
@@ -1315,7 +1317,9 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 </section>
 
 <div class="doc-header">
-  <div class="brand">aceler<span class="dot">iq</span></div>
+  ${logoUrl
+    ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:20px;width:auto;" />`
+    : `<div class="brand">aceler<span class="dot">iq</span></div>`}
   <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
 </div>
 
