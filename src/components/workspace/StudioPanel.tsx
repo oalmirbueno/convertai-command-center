@@ -824,122 +824,135 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
       }
 
     >
-      {/* Header unificado: nome + tabs + controles */}
-      <div className="flex items-center gap-1.5 px-2 sm:px-3 h-[48px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
-        {isMobile && !minimized ? (
-          <button
-            onClick={() => setOpen(false)}
-            title="Voltar"
-            className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground shrink-0"
-          >
-            <ArrowLeft className="w-4 h-4" />
-          </button>
-        ) : (
-          <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
-            <Sparkles className="w-3.5 h-3.5 text-primary" />
-          </div>
-        )}
-        <p className="text-[13px] font-semibold leading-tight shrink-0">Studio</p>
-
-        {/* Tabs inline no header */}
-        {!minimized && (
-          <div className="flex items-center gap-0.5 ml-1 sm:ml-2 border border-border rounded-md p-0.5 bg-background/60">
-            {[
-              { k: "context", icon: Brain,       label: "Contexto" },
-              { k: "notes",   icon: NotebookPen, label: "Notas" },
-              { k: "gpt",     icon: ExternalLink, label: "GPT" },
-            ].map(t => {
-              const active = mode === t.k;
-              const Icon = t.icon;
-              return (
-                <button key={t.k} onClick={() => setMode(t.k as Mode)}
-                  title={t.label}
-                  className={cn("flex items-center gap-1 px-2 py-1 rounded text-[11px] font-medium transition-colors",
-                    active ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground hover:bg-secondary")}>
-                  <Icon className="w-3 h-3" />
-                  <span className="hidden sm:inline">{t.label}</span>
-                </button>
-              );
-            })}
-          </div>
-        )}
-
-        <div className="flex-1" />
-
-        {!minimized && !isMobile && (
-          <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
-            <button onClick={() => setDock("bl")} title="Dock esquerda"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
-            <button onClick={() => setDock("bc")} title="Centralizar embaixo"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
-            <button onClick={() => setDock("br")} title="Dock direita"
-              className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
-            <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
-              className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
-              {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+      {/* Header unificado: nome + tabs (centralizadas) + controles */}
+      <div className="grid grid-cols-[auto_1fr_auto] items-center gap-2 px-2 sm:px-3 h-[52px] sm:h-[48px] border-b border-border shrink-0 bg-gradient-to-b from-secondary/60 to-secondary/20 backdrop-blur">
+        {/* Esquerda: voltar/ícone + Studio */}
+        <div className="flex items-center gap-2 min-w-0">
+          {isMobile && !minimized ? (
+            <button
+              onClick={() => setOpen(false)}
+              title="Voltar"
+              className="flex items-center justify-center h-9 w-9 -ml-1 rounded-md hover:bg-secondary text-foreground shrink-0"
+            >
+              <ArrowLeft className="w-4 h-4" />
             </button>
+          ) : (
+            <div className="w-6 h-6 rounded-lg bg-primary/15 flex items-center justify-center shrink-0">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+            </div>
+          )}
+          <p className="text-[13px] font-semibold leading-tight shrink-0 tracking-tight">Studio</p>
+        </div>
+
+        {/* Centro: tabs segmentadas centralizadas */}
+        {!minimized ? (
+          <div className="flex justify-center">
+            <div className="flex items-center gap-0.5 border border-border/70 rounded-full p-0.5 bg-background/70 shadow-sm">
+              {[
+                { k: "context", icon: Brain,        label: "Contexto" },
+                { k: "notes",   icon: NotebookPen,  label: "Notas" },
+                { k: "gpt",     icon: ExternalLink, label: "GPT" },
+              ].map(t => {
+                const active = mode === t.k;
+                const Icon = t.icon;
+                return (
+                  <button key={t.k} onClick={() => setMode(t.k as Mode)}
+                    title={t.label}
+                    className={cn("flex items-center gap-1.5 h-7 px-2.5 sm:px-3 rounded-full text-[11.5px] font-medium transition-all",
+                      active
+                        ? "bg-primary text-primary-foreground shadow-sm"
+                        : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}>
+                    <Icon className="w-3.5 h-3.5" />
+                    <span className={cn(active ? "inline" : "hidden sm:inline")}>{t.label}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
-        )}
-        <button onClick={() => setMinimized(m => !m)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
-          {minimized ? <ChevronDown className="w-3.5 h-3.5 rotate-180" /> : <Minus className="w-3.5 h-3.5" />}
-        </button>
-        {/* Botão fechar mantido apenas quando não há Voltar (desktop). No mobile Voltar já cumpre esse papel. */}
-        {!isMobile && (
-          <button onClick={() => setOpen(false)} className="p-1.5 rounded-md hover:bg-secondary text-muted-foreground hidden" title="Fechar">
-            <X className="w-3.5 h-3.5" />
+        ) : <div />}
+
+        {/* Direita: dock + minimizar */}
+        <div className="flex items-center gap-1 justify-end">
+          {!minimized && !isMobile && (
+            <div className="flex items-center gap-0.5 mr-1 border border-border rounded-md p-0.5 bg-background/60">
+              <button onClick={() => setDock("bl")} title="Dock esquerda"
+                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bl" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◧</button>
+              <button onClick={() => setDock("bc")} title="Centralizar embaixo"
+                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "bc" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>▬</button>
+              <button onClick={() => setDock("br")} title="Dock direita"
+                className={cn("px-1.5 py-0.5 rounded text-[10px]", dock === "br" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>◨</button>
+              <button onClick={() => setDock(isFull ? "bc" : "full")} title={isFull ? "Sair da tela cheia (Esc)" : "Tela cheia"}
+                className={cn("px-1.5 py-0.5 rounded flex items-center", isFull ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-secondary")}>
+                {isFull ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
+              </button>
+            </div>
+          )}
+          <button onClick={() => setMinimized(m => !m)} className="h-9 w-9 sm:h-8 sm:w-8 flex items-center justify-center rounded-md hover:bg-secondary text-muted-foreground" title={minimized ? "Expandir" : "Minimizar"}>
+            {minimized ? <ChevronDown className="w-4 h-4 rotate-180" /> : <Minus className="w-4 h-4" />}
           </button>
-        )}
+        </div>
       </div>
 
       {!minimized && (
         <>
-          {/* Barra de contexto: no mobile empilha em 2 linhas para dar respiro ao seletor e aos ícones */}
-          <div className="border-b border-border bg-muted/25 shrink-0 px-2 sm:px-3 py-2 sm:py-1.5 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-1.5 text-[11px]">
-            <div className="flex items-center gap-2 min-w-0 flex-1">
-              <span className="text-[10px] uppercase tracking-wider text-muted-foreground/80 truncate shrink-0 max-w-[45%] sm:max-w-[38%]" title={contextLabel}>
+          {/* Barra de contexto: escopo + projeto pill + ações slim */}
+          <div className="border-b border-border/70 bg-muted/20 shrink-0 px-2 sm:px-3 py-2 sm:py-1.5 flex items-center gap-2 text-[11px]">
+            {/* Escopo (chip) */}
+            <div className="hidden sm:flex items-center gap-1.5 shrink-0 px-2 h-7 rounded-full bg-background/70 border border-border/70">
+              <FolderIcon className="w-3 h-3 text-muted-foreground" />
+              <span className="text-[10.5px] uppercase tracking-wider text-muted-foreground/90 truncate max-w-[160px]" title={contextLabel}>
                 {contextLabel}
               </span>
+            </div>
+
+            {/* Projeto (pill combobox) */}
+            <div className="relative flex-1 min-w-0 max-w-full sm:max-w-[280px]">
+              <FolderIcon className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
                 value={projectId ?? ""}
                 onChange={e => setProjectId(e.target.value || null)}
-                className="bg-background border border-border rounded-md px-2 h-9 sm:h-7 text-[12px] sm:text-[11px] flex-1 min-w-0 sm:max-w-[240px]"
+                className="w-full appearance-none bg-background/80 border border-border/70 rounded-full pl-8 pr-8 h-8 sm:h-7 text-[12px] sm:text-[11.5px] font-medium text-foreground focus:outline-none focus:border-primary/60 focus:ring-2 focus:ring-primary/15 truncate"
                 title="Vincule um projeto para publicar/espelhar ao cliente"
               >
                 <option value="">Sem projeto</option>
                 {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
-              {projectId && (
-                <span className={cn("text-[10px] flex items-center gap-1 shrink-0",
-                  docSyncing === "saving" && "text-amber-500",
-                  docSyncing === "saved" && "text-primary",
-                  docSyncing === "error" && "text-destructive",
-                  docSyncing === "idle" && "text-muted-foreground")}
-                  title={docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}>
-                  {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
-                  {docSyncing === "saved" && <Check className="w-3 h-3" />}
-                  {docSyncing === "error" && <X className="w-3 h-3" />}
-                </span>
-              )}
+              <ChevronDown className="w-3.5 h-3.5 text-muted-foreground absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             </div>
-            <div className="flex items-center gap-1.5 shrink-0 sm:ml-auto self-end sm:self-auto">
+
+            {projectId && (
+              <span className={cn("hidden sm:flex text-[10px] items-center gap-1 shrink-0",
+                docSyncing === "saving" && "text-amber-500",
+                docSyncing === "saved" && "text-primary",
+                docSyncing === "error" && "text-destructive",
+                docSyncing === "idle" && "text-muted-foreground")}
+                title={docSyncing === "saving" ? "salvando" : docSyncing === "saved" ? "sincronizado" : docSyncing === "error" ? "erro" : "auto-sync"}>
+                {docSyncing === "saving" && <Loader2 className="w-3 h-3 animate-spin" />}
+                {docSyncing === "saved" && <Check className="w-3 h-3" />}
+                {docSyncing === "error" && <X className="w-3 h-3" />}
+              </span>
+            )}
+
+            {/* Ações slim agrupadas em um único pill */}
+            <div className="flex items-center shrink-0 ml-auto rounded-full border border-border/70 bg-background/70 overflow-hidden h-8 sm:h-7 divide-x divide-border/70">
               <button
                 onClick={() => setAutoFix(v => !v)}
                 title={`Auto-fix ${autoFix ? "ativo" : "inativo"}`}
-                className={cn("h-9 w-9 sm:h-7 sm:w-7 rounded-md flex items-center justify-center border shrink-0",
-                  autoFix ? "border-primary/60 text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}
+                className={cn("h-full w-8 sm:w-7 flex items-center justify-center transition-colors",
+                  autoFix ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}
               >
-                {reflowBusy ? <Loader2 className="w-4 h-4 sm:w-3.5 sm:h-3.5 animate-spin" /> : <Wand2 className="w-4 h-4 sm:w-3.5 sm:h-3.5" />}
+                {reflowBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
               </button>
               <button onClick={togglePublish}
                 title={docPublished ? "Publicado ao vivo" : "Publicar para o cliente"}
-                className={cn("h-9 w-9 sm:h-7 sm:w-7 rounded-md flex items-center justify-center border shrink-0",
-                  docPublished ? "border-primary text-primary bg-primary/10" : "border-border text-muted-foreground hover:text-foreground")}>
-                <Radio className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                className={cn("h-full w-8 sm:w-7 flex items-center justify-center transition-colors",
+                  docPublished ? "text-primary bg-primary/10" : "text-muted-foreground hover:text-foreground hover:bg-secondary/70")}>
+                <Radio className="w-3.5 h-3.5" />
               </button>
               <button onClick={downloadPDF}
                 title="Exportar PDF"
-                className="h-9 w-9 sm:h-7 sm:w-7 rounded-md flex items-center justify-center border border-border text-muted-foreground hover:text-foreground shrink-0">
-                <Download className="w-4 h-4 sm:w-3.5 sm:h-3.5" />
+                className="h-full w-8 sm:w-7 flex items-center justify-center text-muted-foreground hover:text-foreground hover:bg-secondary/70 transition-colors">
+                <Download className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>
@@ -1265,12 +1278,14 @@ function PdfPreviewModal({ html, onClose }: { html: string; onClose: () => void 
           </button>
         </div>
       </div>
-      <iframe
-        ref={iframeRef}
-        srcDoc={html}
-        title="PDF preview"
-        className="flex-1 w-full bg-white border-0"
-      />
+      <div className="flex-1 min-h-0 overflow-auto bg-neutral-200 dark:bg-neutral-900 flex justify-center">
+        <iframe
+          ref={iframeRef}
+          srcDoc={html}
+          title="PDF preview"
+          className="w-full max-w-[820px] h-full bg-white border-0 shadow-xl"
+        />
+      </div>
     </div>
   );
 
@@ -1286,6 +1301,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
   const time = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
   return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"/>
 <title>${escapeHtml(projectName)} · AcelerIQ</title>
+<meta name="viewport" content="width=794, initial-scale=1, viewport-fit=cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
@@ -1375,7 +1391,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 <section class="cover-page">
   <div>
     ${logoUrl
-      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:44px;width:auto;display:block;margin-bottom:4px;" />`
+      ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:72px;width:auto;display:block;margin-bottom:8px;" />`
       : `<div class="brand">aceler<span class="dot">iq</span></div>`}
     <div class="rule"></div>
     <div class="kicker">Documento executivo</div>
@@ -1392,7 +1408,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 
 <div class="doc-header">
   ${logoUrl
-    ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:20px;width:auto;" />`
+    ? `<img src="${escapeHtml(logoUrl)}" alt="AcelerIQ" style="height:32px;width:auto;" />`
     : `<div class="brand">aceler<span class="dot">iq</span></div>`}
   <div class="crumbs">${escapeHtml(clientName)} · ${escapeHtml(projectName)} · ${date}</div>
 </div>
