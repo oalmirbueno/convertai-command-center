@@ -262,8 +262,9 @@ export interface FetchedFile {
 export async function getFile(path: string, ref?: string): Promise<FetchedFile> {
   const cfg = loadConfig();
   const safe = assertReadable(path);
+  const branch = ref ?? await resolveBranch(cfg);
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(safe)}`, {
-    query: { ref: ref ?? cfg.branch },
+    query: { ref: branch },
   });
   if (res.status === 404) throw new SecondBrainError({ kind: 'not_found', path: safe });
   if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
