@@ -22,6 +22,17 @@ import {
   listWorkspaceNodes,
   search,
 } from './aceleriq-read-services.ts';
+import {
+  bridgeStatus,
+  CONTEXT_ORDER,
+  getContextBundle,
+  getFile,
+  INBOX_PREFIX,
+  listInboxPending,
+  proposeUpdate,
+  searchCode,
+  SecondBrainError,
+} from './second-brain-github.ts';
 
 export type ToolScope =
   | 'aceleriq:read'
@@ -426,6 +437,155 @@ const fetchTool = makeRead(
   (input) => fetchEntity(input),
 );
 
+// ─── Second Brain (round 4) ───────────────────────────────────
+const MEMORY_READ: readonly ToolScope[] = ['memory:read'];
+const MEMORY_PROPOSE: readonly ToolScope[] = ['memory:propose'];
+
+function memoryError(e: unknown): Error {
+  if (e instanceof SecondBrainError) {
+    return new Error(`second_brain:${e.error.kind} ${JSON.stringify(e.error)}`);
+  }
+  return e instanceof Error ? e : new Error(String(e));
+}
+
+const memoryGetContextTool: ToolDefinition = {
+  name: 'memory_get_context',
+  title: 'Segundo Cérebro — contexto inicial',
+  description:
+    'Lê, na ordem oficial (AGENTS_MEMORY_BRIDGE → memory/agent-context.md → MEMORY.md → memory/now.md), o pacote de bootstrap do Segundo Cérebro. Aceita paths adicionais específicos. Nunca escreve.',
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      extra_paths: { type: 'array', items: { type: 'string' }, maxItems: 10 },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({ extra_paths: z.array(z.string().min(1).max(256)).max(10).optional() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try {
+      const bundle = await getContextBundle(parsed.data.extra_paths);
+      return { source: 'github', ...bundle, bridge: bridgeStatus() };
+    } catch (e) { throw memoryError(e); }
+  },
+};
+
+const memorySearchTool: ToolDefinition = {
+  name: 'memory_search',
+  title: 'Segundo Cérebro — busca',
+  description: 'Busca textual (GitHub Code Search) restrita ao repositório do Segundo Cérebro. Sem escrita.',
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      query: { type: 'string', minLength: 2, maxLength: 200 },
+      limit: { type: 'integer', minimum: 1, maximum: 25 },
+    },
+    required: ['query'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({ query: z.string().min(2).max(200), limit: z.number().int().min(1).max(25).optional() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return { results: await searchCode(parsed.data.query, parsed.data.limit ?? 10) }; }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
+const memoryFetchTool: ToolDefinition = {
+  name: 'memory_fetch',
+  title: 'Segundo Cérebro — fetch de arquivo',
+  description: 'Lê um arquivo específico do repositório do Segundo Cérebro. Path relativo obrigatório; recusa traversal e paths absolutos. Sem escrita.',
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      path: { type: 'string', minLength: 1, maxLength: 512 },
+      ref: { type: 'string', minLength: 1, maxLength: 128 },
+    },
+    required: ['path'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({ path: z.string().min(1).max(512), ref: z.string().min(1).max(128).optional() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return await getFile(parsed.data.path, parsed.data.ref); }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
+const memoryListPendingTool: ToolDefinition = {
+  name: 'memory_list_pending_proposals',
+  title: 'Segundo Cérebro — propostas pendentes',
+  description: `Lista propostas .md aguardando revisão do OpenClaw em ${INBOX_PREFIX}. Sem escrita.`,
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({ limit: z.number().int().min(1).max(100).optional() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return { inbox: INBOX_PREFIX, items: await listInboxPending(parsed.data.limit ?? 25) }; }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
+const memoryProposeTool: ToolDefinition = {
+  name: 'memory_propose_update',
+  title: 'Segundo Cérebro — propor atualização',
+  description:
+    `Cria uma proposta .md em ${INBOX_PREFIX} (único diretório de escrita permitido). Nome de arquivo é gerado pelo servidor. Nunca sobrescreve arquivos. Bloqueia MEMORY.md, memory/now.md, decisions, projects/, context/, lessons, pending e inboxes de outros agentes.`,
+  scopes: MEMORY_PROPOSE,
+  annotations: {
+    readOnlyHint: false,
+    idempotentHint: false,
+    destructiveHint: false,
+    openWorldHint: true,
+  },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      title: { type: 'string', minLength: 3, maxLength: 160 },
+      summary: { type: 'string', minLength: 10, maxLength: 2000 },
+      origin: { type: 'string', minLength: 2, maxLength: 120, description: 'quem/qual agente propõe (ex: chatgpt-work, hermes-agent).' },
+      suggested_destination: { type: 'string', maxLength: 256 },
+      context: { type: 'string', maxLength: 6000 },
+      risks: { type: 'string', maxLength: 2000 },
+      correlation_id: { type: 'string', minLength: 6, maxLength: 64 },
+      body_markdown: { type: 'string', maxLength: 12000 },
+    },
+    required: ['title', 'summary', 'origin', 'correlation_id'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      title: z.string().min(3).max(160),
+      summary: z.string().min(10).max(2000),
+      origin: z.string().min(2).max(120),
+      suggested_destination: z.string().max(256).optional(),
+      context: z.string().max(6000).optional(),
+      risks: z.string().max(2000).optional(),
+      correlation_id: z.string().min(6).max(64),
+      body_markdown: z.string().max(12000).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return await proposeUpdate(parsed.data); }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
 export const TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -444,6 +604,12 @@ export const TOOLS: readonly ToolDefinition[] = [
   listWorkspaceNodesTool,
   getWorkspaceNodeTool,
   listFilesTool,
+  // Second Brain bridge (round 4)
+  memoryGetContextTool,
+  memorySearchTool,
+  memoryFetchTool,
+  memoryListPendingTool,
+  memoryProposeTool,
 ];
 
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
