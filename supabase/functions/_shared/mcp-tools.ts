@@ -468,7 +468,7 @@ const memoryGetContextTool: ToolDefinition = {
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     try {
       const bundle = await getContextBundle(parsed.data.extra_paths);
-      return { source: 'github', order: CONTEXT_ORDER, ...bundle, bridge: bridgeStatus() };
+      return { source: 'github', ...bundle, bridge: bridgeStatus() };
     } catch (e) { throw memoryError(e); }
   },
 };
