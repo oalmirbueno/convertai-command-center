@@ -310,9 +310,10 @@ export async function searchCode(query: string, limit = 10): Promise<Array<{ pat
 
 export async function listInboxPending(limit = 25): Promise<Array<{ path: string; sha: string; size: number }>> {
   const cfg = loadConfig();
+  const branch = await resolveBranch(cfg);
   const inboxPath = INBOX_PREFIX.replace(/\/$/, '');
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(inboxPath)}`, {
-    query: { ref: cfg.branch },
+    query: { ref: branch },
   });
   if (res.status === 404) return [];
   if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
