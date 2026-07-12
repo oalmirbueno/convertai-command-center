@@ -13,6 +13,14 @@ import {
   RpcErrors,
   rpcResult,
 } from '../_shared/mcp-response.ts';
+import {
+  assertWritableInbox,
+  buildProposalMarkdown,
+  CONTEXT_ORDER,
+  INBOX_PREFIX,
+  normalizePath,
+  SecondBrainError,
+} from '../_shared/second-brain-github.ts';
 
 const readCtx: AuthContext = {
   keyId: '00000000-0000-0000-0000-000000000001',
