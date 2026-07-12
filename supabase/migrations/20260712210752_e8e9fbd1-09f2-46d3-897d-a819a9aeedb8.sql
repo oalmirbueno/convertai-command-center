@@ -1,0 +1,1 @@
+UPDATE public.api_keys SET is_active=false, revoked_at=COALESCE(revoked_at, now()) WHERE name='chatgpt-work-private' AND (revoked_at IS NULL OR is_active=true);
