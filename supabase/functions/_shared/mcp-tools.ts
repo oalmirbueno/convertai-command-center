@@ -22,6 +22,17 @@ import {
   listWorkspaceNodes,
   search,
 } from './aceleriq-read-services.ts';
+import {
+  bridgeStatus,
+  CONTEXT_ORDER,
+  getContextBundle,
+  getFile,
+  INBOX_PREFIX,
+  listInboxPending,
+  proposeUpdate,
+  searchCode,
+  SecondBrainError,
+} from './second-brain-github.ts';
 
 export type ToolScope =
   | 'aceleriq:read'
