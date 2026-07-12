@@ -23,12 +23,62 @@ const readCtx: AuthContext = {
 const emptyCtx: AuthContext = { ...readCtx, scopes: [] };
 const adminCtx: AuthContext = { ...readCtx, scopes: ['admin'] };
 
-Deno.test('registry exposes exactly the round-2 foundation tools', () => {
-  assertEquals(TOOLS.map(t => t.name).sort(), ['aceleriq_capabilities', 'aceleriq_health']);
+Deno.test('registry exposes foundation + round-3 read tools', () => {
+  const names = TOOLS.map(t => t.name).sort();
+  assertEquals(names, [
+    'aceleriq_capabilities',
+    'aceleriq_fetch',
+    'aceleriq_get_briefing',
+    'aceleriq_get_client_context',
+    'aceleriq_get_project',
+    'aceleriq_get_report',
+    'aceleriq_get_workspace_node',
+    'aceleriq_health',
+    'aceleriq_list_briefings',
+    'aceleriq_list_clients',
+    'aceleriq_list_files',
+    'aceleriq_list_projects',
+    'aceleriq_list_reports',
+    'aceleriq_list_tasks',
+    'aceleriq_list_workspace_nodes',
+    'aceleriq_search',
+  ]);
 });
 
-Deno.test('foundation tools are open to any authenticated key', () => {
-  for (const t of TOOLS) assert(canInvoke(emptyCtx, t));
+Deno.test('foundation tools are open to any authenticated key; read tools require aceleriq:read', () => {
+  const foundation = ['aceleriq_health', 'aceleriq_capabilities'];
+  for (const t of TOOLS) {
+    if (foundation.includes(t.name)) assert(canInvoke(emptyCtx, t), `${t.name} should be public-auth`);
+    else {
+      assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
+      assert(canInvoke(readCtx, t), `${t.name} should allow read scope`);
+      assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
+    }
+  }
+});
+
+Deno.test('read tools reject invalid input via Zod', async () => {
+  const tool = TOOL_MAP.get('aceleriq_get_project')!;
+  let threw = false;
+  try { await tool.handler({ project_id: 'not-a-uuid' }, readCtx); }
+  catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw, 'expected Zod validation to reject invalid UUID');
+});
+
+Deno.test('fetch rejects unsupported entity types', async () => {
+  const tool = TOOL_MAP.get('aceleriq_fetch')!;
+  let threw = false;
+  try { await tool.handler({ type: 'expenses', id: '00000000-0000-0000-0000-000000000000' }, readCtx); }
+  catch { threw = true; }
+  assert(threw, 'expected fetch to reject non-whitelisted entity');
+});
+
+Deno.test('search rejects empty query', async () => {
+  const tool = TOOL_MAP.get('aceleriq_search')!;
+  let threw = false;
+  try { await tool.handler({ query: '' }, readCtx); }
+  catch { threw = true; }
+  assert(threw);
 });
 
 Deno.test('hasScope: empty required = allowed, admin overrides everything', () => {
