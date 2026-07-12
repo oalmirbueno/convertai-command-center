@@ -42,6 +42,7 @@ import FirstAccess from "@/pages/FirstAccess";
 import AdminContracts from "@/pages/AdminContracts";
 import ContractPublic from "@/pages/ContractPublic";
 import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
+import OAuthConsent from "@/pages/OAuthConsent";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -94,6 +95,7 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
       <Route path="/contrato/:token" element={<ContractPublic />} />
       <Route path="/inbox/:token" element={<WorkspaceInboxPublic />} />

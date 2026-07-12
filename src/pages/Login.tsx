@@ -66,7 +66,11 @@ export default function Login() {
   const avaliacao = useCountUp(49, 1000, 1000); // 4.9 → animate as 49, display /10
 
   useEffect(() => {
-    if (!loading && user && profile) navigate("/dashboard", { replace: true });
+    if (!loading && user && profile) {
+      const next = new URLSearchParams(window.location.search).get("next");
+      const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+      navigate(safe, { replace: true });
+    }
   }, [loading, user, profile, navigate]);
 
   if (loading || (user && profile)) {
