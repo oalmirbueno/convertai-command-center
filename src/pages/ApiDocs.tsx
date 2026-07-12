@@ -6,6 +6,7 @@ import {
   Play, Loader2, Webhook, Database, Activity, RefreshCw, Search, Settings2
 } from "lucide-react";
 import IntegrationsManager from "@/components/admin/IntegrationsManager";
+import MCPManager from "@/components/admin/MCPManager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
