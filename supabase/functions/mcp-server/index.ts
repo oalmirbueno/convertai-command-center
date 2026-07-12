@@ -31,6 +31,7 @@ import {
   type JsonRpcRequest,
   type JsonRpcResponse,
 } from '../_shared/mcp-response.ts';
+import { bridgeStatus } from '../_shared/second-brain-github.ts';
 
 // ─── JSON-RPC dispatch ────────────────────────────────────────
 async function dispatch(
