@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, Clock, Copy, Cpu, Eye, EyeOff,
-  Key, Loader2, Network, Plus, RefreshCw, RotateCw, Server, ShieldCheck,
-  Trash2, XCircle, Zap
+  ExternalLink, FileJson, Key, Loader2, Lock, Network, Plus, RefreshCw,
+  RotateCw, Server, ShieldCheck, Trash2, XCircle, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 /* ─── Config ──────────────────────────────────────────────── */
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const MCP_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-server`;
+const PRM_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-oauth-metadata`;
+const CONNECT_URL = "https://aceleriq.online/conectar-mcp";
 
 const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = [
   { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios." },
@@ -36,6 +38,73 @@ const EXPIRY_PRESETS: { label: string; days: number | null }[] = [
   { label: "90 dias", days: 90 },
   { label: "1 ano", days: 365 },
   { label: "Sem expiração", days: null },
+];
+
+type AgentId = "chatgpt-work" | "codex" | "claude-code" | "hermes" | "openclaw" | "custom";
+
+const AGENTS: {
+  id: AgentId;
+  name: string;
+  auth: "oauth" | "bearer" | "hybrid";
+  title: string;
+  description: string;
+  defaultScopes: string[];
+  defaultName: string;
+}[] = [
+  {
+    id: "chatgpt-work",
+    name: "ChatGPT Work",
+    auth: "oauth",
+    title: "Login interno, sem token manual",
+    description: "Conexão recomendada por OAuth. O ChatGPT abre a tela de autorização do Aceleriq.",
+    defaultScopes: ["aceleriq:read", "memory:read", "memory:propose"],
+    defaultName: "ChatGPT Work OAuth",
+  },
+  {
+    id: "codex",
+    name: "Codex",
+    auth: "bearer",
+    title: "Plugin técnico com token",
+    description: "Gera credencial mcp_live_* para o plugin oficial, sem duplicar dados.",
+    defaultScopes: ["aceleriq:read", "memory:read", "memory:propose"],
+    defaultName: "Codex MCP",
+  },
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    auth: "hybrid",
+    title: "OAuth quando disponível ou Bearer técnico",
+    description: "Use OAuth para acesso por usuário; use Bearer para automações internas controladas.",
+    defaultScopes: ["aceleriq:read", "memory:read"],
+    defaultName: "Claude Code MCP",
+  },
+  {
+    id: "hermes",
+    name: "Hermes Agent",
+    auth: "bearer",
+    title: "Execução operacional controlada",
+    description: "Credencial escopada para leitura e escrita operacional conforme permissão concedida.",
+    defaultScopes: ["aceleriq:read", "aceleriq:write", "memory:read"],
+    defaultName: "Hermes Agent MCP",
+  },
+  {
+    id: "openclaw",
+    name: "OpenClaw",
+    auth: "bearer",
+    title: "Segundo Cérebro e propostas de memória",
+    description: "Credencial focada em consulta e proposta segura no inbox autorizado.",
+    defaultScopes: ["memory:read", "memory:propose"],
+    defaultName: "OpenClaw MCP",
+  },
+  {
+    id: "custom",
+    name: "Agente futuro",
+    auth: "hybrid",
+    title: "Modelo universal",
+    description: "Use para qualquer cliente MCP compatível com Streamable HTTP.",
+    defaultScopes: ["aceleriq:read"],
+    defaultName: "Agente MCP",
+  },
 ];
 
 /* ─── Types ───────────────────────────────────────────────── */
