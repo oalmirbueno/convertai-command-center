@@ -152,8 +152,32 @@ const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse();
 
-  // GET → sanitized public discovery + link ao PRM (RFC 9728).
+  // GET → OAuth challenge (RFC 9728). Um GET sem Authorization precisa
+  // responder 401 com WWW-Authenticate para que clientes como ChatGPT Work
+  // descubram o Protected Resource Metadata. Um 200 com o mesmo header é
+  // ignorado pelo cliente e leva ao erro "MCP server does not implement OAuth".
   if (req.method === 'GET') {
+    const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({
+          error: 'unauthorized',
+          error_description: 'Authentication required. See resource_metadata for OAuth discovery.',
+          resource_metadata: PRM_URL,
+          authorization_servers: [AUTH_ISSUER],
+        }),
+        {
+          status: 401,
+          headers: {
+            ...corsHeaders,
+            'Content-Type': 'application/json',
+            'WWW-Authenticate': WWW_AUTH_HEADER,
+            'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+            'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+          },
+        },
+      );
+    }
     return jsonResponse({
       name: SERVER_INFO.name,
       version: SERVER_INFO.version,
@@ -171,9 +195,10 @@ Deno.serve(async (req) => {
       serverTime: new Date().toISOString(),
     }, 200, {
       'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
-      'WWW-Authenticate': WWW_AUTH_HEADER,
+      'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
     });
   }
+
 
   if (req.method !== 'POST') {
     return new Response('Method not allowed', { status: 405, headers: corsHeaders });
@@ -204,6 +229,8 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
           'WWW-Authenticate': WWW_AUTH_HEADER,
           'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+          'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+
         },
       },
     );
