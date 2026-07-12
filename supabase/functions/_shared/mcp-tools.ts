@@ -33,6 +33,17 @@ import {
   searchCode,
   SecondBrainError,
 } from './second-brain-github.ts';
+import {
+  completeTask,
+  completeTaskSchema,
+  createReportDraft,
+  createReportDraftSchema,
+  createTask,
+  createTaskSchema,
+  updateTask,
+  updateTaskSchema,
+  WriteError,
+} from './mcp-write-services.ts';
 
 export type ToolScope =
   | 'aceleriq:read'
