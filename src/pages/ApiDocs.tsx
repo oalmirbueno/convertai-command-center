@@ -6,6 +6,7 @@ import {
   Play, Loader2, Webhook, Database, Activity, RefreshCw, Search, Settings2
 } from "lucide-react";
 import IntegrationsManager from "@/components/admin/IntegrationsManager";
+import MCPManager from "@/components/admin/MCPManager";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -833,6 +834,7 @@ Body (JSON):
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Audit Log</TabsTrigger>
           <TabsTrigger value="security" className="text-xs gap-1.5"><Lock className="w-3.5 h-3.5" /> Segurança</TabsTrigger>
           <TabsTrigger value="integrations" className="text-xs gap-1.5"><Settings2 className="w-3.5 h-3.5" /> Integrações</TabsTrigger>
+          <TabsTrigger value="mcp" className="text-xs gap-1.5"><Server className="w-3.5 h-3.5" /> MCP</TabsTrigger>
         </TabsList>
 
         {/* ── TAB: Visão Geral ─────────────────────────────── */}
@@ -1281,6 +1283,11 @@ Body (JSON):
         {/* ── TAB: Integrações Salvas ──────────────────────── */}
         <TabsContent value="integrations" className="mt-4">
           <IntegrationsManager />
+        </TabsContent>
+
+        {/* ── TAB: MCP ─────────────────────────────────────── */}
+        <TabsContent value="mcp" className="mt-4">
+          <MCPManager />
         </TabsContent>
       </Tabs>
     </div>
