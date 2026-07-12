@@ -9,6 +9,9 @@ export interface AuthContext {
   keyName: string;
   scopes: string[];
   origin: string | null;
+  // Optional per-call fields, populated by the dispatcher for write tools.
+  correlationId?: string;
+  resultRefHolder?: { value?: string };
 }
 
 export type AuthError =
