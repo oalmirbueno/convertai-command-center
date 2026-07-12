@@ -402,14 +402,12 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
   const bytes = new TextEncoder().encode(md).length;
   if (bytes > MAX_PROPOSAL_BYTES) throw new SecondBrainError({ kind: 'too_large', bytes });
 
-  // Ensure the branch exists (fast check, avoids a confusing PUT error).
-  const branchRes = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`);
-  if (branchRes.status === 404) throw new SecondBrainError({ kind: 'branch_not_found', branch: cfg.branch });
-  if (branchRes.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: branchRes.status, detail: String(branchRes.body?.message ?? '') });
+  // Resolve the effective branch (falls back to repo default_branch if configured branch is missing).
+  const branch = await resolveBranch(cfg);
 
   // Refuse to overwrite: 404 on the target path is required.
   const probe = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}`, {
-    query: { ref: cfg.branch },
+    query: { ref: branch },
   });
   if (probe.status !== 404) {
     throw new SecondBrainError({ kind: 'conflict', detail: `path already exists (unexpected): ${path}` });
@@ -419,7 +417,7 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
     body: {
       message: `chatgpt-inbox: ${input.title} [${input.correlation_id.slice(0, 8)}]`,
       content: b64encode(md),
-      branch: cfg.branch,
+      branch,
     },
   });
   if (put.status === 422 || put.status === 409) {
@@ -430,5 +428,5 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
   const commitSha: string = put.body?.commit?.sha ?? '';
   const commitUrl: string = put.body?.commit?.html_url ?? '';
   const sha: string = put.body?.content?.sha ?? '';
-  return { path, sha, commit_sha: commitSha, commit_url: commitUrl, bytes, branch: cfg.branch };
+  return { path, sha, commit_sha: commitSha, commit_url: commitUrl, bytes, branch };
 }
