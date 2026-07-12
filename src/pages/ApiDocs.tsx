@@ -1284,6 +1284,11 @@ Body (JSON):
         <TabsContent value="integrations" className="mt-4">
           <IntegrationsManager />
         </TabsContent>
+
+        {/* ── TAB: MCP ─────────────────────────────────────── */}
+        <TabsContent value="mcp" className="mt-4">
+          <MCPManager />
+        </TabsContent>
       </Tabs>
     </div>
   );
