@@ -597,6 +597,153 @@ const memoryProposeTool: ToolDefinition = {
   },
 };
 
+// ─── Write tools (round 5) ────────────────────────────────────
+// Only four: create_task, update_task, complete_task, create_report_draft.
+// All require aceleriq:write. Fields are on a strict allowlist (Zod .strict()).
+const WRITE: readonly ToolScope[] = ['aceleriq:write'];
+const WRITE_ANNOTATIONS = {
+  readOnlyHint: false,
+  idempotentHint: true,
+  destructiveHint: false,
+  openWorldHint: false,
+};
+
+function writeError(e: unknown): Error {
+  if (e instanceof WriteError) {
+    return new Error(`write:${e.code} ${e.message}`);
+  }
+  return e instanceof Error ? e : new Error(String(e));
+}
+
+function ensureWriteCtx(ctx: AuthContext) {
+  if (!ctx.correlationId) throw new Error('missing correlationId on write context');
+  return {
+    keyId: ctx.keyId,
+    origin: ctx.origin,
+    correlationId: ctx.correlationId,
+    resultRefHolder: ctx.resultRefHolder,
+  };
+}
+
+const createTaskTool: ToolDefinition = {
+  name: 'aceleriq_create_task',
+  title: 'Criar tarefa',
+  description:
+    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, assigned_to, due_date, milestone_id, idempotency_key. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: 'string', maxLength: 4000 },
+      status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review', 'done'] },
+      priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      assigned_to: { type: 'string', format: 'uuid' },
+      due_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      milestone_id: { type: 'string', format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'title', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = createTaskSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await createTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const updateTaskTool: ToolDefinition = {
+  name: 'aceleriq_update_task',
+  title: 'Atualizar tarefa',
+  description:
+    'Atualiza campos permitidos de uma tarefa. Não permite trocar project_id, source, created_at nem propriedade. Todos os campos são opcionais exceto task_id e idempotency_key. Nunca envia notificações ao cliente.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      task_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: ['string', 'null'], maxLength: 4000 },
+      status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review', 'done'] },
+      priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      assigned_to: { type: ['string', 'null'], format: 'uuid' },
+      due_date: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      milestone_id: { type: ['string', 'null'], format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['task_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = updateTaskSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await updateTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const completeTaskTool: ToolDefinition = {
+  name: 'aceleriq_complete_task',
+  title: 'Concluir tarefa',
+  description:
+    'Marca uma tarefa como concluída (status=done). Rejeita tarefas já concluídas. Sem outros efeitos colaterais, sem envio para cliente.',
+  scopes: WRITE,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      task_id: { type: 'string', format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['task_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = completeTaskSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await completeTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const createReportDraftTool: ToolDefinition = {
+  name: 'aceleriq_create_report_draft',
+  title: 'Criar rascunho de relatório',
+  description:
+    'Cria um relatório em RASCUNHO (status=draft). client_id é derivado do projeto — não aceito no input. Sem publicação, sem envio ao cliente, sem aprovação automática, sem file_url, sem internal_notes.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      period_start: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      period_end: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      summary: { type: 'string', maxLength: 8000 },
+      highlights: { type: 'string', maxLength: 4000 },
+      next_steps: { type: 'string', maxLength: 4000 },
+      metrics: { type: 'object' },
+      chart_type: { type: 'string', enum: ['area', 'bar', 'line', 'pie'] },
+      chart_data: { type: 'array', items: { type: 'object' }, maxItems: 500 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'title', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = createReportDraftSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await createReportDraft(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 export const TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -621,6 +768,11 @@ export const TOOLS: readonly ToolDefinition[] = [
   memoryFetchTool,
   memoryListPendingTool,
   memoryProposeTool,
+  // Write tools (round 5) — controlled operational writes
+  createTaskTool,
+  updateTaskTool,
+  completeTaskTool,
+  createReportDraftTool,
 ];
 
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
