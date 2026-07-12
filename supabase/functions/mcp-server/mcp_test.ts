@@ -145,3 +145,93 @@ Deno.test('prefersSse honors Accept header', () => {
   assert(!prefersSse(mk('application/json')));
   assert(!prefersSse(mk('')));
 });
+
+// ─── Round 4: Second Brain bridge ────────────────────────────
+const memoryReadCtx: AuthContext = { ...readCtx, scopes: ['memory:read'] };
+const memoryProposeCtx: AuthContext = { ...readCtx, scopes: ['memory:propose'] };
+
+Deno.test('memory tools require correct scopes', () => {
+  const t = (name: string) => TOOL_MAP.get(name)!;
+  assert(!canInvoke(emptyCtx, t('memory_get_context')));
+  assert(canInvoke(memoryReadCtx, t('memory_get_context')));
+  assert(canInvoke(memoryReadCtx, t('memory_search')));
+  assert(canInvoke(memoryReadCtx, t('memory_fetch')));
+  assert(canInvoke(memoryReadCtx, t('memory_list_pending_proposals')));
+  assert(!canInvoke(memoryReadCtx, t('memory_propose_update')));
+  assert(canInvoke(memoryProposeCtx, t('memory_propose_update')));
+  assert(canInvoke(adminCtx, t('memory_propose_update')));
+});
+
+Deno.test('CONTEXT_ORDER matches AGENTS_MEMORY_BRIDGE hierarchy', () => {
+  assertEquals(CONTEXT_ORDER, [
+    'AGENTS_MEMORY_BRIDGE.md',
+    'memory/agent-context.md',
+    'MEMORY.md',
+    'memory/now.md',
+  ]);
+});
+
+Deno.test('normalizePath rejects traversal, absolute paths, and empty segments', () => {
+  for (const bad of ['../etc/passwd', '/absolute/path', 'memory/../MEMORY.md', 'a//b', '', './x']) {
+    let threw = false;
+    try { normalizePath(bad); } catch (e) { threw = e instanceof SecondBrainError; }
+    assert(threw, `expected reject: ${bad}`);
+  }
+  assertEquals(normalizePath('memory/agent-context.md'), 'memory/agent-context.md');
+  assertEquals(normalizePath('memory\\inbox\\chatgpt\\x.md'), 'memory/inbox/chatgpt/x.md');
+});
+
+Deno.test('assertWritableInbox: only inbox/chatgpt/*.md at root, everything else blocked', () => {
+  // allowed
+  assertEquals(
+    assertWritableInbox(INBOX_PREFIX + '2026-07-12T12-00-00Z--x--abcd1234.md'),
+    'memory/inbox/chatgpt/2026-07-12T12-00-00Z--x--abcd1234.md',
+  );
+  // blocked cases
+  const blocked = [
+    'MEMORY.md',
+    'memory/now.md',
+    'memory/decisions.md',
+    'memory/lessons.md',
+    'memory/pending.md',
+    'memory/projects/site/plan.md',
+    'memory/context/anything.md',
+    'memory/inbox/openclaw/note.md',
+    'memory/inbox/hermes/note.md',
+    'AGENTS_MEMORY_BRIDGE.md',
+    'memory/inbox/chatgpt/sub/nested.md',   // no subfolders
+    'memory/inbox/chatgpt/no-ext',          // must be .md
+    'README.md',                            // root writes blocked
+  ];
+  for (const p of blocked) {
+    let threw = false;
+    try { assertWritableInbox(p); } catch (e) { threw = e instanceof SecondBrainError; }
+    assert(threw, `expected block: ${p}`);
+  }
+});
+
+Deno.test('buildProposalMarkdown emits YAML front-matter + required sections', () => {
+  const md = buildProposalMarkdown({
+    title: 'Teste',
+    summary: 'Este é um resumo suficientemente longo.',
+    origin: 'chatgpt-work',
+    correlation_id: 'abcd12345678',
+    context: 'ctx',
+    risks: 'risco baixo',
+  }, { path: 'memory/inbox/chatgpt/x.md', created_at: '2026-07-12T00:00:00.000Z' });
+  assert(md.startsWith('---\n'), 'must open with YAML front-matter');
+  assert(md.includes('status: pending-review'));
+  assert(md.includes('# Teste'));
+  assert(md.includes('## Resumo'));
+  assert(md.includes('## Contexto'));
+  assert(md.includes('## Riscos'));
+  assert(md.includes('correlation_id: "abcd12345678"'));
+});
+
+Deno.test('memory_propose_update rejects invalid input via Zod (short title, missing origin)', async () => {
+  const tool = TOOL_MAP.get('memory_propose_update')!;
+  let threw = false;
+  try { await tool.handler({ title: 'x', summary: 'y', correlation_id: '123456' }, memoryProposeCtx); }
+  catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
