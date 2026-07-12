@@ -99,10 +99,10 @@ Deno.test('aceleriq_health returns server info + key context', async () => {
 
 Deno.test('aceleriq_capabilities lists only tools the key can invoke', async () => {
   const tool = TOOL_MAP.get('aceleriq_capabilities')!;
-  const out = await tool.handler({}, emptyCtx) as Record<string, unknown>;
-  assertEquals(out.protocolVersion, MCP_PROTOCOL_VERSION);
-  const names = (out.tools as any[]).map(t => t.name).sort();
-  assertEquals(names, ['aceleriq_capabilities', 'aceleriq_health']);
+  const outEmpty = await tool.handler({}, emptyCtx) as Record<string, unknown>;
+  assertEquals((outEmpty.tools as any[]).map(t => t.name).sort(), ['aceleriq_capabilities', 'aceleriq_health']);
+  const outRead = await tool.handler({}, readCtx) as Record<string, unknown>;
+  assert((outRead.tools as any[]).length > 2);
 });
 
 Deno.test('sanitize redacts secret-like keys and preserves shape', () => {
