@@ -153,7 +153,11 @@ Deno.serve(async (req) => {
       transport: 'streamable-http',
       auth: { type: 'bearer', header: 'Authorization', scheme: 'Bearer' },
       endpoints: { rpc: 'POST /' },
-      round: 2,
+      toolCount: TOOLS.length,
+      tools: TOOLS.map(t => ({ name: t.name, title: t.title, description: t.description, scopes: t.scopes })),
+      secondBrain: bridgeStatus(),
+      round: 6,
+      serverTime: new Date().toISOString(),
     });
   }
 
