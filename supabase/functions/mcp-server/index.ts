@@ -111,11 +111,14 @@ async function dispatch(
     }
 
     try {
-      const result = await tool.handler(args, ctx);
+      const resultRefHolder: { value?: string } = {};
+      const callCtx: AuthContext = { ...ctx, correlationId, resultRefHolder };
+      const result = await tool.handler(args, callCtx);
       await auditLog({
         correlationId, toolName: name, origin: ctx.origin, keyId: ctx.keyId,
         scopes: ctx.scopes, input: args,
         success: true, statusCode: 200, durationMs: Date.now() - started,
+        resultRef: resultRefHolder.value ?? null,
       });
       return rpcResult(id, {
         content: [{ type: 'text', text: JSON.stringify(result) }],

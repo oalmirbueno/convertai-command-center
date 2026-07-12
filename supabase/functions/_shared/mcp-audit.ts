@@ -42,17 +42,25 @@ export interface AuditEntry {
   durationMs: number;
   errorCode?: string | null;
   errorMessage?: string | null;
+  resultRef?: string | null;
 }
 
 export async function auditLog(entry: AuditEntry): Promise<void> {
   try {
+    const sanitized = sanitize(entry.input) as Record<string, unknown> | unknown;
+    // If a resultRef is provided (writes), tag it inside sanitized_input so
+    // future idempotency lookups can recover the created/updated row id
+    // without introducing a new column. Read-only tools leave it undefined.
+    const inputPayload = entry.resultRef
+      ? { ...(sanitized && typeof sanitized === 'object' ? sanitized : { value: sanitized }), __result_ref: entry.resultRef }
+      : sanitized;
     await admin().from('mcp_audit_log').insert({
       correlation_id: entry.correlationId,
       tool_name: entry.toolName,
       origin: entry.origin,
       key_id: entry.keyId,
       scopes: entry.scopes,
-      sanitized_input: sanitize(entry.input) as any,
+      sanitized_input: inputPayload as any,
       success: entry.success,
       status_code: entry.statusCode,
       duration_ms: entry.durationMs,
