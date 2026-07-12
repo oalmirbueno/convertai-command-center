@@ -834,6 +834,7 @@ Body (JSON):
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Audit Log</TabsTrigger>
           <TabsTrigger value="security" className="text-xs gap-1.5"><Lock className="w-3.5 h-3.5" /> Segurança</TabsTrigger>
           <TabsTrigger value="integrations" className="text-xs gap-1.5"><Settings2 className="w-3.5 h-3.5" /> Integrações</TabsTrigger>
+          <TabsTrigger value="mcp" className="text-xs gap-1.5"><Server className="w-3.5 h-3.5" /> MCP</TabsTrigger>
         </TabsList>
 
         {/* ── TAB: Visão Geral ─────────────────────────────── */}
