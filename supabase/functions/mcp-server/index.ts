@@ -145,9 +145,7 @@ async function dispatch(
 const PROJECT_REF = 'gicbrgagstyvbaaumprj';
 const PRM_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-oauth-metadata`;
 const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
-const WWW_AUTH_HEADER =
-  `Bearer realm="aceleriq-mcp", resource_metadata="${PRM_URL}", ` +
-  `authorization_uri="${AUTH_ISSUER}/oauth/authorize"`;
+const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse();

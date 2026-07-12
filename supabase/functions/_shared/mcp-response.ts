@@ -6,7 +6,7 @@ export const corsHeaders = {
   'Access-Control-Allow-Headers':
     'authorization, x-client-info, apikey, content-type, mcp-protocol-version, mcp-session-id, accept',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
-  'Access-Control-Expose-Headers': 'mcp-session-id',
+  'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
 };
 
 export const MCP_PROTOCOL_VERSION = '2025-06-18';

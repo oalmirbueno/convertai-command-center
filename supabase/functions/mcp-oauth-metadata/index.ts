@@ -7,6 +7,7 @@ const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type, mcp-protocol-version',
   'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
 };
 
 const PROJECT_REF = 'gicbrgagstyvbaaumprj';
@@ -22,8 +23,8 @@ Deno.serve((req) => {
     resource: RESOURCE,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['openid', 'email', 'profile'],
-    resource_documentation: 'https://aceleriq.online/api-docs',
+    scopes_supported: ['aceleriq:read', 'memory:read', 'memory:propose'],
+    resource_documentation: 'https://aceleriq.online/conectar-mcp',
     resource_name: 'Aceleriq OS MCP',
   };
   return new Response(JSON.stringify(body, null, 2), {
