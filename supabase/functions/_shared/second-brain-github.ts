@@ -97,6 +97,27 @@ function loadConfig(): Config {
   return { token, owner, repo, branch };
 }
 
+// Resolve the effective branch: use configured branch if it exists; otherwise
+// fall back to the repo's default_branch. Cached per cold start.
+let RESOLVED_BRANCH: string | null = null;
+async function resolveBranch(cfg: Config): Promise<string> {
+  if (RESOLVED_BRANCH) return RESOLVED_BRANCH;
+  const b = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`);
+  if (b.status === 200) { RESOLVED_BRANCH = cfg.branch; return RESOLVED_BRANCH; }
+  const meta = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}`);
+  if (meta.status === 404) throw new SecondBrainError({ kind: 'not_found', path: `${cfg.owner}/${cfg.repo}` });
+  if (meta.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: meta.status, detail: String(meta.body?.message ?? '') });
+  const def = meta.body?.default_branch as string | undefined;
+  if (!def) throw new SecondBrainError({ kind: 'branch_not_found', branch: cfg.branch });
+  const b2 = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(def)}`);
+  if (b2.status === 404) {
+    throw new SecondBrainError({ kind: 'branch_not_found', branch: def, detail: 'repository has no commits yet — push an initial commit before proposing updates' });
+  }
+  if (b2.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: b2.status, detail: String(b2.body?.message ?? '') });
+  RESOLVED_BRANCH = def;
+  return RESOLVED_BRANCH;
+}
+
 /** Public status probe (no token echo). Safe to expose via tools. */
 export function bridgeStatus(): Record<string, unknown> {
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? null;
