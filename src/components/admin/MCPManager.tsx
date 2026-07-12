@@ -709,13 +709,14 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 /* ─── Create / Rotate dialog ─────────────────────────────── */
 function CreateCredentialDialog({
-  open, onOpenChange, onCreate, preset, rotate,
+  open, onOpenChange, onCreate, preset, rotate, agent,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreate: (name: string, scopes: string[], expiresAt: string | null) => Promise<any>;
   preset: { name: string; scopes: string[]; expiresAt: string | null } | null;
   rotate?: boolean;
+  agent?: (typeof AGENTS)[number] | null;
 }) {
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(["aceleriq:read"]);
@@ -749,11 +750,13 @@ function CreateCredentialDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{rotate ? "Rotacionar credencial" : "Nova credencial MCP"}</DialogTitle>
+          <DialogTitle>{rotate ? "Rotacionar credencial" : agent ? `Conectar ${agent.name}` : "Nova conexão MCP"}</DialogTitle>
           <DialogDescription className="text-xs">
             {rotate
               ? "Cria uma nova credencial com os mesmos escopos e revoga a anterior automaticamente."
-              : "Gere um token seguro para um agente externo. Somente o hash é gravado no banco."}
+              : agent
+                ? agent.description
+                : "Gere um token seguro para um agente externo. Somente o hash é gravado no banco."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
