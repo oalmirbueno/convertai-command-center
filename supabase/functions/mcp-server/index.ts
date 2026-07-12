@@ -142,12 +142,17 @@ async function dispatch(
 }
 
 // ─── HTTP entry — Streamable HTTP transport ────────────────────
+const PROJECT_REF = 'gicbrgagstyvbaaumprj';
+const PRM_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-oauth-metadata`;
+const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
+const WWW_AUTH_HEADER =
+  `Bearer realm="aceleriq-mcp", resource_metadata="${PRM_URL}", ` +
+  `authorization_uri="${AUTH_ISSUER}/oauth/authorize"`;
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse();
 
-  // GET → sanitized public discovery.
-  // Detalhes (nomes de tools, escopos, config do Segundo Cérebro) exigem
-  // Bearer válido via `tools/call aceleriq_capabilities`.
+  // GET → sanitized public discovery + link ao PRM (RFC 9728).
   if (req.method === 'GET') {
     return jsonResponse({
       name: SERVER_INFO.name,
@@ -155,10 +160,18 @@ Deno.serve(async (req) => {
       status: 'ok',
       protocolVersion: MCP_PROTOCOL_VERSION,
       transport: 'streamable-http',
-      auth: { type: 'bearer', scheme: 'Bearer' },
+      auth: {
+        type: 'oauth2',
+        scheme: 'Bearer',
+        resource_metadata: PRM_URL,
+        authorization_servers: [AUTH_ISSUER],
+      },
       toolCount: TOOLS.length,
       secondBrain: bridgeStatusPublic(),
       serverTime: new Date().toISOString(),
+    }, 200, {
+      'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+      'WWW-Authenticate': WWW_AUTH_HEADER,
     });
   }
 
@@ -175,8 +188,33 @@ Deno.serve(async (req) => {
 
   const auth = await authenticate(req);
 
+  // Se qualquer mensagem exigir auth e ela falhou, devolve 401 com
+  // WWW-Authenticate para MCP clients OAuth (ChatGPT, Claude, Codex) fazerem
+  // discovery e iniciarem o fluxo. `initialize` e `ping` seguem no fluxo
+  // normal (respondem sem auth via dispatch).
   const isBatch = Array.isArray(body);
   const messages: JsonRpcRequest[] = (isBatch ? body : [body]) as JsonRpcRequest[];
+  const needsAuth = messages.some(m => {
+    const method = String(m?.method ?? '');
+    return method !== 'initialize' &&
+           method !== 'ping' &&
+           method !== 'notifications/initialized' &&
+           method !== 'initialized';
+  });
+  if (!auth.ok && needsAuth) {
+    return new Response(
+      JSON.stringify(rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'Unauthorized')),
+      {
+        status: 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': WWW_AUTH_HEADER,
+          'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+        },
+      },
+    );
+  }
 
   const responses: JsonRpcResponse[] = [];
   for (const msg of messages) {
@@ -196,3 +234,4 @@ Deno.serve(async (req) => {
   }
   return jsonResponse(payload);
 });
+
