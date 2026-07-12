@@ -64,27 +64,112 @@ async function classifyMissing(hash: string): Promise<AuthError> {
   return { kind: 'invalid' };
 }
 
+// ─── Supabase JWT validation via JWKS ───────────────────────────
+const AUTH_ISSUER = `${(Deno.env.get('SUPABASE_URL') ?? '').replace(/\/$/, '')}/auth/v1`;
+const JWKS_URL = `${AUTH_ISSUER}/.well-known/jwks.json`;
+
+let jwksCache: { keys: any[]; fetchedAt: number } | null = null;
+async function getJwks(): Promise<any[]> {
+  const now = Date.now();
+  if (jwksCache && now - jwksCache.fetchedAt < 10 * 60_000) return jwksCache.keys;
+  const res = await fetch(JWKS_URL);
+  if (!res.ok) throw new Error(`jwks fetch ${res.status}`);
+  const body = await res.json();
+  jwksCache = { keys: body.keys ?? [], fetchedAt: now };
+  return jwksCache.keys;
+}
+
+function b64urlDecode(input: string): Uint8Array {
+  const pad = 4 - (input.length % 4 || 4);
+  const b64 = (input + '='.repeat(pad === 4 ? 0 : pad)).replace(/-/g, '+').replace(/_/g, '/');
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
+}
+
+async function verifySupabaseJwt(token: string): Promise<Record<string, any> | null> {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  const [h, p, s] = parts;
+  let header: any, payload: any;
+  try {
+    header = JSON.parse(new TextDecoder().decode(b64urlDecode(h)));
+    payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
+  } catch { return null; }
+  if (!payload || payload.iss !== AUTH_ISSUER) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (payload.exp && payload.exp < now) return null;
+
+  const alg = header.alg;
+  const kid = header.kid;
+  const keys = await getJwks();
+  const jwk = keys.find(k => k.kid === kid) ?? keys[0];
+  if (!jwk) return null;
+
+  let algo: any;
+  if (alg === 'RS256') algo = { name: 'RSASSA-PKCS1-v1_5', hash: 'SHA-256' };
+  else if (alg === 'ES256') algo = { name: 'ECDSA', namedCurve: 'P-256', hash: 'SHA-256' };
+  else return null; // HS256 not supported in this path
+
+  try {
+    const key = await crypto.subtle.importKey('jwk', jwk, algo, false, ['verify']);
+    const data = new TextEncoder().encode(`${h}.${p}`);
+    const sig = b64urlDecode(s);
+    const ok = await crypto.subtle.verify(
+      alg === 'ES256' ? { name: 'ECDSA', hash: 'SHA-256' } : algo,
+      key, sig, data
+    );
+    return ok ? payload : null;
+  } catch { return null; }
+}
+
+const OAUTH_DEFAULT_SCOPES = ['aceleriq:read', 'memory:read', 'memory:propose'];
+
 export async function authenticate(req: Request): Promise<AuthResult> {
   const token = extractBearer(req);
   if (!token) return { ok: false, error: { kind: 'missing' } };
+
+  // 1) API key path (mcp_live_*, sha256 hash in api_keys)
   const hash = await sha256Hex(token);
   const { data, error } = await admin().rpc('validate_api_key', { _key_hash: hash });
-  if (error) return { ok: false, error: { kind: 'invalid' } };
-  const row = Array.isArray(data) ? data[0] : data;
-  if (!row) {
-    const cls = await classifyMissing(hash);
-    return { ok: false, error: cls };
+  if (!error) {
+    const row = Array.isArray(data) ? data[0] : data;
+    if (row) {
+      return {
+        ok: true,
+        ctx: {
+          keyId: row.id,
+          keyName: row.name,
+          scopes: Array.isArray(row.scopes) ? row.scopes : [],
+          origin: row.origin ?? null,
+        },
+      };
+    }
   }
-  return {
-    ok: true,
-    ctx: {
-      keyId: row.id,
-      keyName: row.name,
-      scopes: Array.isArray(row.scopes) ? row.scopes : [],
-      origin: row.origin ?? null,
-    },
-  };
+
+  // 2) Supabase OAuth JWT path (issued via /oauth/token). Grants a fixed,
+  //    conservative scope set; api_keys ainda governa acessos privilegiados.
+  const claims = await verifySupabaseJwt(token);
+  if (claims) {
+    const sub = String(claims.sub ?? '');
+    const clientId = String(claims.client_id ?? claims.azp ?? '');
+    return {
+      ok: true,
+      ctx: {
+        keyId: `oauth:${sub || clientId || 'anon'}`,
+        keyName: `oauth:${clientId || 'user'}`,
+        scopes: OAUTH_DEFAULT_SCOPES,
+        origin: clientId ? `oauth:${clientId}` : 'oauth',
+      },
+    };
+  }
+
+  // 3) Known-but-revoked/expired api key?
+  const cls = await classifyMissing(hash);
+  return { ok: false, error: cls };
 }
+
 
 export function hasScope(ctx: AuthContext, required: readonly string[]): boolean {
   if (required.length === 0) return true;
