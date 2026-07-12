@@ -43,6 +43,7 @@ import AdminContracts from "@/pages/AdminContracts";
 import ContractPublic from "@/pages/ContractPublic";
 import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
 import OAuthConsent from "@/pages/OAuthConsent";
+import MCPConnect from "@/pages/MCPConnect";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -101,6 +102,7 @@ function AppRoutes() {
       <Route path="/inbox/:token" element={<WorkspaceInboxPublic />} />
       <Route path="/quiz/:token" element={<QuizPublicPage />} />
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
+      <Route path="/conectar-mcp" element={<MCPConnect />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
