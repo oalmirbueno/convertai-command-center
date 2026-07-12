@@ -59,14 +59,17 @@ const env = readFileSync(resolve(ROOT,".env.example"),"utf8");
 if (/mcp_live_[A-Za-z0-9]{20,}/.test(env)) fail(".env.example contains what looks like a real token");
 else ok(".env.example has no real token");
 
-// 7. Optional live handshake
+// 7. Optional live handshake — public discovery é sanitizado (sem lista de tools).
 const url = process.env.ACELERIQ_MCP_URL;
 if (url) {
   try {
     const r = await fetch(url, { headers: { Accept: "application/json" } });
     const j = await r.json();
-    if (j?.name && Array.isArray(j?.tools)) ok(`live MCP reachable (${j.name} v${j.version}, ${j.tools.length} tools)`);
-    else fail("live MCP responded but payload unexpected");
+    if (j?.name && typeof j?.toolCount === "number" && j?.status === "ok") {
+      ok(`live MCP reachable (${j.name} v${j.version}, ${j.toolCount} tools, secondBrain.configured=${j.secondBrain?.configured})`);
+    } else {
+      fail("live MCP responded but payload unexpected");
+    }
   } catch (e) { fail(`live MCP fetch failed: ${e.message}`); }
 } else {
   console.log("· skipping live handshake (ACELERIQ_MCP_URL not set)");
