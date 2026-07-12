@@ -175,14 +175,15 @@ async function gh(
 // ─── Path safety ─────────────────────────────────────────────
 export function normalizePath(input: string): string {
   if (typeof input !== 'string') throw new SecondBrainError({ kind: 'validation', detail: 'path must be a string' });
-  let p = input.trim().replace(/\\/g, '/');
-  while (p.includes('//')) p = p.replace(/\/\//g, '/');
-  if (p.startsWith('/')) throw new SecondBrainError({ kind: 'validation', detail: 'absolute paths are forbidden' });
-  const segs = p.split('/');
+  const raw = input.trim().replace(/\\/g, '/');
+  if (!raw) throw new SecondBrainError({ kind: 'validation', detail: 'empty path' });
+  if (raw.startsWith('/')) throw new SecondBrainError({ kind: 'validation', detail: 'absolute paths are forbidden' });
+  if (raw.includes('//')) throw new SecondBrainError({ kind: 'validation', detail: 'empty segment in path' });
+  const segs = raw.split('/');
   if (segs.some(s => s === '..' || s === '.' || s === '')) {
     throw new SecondBrainError({ kind: 'validation', detail: 'path traversal or empty segment forbidden' });
   }
-  return p;
+  return raw;
 }
 
 export function assertReadable(path: string): string {
