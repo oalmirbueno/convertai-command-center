@@ -186,6 +186,7 @@ export default function MCPManager() {
   const [loadingAudit, setLoadingAudit] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [agentPreset, setAgentPreset] = useState<(typeof AGENTS)[number] | null>(null);
   const [rotateFor, setRotateFor] = useState<ApiKey | null>(null);
   const [revokeFor, setRevokeFor] = useState<ApiKey | null>(null);
   const [testFor, setTestFor] = useState<ApiKey | null>(null);
@@ -243,6 +244,10 @@ export default function MCPManager() {
 
   const keyById = useMemo(() => new Map(keys.map(k => [k.id, k])), [keys]);
 
+  const copyText = async (value: string, label = "Copiado") => {
+    try { await navigator.clipboard.writeText(value); toast.success(label); } catch { toast.error("Não foi possível copiar"); }
+  };
+
   /* ─── Create ─── */
   const createCredential = async (name: string, scopes: string[], expiresAt: string | null) => {
     const raw = generateToken();
@@ -296,8 +301,8 @@ export default function MCPManager() {
           <Button size="sm" variant="outline" onClick={() => { loadDiscovery(); loadKeys(); loadAudit(); }}>
             <RefreshCw className="w-3.5 h-3.5 mr-1" /> Atualizar
           </Button>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Nova credencial
+          <Button size="sm" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
+            <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
           </Button>
         </div>
       </div>
@@ -344,12 +349,97 @@ export default function MCPManager() {
       </div>
 
       {/* ── Main tabs ──────────────────────────────────────── */}
-      <Tabs defaultValue="credentials" className="w-full">
-        <TabsList className="grid grid-cols-3 w-full max-w-md h-9">
+      <Tabs defaultValue="connect" className="w-full">
+        <TabsList className="grid grid-cols-4 w-full max-w-2xl h-9">
+          <TabsTrigger value="connect" className="text-xs gap-1.5"><Network className="w-3.5 h-3.5" /> Conectar</TabsTrigger>
           <TabsTrigger value="credentials" className="text-xs gap-1.5"><Key className="w-3.5 h-3.5" /> Credenciais</TabsTrigger>
           <TabsTrigger value="tools" className="text-xs gap-1.5"><Zap className="w-3.5 h-3.5" /> Tools</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Auditoria</TabsTrigger>
         </TabsList>
+
+        {/* ── Universal connection center ── */}
+        <TabsContent value="connect" className="mt-3 space-y-3">
+          <div className="grid lg:grid-cols-[1.1fr_.9fr] gap-3">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-xs flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Central Universal de Conexão MCP
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <div className="grid sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded border bg-secondary/30 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"><Network className="w-3 h-3 text-primary" /> URL MCP</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(MCP_URL)}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <code className="break-all text-[10px]">{MCP_URL}</code>
+                  </div>
+                  <div className="rounded border bg-secondary/30 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"><FileJson className="w-3 h-3 text-primary" /> OAuth PRM</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(PRM_URL)}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <code className="break-all text-[10px]">{PRM_URL}</code>
+                  </div>
+                </div>
+                <div className="rounded border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="font-semibold text-foreground mb-1">ChatGPT Work deve usar OAuth.</p>
+                  <p>Cadastre a URL MCP, selecione OAuth e aguarde a tela de login/autorização do Aceleriq. Não cole token manual no ChatGPT Work.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => copyText(MCP_URL)}><Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL MCP</Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href="/conectar-mcp" target="_blank" rel="noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" /> Guia público</a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-xs flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Diagnóstico OAuth externo</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2 text-[11px]">
+                <Row label="401 sem autenticação" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">Obrigatório</Badge>} />
+                <Row label="WWW-Authenticate" value={<code className="text-[10px]">Bearer resource_metadata</code>} />
+                <Row label="Expose headers" value={<code className="text-[10px]">WWW-Authenticate</code>} />
+                <Row label="PRM público" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">JSON 200</Badge>} />
+                <Separator />
+                <p className="text-muted-foreground leading-relaxed">O endpoint foi ajustado para o formato esperado por clientes externos que partem da URL MCP e fazem discovery OAuth automaticamente.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {AGENTS.map(agent => (
+              <Card key={agent.id} className="bg-card">
+                <CardContent className="p-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold">{agent.name}</h4>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{agent.description}</p>
+                    </div>
+                    <Badge variant={agent.auth === "oauth" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.auth}</Badge>
+                  </div>
+                  <p className="text-[11px] font-medium">{agent.title}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {agent.defaultScopes.map(scope => <Badge key={scope} variant="outline" className="text-[9px] font-mono">{scope}</Badge>)}
+                  </div>
+                  {agent.auth === "oauth" ? (
+                    <Button size="sm" className="w-full" onClick={() => copyText(MCP_URL, "URL do ChatGPT copiada")}>
+                      <Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL OAuth
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="w-full" onClick={() => { setAgentPreset(agent); setShowCreate(true); }}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Gerar conexão
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
         {/* ── Credentials ── */}
         <TabsContent value="credentials" className="mt-3 space-y-2">
@@ -368,8 +458,8 @@ export default function MCPManager() {
                 <Key className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm">Nenhuma credencial MCP</p>
                 <p className="text-xs text-muted-foreground mt-1">Crie uma credencial para conectar agentes externos.</p>
-                <Button size="sm" className="mt-3" onClick={() => setShowCreate(true)}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Nova credencial
+                <Button size="sm" className="mt-3" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
                 </Button>
               </CardContent>
             </Card>
@@ -502,9 +592,10 @@ export default function MCPManager() {
       {/* ── Create dialog ─────────────────────────────────── */}
       <CreateCredentialDialog
         open={showCreate}
-        onOpenChange={setShowCreate}
+        onOpenChange={o => { setShowCreate(o); if (!o) setAgentPreset(null); }}
         onCreate={createCredential}
-        preset={null}
+        preset={agentPreset ? { name: agentPreset.defaultName, scopes: agentPreset.defaultScopes, expiresAt: null } : null}
+        agent={agentPreset}
       />
 
       {/* ── Rotate dialog ─────────────────────────────────── */}
