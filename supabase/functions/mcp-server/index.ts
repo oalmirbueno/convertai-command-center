@@ -45,7 +45,9 @@ async function dispatch(
   // Notifications carry no id and expect no response body.
   const isNotification = msg?.id === undefined || msg?.id === null;
 
-  // `initialize` is always public — it advertises the server.
+  // `initialize` advertises the server after the HTTP auth boundary accepts
+  // the request. Unauthenticated POSTs are rejected before dispatch so OAuth
+  // clients can discover PRM from WWW-Authenticate.
   if (method === 'initialize') {
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
@@ -186,20 +188,13 @@ Deno.serve(async (req) => {
 
   const auth = await authenticate(req);
 
-  // Se qualquer mensagem exigir auth e ela falhou, devolve 401 com
-  // WWW-Authenticate para MCP clients OAuth (ChatGPT, Claude, Codex) fazerem
-  // discovery e iniciarem o fluxo. `initialize` e `ping` seguem no fluxo
-  // normal (respondem sem auth via dispatch).
+  // Qualquer POST MCP sem credencial devolve 401 real com WWW-Authenticate.
+  // ChatGPT Work e outros clientes OAuth partem justamente desse probe para
+  // localizar o Protected Resource Metadata. GET continua sendo discovery
+  // público sanitizado; OPTIONS continua CORS.
   const isBatch = Array.isArray(body);
   const messages: JsonRpcRequest[] = (isBatch ? body : [body]) as JsonRpcRequest[];
-  const needsAuth = messages.some(m => {
-    const method = String(m?.method ?? '');
-    return method !== 'initialize' &&
-           method !== 'ping' &&
-           method !== 'notifications/initialized' &&
-           method !== 'initialized';
-  });
-  if (!auth.ok && needsAuth) {
+  if (!auth.ok) {
     return new Response(
       JSON.stringify(rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'Unauthorized')),
       {
