@@ -61,3 +61,6 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.mcp-server]
+    verify_jwt = false
+
