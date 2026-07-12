@@ -23,7 +23,7 @@ const readCtx: AuthContext = {
 const emptyCtx: AuthContext = { ...readCtx, scopes: [] };
 const adminCtx: AuthContext = { ...readCtx, scopes: ['admin'] };
 
-Deno.test('registry exposes foundation + round-3 read tools', () => {
+Deno.test('registry exposes foundation + read + memory tools', () => {
   const names = TOOLS.map(t => t.name).sort();
   assertEquals(names, [
     'aceleriq_capabilities',
@@ -42,6 +42,11 @@ Deno.test('registry exposes foundation + round-3 read tools', () => {
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
     'aceleriq_search',
+    'memory_fetch',
+    'memory_get_context',
+    'memory_list_pending_proposals',
+    'memory_propose_update',
+    'memory_search',
   ]);
 });
 
