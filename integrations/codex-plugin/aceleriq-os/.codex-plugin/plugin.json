@@ -1,0 +1,49 @@
+{
+  "$schema": "https://codex.openai.com/schemas/plugin.json",
+  "name": "aceleriq-os",
+  "version": "0.1.0",
+  "title": "Aceleriq OS",
+  "description": "Ponte oficial entre Codex e o Aceleriq Performance OS. Consome o MCP central do Aceleriq para leitura de contexto de clientes/projetos, escrita operacional restrita (tarefas e rascunhos de relatório) e consulta ao Segundo Cérebro (OpenClaw). Não hospeda dados próprios e não expõe qualquer superfície de escrita fora do inbox designado.",
+  "publisher": "Aceleriq",
+  "homepage": "https://aceleriq.online",
+  "license": "UNLICENSED",
+  "private": true,
+  "mcp": {
+    "servers": ["aceleriq"],
+    "config": ".mcp.json"
+  },
+  "capabilities": {
+    "tools": true,
+    "resources": false,
+    "prompts": false
+  },
+  "skills": [
+    { "id": "client-context",     "file": "skills/client-context.md" },
+    { "id": "task-management",    "file": "skills/task-management.md" },
+    { "id": "reports",            "file": "skills/reports.md" },
+    { "id": "second-brain",       "file": "skills/second-brain.md" },
+    { "id": "memory-proposals",   "file": "skills/memory-proposals.md" },
+    { "id": "project-review",     "file": "skills/project-review.md" }
+  ],
+  "env": {
+    "ACELERIQ_MCP_URL": {
+      "required": true,
+      "description": "URL pública do endpoint MCP do Aceleriq OS (produção)."
+    },
+    "ACELERIQ_MCP_TOKEN": {
+      "required": true,
+      "secret": true,
+      "description": "Credencial mcp_live_* emitida em /api-docs → MCP. Cada agente deve possuir a sua própria."
+    },
+    "ACELERIQ_AGENT_ORIGIN": {
+      "required": false,
+      "default": "codex",
+      "description": "Identifica a origem da chamada nos logs de auditoria e nas propostas de memória."
+    }
+  },
+  "security": {
+    "tokens": "environment-only",
+    "storage": "none",
+    "network": ["https://gicbrgagstyvbaaumprj.supabase.co"]
+  }
+}
