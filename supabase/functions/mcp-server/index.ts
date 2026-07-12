@@ -31,7 +31,7 @@ import {
   type JsonRpcRequest,
   type JsonRpcResponse,
 } from '../_shared/mcp-response.ts';
-import { bridgeStatus } from '../_shared/second-brain-github.ts';
+import { bridgeStatusPublic } from '../_shared/second-brain-github.ts';
 
 // ─── JSON-RPC dispatch ────────────────────────────────────────
 async function dispatch(
@@ -145,18 +145,19 @@ async function dispatch(
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse();
 
-  // GET → discovery document (no auth needed to describe the server).
+  // GET → sanitized public discovery.
+  // Detalhes (nomes de tools, escopos, config do Segundo Cérebro) exigem
+  // Bearer válido via `tools/call aceleriq_capabilities`.
   if (req.method === 'GET') {
     return jsonResponse({
-      ...SERVER_INFO,
+      name: SERVER_INFO.name,
+      version: SERVER_INFO.version,
+      status: 'ok',
       protocolVersion: MCP_PROTOCOL_VERSION,
       transport: 'streamable-http',
-      auth: { type: 'bearer', header: 'Authorization', scheme: 'Bearer' },
-      endpoints: { rpc: 'POST /' },
+      auth: { type: 'bearer', scheme: 'Bearer' },
       toolCount: TOOLS.length,
-      tools: TOOLS.map(t => ({ name: t.name, title: t.title, description: t.description, scopes: t.scopes })),
-      secondBrain: bridgeStatus(),
-      round: 6,
+      secondBrain: bridgeStatusPublic(),
       serverTime: new Date().toISOString(),
     });
   }

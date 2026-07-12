@@ -55,9 +55,9 @@ interface ApiKey {
 interface McpDiscovery {
   name?: string;
   version?: string;
+  status?: string;
   toolCount?: number;
-  tools?: { name: string; title?: string; description?: string; scopes?: string[] }[];
-  secondBrain?: { configured: boolean; owner: string | null; repo: string | null; branch: string; token_present: boolean };
+  secondBrain?: { configured: boolean };
   serverTime?: string;
   protocolVersion?: string;
 }
@@ -262,14 +262,13 @@ export default function MCPManager() {
         >
           {discovery?.secondBrain && (
             <div className="space-y-1.5 text-[11px]">
-              <Row label="Owner / Repo" value={<code>{discovery.secondBrain.owner ?? "—"}/{discovery.secondBrain.repo ?? "—"}</code>} />
-              <Row label="Branch" value={<code>{discovery.secondBrain.branch}</code>} />
-              <Row label="Token (server-side)" value={
-                discovery.secondBrain.token_present
+              <Row label="Status" value={
+                discovery.secondBrain.configured
                   ? <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-0">Configurado</Badge>
-                  : <Badge variant="destructive" className="text-[10px]">Ausente</Badge>
+                  : <Badge variant="destructive" className="text-[10px]">Não configurado</Badge>
               } />
               <Row label="Escrita permitida" value={<code className="text-[10px]">memory/inbox/chatgpt/</code>} />
+              <Row label="Detalhes" value={<span className="text-muted-foreground">via <code>aceleriq_capabilities</code></span>} />
             </div>
           )}
         </StatusCard>
@@ -370,22 +369,14 @@ export default function MCPManager() {
                 <Badge variant="secondary" className="text-[10px]">{discovery?.toolCount ?? 0}</Badge>
               </CardTitle>
             </CardHeader>
-            <CardContent className="pt-0 space-y-1.5">
-              {(discovery?.tools ?? []).map(t => (
-                <div key={t.name} className="p-2.5 rounded border border-border bg-secondary/30">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <code className="text-[11.5px] font-semibold text-primary">{t.name}</code>
-                    <div className="flex flex-wrap gap-1">
-                      {(t.scopes ?? []).length === 0
-                        ? <Badge variant="outline" className="text-[10px]">público (autenticado)</Badge>
-                        : (t.scopes ?? []).map(s => <Badge key={s} variant="secondary" className="text-[10px] font-mono">{s}</Badge>)
-                      }
-                    </div>
-                  </div>
-                  {t.description && <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{t.description}</p>}
-                </div>
-              ))}
-              {!discovery?.tools?.length && <p className="text-[11px] text-muted-foreground py-4 text-center">Sem tools disponíveis.</p>}
+            <CardContent className="pt-0">
+              <p className="text-[11px] text-muted-foreground leading-relaxed">
+                O total exposto acima vem do discovery público do servidor (<code>{discovery?.name}@{discovery?.version}</code>).
+                O catálogo detalhado (nomes, descrições e escopos por tool, bem como as tools visíveis para cada credencial)
+                exige Bearer válido e é retornado pela tool <code>aceleriq_capabilities</code>. Use o botão
+                <span className="mx-1 inline-flex items-center gap-1"><Zap className="w-3 h-3" /> Testar</span>
+                em uma credencial para ver o total visível para aquela chave.
+              </p>
             </CardContent>
           </Card>
         </TabsContent>

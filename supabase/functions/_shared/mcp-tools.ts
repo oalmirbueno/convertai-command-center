@@ -72,10 +72,13 @@ export interface ToolDefinition {
   handler: (input: unknown, ctx: AuthContext) => Promise<unknown>;
 }
 
+// Single source of truth for the MCP server version. Bumped whenever the
+// tool surface changes materially. No `-read` suffix: the server exposes
+// read, memory, and scope-gated write tools.
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.1.0-read',
+  version: '1.2.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -137,7 +140,7 @@ const capabilitiesTool: ToolDefinition = {
   name: 'aceleriq_capabilities',
   title: 'Aceleriq capabilities',
   description:
-    'Descreve o servidor MCP: tools disponíveis para esta chave, escopos concedidos e escopos suportados.',
+    'Descreve o servidor MCP: tools disponíveis para esta chave, escopos concedidos, escopos suportados, contagens agregadas e status do Segundo Cérebro (server-side).',
   scopes: [],
   inputSchema: { type: 'object', properties: {}, additionalProperties: false },
   annotations: READ_ANNOTATIONS,
@@ -145,11 +148,22 @@ const capabilitiesTool: ToolDefinition = {
     const visible = TOOLS
       .filter(t => canInvoke(ctx, t))
       .map(t => ({ name: t.name, description: t.description, requiredScopes: t.scopes }));
+    const counts = {
+      total: TOOLS.length,
+      visible: visible.length,
+      read: TOOLS.filter(t => t.scopes.includes('aceleriq:read')).length,
+      write: TOOLS.filter(t => t.scopes.includes('aceleriq:write')).length,
+      memory_read: TOOLS.filter(t => t.scopes.includes('memory:read')).length,
+      memory_propose: TOOLS.filter(t => t.scopes.includes('memory:propose')).length,
+      public: TOOLS.filter(t => t.scopes.length === 0).length,
+    };
     return Promise.resolve({
       server: SERVER_INFO,
       protocolVersion: '2025-06-18',
       grantedScopes: ctx.scopes,
       supportedScopes: ALL_SCOPES,
+      counts,
+      secondBrain: bridgeStatus(),
       tools: visible,
     });
   },
