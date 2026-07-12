@@ -823,7 +823,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
     try {
       const init = await fetch(MCP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token.trim()}` },
+        headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": `Bearer ${token.trim()}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
       });
       if (!init.ok) throw new Error(`initialize HTTP ${init.status}`);
@@ -831,7 +831,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
       if (initBody.error) throw new Error(initBody.error.message);
       const list = await fetch(MCP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token.trim()}` },
+        headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": `Bearer ${token.trim()}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
       });
       const listBody = await list.json();
