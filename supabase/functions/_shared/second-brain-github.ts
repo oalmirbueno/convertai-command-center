@@ -97,6 +97,27 @@ function loadConfig(): Config {
   return { token, owner, repo, branch };
 }
 
+// Resolve the effective branch: use configured branch if it exists; otherwise
+// fall back to the repo's default_branch. Cached per cold start.
+let RESOLVED_BRANCH: string | null = null;
+async function resolveBranch(cfg: Config): Promise<string> {
+  if (RESOLVED_BRANCH) return RESOLVED_BRANCH;
+  const b = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`);
+  if (b.status === 200) { RESOLVED_BRANCH = cfg.branch; return RESOLVED_BRANCH; }
+  const meta = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}`);
+  if (meta.status === 404) throw new SecondBrainError({ kind: 'not_found', path: `${cfg.owner}/${cfg.repo}` });
+  if (meta.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: meta.status, detail: String(meta.body?.message ?? '') });
+  const def = meta.body?.default_branch as string | undefined;
+  if (!def) throw new SecondBrainError({ kind: 'branch_not_found', branch: cfg.branch });
+  const b2 = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(def)}`);
+  if (b2.status === 404) {
+    throw new SecondBrainError({ kind: 'branch_not_found', branch: def, detail: 'repository has no commits yet — push an initial commit before proposing updates' });
+  }
+  if (b2.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: b2.status, detail: String(b2.body?.message ?? '') });
+  RESOLVED_BRANCH = def;
+  return RESOLVED_BRANCH;
+}
+
 /** Public status probe (no token echo). Safe to expose via tools. */
 export function bridgeStatus(): Record<string, unknown> {
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? null;
@@ -241,8 +262,9 @@ export interface FetchedFile {
 export async function getFile(path: string, ref?: string): Promise<FetchedFile> {
   const cfg = loadConfig();
   const safe = assertReadable(path);
+  const branch = ref ?? await resolveBranch(cfg);
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(safe)}`, {
-    query: { ref: ref ?? cfg.branch },
+    query: { ref: branch },
   });
   if (res.status === 404) throw new SecondBrainError({ kind: 'not_found', path: safe });
   if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
@@ -288,9 +310,10 @@ export async function searchCode(query: string, limit = 10): Promise<Array<{ pat
 
 export async function listInboxPending(limit = 25): Promise<Array<{ path: string; sha: string; size: number }>> {
   const cfg = loadConfig();
+  const branch = await resolveBranch(cfg);
   const inboxPath = INBOX_PREFIX.replace(/\/$/, '');
   const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(inboxPath)}`, {
-    query: { ref: cfg.branch },
+    query: { ref: branch },
   });
   if (res.status === 404) return [];
   if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
@@ -379,14 +402,12 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
   const bytes = new TextEncoder().encode(md).length;
   if (bytes > MAX_PROPOSAL_BYTES) throw new SecondBrainError({ kind: 'too_large', bytes });
 
-  // Ensure the branch exists (fast check, avoids a confusing PUT error).
-  const branchRes = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/branches/${encodeURIComponent(cfg.branch)}`);
-  if (branchRes.status === 404) throw new SecondBrainError({ kind: 'branch_not_found', branch: cfg.branch });
-  if (branchRes.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: branchRes.status, detail: String(branchRes.body?.message ?? '') });
+  // Resolve the effective branch (falls back to repo default_branch if configured branch is missing).
+  const branch = await resolveBranch(cfg);
 
   // Refuse to overwrite: 404 on the target path is required.
   const probe = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/contents/${encodeURI(path)}`, {
-    query: { ref: cfg.branch },
+    query: { ref: branch },
   });
   if (probe.status !== 404) {
     throw new SecondBrainError({ kind: 'conflict', detail: `path already exists (unexpected): ${path}` });
@@ -396,7 +417,7 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
     body: {
       message: `chatgpt-inbox: ${input.title} [${input.correlation_id.slice(0, 8)}]`,
       content: b64encode(md),
-      branch: cfg.branch,
+      branch,
     },
   });
   if (put.status === 422 || put.status === 409) {
@@ -407,5 +428,5 @@ export async function proposeUpdate(input: ProposalInput): Promise<ProposalResul
   const commitSha: string = put.body?.commit?.sha ?? '';
   const commitUrl: string = put.body?.commit?.html_url ?? '';
   const sha: string = put.body?.content?.sha ?? '';
-  return { path, sha, commit_sha: commitSha, commit_url: commitUrl, bytes, branch: cfg.branch };
+  return { path, sha, commit_sha: commitSha, commit_url: commitUrl, bytes, branch };
 }
