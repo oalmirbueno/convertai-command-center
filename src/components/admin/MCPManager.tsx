@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, AlertTriangle, CheckCircle2, Clock, Copy, Cpu, Eye, EyeOff,
-  Key, Loader2, Network, Plus, RefreshCw, RotateCw, Server, ShieldCheck,
-  Trash2, XCircle, Zap
+  ExternalLink, FileJson, Key, Loader2, Lock, Network, Plus, RefreshCw,
+  RotateCw, Server, ShieldCheck, Trash2, XCircle, Zap
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -21,6 +21,8 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 /* ─── Config ──────────────────────────────────────────────── */
 const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
 const MCP_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-server`;
+const PRM_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-oauth-metadata`;
+const CONNECT_URL = "https://aceleriq.online/conectar-mcp";
 
 const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = [
   { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios." },
@@ -36,6 +38,73 @@ const EXPIRY_PRESETS: { label: string; days: number | null }[] = [
   { label: "90 dias", days: 90 },
   { label: "1 ano", days: 365 },
   { label: "Sem expiração", days: null },
+];
+
+type AgentId = "chatgpt-work" | "codex" | "claude-code" | "hermes" | "openclaw" | "custom";
+
+const AGENTS: {
+  id: AgentId;
+  name: string;
+  auth: "oauth" | "bearer" | "hybrid";
+  title: string;
+  description: string;
+  defaultScopes: string[];
+  defaultName: string;
+}[] = [
+  {
+    id: "chatgpt-work",
+    name: "ChatGPT Work",
+    auth: "oauth",
+    title: "Login interno, sem token manual",
+    description: "Conexão recomendada por OAuth. O ChatGPT abre a tela de autorização do Aceleriq.",
+    defaultScopes: ["aceleriq:read", "memory:read", "memory:propose"],
+    defaultName: "ChatGPT Work OAuth",
+  },
+  {
+    id: "codex",
+    name: "Codex",
+    auth: "bearer",
+    title: "Plugin técnico com token",
+    description: "Gera credencial mcp_live_* para o plugin oficial, sem duplicar dados.",
+    defaultScopes: ["aceleriq:read", "memory:read", "memory:propose"],
+    defaultName: "Codex MCP",
+  },
+  {
+    id: "claude-code",
+    name: "Claude Code",
+    auth: "hybrid",
+    title: "OAuth quando disponível ou Bearer técnico",
+    description: "Use OAuth para acesso por usuário; use Bearer para automações internas controladas.",
+    defaultScopes: ["aceleriq:read", "memory:read"],
+    defaultName: "Claude Code MCP",
+  },
+  {
+    id: "hermes",
+    name: "Hermes Agent",
+    auth: "bearer",
+    title: "Execução operacional controlada",
+    description: "Credencial escopada para leitura e escrita operacional conforme permissão concedida.",
+    defaultScopes: ["aceleriq:read", "aceleriq:write", "memory:read"],
+    defaultName: "Hermes Agent MCP",
+  },
+  {
+    id: "openclaw",
+    name: "OpenClaw",
+    auth: "bearer",
+    title: "Segundo Cérebro e propostas de memória",
+    description: "Credencial focada em consulta e proposta segura no inbox autorizado.",
+    defaultScopes: ["memory:read", "memory:propose"],
+    defaultName: "OpenClaw MCP",
+  },
+  {
+    id: "custom",
+    name: "Agente futuro",
+    auth: "hybrid",
+    title: "Modelo universal",
+    description: "Use para qualquer cliente MCP compatível com Streamable HTTP.",
+    defaultScopes: ["aceleriq:read"],
+    defaultName: "Agente MCP",
+  },
 ];
 
 /* ─── Types ───────────────────────────────────────────────── */
@@ -117,6 +186,7 @@ export default function MCPManager() {
   const [loadingAudit, setLoadingAudit] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
+  const [agentPreset, setAgentPreset] = useState<(typeof AGENTS)[number] | null>(null);
   const [rotateFor, setRotateFor] = useState<ApiKey | null>(null);
   const [revokeFor, setRevokeFor] = useState<ApiKey | null>(null);
   const [testFor, setTestFor] = useState<ApiKey | null>(null);
@@ -174,6 +244,10 @@ export default function MCPManager() {
 
   const keyById = useMemo(() => new Map(keys.map(k => [k.id, k])), [keys]);
 
+  const copyText = async (value: string, label = "Copiado") => {
+    try { await navigator.clipboard.writeText(value); toast.success(label); } catch { toast.error("Não foi possível copiar"); }
+  };
+
   /* ─── Create ─── */
   const createCredential = async (name: string, scopes: string[], expiresAt: string | null) => {
     const raw = generateToken();
@@ -227,8 +301,8 @@ export default function MCPManager() {
           <Button size="sm" variant="outline" onClick={() => { loadDiscovery(); loadKeys(); loadAudit(); }}>
             <RefreshCw className="w-3.5 h-3.5 mr-1" /> Atualizar
           </Button>
-          <Button size="sm" onClick={() => setShowCreate(true)}>
-            <Plus className="w-3.5 h-3.5 mr-1" /> Nova credencial
+          <Button size="sm" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
+            <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
           </Button>
         </div>
       </div>
@@ -275,12 +349,97 @@ export default function MCPManager() {
       </div>
 
       {/* ── Main tabs ──────────────────────────────────────── */}
-      <Tabs defaultValue="credentials" className="w-full">
-        <TabsList className="grid grid-cols-3 w-full max-w-md h-9">
+      <Tabs defaultValue="connect" className="w-full">
+        <TabsList className="grid grid-cols-4 w-full max-w-2xl h-9">
+          <TabsTrigger value="connect" className="text-xs gap-1.5"><Network className="w-3.5 h-3.5" /> Conectar</TabsTrigger>
           <TabsTrigger value="credentials" className="text-xs gap-1.5"><Key className="w-3.5 h-3.5" /> Credenciais</TabsTrigger>
           <TabsTrigger value="tools" className="text-xs gap-1.5"><Zap className="w-3.5 h-3.5" /> Tools</TabsTrigger>
           <TabsTrigger value="audit" className="text-xs gap-1.5"><Activity className="w-3.5 h-3.5" /> Auditoria</TabsTrigger>
         </TabsList>
+
+        {/* ── Universal connection center ── */}
+        <TabsContent value="connect" className="mt-3 space-y-3">
+          <div className="grid lg:grid-cols-[1.1fr_.9fr] gap-3">
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-xs flex items-center gap-2">
+                  <ShieldCheck className="w-3.5 h-3.5 text-primary" /> Central Universal de Conexão MCP
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-3">
+                <div className="grid sm:grid-cols-2 gap-2 text-[11px]">
+                  <div className="rounded border bg-secondary/30 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"><Network className="w-3 h-3 text-primary" /> URL MCP</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(MCP_URL)}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <code className="break-all text-[10px]">{MCP_URL}</code>
+                  </div>
+                  <div className="rounded border bg-secondary/30 p-2.5">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-semibold flex items-center gap-1.5"><FileJson className="w-3 h-3 text-primary" /> OAuth PRM</span>
+                      <Button size="icon" variant="ghost" className="h-6 w-6" onClick={() => copyText(PRM_URL)}><Copy className="w-3 h-3" /></Button>
+                    </div>
+                    <code className="break-all text-[10px]">{PRM_URL}</code>
+                  </div>
+                </div>
+                <div className="rounded border border-primary/20 bg-primary/5 p-3 text-[11px] leading-relaxed text-muted-foreground">
+                  <p className="font-semibold text-foreground mb-1">ChatGPT Work deve usar OAuth.</p>
+                  <p>Cadastre a URL MCP, selecione OAuth e aguarde a tela de login/autorização do Aceleriq. Não cole token manual no ChatGPT Work.</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" onClick={() => copyText(MCP_URL)}><Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL MCP</Button>
+                  <Button size="sm" variant="outline" asChild>
+                    <a href="/conectar-mcp" target="_blank" rel="noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1" /> Guia público</a>
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="py-3">
+                <CardTitle className="text-xs flex items-center gap-2"><Lock className="w-3.5 h-3.5 text-primary" /> Diagnóstico OAuth externo</CardTitle>
+              </CardHeader>
+              <CardContent className="pt-0 space-y-2 text-[11px]">
+                <Row label="401 sem autenticação" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">Obrigatório</Badge>} />
+                <Row label="WWW-Authenticate" value={<code className="text-[10px]">Bearer resource_metadata</code>} />
+                <Row label="Expose headers" value={<code className="text-[10px]">WWW-Authenticate</code>} />
+                <Row label="PRM público" value={<Badge className="bg-emerald-500/15 text-emerald-500 border-0 text-[10px]">JSON 200</Badge>} />
+                <Separator />
+                <p className="text-muted-foreground leading-relaxed">O endpoint foi ajustado para o formato esperado por clientes externos que partem da URL MCP e fazem discovery OAuth automaticamente.</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          <div className="grid md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {AGENTS.map(agent => (
+              <Card key={agent.id} className="bg-card">
+                <CardContent className="p-3.5 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <h4 className="text-sm font-semibold">{agent.name}</h4>
+                      <p className="text-[11px] text-muted-foreground mt-1 leading-relaxed">{agent.description}</p>
+                    </div>
+                    <Badge variant={agent.auth === "oauth" ? "default" : "secondary"} className="text-[10px] uppercase">{agent.auth}</Badge>
+                  </div>
+                  <p className="text-[11px] font-medium">{agent.title}</p>
+                  <div className="flex flex-wrap gap-1">
+                    {agent.defaultScopes.map(scope => <Badge key={scope} variant="outline" className="text-[9px] font-mono">{scope}</Badge>)}
+                  </div>
+                  {agent.auth === "oauth" ? (
+                    <Button size="sm" className="w-full" onClick={() => copyText(MCP_URL, "URL do ChatGPT copiada")}>
+                      <Copy className="w-3.5 h-3.5 mr-1" /> Copiar URL OAuth
+                    </Button>
+                  ) : (
+                    <Button size="sm" className="w-full" onClick={() => { setAgentPreset(agent); setShowCreate(true); }}>
+                      <Plus className="w-3.5 h-3.5 mr-1" /> Gerar conexão
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </TabsContent>
 
         {/* ── Credentials ── */}
         <TabsContent value="credentials" className="mt-3 space-y-2">
@@ -299,8 +458,8 @@ export default function MCPManager() {
                 <Key className="w-8 h-8 mx-auto text-muted-foreground mb-2" />
                 <p className="text-sm">Nenhuma credencial MCP</p>
                 <p className="text-xs text-muted-foreground mt-1">Crie uma credencial para conectar agentes externos.</p>
-                <Button size="sm" className="mt-3" onClick={() => setShowCreate(true)}>
-                  <Plus className="w-3.5 h-3.5 mr-1" /> Nova credencial
+                <Button size="sm" className="mt-3" onClick={() => { setAgentPreset(null); setShowCreate(true); }}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Nova conexão
                 </Button>
               </CardContent>
             </Card>
@@ -433,9 +592,10 @@ export default function MCPManager() {
       {/* ── Create dialog ─────────────────────────────────── */}
       <CreateCredentialDialog
         open={showCreate}
-        onOpenChange={setShowCreate}
+        onOpenChange={o => { setShowCreate(o); if (!o) setAgentPreset(null); }}
         onCreate={createCredential}
-        preset={null}
+        preset={agentPreset ? { name: agentPreset.defaultName, scopes: agentPreset.defaultScopes, expiresAt: null } : null}
+        agent={agentPreset}
       />
 
       {/* ── Rotate dialog ─────────────────────────────────── */}
@@ -549,13 +709,14 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
 
 /* ─── Create / Rotate dialog ─────────────────────────────── */
 function CreateCredentialDialog({
-  open, onOpenChange, onCreate, preset, rotate,
+  open, onOpenChange, onCreate, preset, rotate, agent,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   onCreate: (name: string, scopes: string[], expiresAt: string | null) => Promise<any>;
   preset: { name: string; scopes: string[]; expiresAt: string | null } | null;
   rotate?: boolean;
+  agent?: (typeof AGENTS)[number] | null;
 }) {
   const [name, setName] = useState("");
   const [scopes, setScopes] = useState<string[]>(["aceleriq:read"]);
@@ -589,11 +750,13 @@ function CreateCredentialDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{rotate ? "Rotacionar credencial" : "Nova credencial MCP"}</DialogTitle>
+          <DialogTitle>{rotate ? "Rotacionar credencial" : agent ? `Conectar ${agent.name}` : "Nova conexão MCP"}</DialogTitle>
           <DialogDescription className="text-xs">
             {rotate
               ? "Cria uma nova credencial com os mesmos escopos e revoga a anterior automaticamente."
-              : "Gere um token seguro para um agente externo. Somente o hash é gravado no banco."}
+              : agent
+                ? agent.description
+                : "Gere um token seguro para um agente externo. Somente o hash é gravado no banco."}
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
@@ -660,7 +823,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
     try {
       const init = await fetch(MCP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token.trim()}` },
+        headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": `Bearer ${token.trim()}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "initialize", params: {} }),
       });
       if (!init.ok) throw new Error(`initialize HTTP ${init.status}`);
@@ -668,7 +831,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
       if (initBody.error) throw new Error(initBody.error.message);
       const list = await fetch(MCP_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${token.trim()}` },
+        headers: { "Content-Type": "application/json", "Accept": "application/json, text/event-stream", "Authorization": `Bearer ${token.trim()}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: 2, method: "tools/list", params: {} }),
       });
       const listBody = await list.json();

@@ -65,13 +65,14 @@ export default function Login() {
   const satisfacao = useCountUp(98, 1000, 900);
   const avaliacao = useCountUp(49, 1000, 1000); // 4.9 → animate as 49, display /10
 
+  const next = new URLSearchParams(window.location.search).get("next");
+  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+
   useEffect(() => {
     if (!loading && user && profile) {
-      const next = new URLSearchParams(window.location.search).get("next");
-      const safe = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
-      navigate(safe, { replace: true });
+      navigate(safeNext, { replace: true });
     }
-  }, [loading, user, profile, navigate]);
+  }, [loading, user, profile, navigate, safeNext]);
 
   if (loading || (user && profile)) {
     return (
@@ -100,7 +101,14 @@ export default function Login() {
       if (!acceptTerms) { triggerError("Aceite os termos para continuar"); return; }
       setSubmitting(true);
       try {
-        await signup(email, password, fullName, company || undefined, phone?.replace(/\D/g, "") || undefined);
+        await signup(
+          email,
+          password,
+          fullName,
+          company || undefined,
+          phone?.replace(/\D/g, "") || undefined,
+          `${window.location.origin}${safeNext}`,
+        );
       } catch (err: any) {
         const msg = err.message?.toLowerCase() || "";
         if (msg.includes("already registered") || msg.includes("already exists")) {
