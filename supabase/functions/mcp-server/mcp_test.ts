@@ -58,15 +58,17 @@ Deno.test('registry exposes foundation + read + memory tools', () => {
   ]);
 });
 
-Deno.test('foundation tools are open to any authenticated key; read tools require aceleriq:read', () => {
+Deno.test('foundation tools are open to any authenticated key; gated tools require the right scope', () => {
   const foundation = ['aceleriq_health', 'aceleriq_capabilities'];
   for (const t of TOOLS) {
-    if (foundation.includes(t.name)) assert(canInvoke(emptyCtx, t), `${t.name} should be public-auth`);
-    else {
-      assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
-      assert(canInvoke(readCtx, t), `${t.name} should allow read scope`);
-      assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
+    if (foundation.includes(t.name)) {
+      assert(canInvoke(emptyCtx, t), `${t.name} should be public-auth`);
+      continue;
     }
+    assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
+    assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
+    if (t.name.startsWith('memory_')) continue; // memory scopes tested separately
+    assert(canInvoke(readCtx, t), `${t.name} should allow aceleriq:read`);
   }
 });
 
