@@ -75,17 +75,21 @@ interface Config {
 }
 
 function loadConfig(): Config {
-  const token =
-    Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN') ??
-    Deno.env.get('SEGUNDO_CEREBRO_GITHUB_PAT') ??
-    '';
+  // Single canonical secret. No silent fallback.
+  const token = Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN') ?? '';
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? '';
   const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? '';
   const branch = Deno.env.get('SECOND_BRAIN_DEFAULT_BRANCH') ?? 'main';
   if (!token) {
     throw new SecondBrainError({
       kind: 'not_configured',
-      detail: 'SECOND_BRAIN_GITHUB_TOKEN (or SEGUNDO_CEREBRO_GITHUB_PAT) is not set.',
+      detail: 'SECOND_BRAIN_GITHUB_TOKEN is not set.',
+    });
+  }
+  if (token.length < 20) {
+    throw new SecondBrainError({
+      kind: 'not_configured',
+      detail: 'SECOND_BRAIN_GITHUB_TOKEN looks malformed (implausible length).',
     });
   }
   if (!owner || !repo) {
@@ -118,14 +122,20 @@ async function resolveBranch(cfg: Config): Promise<string> {
   return RESOLVED_BRANCH;
 }
 
-/** Public status probe (no token echo). Safe to expose via tools. */
+/** Minimal public status: presence only, never repo/owner/branch/token. */
+export function bridgeStatusPublic(): { configured: boolean } {
+  const tokenPresent = !!Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN');
+  const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? '';
+  const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? '';
+  return { configured: tokenPresent && !!owner && !!repo };
+}
+
+/** Full status for authenticated callers only (via aceleriq_capabilities). */
 export function bridgeStatus(): Record<string, unknown> {
   const owner = Deno.env.get('SECOND_BRAIN_GITHUB_OWNER') ?? null;
   const repo = Deno.env.get('SECOND_BRAIN_GITHUB_REPO') ?? null;
   const branch = Deno.env.get('SECOND_BRAIN_DEFAULT_BRANCH') ?? 'main';
-  const tokenPresent =
-    !!Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN') ||
-    !!Deno.env.get('SEGUNDO_CEREBRO_GITHUB_PAT');
+  const tokenPresent = !!Deno.env.get('SECOND_BRAIN_GITHUB_TOKEN');
   return {
     configured: tokenPresent && !!owner && !!repo,
     owner,
