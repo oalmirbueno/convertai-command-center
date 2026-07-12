@@ -229,6 +229,8 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
           'WWW-Authenticate': WWW_AUTH_HEADER,
           'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+          'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+
         },
       },
     );
