@@ -86,32 +86,44 @@ export type Database = {
         Row: {
           created_at: string
           created_by: string | null
+          expires_at: string | null
           id: string
           is_active: boolean
           key_hash: string
           key_preview: string
           last_used_at: string | null
           name: string
+          origin: string | null
+          revoked_at: string | null
+          scopes: string[]
         }
         Insert: {
           created_at?: string
           created_by?: string | null
+          expires_at?: string | null
           id?: string
           is_active?: boolean
           key_hash: string
           key_preview: string
           last_used_at?: string | null
           name: string
+          origin?: string | null
+          revoked_at?: string | null
+          scopes?: string[]
         }
         Update: {
           created_at?: string
           created_by?: string | null
+          expires_at?: string | null
           id?: string
           is_active?: boolean
           key_hash?: string
           key_preview?: string
           last_used_at?: string | null
           name?: string
+          origin?: string | null
+          revoked_at?: string | null
+          scopes?: string[]
         }
         Relationships: []
       }
@@ -708,6 +720,62 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      mcp_audit_log: {
+        Row: {
+          correlation_id: string
+          created_at: string
+          duration_ms: number | null
+          error_code: string | null
+          error_message: string | null
+          id: string
+          key_id: string | null
+          origin: string | null
+          sanitized_input: Json | null
+          scopes: string[] | null
+          status_code: number | null
+          success: boolean
+          tool_name: string
+        }
+        Insert: {
+          correlation_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          key_id?: string | null
+          origin?: string | null
+          sanitized_input?: Json | null
+          scopes?: string[] | null
+          status_code?: number | null
+          success?: boolean
+          tool_name: string
+        }
+        Update: {
+          correlation_id?: string
+          created_at?: string
+          duration_ms?: number | null
+          error_code?: string | null
+          error_message?: string | null
+          id?: string
+          key_id?: string | null
+          origin?: string | null
+          sanitized_input?: Json | null
+          scopes?: string[] | null
+          status_code?: number | null
+          success?: boolean
+          tool_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mcp_audit_log_key_id_fkey"
+            columns: ["key_id"]
+            isOneToOne: false
+            referencedRelation: "api_keys"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       milestones: {
         Row: {
@@ -2186,6 +2254,8 @@ export type Database = {
         Returns: {
           id: string
           name: string
+          origin: string
+          scopes: string[]
         }[]
       }
     }
