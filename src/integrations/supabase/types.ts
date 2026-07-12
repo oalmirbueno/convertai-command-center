@@ -777,6 +777,69 @@ export type Database = {
           },
         ]
       }
+      mcp_connection_profiles: {
+        Row: {
+          agent_type: string
+          allow_operational_write: boolean
+          auth_mode: string
+          connection_count: number
+          created_at: string
+          created_by: string
+          expires_at: string | null
+          id: string
+          last_connected_at: string | null
+          last_used_at: string | null
+          metadata: Json
+          name: string
+          origin: string
+          public_id: string
+          revoked_at: string | null
+          scopes: string[]
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          agent_type: string
+          allow_operational_write?: boolean
+          auth_mode?: string
+          connection_count?: number
+          created_at?: string
+          created_by: string
+          expires_at?: string | null
+          id?: string
+          last_connected_at?: string | null
+          last_used_at?: string | null
+          metadata?: Json
+          name: string
+          origin: string
+          public_id: string
+          revoked_at?: string | null
+          scopes?: string[]
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          agent_type?: string
+          allow_operational_write?: boolean
+          auth_mode?: string
+          connection_count?: number
+          created_at?: string
+          created_by?: string
+          expires_at?: string | null
+          id?: string
+          last_connected_at?: string | null
+          last_used_at?: string | null
+          metadata?: Json
+          name?: string
+          origin?: string
+          public_id?: string
+          revoked_at?: string | null
+          scopes?: string[]
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       milestones: {
         Row: {
           created_at: string
