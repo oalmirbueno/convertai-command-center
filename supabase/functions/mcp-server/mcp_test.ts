@@ -242,3 +242,97 @@ Deno.test('memory_propose_update rejects invalid input via Zod (short title, mis
   catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
   assert(threw);
 });
+
+// ─── Round 5: write tools ────────────────────────────────────
+const writeCtx: AuthContext = { ...readCtx, scopes: ['aceleriq:write'], correlationId: '00000000-0000-0000-0000-0000000000aa' };
+
+Deno.test('write tools require aceleriq:write scope', () => {
+  for (const name of ['aceleriq_create_task', 'aceleriq_update_task', 'aceleriq_complete_task', 'aceleriq_create_report_draft']) {
+    const t = TOOL_MAP.get(name)!;
+    assert(!canInvoke(readCtx, t), `${name} must not accept read-only key`);
+    assert(canInvoke(writeCtx, t), `${name} must accept write key`);
+    assert(canInvoke(adminCtx, t), `${name} must accept admin key`);
+    assertEquals(t.scopes, ['aceleriq:write']);
+  }
+});
+
+Deno.test('create_task rejects unknown fields (strict allowlist)', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_task')!;
+  let threw = false;
+  try {
+    await tool.handler({
+      project_id: '00000000-0000-0000-0000-000000000001',
+      title: 'x', idempotency_key: 'abcd1234',
+      client_id: '00000000-0000-0000-0000-000000000002', // NOT allowed
+    }, writeCtx);
+  } catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
+
+Deno.test('create_task requires project_id, title, idempotency_key', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_task')!;
+  let threw = false;
+  try { await tool.handler({ title: 'x' }, writeCtx); }
+  catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
+
+Deno.test('create_task rejects too-short idempotency_key', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_task')!;
+  let threw = false;
+  try {
+    await tool.handler({
+      project_id: '00000000-0000-0000-0000-000000000001',
+      title: 'x', idempotency_key: 'abc',
+    }, writeCtx);
+  } catch (e) { threw = true; }
+  assert(threw);
+});
+
+Deno.test('update_task requires at least one updatable field', async () => {
+  const tool = TOOL_MAP.get('aceleriq_update_task')!;
+  let threw = false;
+  try {
+    await tool.handler({
+      task_id: '00000000-0000-0000-0000-000000000001',
+      idempotency_key: 'abcd1234',
+    }, writeCtx);
+  } catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
+
+Deno.test('update_task rejects unknown/forbidden fields (project_id switch, source, created_by)', async () => {
+  const tool = TOOL_MAP.get('aceleriq_update_task')!;
+  for (const bad of [{ project_id: '00000000-0000-0000-0000-000000000009' }, { source: 'x' }, { created_by: '00000000-0000-0000-0000-000000000009' }]) {
+    let threw = false;
+    try {
+      await tool.handler({
+        task_id: '00000000-0000-0000-0000-000000000001',
+        idempotency_key: 'abcd1234',
+        title: 'ok',
+        ...bad,
+      }, writeCtx);
+    } catch (e) { threw = true; }
+    assert(threw, `expected reject: ${JSON.stringify(bad)}`);
+  }
+});
+
+Deno.test('create_report_draft rejects status, file_url, internal_notes, client_id (allowlist)', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_report_draft')!;
+  const base = {
+    project_id: '00000000-0000-0000-0000-000000000001',
+    title: 'Rascunho', idempotency_key: 'abcd12345',
+  };
+  for (const bad of [{ status: 'published' }, { file_url: 'https://x' }, { internal_notes: 'x' }, { client_id: '00000000-0000-0000-0000-000000000009' }, { created_by: '00000000-0000-0000-0000-000000000009' }, { images: [] }]) {
+    let threw = false;
+    try { await tool.handler({ ...base, ...bad }, writeCtx); }
+    catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+    assert(threw, `expected reject: ${JSON.stringify(bad)}`);
+  }
+});
+
+Deno.test('complete_task minimal schema: only task_id + idempotency_key', () => {
+  const tool = TOOL_MAP.get('aceleriq_complete_task')!;
+  assertEquals((tool.inputSchema as any).required, ['task_id', 'idempotency_key']);
+  assertEquals((tool.inputSchema as any).additionalProperties, false);
+});
