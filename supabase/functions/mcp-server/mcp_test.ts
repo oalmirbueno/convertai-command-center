@@ -72,6 +72,7 @@ Deno.test('foundation tools are open to any authenticated key; gated tools requi
     assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
     assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
     if (t.name.startsWith('memory_')) continue; // memory scopes tested separately
+    if (t.scopes.includes('aceleriq:write' as any)) continue; // write scopes tested separately
     assert(canInvoke(readCtx, t), `${t.name} should allow aceleriq:read`);
   }
 });
