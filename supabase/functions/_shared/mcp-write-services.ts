@@ -328,3 +328,65 @@ export async function createReportDraft(input: CreateReportDraftInput, ctx: Writ
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }
+
+// ─── update_project ───────────────────────────────────────────
+// Allows correcting deadline, status, progress and other operational fields.
+// Never touches client_id, brand, billing_mode, total_value, created_by or
+// ownership fields. `progress` is clamped to 0..100.
+const PROJECT_STATUS = z.enum(['active', 'done', 'paused', 'standby', 'cancelled']);
+const PROJECT_TYPE = z.enum(['recurring', 'individual', 'internal']).or(z.string().max(64));
+
+export const updateProjectSchema = z.object({
+  project_id: UUID,
+  name: z.string().trim().min(1).max(200).optional(),
+  description: z.string().trim().max(8000).nullable().optional(),
+  status: PROJECT_STATUS.optional(),
+  project_type: PROJECT_TYPE.optional(),
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  deadline: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+  progress: z.number().int().min(0).max(100).optional(),
+  scope: z.string().trim().max(8000).nullable().optional(),
+  objectives: z.string().trim().max(8000).nullable().optional(),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict().refine(
+  (v) => Object.keys(v).some(k => k !== 'project_id' && k !== 'idempotency_key'),
+  { message: 'at least one updatable field is required' },
+);
+export type UpdateProjectInput = z.infer<typeof updateProjectSchema>;
+
+const PROJECT_SELECT = 'id, client_id, name, description, project_type, status, progress, start_date, deadline, scope, objectives, brand, billing_mode, total_value, created_at, updated_at';
+
+export async function updateProject(input: UpdateProjectInput, ctx: WriteCtx) {
+  const replay = await replayIdempotent(
+    'aceleriq_update_project', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle()).data,
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as any).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
+  const { data: existing, error: fetchErr } = await db()
+    .from('projects').select('id, deleted_at').eq('id', input.project_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing || (existing as any).deleted_at) throw new WriteError('not_found', 'project_id not found');
+
+  if (input.start_date && input.deadline && input.deadline < input.start_date) {
+    throw new WriteError('validation', 'deadline must be >= start_date');
+  }
+
+  const patch: Record<string, unknown> = {};
+  for (const k of ['name', 'description', 'status', 'project_type', 'start_date', 'deadline', 'progress', 'scope', 'objectives'] as const) {
+    if (k in input) (patch as any)[k] = (input as any)[k];
+  }
+
+  const { data, error } = await db()
+    .from('projects')
+    .update(patch)
+    .eq('id', input.project_id)
+    .select(PROJECT_SELECT)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId };
+}

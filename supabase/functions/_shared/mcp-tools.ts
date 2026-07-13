@@ -10,6 +10,7 @@ import {
   fetchEntity,
   getBriefing,
   getClientContext,
+  getFile as getPanelFile,
   getProject,
   getReport,
   getWorkspaceNode,
@@ -40,6 +41,8 @@ import {
   createReportDraftSchema,
   createTask,
   createTaskSchema,
+  updateProject,
+  updateProjectSchema,
   updateTask,
   updateTaskSchema,
   WriteError,
@@ -78,7 +81,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.2.0',
+  version: '1.3.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -176,14 +179,14 @@ const listClientsTool = makeRead(
   'Lista clientes reais do Aceleriq OS (user_roles.role = client + profiles). Suporta busca por nome, empresa ou email, paginação e limite. Consulta somente dados existentes.',
   z.object({
     query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
     type: 'object',
     properties: {
       query: { type: 'string', description: 'Termo de busca em nome/empresa/email.' },
-      limit: { type: 'integer', minimum: 1, maximum: 100, default: 25 },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
       offset: { type: 'integer', minimum: 0, default: 0 },
     },
     additionalProperties: false,
@@ -213,7 +216,7 @@ const listProjectsTool = makeRead(
     client_id: UUID.optional(),
     status: z.string().max(64).optional(),
     query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -222,7 +225,7 @@ const listProjectsTool = makeRead(
       client_id: { type: 'string', format: 'uuid' },
       status: { type: 'string' },
       query: { type: 'string' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -254,7 +257,7 @@ const listTasksTool = makeRead(
     status: z.string().max(64).optional(),
     assigned_to: UUID.optional(),
     only_open: z.boolean().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -265,7 +268,7 @@ const listTasksTool = makeRead(
       status: { type: 'string' },
       assigned_to: { type: 'string', format: 'uuid' },
       only_open: { type: 'boolean' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -280,7 +283,7 @@ const listReportsTool = makeRead(
   z.object({
     client_id: UUID.optional(),
     project_id: UUID.optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -288,7 +291,7 @@ const listReportsTool = makeRead(
     properties: {
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -318,7 +321,7 @@ const listBriefingsTool = makeRead(
     client_id: UUID.optional(),
     project_id: UUID.optional(),
     submitted: z.boolean().optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -327,7 +330,7 @@ const listBriefingsTool = makeRead(
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
       submitted: { type: 'boolean' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -358,7 +361,7 @@ const listWorkspaceNodesTool = makeRead(
     client_id: UUID.optional(),
     scope: z.string().max(64).optional(),
     kind: z.string().max(64).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -368,7 +371,7 @@ const listWorkspaceNodesTool = makeRead(
       client_id: { type: 'string', format: 'uuid' },
       scope: { type: 'string' },
       kind: { type: 'string' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
@@ -393,13 +396,13 @@ const getWorkspaceNodeTool = makeRead(
 const listFilesTool = makeRead(
   'aceleriq_list_files',
   'Listar arquivos',
-  'Lista arquivos de entregas/aprovação com filtros por cliente, projeto, pasta e status de aprovação.',
+  'Lista arquivos de entregas/aprovação com filtros por cliente, projeto, pasta e status de aprovação. Cada item vem enriquecido com approval_state (approved|pending|rejected|not_required), requires_approval e is_internal_document — arquivos internos (estrategicos/materiais/operacionais/contratos/relatorios) NÃO passam pelo fluxo de aprovação do cliente.',
   z.object({
     client_id: UUID.optional(),
     project_id: UUID.optional(),
     folder: z.string().max(128).optional(),
     approval_status: z.string().max(64).optional(),
-    limit: z.number().int().min(1).max(100).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -409,12 +412,26 @@ const listFilesTool = makeRead(
       project_id: { type: 'string', format: 'uuid' },
       folder: { type: 'string' },
       approval_status: { type: 'string' },
-      limit: { type: 'integer', minimum: 1, maximum: 100 },
+      limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
   },
   (input) => listFiles(input),
+);
+
+const getFileTool = makeRead(
+  'aceleriq_get_file',
+  'Detalhes de arquivo',
+  'Retorna um arquivo pelo ID com metadados completos, versões filhas (parent_file_id) e semântica de aprovação enriquecida (approval_state, requires_approval, is_internal_document).',
+  z.object({ file_id: UUID }).strict(),
+  {
+    type: 'object',
+    properties: { file_id: { type: 'string', format: 'uuid' } },
+    required: ['file_id'],
+    additionalProperties: false,
+  },
+  (input) => getPanelFile(input),
 );
 
 const searchTool = makeRead(
@@ -554,11 +571,11 @@ const memoryListPendingTool: ToolDefinition = {
   annotations: READ_ANNOTATIONS,
   inputSchema: {
     type: 'object',
-    properties: { limit: { type: 'integer', minimum: 1, maximum: 100 } },
+    properties: { limit: { type: 'integer', minimum: 1, maximum: 500 } },
     additionalProperties: false,
   },
   handler: async (input) => {
-    const schema = z.object({ limit: z.number().int().min(1).max(100).optional() }).strict();
+    const schema = z.object({ limit: z.number().int().min(1).max(500).optional() }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     try { return { inbox: INBOX_PREFIX, items: await listInboxPending(parsed.data.limit ?? 25) }; }
@@ -758,6 +775,38 @@ const createReportDraftTool: ToolDefinition = {
   },
 };
 
+const updateProjectTool: ToolDefinition = {
+  name: 'aceleriq_update_project',
+  title: 'Atualizar projeto',
+  description: 'Atualiza campos operacionais de um projeto (name, description, status, project_type, start_date, deadline, progress 0-100, scope, objectives). Não altera cliente, brand, billing_mode ou total_value. Requer idempotency_key.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: ['string', 'null'], maxLength: 8000 },
+      status: { type: 'string', enum: ['active', 'done', 'paused', 'standby', 'cancelled'] },
+      project_type: { type: 'string', maxLength: 64 },
+      start_date: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      deadline: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      progress: { type: 'integer', minimum: 0, maximum: 100 },
+      scope: { type: ['string', 'null'], maxLength: 8000 },
+      objectives: { type: ['string', 'null'], maxLength: 8000 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = updateProjectSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await updateProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 export const TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -776,6 +825,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   listWorkspaceNodesTool,
   getWorkspaceNodeTool,
   listFilesTool,
+  getFileTool,
   // Second Brain bridge (round 4)
   memoryGetContextTool,
   memorySearchTool,
@@ -787,6 +837,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   updateTaskTool,
   completeTaskTool,
   createReportDraftTool,
+  updateProjectTool,
 ];
 
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(

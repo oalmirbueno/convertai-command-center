@@ -14,13 +14,48 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 // ─── Config ───────────────────────────────────────────────────
 export const READ_LIMITS = {
   defaultPageSize: 25,
-  maxPageSize: 100,
+  maxPageSize: 500,
   searchMaxPerEntity: 10,
   contextRecentFiles: 20,
   contextRecentRequests: 20,
   contextOpenTasks: 100,
   queryTimeoutMs: 8000,
 } as const;
+
+// Folders whose files pass through the client approval workflow.
+const APPROVAL_FOLDERS = new Set(['criativos', 'entregas']);
+
+function enrichFile<T extends Record<string, any>>(f: T): T & {
+  approval_state: 'approved' | 'pending' | 'rejected' | 'not_required';
+  requires_approval: boolean;
+  is_internal_document: boolean;
+} {
+  const folder = (f?.folder ?? '') as string;
+  const requires = APPROVAL_FOLDERS.has(folder);
+  const raw = String(f?.approval_status ?? 'none');
+  let state: 'approved' | 'pending' | 'rejected' | 'not_required';
+  if (raw === 'approved' || raw === 'pending' || raw === 'rejected') state = raw as any;
+  else state = requires ? 'pending' : 'not_required';
+  return {
+    ...f,
+    approval_state: state,
+    requires_approval: requires,
+    is_internal_document: !requires,
+  };
+}
+
+export function pageMeta(count: number | null | undefined, limit: number, offset: number) {
+  const total = count ?? 0;
+  const returned = Math.max(0, Math.min(limit, Math.max(0, total - offset)));
+  const has_more = offset + returned < total;
+  return {
+    total,
+    limit,
+    offset,
+    has_more,
+    next_offset: has_more ? offset + limit : null,
+  };
+}
 
 export const ALLOWED_ENTITY_TYPES = [
   'client',
@@ -142,7 +177,7 @@ export async function listClients(opts: { query?: string; limit?: number; offset
       .range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`profiles: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── get_client_context ──────────────────────────────────────
@@ -244,7 +279,7 @@ export async function listProjects(opts: {
     qb.order('updated_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`projects: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── get_project ─────────────────────────────────────────────
@@ -313,7 +348,7 @@ export async function listTasks(opts: {
     qb.order('updated_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`tasks: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── list_reports / get_report ───────────────────────────────
@@ -335,7 +370,7 @@ export async function listReports(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`reports: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getReport(opts: { report_id: string }) {
@@ -370,7 +405,7 @@ export async function listBriefings(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`briefings: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getBriefing(opts: { briefing_id: string }) {
@@ -409,7 +444,7 @@ export async function listWorkspaceNodes(opts: {
       .range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`workspace_nodes: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getWorkspaceNode(opts: { node_id: string }) {
@@ -422,7 +457,7 @@ export async function getWorkspaceNode(opts: { node_id: string }) {
   return { node: data };
 }
 
-// ─── list_files ──────────────────────────────────────────────
+// ─── list_files / get_file ───────────────────────────────────
 export async function listFiles(opts: {
   client_id?: string; project_id?: string; folder?: string; approval_status?: string;
   limit?: number; offset?: number;
@@ -444,7 +479,26 @@ export async function listFiles(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`files: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  const items = (data ?? []).map(enrichFile);
+  return { items, ...pageMeta(count, limit, offset) };
+}
+
+export async function getFile(opts: { file_id: string }) {
+  if (!isUuid(opts.file_id)) throw new Error('file_id must be a UUID');
+  const { data, error } = await withTimeout(
+    db().from('files').select(F.file).eq('id', opts.file_id).maybeSingle(),
+  );
+  if (error) throw new Error(`files: ${error.message}`);
+  if (!data) throw new Error('File not found');
+  // Fetch child versions (parent_file_id = this id) for approval history.
+  const { data: versions } = await withTimeout(
+    db().from('files').select(F.file).eq('parent_file_id', opts.file_id)
+      .order('created_at', { ascending: false }).limit(50),
+  );
+  return {
+    file: enrichFile(data),
+    versions: (versions ?? []).map(enrichFile),
+  };
 }
 
 // ─── search ──────────────────────────────────────────────────
