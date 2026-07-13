@@ -31,6 +31,7 @@ export default function Projects() {
   const { profile } = useAuth();
   const { data: projects, isLoading } = useProjects();
   const isAdmin = profile?.role === "admin";
+  const isClient = profile?.role === "client";
 
   const [filter, setFilter] = useState("all");
   const [createOpen, setCreateOpen] = useState(false);
@@ -39,7 +40,7 @@ export default function Projects() {
   const [drawerProject, setDrawerProject] = useState<any>(null);
 
   const filtered = (projects || []).filter((p: any) => {
-    if (!isAdmin && p.client_id !== profile?.id) return false;
+    if (isClient && p.client_id !== profile?.id) return false;
     if (filter !== "all" && p.status !== filter) return false;
     return true;
   });
