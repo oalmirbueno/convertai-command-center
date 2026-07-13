@@ -775,6 +775,38 @@ const createReportDraftTool: ToolDefinition = {
   },
 };
 
+const updateProjectTool: ToolDefinition = {
+  name: 'aceleriq_update_project',
+  title: 'Atualizar projeto',
+  description: 'Atualiza campos operacionais de um projeto (name, description, status, project_type, start_date, deadline, progress 0-100, scope, objectives). Não altera cliente, brand, billing_mode ou total_value. Requer idempotency_key.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: ['string', 'null'], maxLength: 8000 },
+      status: { type: 'string', enum: ['active', 'done', 'paused', 'standby', 'cancelled'] },
+      project_type: { type: 'string', maxLength: 64 },
+      start_date: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      deadline: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      progress: { type: 'integer', minimum: 0, maximum: 100 },
+      scope: { type: ['string', 'null'], maxLength: 8000 },
+      objectives: { type: ['string', 'null'], maxLength: 8000 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = updateProjectSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await updateProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 export const TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -793,6 +825,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   listWorkspaceNodesTool,
   getWorkspaceNodeTool,
   listFilesTool,
+  getFileTool,
   // Second Brain bridge (round 4)
   memoryGetContextTool,
   memorySearchTool,
@@ -804,6 +837,7 @@ export const TOOLS: readonly ToolDefinition[] = [
   updateTaskTool,
   completeTaskTool,
   createReportDraftTool,
+  updateProjectTool,
 ];
 
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
