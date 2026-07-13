@@ -1068,7 +1068,7 @@ export default function Workspace() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[320px] p-0">
+          <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[75vh] overflow-hidden flex flex-col">
             <div className="p-2 border-b border-border">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
