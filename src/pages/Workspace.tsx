@@ -291,7 +291,7 @@ export default function Workspace() {
     return map;
   }, [allFolders]);
 
-  useEffect(() => { nav.reset(); setSelected(null); }, [scope, clientId]);
+  // (Stack reset happens atomically inside nav.setScope/setClient.)
 
   // Existing client files (from public.files) — merged as virtual folders/files
   const { data: clientFiles } = useQuery({
