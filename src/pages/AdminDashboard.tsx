@@ -18,6 +18,7 @@ import { Slider } from "@/components/ui/slider";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
 import { PipelineBar } from "@/components/admin/ProjectPipeline";
+import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidget";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
