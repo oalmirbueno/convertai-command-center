@@ -4,7 +4,7 @@
 export const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type, mcp-protocol-version, mcp-session-id, accept',
+    'authorization, x-client-info, apikey, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
   'Access-Control-Allow-Methods': 'POST, GET, OPTIONS',
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
 };
@@ -67,12 +67,13 @@ export function optionsResponse(): Response {
 // Streamable HTTP: build an SSE payload for a single JSON-RPC response.
 // Spec: each event is `event: message` + `data: <json>\n\n`.
 export function sseResponse(payload: unknown, extra: HeadersInit = {}): Response {
-  const body = `event: message\ndata: ${JSON.stringify(payload)}\n\n`;
+  const items = Array.isArray(payload) ? payload : [payload];
+  const body = items.map(item => `event: message\ndata: ${JSON.stringify(item)}\n\n`).join('');
   return new Response(body, {
     status: 200,
     headers: {
       ...corsHeaders,
-      'Content-Type': 'text/event-stream',
+      'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       ...extra,
@@ -84,6 +85,8 @@ export function sseResponse(payload: unknown, extra: HeadersInit = {}): Response
 export function prefersSse(req: Request): boolean {
   const accept = (req.headers.get('accept') ?? '').toLowerCase();
   if (!accept) return false;
-  // If both are listed, prefer SSE only when explicitly asked for.
-  return accept.includes('text/event-stream');
+  // Streamable HTTP clients normally send both media types. Returning JSON for
+  // request/response methods keeps strict external scanners (ChatGPT Work) from
+  // missing initialize/tools-list payloads while still allowing SSE-only callers.
+  return accept.includes('text/event-stream') && !accept.includes('application/json');
 }

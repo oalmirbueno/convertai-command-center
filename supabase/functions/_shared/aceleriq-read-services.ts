@@ -58,7 +58,7 @@ async function withTimeout<T>(p: PromiseLike<T>, ms = READ_LIMITS.queryTimeoutMs
   ]);
 }
 
-function clampLimit(n: unknown, def = READ_LIMITS.defaultPageSize): number {
+function clampLimit(n: unknown, def: number = READ_LIMITS.defaultPageSize): number {
   const v = Number(n);
   if (!Number.isFinite(v) || v <= 0) return def;
   return Math.min(Math.floor(v), READ_LIMITS.maxPageSize);

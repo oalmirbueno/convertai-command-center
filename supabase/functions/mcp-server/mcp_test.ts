@@ -148,7 +148,7 @@ Deno.test('rpcResult / rpcError shape', () => {
 Deno.test('prefersSse honors Accept header', () => {
   const mk = (accept: string) => new Request('http://x', { headers: { accept } });
   assert(prefersSse(mk('text/event-stream')));
-  assert(prefersSse(mk('application/json, text/event-stream')));
+  assert(!prefersSse(mk('application/json, text/event-stream')));
   assert(!prefersSse(mk('application/json')));
   assert(!prefersSse(mk('')));
 });
