@@ -396,7 +396,7 @@ const getWorkspaceNodeTool = makeRead(
 const listFilesTool = makeRead(
   'aceleriq_list_files',
   'Listar arquivos',
-  'Lista arquivos de entregas/aprovação com filtros por cliente, projeto, pasta e status de aprovação.',
+  'Lista arquivos de entregas/aprovação com filtros por cliente, projeto, pasta e status de aprovação. Cada item vem enriquecido com approval_state (approved|pending|rejected|not_required), requires_approval e is_internal_document — arquivos internos (estrategicos/materiais/operacionais/contratos/relatorios) NÃO passam pelo fluxo de aprovação do cliente.',
   z.object({
     client_id: UUID.optional(),
     project_id: UUID.optional(),
@@ -418,6 +418,20 @@ const listFilesTool = makeRead(
     additionalProperties: false,
   },
   (input) => listFiles(input),
+);
+
+const getFileTool = makeRead(
+  'aceleriq_get_file',
+  'Detalhes de arquivo',
+  'Retorna um arquivo pelo ID com metadados completos, versões filhas (parent_file_id) e semântica de aprovação enriquecida (approval_state, requires_approval, is_internal_document).',
+  z.object({ file_id: UUID }).strict(),
+  {
+    type: 'object',
+    properties: { file_id: { type: 'string', format: 'uuid' } },
+    required: ['file_id'],
+    additionalProperties: false,
+  },
+  (input) => getPanelFile(input),
 );
 
 const searchTool = makeRead(
