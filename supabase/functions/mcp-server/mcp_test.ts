@@ -173,6 +173,10 @@ Deno.test('memory tools require correct scopes', () => {
   assert(canInvoke(memoryReadCtx, t('memory_search')));
   assert(canInvoke(memoryReadCtx, t('memory_fetch')));
   assert(canInvoke(memoryReadCtx, t('memory_list_pending_proposals')));
+  assert(canInvoke(memoryReadCtx, t('memory_get_pulse')));
+  assert(canInvoke(memoryReadCtx, t('memory_recent_commits')));
+  assert(!canInvoke(emptyCtx, t('memory_get_pulse')));
+  assert(!canInvoke(emptyCtx, t('memory_recent_commits')));
   assert(!canInvoke(memoryReadCtx, t('memory_propose_update')));
   assert(canInvoke(memoryProposeCtx, t('memory_propose_update')));
   assert(canInvoke(adminCtx, t('memory_propose_update')));
