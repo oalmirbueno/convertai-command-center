@@ -610,9 +610,45 @@ export default function Workspace() {
   }
 
 
+  // Ensures the destination parent is always a real workspace_nodes UUID.
+  // If uploading inside a virtual folder (grouping of public.files.folder),
+  // materialize a real folder with the same name at the client root so
+  // Postgres never receives a "virt:..." string as parent_id.
+  async function resolveRealParentId(rawParent: string | null | undefined): Promise<string | null> {
+    if (!rawParent) return null;
+    if (!isVirt(rawParent)) return rawParent;
+    if (!rawParent.startsWith(VIRT_PREFIX + "folder:")) return null;
+    if (scope !== "client" || !clientId) return null;
+    const folderName = rawParent.substring((VIRT_PREFIX + "folder:").length).trim();
+    if (!folderName) return null;
+    const { data: existing } = await supabase
+      .from("workspace_nodes")
+      .select("id")
+      .eq("scope", "client")
+      .eq("client_id", clientId)
+      .eq("kind", "folder")
+      .is("parent_id", null)
+      .ilike("name", folderName)
+      .maybeSingle();
+    if ((existing as any)?.id) return (existing as any).id as string;
+    const { data: created, error } = await supabase.from("workspace_nodes").insert({
+      name: folderName, kind: "folder", scope: "client",
+      client_id: clientId, parent_id: null, created_by: user?.id ?? null,
+    }).select("id").single();
+    if (error || !created) throw error || new Error("Falha ao criar pasta");
+    return (created as any).id as string;
+  }
+
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
-    const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
+    const rawParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
+    let destParent: string | null;
+    try {
+      destParent = await resolveRealParentId(rawParent);
+    } catch (e: any) {
+      toast({ title: "Erro ao preparar pasta", description: e?.message || "Tente novamente.", variant: "destructive" });
+      return;
+    }
     uploads.enqueue({
       files: Array.from(files),
       scope,
@@ -1032,7 +1068,7 @@ export default function Workspace() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[320px] p-0">
+          <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[75vh] overflow-hidden flex flex-col">
             <div className="p-2 border-b border-border">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -1066,7 +1102,7 @@ export default function Workspace() {
             <div className="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">({filteredClients.length})</span>}
             </div>
-            <div className="max-h-[320px] overflow-y-auto p-1">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1">
               {filteredClients.map((c: any) => {
                 const active = scope === "client" && clientId === c.id;
                 return (
