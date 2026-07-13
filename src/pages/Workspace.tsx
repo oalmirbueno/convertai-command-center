@@ -1102,7 +1102,7 @@ export default function Workspace() {
             <div className="px-2 pt-1 pb-1 text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1">
               <UsersIcon className="w-3 h-3" /> Clientes {filteredClients.length > 0 && <span className="text-muted-foreground/60">({filteredClients.length})</span>}
             </div>
-            <div className="max-h-[320px] overflow-y-auto p-1">
+            <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-1">
               {filteredClients.map((c: any) => {
                 const active = scope === "client" && clientId === c.id;
                 return (
