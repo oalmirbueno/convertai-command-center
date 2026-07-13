@@ -812,16 +812,18 @@ Body (JSON):
 }`;
 
   return (
-    <div className="space-y-6 max-w-5xl">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold flex items-center gap-2">
-          <Server className="w-6 h-6 text-primary" /> API & Integrações
-        </h1>
+    <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
+      <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
+        <p className="heading-page flex items-center gap-2">
+          <Server className="w-5 h-5 text-primary" /> API & Integrações
+        </p>
         <p className="text-sm text-muted-foreground mt-1">
           Documentação completa da infraestrutura real da Aceleriq — rotas, autenticação, webhooks e testes ao vivo.
         </p>
       </div>
+
+      <div className="flex-1 min-h-0 space-y-6 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
+
 
       <Tabs defaultValue="overview" className="w-full">
         <TabsList className="w-full justify-start bg-secondary/50 flex-wrap h-auto gap-1 p-1">
@@ -1290,6 +1292,8 @@ Body (JSON):
           <MCPManager />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
+
 }
