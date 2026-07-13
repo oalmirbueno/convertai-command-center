@@ -73,7 +73,7 @@ async function replayContract(
   const prior = await findIdempotentResult(toolName, keyId, idempotencyKey);
   if (!prior?.resultRef) return null;
   const { data } = await db().from('contracts').select(CONTRACT_SELECT).eq('id', prior.resultRef).maybeSingle();
-  return { replayed: true, correlation_id: prior.correlationId, record: data ? enrichContract(data) : null };
+  return { replayed: true, correlation_id: prior.correlationId, record: data ? enrichContract(data as any) : null };
 }
 
 // ─── READ ─────────────────────────────────────────────────────
@@ -110,7 +110,7 @@ export async function getContract(input: z.infer<typeof getContractSchema>) {
     .eq('id', input.contract_id).maybeSingle();
   if (error) throw new Error(`contracts: ${error.message}`);
   if (!data) throw new WriteError('not_found', 'contract_id not found');
-  return { contract: enrichContract(data) };
+  return { contract: enrichContract(data as any) };
 }
 
 // ─── CREATE (draft) ───────────────────────────────────────────
@@ -156,8 +156,8 @@ export async function createContract(input: z.infer<typeof createContractSchema>
   };
   const { data, error } = await db().from('contracts').insert(row).select(CONTRACT_SELECT).single();
   if (error) throw new WriteError('validation', error.message);
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
-  return { record: enrichContract(data), replayed: false, correlation_id: ctx.correlationId };
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
+  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
 
 // ─── UPDATE (only unsigned) ───────────────────────────────────
@@ -209,8 +209,8 @@ export async function updateContract(input: z.infer<typeof updateContractSchema>
     .in('status', ['draft', 'sent'])
     .select(CONTRACT_SELECT).single();
   if (upErr) throw new WriteError('conflict', upErr.message);
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
-  return { record: enrichContract(data), replayed: false, correlation_id: ctx.correlationId };
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
+  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
 
 // ─── SEND (draft → sent). No email dispatch; returns sign_url. ─
@@ -239,8 +239,8 @@ export async function sendContract(input: z.infer<typeof sendContractSchema>, ct
     .in('status', ['draft', 'sent'])
     .select(CONTRACT_SELECT).single();
   if (error) throw new WriteError('conflict', error.message);
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
-  return { record: enrichContract(data), replayed: false, correlation_id: ctx.correlationId };
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
+  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
 
 // ─── CANCEL (only unsigned). Terminal state. ──────────────────
@@ -275,6 +275,6 @@ export async function cancelContract(input: z.infer<typeof cancelContractSchema>
     .in('status', ['draft', 'sent'])
     .select(CONTRACT_SELECT).single();
   if (error) throw new WriteError('conflict', error.message);
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
-  return { record: enrichContract(data), replayed: false, correlation_id: ctx.correlationId };
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
+  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
