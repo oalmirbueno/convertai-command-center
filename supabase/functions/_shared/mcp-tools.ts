@@ -827,6 +827,161 @@ const updateProjectTool: ToolDefinition = {
   },
 };
 
+// ─── Contracts (Bloco B) ──────────────────────────────────────
+// Contratos ASSINADOS (client_signed_at != null OR status IN
+// {signed, completed, cancelled}) são imutáveis via MCP — update/send/cancel
+// retornam write:forbidden. Nenhuma tool aqui envia email nem faz upload de
+// arquivo: send apenas move para status=sent e retorna a sign_url pública.
+const CONTRACTS_READ: readonly ToolScope[] = ['contracts:read', 'aceleriq:read'];
+const CONTRACTS_WRITE: readonly ToolScope[] = ['contracts:write'];
+
+const listContractsTool: ToolDefinition = {
+  name: 'aceleriq_list_contracts',
+  title: 'Listar contratos',
+  description: 'Lista contratos com filtros opcionais (client_id, project_id, status, query em title) e paginação padrão has_more/next_offset. Cada item inclui is_signed, is_locked e sign_url.',
+  scopes: CONTRACTS_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      status: { type: 'string', enum: ['draft', 'sent', 'signed', 'completed', 'cancelled'] },
+      query: { type: 'string', maxLength: 200 },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const parsed = listContractsSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await listContracts(parsed.data);
+  },
+};
+
+const getContractTool: ToolDefinition = {
+  name: 'aceleriq_get_contract',
+  title: 'Detalhar contrato',
+  description: 'Retorna um contrato pelo id, incluindo is_signed, is_locked e sign_url pública quando aplicável.',
+  scopes: CONTRACTS_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { contract_id: { type: 'string', format: 'uuid' } },
+    required: ['contract_id'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const parsed = getContractSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    return await getContract(parsed.data);
+  },
+};
+
+const createContractTool: ToolDefinition = {
+  name: 'aceleriq_create_contract',
+  title: 'Criar contrato (rascunho)',
+  description: 'Cria um contrato em RASCUNHO. Exige client_id existente; project_id opcional deve pertencer ao mesmo cliente. Gera sign_token automaticamente; nunca envia email nem faz upload — original_file_url deve apontar para um arquivo já hospedado.',
+  scopes: CONTRACTS_WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: 'string', maxLength: 8000 },
+      original_file_url: { type: 'string', format: 'uri', maxLength: 2000 },
+      original_file_name: { type: 'string', minLength: 1, maxLength: 300 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['client_id', 'title', 'original_file_url', 'original_file_name', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = createContractSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await createContract(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const updateContractTool: ToolDefinition = {
+  name: 'aceleriq_update_contract',
+  title: 'Atualizar contrato',
+  description: 'Atualiza title, description, project_id ou arquivo do contrato. BLOQUEADO se o contrato estiver assinado (client_signed_at != null) ou em status signed/completed/cancelled — retorna write:forbidden. Nunca altera client_id, sign_token, admin_signed_at ou created_by.',
+  scopes: CONTRACTS_WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      contract_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: ['string', 'null'], maxLength: 8000 },
+      original_file_url: { type: 'string', format: 'uri', maxLength: 2000 },
+      original_file_name: { type: 'string', minLength: 1, maxLength: 300 },
+      project_id: { type: ['string', 'null'], format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['contract_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = updateContractSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await updateContract(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const sendContractTool: ToolDefinition = {
+  name: 'aceleriq_send_contract',
+  title: 'Marcar contrato como enviado',
+  description: 'Move o contrato para status=sent e registra sent_at. Retorna sign_url pública. NÃO envia email. Bloqueado para contratos assinados/cancelados.',
+  scopes: CONTRACTS_WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      contract_id: { type: 'string', format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['contract_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = sendContractSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await sendContract(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const cancelContractTool: ToolDefinition = {
+  name: 'aceleriq_cancel_contract',
+  title: 'Cancelar contrato',
+  description: 'Cancela um contrato em draft ou sent (status → cancelled). Bloqueado se assinado. Aceita reason opcional que é anexada à description.',
+  scopes: CONTRACTS_WRITE,
+  annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      contract_id: { type: 'string', format: 'uuid' },
+      reason: { type: 'string', maxLength: 2000 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['contract_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = cancelContractSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await cancelContract(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 export const TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -858,6 +1013,13 @@ export const TOOLS: readonly ToolDefinition[] = [
   completeTaskTool,
   createReportDraftTool,
   updateProjectTool,
+  // Contracts (Bloco B) — read + scope-gated write
+  listContractsTool,
+  getContractTool,
+  createContractTool,
+  updateContractTool,
+  sendContractTool,
+  cancelContractTool,
 ];
 
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
