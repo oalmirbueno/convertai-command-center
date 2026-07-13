@@ -610,10 +610,14 @@ export default function Workspace() {
   }
 
 
-  // Ensures the destination parent is always a real workspace_nodes UUID.
-  // If uploading inside a virtual folder (grouping of public.files.folder),
-  // materialize a real folder with the same name at the client root so
-  // Postgres never receives a "virt:..." string as parent_id.
+  // Standard materialization: guarantees the destination parent is always a
+  // real workspace_nodes UUID (or null for root) before any DB write. Applies
+  // to single files, batches, drag-and-drop and programmatic uploads alike.
+  // - Real UUIDs pass through untouched.
+  // - Virtual folder groupings (public.files.folder) get a matching real folder
+  //   materialized at the client root and cached for the session.
+  // - Any other virt kind (e.g. virt:file:...) falls back to null (root).
+  const materializedFoldersRef = useRef<Map<string, string>>(new Map());
   async function resolveRealParentId(rawParent: string | null | undefined): Promise<string | null> {
     if (!rawParent) return null;
     if (!isVirt(rawParent)) return rawParent;
@@ -621,6 +625,9 @@ export default function Workspace() {
     if (scope !== "client" || !clientId) return null;
     const folderName = rawParent.substring((VIRT_PREFIX + "folder:").length).trim();
     if (!folderName) return null;
+    const cacheKey = `${clientId}::${folderName.toLowerCase()}`;
+    const cached = materializedFoldersRef.current.get(cacheKey);
+    if (cached) return cached;
     const { data: existing } = await supabase
       .from("workspace_nodes")
       .select("id")
@@ -630,13 +637,27 @@ export default function Workspace() {
       .is("parent_id", null)
       .ilike("name", folderName)
       .maybeSingle();
-    if ((existing as any)?.id) return (existing as any).id as string;
+    if ((existing as any)?.id) {
+      const id = (existing as any).id as string;
+      materializedFoldersRef.current.set(cacheKey, id);
+      return id;
+    }
     const { data: created, error } = await supabase.from("workspace_nodes").insert({
       name: folderName, kind: "folder", scope: "client",
       client_id: clientId, parent_id: null, created_by: user?.id ?? null,
     }).select("id").single();
     if (error || !created) throw error || new Error("Falha ao criar pasta");
-    return (created as any).id as string;
+    const id = (created as any).id as string;
+    materializedFoldersRef.current.set(cacheKey, id);
+    invalidate();
+    return id;
+  }
+
+  // Invariant check — never let a virtual token reach the database.
+  function assertRealParent(id: string | null): asserts id is string | null {
+    if (id && isVirt(id)) {
+      throw new Error(`parent_id inválido (virtual token): ${id}`);
+    }
   }
 
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
@@ -645,6 +666,7 @@ export default function Workspace() {
     let destParent: string | null;
     try {
       destParent = await resolveRealParentId(rawParent);
+      assertRealParent(destParent);
     } catch (e: any) {
       toast({ title: "Erro ao preparar pasta", description: e?.message || "Tente novamente.", variant: "destructive" });
       return;
