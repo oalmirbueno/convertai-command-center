@@ -165,6 +165,8 @@ async function verifySupabaseJwtViaAuth(token: string): Promise<Record<string, a
 const OAUTH_DEFAULT_SCOPES = [
   'aceleriq:read',
   'aceleriq:write',
+  'contracts:read',
+  'contracts:write',
   'memory:read',
   'memory:propose',
 ];
