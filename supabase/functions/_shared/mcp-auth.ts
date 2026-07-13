@@ -64,8 +64,13 @@ async function classifyMissing(hash: string): Promise<AuthError> {
   return { kind: 'invalid' };
 }
 
-// ─── Supabase JWT validation via JWKS ───────────────────────────
-const AUTH_ISSUER = `${(Deno.env.get('SUPABASE_URL') ?? '').replace(/\/$/, '')}/auth/v1`;
+// ─── Supabase OAuth JWT validation via JWKS ─────────────────────
+// Use the canonical Supabase issuer, not the runtime/backend URL. OAuth
+// discovery advertises the direct `supabase.co` issuer and strict clients issue
+// tokens with that `iss`; using a proxy/runtime URL here makes valid ChatGPT
+// OAuth tokens fail verification.
+const PROJECT_REF = Deno.env.get('SUPABASE_PROJECT_ID') ?? 'gicbrgagstyvbaaumprj';
+const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const JWKS_URL = `${AUTH_ISSUER}/.well-known/jwks.json`;
 
 let jwksCache: { keys: any[]; fetchedAt: number } | null = null;
@@ -124,6 +129,35 @@ async function verifySupabaseJwt(token: string): Promise<Record<string, any> | n
   } catch { return null; }
 }
 
+function readJwtClaimsUnsafe(token: string): Record<string, any> | null {
+  const parts = token.split('.');
+  if (parts.length !== 3) return null;
+  try {
+    return JSON.parse(new TextDecoder().decode(b64urlDecode(parts[1])));
+  } catch {
+    return null;
+  }
+}
+
+async function verifySupabaseJwtViaAuth(token: string): Promise<Record<string, any> | null> {
+  const claims = readJwtClaimsUnsafe(token);
+  if (!claims || claims.iss !== AUTH_ISSUER) return null;
+  const now = Math.floor(Date.now() / 1000);
+  if (claims.exp && claims.exp < now) return null;
+
+  // Keep the OAuth boundary strict: copied browser/app-session JWTs do not carry
+  // an OAuth client identity, while tokens issued through /oauth/token do.
+  if (!claims.client_id && !claims.azp) return null;
+
+  try {
+    const { data, error } = await admin().auth.getUser(token);
+    if (error || !data?.user) return null;
+    return claims;
+  } catch {
+    return null;
+  }
+}
+
 const OAUTH_DEFAULT_SCOPES = ['aceleriq:read', 'memory:read', 'memory:propose'];
 
 export async function authenticate(req: Request): Promise<AuthResult> {
@@ -150,7 +184,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 
   // 2) Supabase OAuth JWT path (issued via /oauth/token). Grants a fixed,
   //    conservative scope set; api_keys ainda governa acessos privilegiados.
-  const claims = await verifySupabaseJwt(token);
+  const claims = (await verifySupabaseJwt(token)) ?? (await verifySupabaseJwtViaAuth(token));
   if (claims) {
     const sub = String(claims.sub ?? '');
     const clientId = String(claims.client_id ?? claims.azp ?? '');
