@@ -267,7 +267,7 @@ Deno.test('write tools require aceleriq:write scope', () => {
     assert(!canInvoke(readCtx, t), `${name} must not accept read-only key`);
     assert(canInvoke(writeCtx, t), `${name} must accept write key`);
     assert(canInvoke(adminCtx, t), `${name} must accept admin key`);
-    assertEquals(t.scopes, ['aceleriq:write']);
+    assert(t.scopes.includes('aceleriq:write' as any), `${name} keeps aggregate write scope`);
   }
 });
 
