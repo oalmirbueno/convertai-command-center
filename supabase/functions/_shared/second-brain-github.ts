@@ -334,6 +334,92 @@ export async function listInboxPending(limit = 25): Promise<Array<{ path: string
     .map((e: any) => ({ path: e.path, sha: e.sha, size: e.size }));
 }
 
+// ─── Real-time pulse (Bloco C) ───────────────────────────────
+// Cheap, single-shot health snapshot of the bridge. Cached in-memory for a few
+// seconds so a chatty dashboard doesn't burn GitHub REST quota.
+export interface BridgePulse {
+  configured: boolean;
+  branch: string | null;
+  head: { sha: string; short: string; message: string; author: string | null; committed_at: string } | null;
+  inbox_pending: number;
+  fetched_at: string;
+  cached: boolean;
+  latency_ms: number;
+}
+
+const PULSE_TTL_MS = 15_000;
+let PULSE_CACHE: { at: number; value: BridgePulse } | null = null;
+
+export async function getBridgePulse(force = false): Promise<BridgePulse> {
+  const now = Date.now();
+  if (!force && PULSE_CACHE && now - PULSE_CACHE.at < PULSE_TTL_MS) {
+    return { ...PULSE_CACHE.value, cached: true };
+  }
+  const started = now;
+  if (!bridgeStatusPublic().configured) {
+    const value: BridgePulse = {
+      configured: false, branch: null, head: null, inbox_pending: 0,
+      fetched_at: new Date().toISOString(), cached: false, latency_ms: 0,
+    };
+    PULSE_CACHE = { at: now, value };
+    return value;
+  }
+  const cfg = loadConfig();
+  const branch = await resolveBranch(cfg);
+  const [commitsRes, pending] = await Promise.all([
+    gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/commits`, { query: { sha: branch, per_page: '1' } }),
+    listInboxPending(50).catch(() => []),
+  ]);
+  let head: BridgePulse['head'] = null;
+  if (commitsRes.status < 400 && Array.isArray(commitsRes.body) && commitsRes.body[0]) {
+    const c = commitsRes.body[0];
+    const sha = String(c.sha ?? '');
+    head = {
+      sha,
+      short: sha.slice(0, 7),
+      message: String(c.commit?.message ?? '').split('\n')[0].slice(0, 200),
+      author: c.commit?.author?.name ?? c.author?.login ?? null,
+      committed_at: String(c.commit?.author?.date ?? c.commit?.committer?.date ?? new Date().toISOString()),
+    };
+  }
+  const value: BridgePulse = {
+    configured: true, branch, head, inbox_pending: pending.length,
+    fetched_at: new Date().toISOString(), cached: false, latency_ms: Date.now() - started,
+  };
+  PULSE_CACHE = { at: now, value };
+  return value;
+}
+
+export function invalidatePulse(): void { PULSE_CACHE = null; }
+
+export interface RecentCommit {
+  sha: string; short: string; message: string; author: string | null;
+  committed_at: string; url: string;
+}
+
+export async function listRecentCommits(limit = 10, pathFilter?: string): Promise<RecentCommit[]> {
+  const cfg = loadConfig();
+  const branch = await resolveBranch(cfg);
+  const query: Record<string, string> = {
+    sha: branch,
+    per_page: String(Math.min(Math.max(limit, 1), 30)),
+  };
+  if (pathFilter) query.path = assertReadable(pathFilter);
+  const res = await gh(cfg, 'GET', `/repos/${cfg.owner}/${cfg.repo}/commits`, { query });
+  if (res.status >= 400) throw new SecondBrainError({ kind: 'upstream', status: res.status, detail: String(res.body?.message ?? '') });
+  if (!Array.isArray(res.body)) return [];
+  return res.body.map((c: any) => {
+    const sha = String(c.sha ?? '');
+    return {
+      sha,
+      short: sha.slice(0, 7),
+      message: String(c.commit?.message ?? '').split('\n')[0].slice(0, 240),
+      author: c.commit?.author?.name ?? c.author?.login ?? null,
+      committed_at: String(c.commit?.author?.date ?? new Date().toISOString()),
+      url: String(c.html_url ?? ''),
+    };
+  });
+
 // ─── Proposal (inbox-only write) ─────────────────────────────
 export interface ProposalInput {
   title: string;
