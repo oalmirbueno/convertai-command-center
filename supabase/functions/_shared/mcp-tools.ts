@@ -66,6 +66,8 @@ export type ToolScope =
   | 'aceleriq:read'
   | 'aceleriq:write'
   | 'aceleriq:finance'
+  | 'contracts:read'
+  | 'contracts:write'
   | 'memory:read'
   | 'memory:propose'
   | 'admin';
@@ -74,6 +76,8 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'aceleriq:read',
   'aceleriq:write',
   'aceleriq:finance',
+  'contracts:read',
+  'contracts:write',
   'memory:read',
   'memory:propose',
   'admin',
@@ -95,7 +99,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.3.0',
+  version: '1.4.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
