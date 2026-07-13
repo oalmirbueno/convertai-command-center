@@ -200,7 +200,11 @@ export default function MCPManager() {
     setLoadingDiscovery(true);
     setDiscoveryError(null);
     try {
-      const r = await fetch(MCP_URL, { method: "GET" });
+      const { data: sessionData } = await supabase.auth.getSession();
+      const headers: HeadersInit = sessionData.session?.access_token
+        ? { Authorization: `Bearer ${sessionData.session.access_token}` }
+        : { Authorization: "Bearer mcp-status-probe" };
+      const r = await fetch(MCP_URL, { method: "GET", headers });
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       setDiscovery(await r.json());
     } catch (e) {
