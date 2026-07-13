@@ -419,6 +419,9 @@ export async function listRecentCommits(limit = 10, pathFilter?: string): Promis
       url: String(c.html_url ?? ''),
     };
   });
+}
+
+
 
 // ─── Proposal (inbox-only write) ─────────────────────────────
 export interface ProposalInput {
