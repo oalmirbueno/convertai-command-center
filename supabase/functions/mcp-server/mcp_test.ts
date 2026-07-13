@@ -64,8 +64,10 @@ Deno.test('registry exposes foundation + read + memory + write + contracts tools
     'aceleriq_update_task',
     'memory_fetch',
     'memory_get_context',
+    'memory_get_pulse',
     'memory_list_pending_proposals',
     'memory_propose_update',
+    'memory_recent_commits',
     'memory_search',
   ]);
 });
