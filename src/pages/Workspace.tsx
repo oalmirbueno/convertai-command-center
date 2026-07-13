@@ -291,7 +291,7 @@ export default function Workspace() {
     return map;
   }, [allFolders]);
 
-  useEffect(() => { setParentStack([]); setSelected(null); }, [scope, clientId]);
+  useEffect(() => { nav.reset(); setSelected(null); }, [scope, clientId]);
 
   // Existing client files (from public.files) — merged as virtual folders/files
   const { data: clientFiles } = useQuery({
@@ -895,7 +895,7 @@ export default function Workspace() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
           {n.kind === "folder" && (
-            <DropdownMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+            <DropdownMenuItem onSelect={() => nav.push(n)}>
               <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
             </DropdownMenuItem>
           )}
@@ -994,7 +994,7 @@ export default function Workspace() {
         <ContextMenuContent className="w-56">
           {isFolder ? (
             <>
-              <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+              <ContextMenuItem onSelect={() => nav.push(n)}>
                 <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
               </ContextMenuItem>
               {!n.__virtual && (
@@ -1134,7 +1134,7 @@ export default function Workspace() {
             </div>
             <div className="p-1">
               <button
-                onClick={() => { setScope("global"); setClientId(null); setPickerOpen(false); }}
+                onClick={() => { nav.setClient(null); setPickerOpen(false); }}
                 className={cn("w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors",
                   scope === "global" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50")}
               >
@@ -1151,7 +1151,7 @@ export default function Workspace() {
                 return (
                   <button
                     key={c.id}
-                    onClick={() => { setScope("client"); setClientId(c.id); setPickerOpen(false); }}
+                    onClick={() => { nav.setClient(c.id); setPickerOpen(false); }}
                     className={cn("w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors",
                       active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50")}
                   >
@@ -1176,11 +1176,11 @@ export default function Workspace() {
           <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between py-3 md:py-0">
             <div className="flex w-full items-center gap-1 overflow-x-auto text-sm scrollbar-hidden md:w-auto md:flex-wrap md:overflow-visible min-w-0">
               {parent && (
-                <button onClick={() => setParentStack(parentStack.slice(0, -1))}
+                <button onClick={() => nav.pop()}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground mr-1"><ArrowLeft className="w-3.5 h-3.5" /></button>
               )}
               <button
-                onClick={() => setParentStack([])}
+                onClick={() => nav.reset()}
                 onDragOver={(e) => onDragOverFolder(e, "root")}
                 onDragLeave={() => setDragOverId(null)}
                 onDrop={(e) => onDropFolder(e, null)}
@@ -1196,7 +1196,7 @@ export default function Workspace() {
                   <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <button
                     className="text-foreground hover:text-primary truncate max-w-[180px]"
-                    onClick={() => setParentStack(parentStack.slice(0, i + 1))}
+                    onClick={() => nav.jumpTo(i)}
                   >{n.name}</button>
                 </span>
               ))}
@@ -1344,7 +1344,7 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                       className={cn(
                         "group relative rounded-xl border bg-card hover:border-primary/40 transition-all overflow-hidden flex flex-col cursor-pointer aspect-square",
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
@@ -1425,7 +1425,7 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                       className={cn("w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors cursor-pointer",
                         dragActive && "bg-primary/10 ring-1 ring-primary/40")}
                     >
@@ -1585,7 +1585,7 @@ export default function Workspace() {
         }))}
         onOpenFile={(id) => {
           const found = (filtered || []).find(n => n.id === id);
-          if (found) found.kind === "folder" ? setParentStack([...parentStack, found]) : setSelected(found);
+          if (found) found.kind === "folder" ? nav.push(found) : setSelected(found);
         }}
       />
     </div>
