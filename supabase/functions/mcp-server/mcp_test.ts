@@ -31,16 +31,19 @@ const readCtx: AuthContext = {
 const emptyCtx: AuthContext = { ...readCtx, scopes: [] };
 const adminCtx: AuthContext = { ...readCtx, scopes: ['admin'] };
 
-Deno.test('registry exposes foundation + read + memory + write tools', () => {
+Deno.test('registry exposes foundation + read + memory + write + contracts tools', () => {
   const names = TOOLS.map(t => t.name).sort();
   assertEquals(names, [
+    'aceleriq_cancel_contract',
     'aceleriq_capabilities',
     'aceleriq_complete_task',
+    'aceleriq_create_contract',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
     'aceleriq_fetch',
     'aceleriq_get_briefing',
     'aceleriq_get_client_context',
+    'aceleriq_get_contract',
     'aceleriq_get_file',
     'aceleriq_get_project',
     'aceleriq_get_report',
@@ -48,12 +51,15 @@ Deno.test('registry exposes foundation + read + memory + write tools', () => {
     'aceleriq_health',
     'aceleriq_list_briefings',
     'aceleriq_list_clients',
+    'aceleriq_list_contracts',
     'aceleriq_list_files',
     'aceleriq_list_projects',
     'aceleriq_list_reports',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
     'aceleriq_search',
+    'aceleriq_send_contract',
+    'aceleriq_update_contract',
     'aceleriq_update_project',
     'aceleriq_update_task',
     'memory_fetch',
