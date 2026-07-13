@@ -98,7 +98,7 @@ export async function listContracts(input: z.infer<typeof listContractsSchema>) 
     .order('created_at', { ascending: false })
     .range(offset, offset + limit - 1);
   if (error) throw new Error(`contracts: ${error.message}`);
-  const items = (data ?? []).map(enrichContract);
+  const items = ((data as any[]) ?? []).map(enrichContract);
   const total = count ?? 0;
   const has_more = offset + items.length < total;
   return { items, total, limit, offset, has_more, next_offset: has_more ? offset + limit : null };
