@@ -28,8 +28,10 @@ import {
   CONTEXT_ORDER,
   getContextBundle,
   getFile,
+  getBridgePulse,
   INBOX_PREFIX,
   listInboxPending,
+  listRecentCommits,
   proposeUpdate,
   searchCode,
   SecondBrainError,
@@ -99,7 +101,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.4.0',
+  version: '1.5.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -603,6 +605,52 @@ const memoryListPendingTool: ToolDefinition = {
   },
 };
 
+const memoryPulseTool: ToolDefinition = {
+  name: 'memory_get_pulse',
+  title: 'Segundo Cérebro — pulse em tempo real',
+  description: 'Snapshot leve do bridge: HEAD commit, branch, contagem de propostas pendentes e latência. Cacheado por 15s. Sem escrita.',
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { force: { type: 'boolean', description: 'Ignora o cache in-memory de 15s.' } },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({ force: z.boolean().optional() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return await getBridgePulse(parsed.data.force ?? false); }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
+const memoryRecentCommitsTool: ToolDefinition = {
+  name: 'memory_recent_commits',
+  title: 'Segundo Cérebro — commits recentes',
+  description: 'Lista os últimos commits do repositório (até 30). Aceita filtro opcional por path relativo. Sem escrita.',
+  scopes: MEMORY_READ,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      limit: { type: 'integer', minimum: 1, maximum: 30 },
+      path: { type: 'string', minLength: 1, maxLength: 512 },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      limit: z.number().int().min(1).max(30).optional(),
+      path: z.string().min(1).max(512).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    try { return { commits: await listRecentCommits(parsed.data.limit ?? 10, parsed.data.path) }; }
+    catch (e) { throw memoryError(e); }
+  },
+};
+
 const memoryProposeTool: ToolDefinition = {
   name: 'memory_propose_update',
   title: 'Segundo Cérebro — propor atualização',
@@ -1006,6 +1054,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   memorySearchTool,
   memoryFetchTool,
   memoryListPendingTool,
+  memoryPulseTool,
+  memoryRecentCommitsTool,
   memoryProposeTool,
   // Write tools (round 5) — controlled operational writes
   createTaskTool,
