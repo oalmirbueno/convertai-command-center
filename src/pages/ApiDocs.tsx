@@ -1292,6 +1292,8 @@ Body (JSON):
           <MCPManager />
         </TabsContent>
       </Tabs>
+      </div>
     </div>
   );
+
 }
