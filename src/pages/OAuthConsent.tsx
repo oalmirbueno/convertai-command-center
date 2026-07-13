@@ -130,15 +130,38 @@ export default function OAuthConsent() {
           <div className="flex items-center gap-2 text-foreground">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <span>Conectado como <b>{user?.email}</b></span>
-          </div>
-          {scopes.length > 0 && (
-            <div className="text-xs text-muted-foreground">
-              Permissões solicitadas: {scopes.map(s => (
-                <span key={s} className="inline-block mr-1 mb-1 rounded bg-background border px-1.5 py-0.5 font-mono">{s}</span>
-              ))}
-            </div>
-          )}
         </div>
+
+        {scopes.length > 0 && (
+          <div className="space-y-2">
+            <div className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+              Permissões solicitadas
+            </div>
+            <ul className="space-y-2">
+              {scopes.map((s) => {
+                const info = describeScope(s);
+                return (
+                  <li key={s} className="flex items-start gap-3 rounded-lg border bg-muted/20 p-3">
+                    {info.sensitive ? (
+                      <AlertTriangle className="mt-0.5 h-4 w-4 text-amber-500 shrink-0" />
+                    ) : (
+                      <ShieldCheck className="mt-0.5 h-4 w-4 text-primary shrink-0" />
+                    )}
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium leading-tight">
+                        {info.title}
+                        <span className="ml-2 rounded bg-background border px-1.5 py-0.5 text-[10px] font-mono text-muted-foreground">
+                          {s}
+                        </span>
+                      </div>
+                      <div className="text-xs text-muted-foreground mt-0.5">{info.description}</div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <Button variant="outline" className="flex-1" disabled={busy} onClick={() => decide(false)}>
