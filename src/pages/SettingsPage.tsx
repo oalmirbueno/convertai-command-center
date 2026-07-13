@@ -15,12 +15,19 @@ export default function SettingsPage() {
   ];
 
   return (
-    <div className="-mx-4 flex h-full min-h-0 w-auto flex-col animate-fade-in md:mx-0 md:block md:h-auto md:max-w-lg md:space-y-6">
+    <div className="-mx-4 flex h-full min-h-0 w-auto flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
         <p className="heading-page">Configurações</p>
+        <p className="text-sm text-muted-foreground mt-1">Personalize sua experiência, gerencie perfil, notificações e segurança.</p>
       </div>
 
-      <div className="flex-1 min-h-0 space-y-6 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
+      <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {/* Aparência */}
+          <div className="bg-card border border-border rounded-xl p-5 space-y-3">
+            <p className="label-sm">Aparência</p>
+            <div className="bg-secondary/40 border border-border rounded-xl p-1.5 flex gap-1">
+
       {/* Aparência */}
       <div className="space-y-2">
         <p className="label-sm">Aparência</p>
