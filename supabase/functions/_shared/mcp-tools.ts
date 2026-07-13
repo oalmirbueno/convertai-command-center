@@ -47,6 +47,20 @@ import {
   updateTaskSchema,
   WriteError,
 } from './mcp-write-services.ts';
+import {
+  cancelContract,
+  cancelContractSchema,
+  createContract,
+  createContractSchema,
+  getContract,
+  getContractSchema,
+  listContracts,
+  listContractsSchema,
+  sendContract,
+  sendContractSchema,
+  updateContract,
+  updateContractSchema,
+} from './mcp-contracts-services.ts';
 
 export type ToolScope =
   | 'aceleriq:read'
