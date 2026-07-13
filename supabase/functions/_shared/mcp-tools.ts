@@ -1121,7 +1121,7 @@ const cancelContractTool: ToolDefinition = {
   },
 };
 
-export const TOOLS: readonly ToolDefinition[] = [
+const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
   // read tools (round 3)
@@ -1163,14 +1163,25 @@ export const TOOLS: readonly ToolDefinition[] = [
   cancelContractTool,
 ];
 
+// Bloco D: augment each tool's `scopes` with its granular resource scope so
+// both aggregate (`aceleriq:read`) and granular (`projects:read`) grants pass
+// authorization. Aggregate → granular expansion runs in `canInvoke`.
+export const TOOLS: readonly ToolDefinition[] = RAW_TOOLS.map((t) => {
+  const granular = GRANULAR_SCOPE_BY_TOOL[t.name];
+  if (!granular) return t;
+  if (t.scopes.includes(granular)) return t;
+  return { ...t, scopes: [...t.scopes, granular] };
+});
+
 export const TOOL_MAP: ReadonlyMap<string, ToolDefinition> = new Map(
   TOOLS.map(t => [t.name, t]),
 );
 
 export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   if (tool.scopes.length === 0) return true;
-  if (ctx.scopes.includes('admin')) return true;
-  return tool.scopes.some(s => ctx.scopes.includes(s));
+  const expanded = expandScopes(ctx.scopes);
+  if (expanded.has('admin')) return true;
+  return tool.scopes.some(s => expanded.has(s));
 }
 
 export function describeTool(t: ToolDefinition) {
