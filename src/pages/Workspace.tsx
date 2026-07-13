@@ -180,9 +180,29 @@ export default function Workspace() {
 
   const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
 
-  const [scope, setScope] = useState<"global" | "client">("global");
-  const [clientId, setClientId] = useState<string | null>(null);
-  const [parentStack, setParentStack] = useState<Node[]>([]);
+  // Single atomic navigation state — prevents context mixing when switching
+  // scope, client, or folder. Every transition goes through `nav.*` setters
+  // that reset dependent slices in the same render (no useEffect race).
+  type NavState = { scope: "global" | "client"; clientId: string | null; stack: Node[] };
+  const [navState, setNavState] = useState<NavState>({ scope: "global", clientId: null, stack: [] });
+  const { scope, clientId, stack: parentStack } = navState;
+  const parent = parentStack[parentStack.length - 1] || null;
+  const navToken = `${scope}::${clientId || "-"}::${parent?.id || "-"}`;
+
+  const nav = useMemo(() => ({
+    setScope: (s: "global" | "client") =>
+      setNavState((prev) => (prev.scope === s ? prev : { scope: s, clientId: s === "global" ? null : prev.clientId, stack: [] })),
+    setClient: (id: string | null) =>
+      setNavState((prev) => ({ scope: id ? "client" : "global", clientId: id, stack: [] })),
+    push: (node: Node) =>
+      setNavState((prev) => ({ ...prev, stack: [...prev.stack, node] })),
+    pop: () =>
+      setNavState((prev) => ({ ...prev, stack: prev.stack.slice(0, -1) })),
+    jumpTo: (index: number) =>
+      setNavState((prev) => ({ ...prev, stack: prev.stack.slice(0, index + 1) })),
+    reset: () => setNavState((prev) => ({ ...prev, stack: [] })),
+  }), []);
+
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Node | null>(null);
@@ -207,8 +227,9 @@ export default function Workspace() {
   const [tagFilter, setTagFilter] = useState<"all" | SmartTag>("all");
   const [sortBy, setSortBy] = useState<"recent" | "old" | "az" | "za">("recent");
 
+  // Close selection whenever context changes — avoids acting on a stale node.
+  useEffect(() => { setSelected(null); }, [navToken]);
 
-  const parent = parentStack[parentStack.length - 1] || null;
 
   const { data: clients } = useQuery({
     queryKey: ["workspace-clients"],
@@ -238,7 +259,6 @@ export default function Workspace() {
     },
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
-    placeholderData: (prev: any) => prev,
   });
 
 
@@ -270,7 +290,7 @@ export default function Workspace() {
     return map;
   }, [allFolders]);
 
-  useEffect(() => { setParentStack([]); setSelected(null); }, [scope, clientId]);
+  // (Stack reset happens atomically inside nav.setScope/setClient.)
 
   // Existing client files (from public.files) — merged as virtual folders/files
   const { data: clientFiles } = useQuery({
@@ -874,7 +894,7 @@ export default function Workspace() {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-52" onClick={(e) => e.stopPropagation()}>
           {n.kind === "folder" && (
-            <DropdownMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+            <DropdownMenuItem onSelect={() => nav.push(n)}>
               <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
             </DropdownMenuItem>
           )}
@@ -973,7 +993,7 @@ export default function Workspace() {
         <ContextMenuContent className="w-56">
           {isFolder ? (
             <>
-              <ContextMenuItem onSelect={() => setParentStack([...parentStack, n])}>
+              <ContextMenuItem onSelect={() => nav.push(n)}>
                 <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
               </ContextMenuItem>
               {!n.__virtual && (
@@ -1113,7 +1133,7 @@ export default function Workspace() {
             </div>
             <div className="p-1">
               <button
-                onClick={() => { setScope("global"); setClientId(null); setPickerOpen(false); }}
+                onClick={() => { nav.setClient(null); setPickerOpen(false); }}
                 className={cn("w-full flex items-center gap-2 px-2.5 py-2 rounded-md text-sm transition-colors",
                   scope === "global" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50")}
               >
@@ -1130,7 +1150,7 @@ export default function Workspace() {
                 return (
                   <button
                     key={c.id}
-                    onClick={() => { setScope("client"); setClientId(c.id); setPickerOpen(false); }}
+                    onClick={() => { nav.setClient(c.id); setPickerOpen(false); }}
                     className={cn("w-full text-left flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[13px] transition-colors",
                       active ? "bg-primary/10 text-primary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50")}
                   >
@@ -1155,11 +1175,11 @@ export default function Workspace() {
           <div className="shrink-0 flex flex-wrap items-center gap-2 justify-between py-3 md:py-0">
             <div className="flex w-full items-center gap-1 overflow-x-auto text-sm scrollbar-hidden md:w-auto md:flex-wrap md:overflow-visible min-w-0">
               {parent && (
-                <button onClick={() => setParentStack(parentStack.slice(0, -1))}
+                <button onClick={() => nav.pop()}
                   className="p-1 rounded hover:bg-secondary text-muted-foreground mr-1"><ArrowLeft className="w-3.5 h-3.5" /></button>
               )}
               <button
-                onClick={() => setParentStack([])}
+                onClick={() => nav.reset()}
                 onDragOver={(e) => onDragOverFolder(e, "root")}
                 onDragLeave={() => setDragOverId(null)}
                 onDrop={(e) => onDropFolder(e, null)}
@@ -1175,7 +1195,7 @@ export default function Workspace() {
                   <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <button
                     className="text-foreground hover:text-primary truncate max-w-[180px]"
-                    onClick={() => setParentStack(parentStack.slice(0, i + 1))}
+                    onClick={() => nav.jumpTo(i)}
                   >{n.name}</button>
                 </span>
               ))}
@@ -1323,7 +1343,7 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                       className={cn(
                         "group relative rounded-xl border bg-card hover:border-primary/40 transition-all overflow-hidden flex flex-col cursor-pointer aspect-square",
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
@@ -1404,7 +1424,7 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? setParentStack([...parentStack, n]) : setSelected(n)}
+                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                       className={cn("w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors cursor-pointer",
                         dragActive && "bg-primary/10 ring-1 ring-primary/40")}
                     >
@@ -1564,7 +1584,7 @@ export default function Workspace() {
         }))}
         onOpenFile={(id) => {
           const found = (filtered || []).find(n => n.id === id);
-          if (found) found.kind === "folder" ? setParentStack([...parentStack, found]) : setSelected(found);
+          if (found) found.kind === "folder" ? nav.push(found) : setSelected(found);
         }}
       />
     </div>
