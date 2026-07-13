@@ -93,6 +93,10 @@ function b64urlDecode(input: string): Uint8Array {
   return bytes;
 }
 
+function exactBuffer(bytes: Uint8Array): ArrayBuffer {
+  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
+}
+
 async function verifySupabaseJwt(token: string): Promise<Record<string, any> | null> {
   const parts = token.split('.');
   if (parts.length !== 3) return null;
@@ -119,8 +123,8 @@ async function verifySupabaseJwt(token: string): Promise<Record<string, any> | n
 
   try {
     const key = await crypto.subtle.importKey('jwk', jwk, algo, false, ['verify']);
-    const data = new TextEncoder().encode(`${h}.${p}`);
-    const sig = b64urlDecode(s);
+    const data = exactBuffer(new TextEncoder().encode(`${h}.${p}`));
+    const sig = exactBuffer(b64urlDecode(s));
     const ok = await crypto.subtle.verify(
       alg === 'ES256' ? { name: 'ECDSA', hash: 'SHA-256' } : algo,
       key, sig, data
