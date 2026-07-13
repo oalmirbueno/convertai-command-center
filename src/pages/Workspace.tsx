@@ -180,9 +180,29 @@ export default function Workspace() {
 
   const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
 
-  const [scope, setScope] = useState<"global" | "client">("global");
-  const [clientId, setClientId] = useState<string | null>(null);
-  const [parentStack, setParentStack] = useState<Node[]>([]);
+  // Single atomic navigation state — prevents context mixing when switching
+  // scope, client, or folder. Every transition goes through `nav.*` setters
+  // that reset dependent slices in the same render (no useEffect race).
+  type NavState = { scope: "global" | "client"; clientId: string | null; stack: Node[] };
+  const [navState, setNavState] = useState<NavState>({ scope: "global", clientId: null, stack: [] });
+  const { scope, clientId, stack: parentStack } = navState;
+  const parent = parentStack[parentStack.length - 1] || null;
+  const navToken = `${scope}::${clientId || "-"}::${parent?.id || "-"}`;
+
+  const nav = useMemo(() => ({
+    setScope: (s: "global" | "client") =>
+      setNavState((prev) => (prev.scope === s ? prev : { scope: s, clientId: s === "global" ? null : prev.clientId, stack: [] })),
+    setClient: (id: string | null) =>
+      setNavState((prev) => ({ scope: id ? "client" : "global", clientId: id, stack: [] })),
+    push: (node: Node) =>
+      setNavState((prev) => ({ ...prev, stack: [...prev.stack, node] })),
+    pop: () =>
+      setNavState((prev) => ({ ...prev, stack: prev.stack.slice(0, -1) })),
+    jumpTo: (index: number) =>
+      setNavState((prev) => ({ ...prev, stack: prev.stack.slice(0, index + 1) })),
+    reset: () => setNavState((prev) => ({ ...prev, stack: [] })),
+  }), []);
+
   const [view, setView] = useState<"grid" | "list">("grid");
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Node | null>(null);
@@ -207,8 +227,9 @@ export default function Workspace() {
   const [tagFilter, setTagFilter] = useState<"all" | SmartTag>("all");
   const [sortBy, setSortBy] = useState<"recent" | "old" | "az" | "za">("recent");
 
+  // Close selection whenever context changes — avoids acting on a stale node.
+  useEffect(() => { setSelected(null); }, [navToken]);
 
-  const parent = parentStack[parentStack.length - 1] || null;
 
   const { data: clients } = useQuery({
     queryKey: ["workspace-clients"],
