@@ -259,7 +259,6 @@ export default function Workspace() {
     },
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
-    placeholderData: (prev: any) => prev,
   });
 
 
