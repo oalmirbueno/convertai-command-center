@@ -174,6 +174,8 @@ const capabilitiesTool: ToolDefinition = {
       visible: visible.length,
       read: TOOLS.filter(t => t.scopes.includes('aceleriq:read')).length,
       write: TOOLS.filter(t => t.scopes.includes('aceleriq:write')).length,
+      contracts_read: TOOLS.filter(t => t.scopes.includes('contracts:read')).length,
+      contracts_write: TOOLS.filter(t => t.scopes.includes('contracts:write')).length,
       memory_read: TOOLS.filter(t => t.scopes.includes('memory:read')).length,
       memory_propose: TOOLS.filter(t => t.scopes.includes('memory:propose')).length,
       public: TOOLS.filter(t => t.scopes.length === 0).length,
