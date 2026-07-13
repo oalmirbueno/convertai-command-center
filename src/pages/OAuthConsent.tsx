@@ -130,7 +130,9 @@ export default function OAuthConsent() {
           <div className="flex items-center gap-2 text-foreground">
             <ShieldCheck className="h-4 w-4 text-primary" />
             <span>Conectado como <b>{user?.email}</b></span>
+          </div>
         </div>
+
 
         {scopes.length > 0 && (
           <div className="space-y-2">
