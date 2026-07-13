@@ -457,7 +457,7 @@ export async function getWorkspaceNode(opts: { node_id: string }) {
   return { node: data };
 }
 
-// ─── list_files ──────────────────────────────────────────────
+// ─── list_files / get_file ───────────────────────────────────
 export async function listFiles(opts: {
   client_id?: string; project_id?: string; folder?: string; approval_status?: string;
   limit?: number; offset?: number;
@@ -479,7 +479,26 @@ export async function listFiles(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`files: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  const items = (data ?? []).map(enrichFile);
+  return { items, ...pageMeta(count, limit, offset) };
+}
+
+export async function getFile(opts: { file_id: string }) {
+  if (!isUuid(opts.file_id)) throw new Error('file_id must be a UUID');
+  const { data, error } = await withTimeout(
+    db().from('files').select(F.file).eq('id', opts.file_id).maybeSingle(),
+  );
+  if (error) throw new Error(`files: ${error.message}`);
+  if (!data) throw new Error('File not found');
+  // Fetch child versions (parent_file_id = this id) for approval history.
+  const { data: versions } = await withTimeout(
+    db().from('files').select(F.file).eq('parent_file_id', opts.file_id)
+      .order('created_at', { ascending: false }).limit(50),
+  );
+  return {
+    file: enrichFile(data),
+    versions: (versions ?? []).map(enrichFile),
+  };
 }
 
 // ─── search ──────────────────────────────────────────────────
