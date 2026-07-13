@@ -33,6 +33,78 @@ import {
 } from '../_shared/mcp-response.ts';
 import { bridgeStatusPublic } from '../_shared/second-brain-github.ts';
 
+// ─── OAuth / Protected Resource metadata ──────────────────────
+const PROJECT_REF = 'gicbrgagstyvbaaumprj';
+const RESOURCE_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-server`;
+const PRM_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-oauth-metadata`;
+const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
+const AUTHORIZATION_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
+const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
+
+function protectedResourceMetadata() {
+  return {
+    resource: RESOURCE_URL,
+    authorization_servers: [AUTH_ISSUER],
+    bearer_methods_supported: ['header'],
+    scopes_supported: ['openid', 'email', 'profile'],
+    resource_name: 'Aceleriq OS MCP',
+    resource_documentation: 'https://aceleriq.online/conectar-mcp',
+    mcp: {
+      transport: 'streamable-http',
+      protocol_version: MCP_PROTOCOL_VERSION,
+      server_info: SERVER_INFO,
+      endpoint: RESOURCE_URL,
+    },
+  };
+}
+
+function oauthChallengeBody() {
+  return {
+    error: 'unauthorized',
+    error_description: 'OAuth bearer token required for protected MCP tool execution.',
+    resource_metadata: PRM_URL,
+    authorization_servers: [AUTH_ISSUER],
+    authorization_server_metadata: AUTHORIZATION_SERVER_METADATA,
+  };
+}
+
+function oauthChallengeResponse(body: unknown, status = 401) {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...corsHeaders,
+      'Content-Type': 'application/json',
+      'WWW-Authenticate': WWW_AUTH_HEADER,
+      'Link': `<${PRM_URL}>; rel="oauth-protected-resource", <${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
+      'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+    },
+  });
+}
+
+function publicAuthContext(): AuthContext {
+  return {
+    keyId: 'public:discovery',
+    keyName: 'MCP discovery',
+    scopes: [],
+    origin: 'public-discovery',
+  };
+}
+
+function isPublicRpc(msg: JsonRpcRequest): boolean {
+  const method = String(msg?.method ?? '');
+  if (method === 'initialize' || method === 'notifications/initialized' || method === 'initialized' || method === 'ping') {
+    return true;
+  }
+  if (method === 'tools/list') return true;
+  if (method === 'tools/call') {
+    const params = (msg?.params ?? {}) as Record<string, unknown>;
+    const name = String((params?.name as string) ?? '');
+    const tool = TOOL_MAP.get(name);
+    return Boolean(tool && tool.scopes.length === 0);
+  }
+  return false;
+}
+
 // ─── JSON-RPC dispatch ────────────────────────────────────────
 async function dispatch(
   msg: JsonRpcRequest,
@@ -45,14 +117,16 @@ async function dispatch(
   // Notifications carry no id and expect no response body.
   const isNotification = msg?.id === undefined || msg?.id === null;
 
-  // `initialize` advertises the server after the HTTP auth boundary accepts
-  // the request. Unauthenticated POSTs are rejected before dispatch so OAuth
-  // clients can discover PRM from WWW-Authenticate.
+  // `initialize` and `tools/list` are intentionally discoverable without a
+  // bearer token. Protected tool execution still receives a real HTTP 401
+  // challenge before any private data is touched.
   if (method === 'initialize') {
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
       capabilities: { tools: { listChanged: false } },
       serverInfo: SERVER_INFO,
+      instructions:
+        'Use tools/list to inspect Aceleriq tools. Tools with required scopes need OAuth Bearer authorization before tools/call.',
     });
   }
 
@@ -64,22 +138,33 @@ async function dispatch(
     return rpcResult(id, {});
   }
 
-  // Everything else requires auth.
+  if (method === 'tools/list') {
+    const visible = auth.ok ? TOOLS.filter(t => canInvoke(auth.ctx, t)) : TOOLS;
+    return rpcResult(id, { tools: visible.map(describeTool) });
+  }
+
+  // Everything else requires auth, except explicit public foundation tools.
   if (!auth.ok) {
+    if (method === 'tools/call') {
+      const name = String((params?.name as string) ?? '');
+      const publicTool = TOOL_MAP.get(name);
+      if (publicTool && publicTool.scopes.length === 0) {
+        const publicCtx = publicAuthContext();
+        try {
+          const result = await publicTool.handler((params?.arguments as unknown) ?? {}, publicCtx);
+          return rpcResult(id, {
+            content: [{ type: 'text', text: JSON.stringify(result) }],
+            structuredContent: result,
+          });
+        } catch (e) {
+          return rpcError(id, RpcErrors.internalError, (e as Error)?.message ?? String(e));
+        }
+      }
+    }
     if (isNotification) return null;
-    const map: Record<string, string> = {
-      missing: 'Missing bearer token',
-      invalid: 'Invalid bearer token',
-      expired_or_revoked: 'Bearer token expired or revoked',
-    };
-    return rpcError(id, RpcErrors.unauthorized, map[auth.error.kind] ?? 'Unauthorized');
+    return rpcError(id, RpcErrors.unauthorized, 'OAuth authorization required');
   }
   const ctx: AuthContext = auth.ctx;
-
-  if (method === 'tools/list') {
-    const visible = TOOLS.filter(t => canInvoke(ctx, t)).map(describeTool);
-    return rpcResult(id, { tools: visible });
-  }
 
   if (method === 'tools/call') {
     const name = String((params?.name as string) ?? '');
@@ -143,14 +228,18 @@ async function dispatch(
   return rpcError(id, RpcErrors.methodNotFound, `Method not found: ${method}`);
 }
 
-// ─── HTTP entry — Streamable HTTP transport ────────────────────
-const PROJECT_REF = 'gicbrgagstyvbaaumprj';
-const PRM_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-oauth-metadata`;
-const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
-const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return optionsResponse();
+
+  const url = new URL(req.url);
+  const path = url.pathname;
+
+  if (req.method === 'GET' && path.endsWith('/.well-known/oauth-protected-resource')) {
+    return jsonResponse(protectedResourceMetadata(), 200, {
+      'Cache-Control': 'public, max-age=300',
+      'Link': `<${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
+    });
+  }
 
   // GET → OAuth challenge (RFC 9728). Um GET sem Authorization precisa
   // responder 401 com WWW-Authenticate para que clientes como ChatGPT Work
@@ -159,24 +248,7 @@ Deno.serve(async (req) => {
   if (req.method === 'GET') {
     const authHeader = req.headers.get('authorization') ?? req.headers.get('Authorization');
     if (!authHeader) {
-      return new Response(
-        JSON.stringify({
-          error: 'unauthorized',
-          error_description: 'Authentication required. See resource_metadata for OAuth discovery.',
-          resource_metadata: PRM_URL,
-          authorization_servers: [AUTH_ISSUER],
-        }),
-        {
-          status: 401,
-          headers: {
-            ...corsHeaders,
-            'Content-Type': 'application/json',
-            'WWW-Authenticate': WWW_AUTH_HEADER,
-            'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
-            'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
-          },
-        },
-      );
+      return oauthChallengeResponse(oauthChallengeBody());
     }
     return jsonResponse({
       name: SERVER_INFO.name,
@@ -189,12 +261,14 @@ Deno.serve(async (req) => {
         scheme: 'Bearer',
         resource_metadata: PRM_URL,
         authorization_servers: [AUTH_ISSUER],
+        authorization_server_metadata: AUTHORIZATION_SERVER_METADATA,
       },
       toolCount: TOOLS.length,
+      tools: TOOLS.map(t => ({ name: t.name, title: t.title, requiredScopes: t.scopes })),
       secondBrain: bridgeStatusPublic(),
       serverTime: new Date().toISOString(),
     }, 200, {
-      'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
+      'Link': `<${PRM_URL}>; rel="oauth-protected-resource", <${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
       'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
     });
   }
@@ -211,29 +285,20 @@ Deno.serve(async (req) => {
     return jsonResponse(rpcError(null, RpcErrors.parseError, 'Parse error'), 400);
   }
 
-  const auth = await authenticate(req);
-
-  // Qualquer POST MCP sem credencial devolve 401 real com WWW-Authenticate.
-  // ChatGPT Work e outros clientes OAuth partem justamente desse probe para
-  // localizar o Protected Resource Metadata. GET continua sendo discovery
-  // público sanitizado; OPTIONS continua CORS.
   const isBatch = Array.isArray(body);
   const messages: JsonRpcRequest[] = (isBatch ? body : [body]) as JsonRpcRequest[];
-  if (!auth.ok) {
-    return new Response(
-      JSON.stringify(rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'Unauthorized')),
-      {
-        status: 401,
-        headers: {
-          ...corsHeaders,
-          'Content-Type': 'application/json',
-          'WWW-Authenticate': WWW_AUTH_HEADER,
-          'Link': `<${PRM_URL}>; rel="oauth-protected-resource"`,
-          'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+  const auth = await authenticate(req);
 
-        },
-      },
-    );
+  // Discovery methods are public. Protected tool calls still produce a real
+  // HTTP 401 + WWW-Authenticate so OAuth clients can start/repair consent.
+  if (!auth.ok) {
+    const allPublic = messages.every(isPublicRpc);
+    if (!allPublic) {
+      const payload = isBatch
+        ? messages.map(m => rpcError(m?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required'))
+        : rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required');
+      return oauthChallengeResponse(payload);
+    }
   }
 
   const responses: JsonRpcResponse[] = [];

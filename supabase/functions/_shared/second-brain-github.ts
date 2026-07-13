@@ -53,7 +53,7 @@ export type BridgeError =
   | { kind: 'unauthorized' }
   | { kind: 'forbidden'; detail: string }
   | { kind: 'not_found'; path: string }
-  | { kind: 'branch_not_found'; branch: string }
+  | { kind: 'branch_not_found'; branch: string; detail?: string }
   | { kind: 'conflict'; detail: string }
   | { kind: 'rate_limited'; resetAt?: string }
   | { kind: 'timeout' }

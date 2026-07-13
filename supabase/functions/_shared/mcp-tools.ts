@@ -800,11 +800,23 @@ export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
 }
 
 export function describeTool(t: ToolDefinition) {
+  const securitySchemes = t.scopes.length === 0
+    ? [{ type: 'noauth' }]
+    : [{
+      type: 'oauth2',
+      scopes: ['openid', 'email', 'profile'],
+      description: 'OAuth do Aceleriq OS. Permissões de dados são aplicadas pelo backend/RLS e pelos escopos MCP internos.',
+    }];
+
   return {
     name: t.name,
     title: t.title,
     description: t.description,
     inputSchema: t.inputSchema,
     annotations: t.annotations,
+    _meta: {
+      securitySchemes,
+      required_mcp_scopes: t.scopes,
+    },
   };
 }
