@@ -23,7 +23,11 @@ Deno.serve((req) => {
     resource: RESOURCE,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['aceleriq:read', 'memory:read', 'memory:propose'],
+    // Only advertise scopes supported by the Supabase authorization server
+    // (see /.well-known/oauth-authorization-server). Custom scopes like
+    // `aceleriq:read` cause the authorize step to fail with invalid_scope
+    // in strict clients such as ChatGPT Work.
+    scopes_supported: ['openid', 'email', 'profile'],
     resource_documentation: 'https://aceleriq.online/conectar-mcp',
     resource_name: 'Aceleriq OS MCP',
   };
