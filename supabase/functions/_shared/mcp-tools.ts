@@ -1054,6 +1054,8 @@ export const TOOLS: readonly ToolDefinition[] = [
   memorySearchTool,
   memoryFetchTool,
   memoryListPendingTool,
+  memoryPulseTool,
+  memoryRecentCommitsTool,
   memoryProposeTool,
   // Write tools (round 5) — controlled operational writes
   createTaskTool,
