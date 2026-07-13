@@ -610,9 +610,45 @@ export default function Workspace() {
   }
 
 
+  // Ensures the destination parent is always a real workspace_nodes UUID.
+  // If uploading inside a virtual folder (grouping of public.files.folder),
+  // materialize a real folder with the same name at the client root so
+  // Postgres never receives a "virt:..." string as parent_id.
+  async function resolveRealParentId(rawParent: string | null | undefined): Promise<string | null> {
+    if (!rawParent) return null;
+    if (!isVirt(rawParent)) return rawParent;
+    if (!rawParent.startsWith(VIRT_PREFIX + "folder:")) return null;
+    if (scope !== "client" || !clientId) return null;
+    const folderName = rawParent.substring((VIRT_PREFIX + "folder:").length).trim();
+    if (!folderName) return null;
+    const { data: existing } = await supabase
+      .from("workspace_nodes")
+      .select("id")
+      .eq("scope", "client")
+      .eq("client_id", clientId)
+      .eq("kind", "folder")
+      .is("parent_id", null)
+      .ilike("name", folderName)
+      .maybeSingle();
+    if ((existing as any)?.id) return (existing as any).id as string;
+    const { data: created, error } = await supabase.from("workspace_nodes").insert({
+      name: folderName, kind: "folder", scope: "client",
+      client_id: clientId, parent_id: null, created_by: user?.id ?? null,
+    }).select("id").single();
+    if (error || !created) throw error || new Error("Falha ao criar pasta");
+    return (created as any).id as string;
+  }
+
   async function handleUpload(files: FileList | null, targetFolderId?: string | null) {
     if (!files || !files.length || !user) return;
-    const destParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
+    const rawParent = targetFolderId !== undefined ? targetFolderId : (parent?.id || null);
+    let destParent: string | null;
+    try {
+      destParent = await resolveRealParentId(rawParent);
+    } catch (e: any) {
+      toast({ title: "Erro ao preparar pasta", description: e?.message || "Tente novamente.", variant: "destructive" });
+      return;
+    }
     uploads.enqueue({
       files: Array.from(files),
       scope,
