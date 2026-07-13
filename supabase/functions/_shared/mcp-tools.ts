@@ -10,6 +10,7 @@ import {
   fetchEntity,
   getBriefing,
   getClientContext,
+  getFile as getPanelFile,
   getProject,
   getReport,
   getWorkspaceNode,
