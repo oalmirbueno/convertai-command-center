@@ -177,7 +177,7 @@ export async function listClients(opts: { query?: string; limit?: number; offset
       .range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`profiles: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── get_client_context ──────────────────────────────────────
@@ -279,7 +279,7 @@ export async function listProjects(opts: {
     qb.order('updated_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`projects: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── get_project ─────────────────────────────────────────────
@@ -348,7 +348,7 @@ export async function listTasks(opts: {
     qb.order('updated_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`tasks: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── list_reports / get_report ───────────────────────────────
@@ -370,7 +370,7 @@ export async function listReports(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`reports: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getReport(opts: { report_id: string }) {
@@ -405,7 +405,7 @@ export async function listBriefings(opts: {
     qb.order('created_at', { ascending: false }).range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`briefings: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getBriefing(opts: { briefing_id: string }) {
@@ -444,7 +444,7 @@ export async function listWorkspaceNodes(opts: {
       .range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`workspace_nodes: ${error.message}`);
-  return { items: data ?? [], total: count ?? 0, limit, offset };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 export async function getWorkspaceNode(opts: { node_id: string }) {
