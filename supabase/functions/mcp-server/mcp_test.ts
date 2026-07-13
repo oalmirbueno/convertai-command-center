@@ -267,7 +267,7 @@ Deno.test('write tools require aceleriq:write scope', () => {
     assert(!canInvoke(readCtx, t), `${name} must not accept read-only key`);
     assert(canInvoke(writeCtx, t), `${name} must accept write key`);
     assert(canInvoke(adminCtx, t), `${name} must accept admin key`);
-    assertEquals(t.scopes, ['aceleriq:write']);
+    assert(t.scopes.includes('aceleriq:write' as any), `${name} keeps aggregate write scope`);
   }
 });
 
@@ -412,4 +412,38 @@ Deno.test('contracts write tools reject unknown fields (strict allowlist)', asyn
     }, contractsWriteCtx);
   } catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
   assert(threw);
+});
+
+// ─── Bloco D: granular OAuth scopes ──────────────────────────
+import { SCOPE_DESCRIPTIONS, ALL_SCOPES, expandScopes, GRANULAR_SCOPE_BY_TOOL } from '../_shared/mcp-tools.ts';
+
+Deno.test('every scope has a human-readable description', () => {
+  for (const s of ALL_SCOPES) {
+    const d = SCOPE_DESCRIPTIONS[s];
+    assert(d && d.title && d.description, `missing description for ${s}`);
+  }
+});
+
+Deno.test('aggregate aceleriq:read expands to all granular reads', () => {
+  const exp = expandScopes(['aceleriq:read']);
+  for (const s of ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read']) {
+    assert(exp.has(s), `expected expansion to include ${s}`);
+  }
+  assert(!exp.has('projects:write'), 'read must not grant writes');
+});
+
+Deno.test('granular scope alone authorizes only its own tools', () => {
+  const projectsRead: AuthContext = { ...readCtx, scopes: ['projects:read'] };
+  const projectsTool = TOOL_MAP.get('aceleriq_list_projects')!;
+  const clientsTool = TOOL_MAP.get('aceleriq_list_clients')!;
+  assert(canInvoke(projectsRead, projectsTool));
+  assert(!canInvoke(projectsRead, clientsTool));
+});
+
+Deno.test('every mapped granular scope is on the resolved tool', () => {
+  for (const [name, scope] of Object.entries(GRANULAR_SCOPE_BY_TOOL)) {
+    const t = TOOL_MAP.get(name);
+    assert(t, `missing tool ${name}`);
+    assert(t!.scopes.includes(scope as any), `${name} missing scope ${scope}`);
+  }
 });
