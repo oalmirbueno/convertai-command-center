@@ -315,6 +315,9 @@ export default function AdminDashboard() {
       </div>
       )}
 
+      {/* Second Brain live pulse - admin only */}
+      {isAdmin && <SecondBrainPulseWidget />}
+
       {/* Individual Project Payments - admin only */}
       {isAdmin && (projectPayments || []).length > 0 && (
         <div>
