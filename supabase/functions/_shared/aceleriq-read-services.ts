@@ -14,13 +14,48 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 // ─── Config ───────────────────────────────────────────────────
 export const READ_LIMITS = {
   defaultPageSize: 25,
-  maxPageSize: 100,
+  maxPageSize: 500,
   searchMaxPerEntity: 10,
   contextRecentFiles: 20,
   contextRecentRequests: 20,
   contextOpenTasks: 100,
   queryTimeoutMs: 8000,
 } as const;
+
+// Folders whose files pass through the client approval workflow.
+const APPROVAL_FOLDERS = new Set(['criativos', 'entregas']);
+
+function enrichFile<T extends Record<string, any>>(f: T): T & {
+  approval_state: 'approved' | 'pending' | 'rejected' | 'not_required';
+  requires_approval: boolean;
+  is_internal_document: boolean;
+} {
+  const folder = (f?.folder ?? '') as string;
+  const requires = APPROVAL_FOLDERS.has(folder);
+  const raw = String(f?.approval_status ?? 'none');
+  let state: 'approved' | 'pending' | 'rejected' | 'not_required';
+  if (raw === 'approved' || raw === 'pending' || raw === 'rejected') state = raw as any;
+  else state = requires ? 'pending' : 'not_required';
+  return {
+    ...f,
+    approval_state: state,
+    requires_approval: requires,
+    is_internal_document: !requires,
+  };
+}
+
+export function pageMeta(count: number | null | undefined, limit: number, offset: number) {
+  const total = count ?? 0;
+  const returned = Math.max(0, Math.min(limit, Math.max(0, total - offset)));
+  const has_more = offset + returned < total;
+  return {
+    total,
+    limit,
+    offset,
+    has_more,
+    next_offset: has_more ? offset + limit : null,
+  };
+}
 
 export const ALLOWED_ENTITY_TYPES = [
   'client',
