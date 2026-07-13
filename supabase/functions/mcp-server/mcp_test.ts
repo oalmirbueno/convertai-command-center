@@ -345,3 +345,65 @@ Deno.test('complete_task minimal schema: only task_id + idempotency_key', () => 
   assertEquals((tool.inputSchema as any).required, ['task_id', 'idempotency_key']);
   assertEquals((tool.inputSchema as any).additionalProperties, false);
 });
+
+// ─── Bloco B: contracts scope gating ─────────────────────────
+const contractsReadCtx: AuthContext = { ...readCtx, scopes: ['contracts:read'] };
+const contractsWriteCtx: AuthContext = { ...readCtx, scopes: ['contracts:write'], correlationId: '00000000-0000-0000-0000-0000000000bb' };
+
+Deno.test('contracts read tools accept contracts:read OR aceleriq:read', () => {
+  for (const name of ['aceleriq_list_contracts', 'aceleriq_get_contract']) {
+    const t = TOOL_MAP.get(name)!;
+    assert(canInvoke(contractsReadCtx, t), `${name} must accept contracts:read`);
+    assert(canInvoke(readCtx, t), `${name} must accept aceleriq:read`);
+    assert(canInvoke(adminCtx, t));
+    assert(!canInvoke(emptyCtx, t));
+  }
+});
+
+Deno.test('contracts write tools require contracts:write; aceleriq:write is NOT enough', () => {
+  const writeOnly: AuthContext = { ...readCtx, scopes: ['aceleriq:write'] };
+  for (const name of ['aceleriq_create_contract', 'aceleriq_update_contract', 'aceleriq_send_contract', 'aceleriq_cancel_contract']) {
+    const t = TOOL_MAP.get(name)!;
+    assert(!canInvoke(readCtx, t), `${name} must reject read-only`);
+    assert(!canInvoke(writeOnly, t), `${name} must NOT accept plain aceleriq:write`);
+    assert(canInvoke(contractsWriteCtx, t), `${name} must accept contracts:write`);
+    assert(canInvoke(adminCtx, t));
+    assertEquals(t.scopes, ['contracts:write']);
+  }
+});
+
+Deno.test('create_contract requires client_id, title, file fields, idempotency_key', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_contract')!;
+  let threw = false;
+  try { await tool.handler({ title: 'x' }, contractsWriteCtx); }
+  catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
+
+Deno.test('update_contract requires at least one updatable field', async () => {
+  const tool = TOOL_MAP.get('aceleriq_update_contract')!;
+  let threw = false;
+  try {
+    await tool.handler({
+      contract_id: '00000000-0000-0000-0000-000000000001',
+      idempotency_key: 'abcd1234',
+    }, contractsWriteCtx);
+  } catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
+
+Deno.test('contracts write tools reject unknown fields (strict allowlist)', async () => {
+  const tool = TOOL_MAP.get('aceleriq_create_contract')!;
+  let threw = false;
+  try {
+    await tool.handler({
+      client_id: '00000000-0000-0000-0000-000000000002',
+      title: 'x',
+      original_file_url: 'https://example.com/a.pdf',
+      original_file_name: 'a.pdf',
+      idempotency_key: 'abcd1234',
+      status: 'signed', // forbidden: status is server-controlled
+    }, contractsWriteCtx);
+  } catch (e) { threw = true; assert(/Invalid input/.test((e as Error).message)); }
+  assert(threw);
+});
