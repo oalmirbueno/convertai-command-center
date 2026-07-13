@@ -41,6 +41,8 @@ import {
   createReportDraftSchema,
   createTask,
   createTaskSchema,
+  updateProject,
+  updateProjectSchema,
   updateTask,
   updateTaskSchema,
   WriteError,
