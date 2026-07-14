@@ -2101,6 +2101,103 @@ function MapNodeRow({ node, depth, onRename, onAdd, onDelete }: {
 type AgentThread = { id: string; title: string; updated_at: string; client_id: string | null; folder_path?: string | null };
 type AgentMsg = { id: string; role: "user" | "assistant" | "system"; content: string; created_at: string };
 
+function GroupedThreadList({
+  threads, activeId, currentClientId, currentFolderPath, clientNameMap, onSelect, onDelete,
+}: {
+  threads: AgentThread[];
+  activeId: string | null;
+  currentClientId: string | null;
+  currentFolderPath: string | null;
+  clientNameMap: Record<string, string>;
+  onSelect: (id: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  // Estado de colapso persistente por (cliente, pasta)
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>(() => {
+    try { return JSON.parse(localStorage.getItem("studio:threadGroups") || "{}"); } catch { return {}; }
+  });
+  const persist = (next: Record<string, boolean>) => {
+    setCollapsed(next);
+    try { localStorage.setItem("studio:threadGroups", JSON.stringify(next)); } catch {}
+  };
+  const toggle = (k: string) => persist({ ...collapsed, [k]: !collapsed[k] });
+
+  // Agrupa: cliente → pasta/projeto
+  const byClient = new Map<string, { name: string; folders: Map<string, AgentThread[]> }>();
+  for (const t of threads) {
+    const cid = t.client_id || "_global";
+    const cname = t.client_id ? (clientNameMap[t.client_id] || "Cliente") : "Global";
+    if (!byClient.has(cid)) byClient.set(cid, { name: cname, folders: new Map() });
+    const bucket = byClient.get(cid)!;
+    const fkey = t.folder_path || "_root";
+    if (!bucket.folders.has(fkey)) bucket.folders.set(fkey, []);
+    bucket.folders.get(fkey)!.push(t);
+  }
+  // Cliente atual primeiro
+  const orderedClients = Array.from(byClient.entries()).sort(([a], [b]) => {
+    if (a === (currentClientId || "_global")) return -1;
+    if (b === (currentClientId || "_global")) return 1;
+    return byClient.get(a)!.name.localeCompare(byClient.get(b)!.name);
+  });
+
+  if (!threads.length) {
+    return <div className="flex-1 min-h-0 overflow-y-auto"><p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p></div>;
+  }
+
+  return (
+    <div className="flex-1 min-h-0 overflow-y-auto">
+      {orderedClients.map(([cid, group]) => {
+        const clientKey = `c:${cid}`;
+        const clientCollapsed = collapsed[clientKey] === true;
+        const totalInClient = Array.from(group.folders.values()).reduce((n, arr) => n + arr.length, 0);
+        return (
+          <div key={cid} className="border-b border-border/60 last:border-b-0">
+            <button
+              onClick={() => toggle(clientKey)}
+              className="w-full flex items-center gap-1.5 px-2 py-1.5 text-left hover:bg-secondary/60 bg-secondary/25">
+              <ChevronRight className={cn("w-3 h-3 text-muted-foreground transition-transform", !clientCollapsed && "rotate-90")} />
+              <span className="text-[10px] font-semibold uppercase tracking-wider text-foreground/90 flex-1 truncate">{group.name}</span>
+              <span className="text-[9px] text-muted-foreground tabular-nums">{totalInClient}</span>
+            </button>
+            {!clientCollapsed && Array.from(group.folders.entries())
+              .sort(([a], [b]) => (a === "_root" ? -1 : b === "_root" ? 1 : a.localeCompare(b)))
+              .map(([fkey, list]) => {
+                const folderKey = `f:${cid}:${fkey}`;
+                const folderCollapsed = collapsed[folderKey] === true;
+                const label = fkey === "_root" ? "Geral" : `/${fkey}`;
+                return (
+                  <div key={fkey}>
+                    <button
+                      onClick={() => toggle(folderKey)}
+                      className="w-full flex items-center gap-1.5 pl-4 pr-2 py-1 text-left hover:bg-secondary/40">
+                      <ChevronRight className={cn("w-3 h-3 text-muted-foreground/70 transition-transform", !folderCollapsed && "rotate-90")} />
+                      <span className="text-[10px] text-muted-foreground truncate flex-1">{label}</span>
+                      <span className="text-[9px] text-muted-foreground/70 tabular-nums">{list.length}</span>
+                    </button>
+                    {!folderCollapsed && list.map(t => (
+                      <div key={t.id}
+                        className={cn("group flex items-center gap-1 pl-7 pr-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
+                          activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
+                        onClick={() => onSelect(t.id)}>
+                        <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
+                        <span className="text-[11px] truncate flex-1">{t.title}</span>
+                        <button onClick={(e) => { e.stopPropagation(); onDelete(t.id); }}
+                          className="p-0.5 hover:text-destructive opacity-0 group-hover:opacity-100">
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+
 function GptPanel({ clientName, folderPath, availableFiles, notes, script, onAppendToNotes }: {
   clientName: string | null;
   folderPath: string;
