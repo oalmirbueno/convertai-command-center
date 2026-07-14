@@ -517,7 +517,7 @@ Regras:
     let aiRes: Response | null = null;
     let lastStatus = 0; let lastText = "";
     for (const p of chain) {
-      const r = await fetch(p.url, { method: "POST", headers: p.headers, body: JSON.stringify({ model: p.model, messages, stream: true }) });
+      const r = await fetch(p.url, { method: "POST", headers: p.headers, body: JSON.stringify({ model: p.model, messages, stream: true, temperature: 0.55 }) });
       if (r.ok && r.body) { aiRes = r; break; }
       lastStatus = r.status; lastText = await r.text().catch(() => "");
       if (![401, 402, 429].includes(r.status)) break;
