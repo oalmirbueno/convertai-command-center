@@ -230,6 +230,46 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     );
   }
 
+  if (isOffice(fileName, fileUrl)) {
+    const encoded = encodeURIComponent(fileUrl);
+    const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encoded}`;
+    const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
+    return (
+      <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-white">
+        <iframe
+          src={officeSrc}
+          title={fileName}
+          className="w-full h-[70vh] border-0 bg-white"
+          allow="fullscreen"
+        />
+        <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border">
+          <a
+            href={gviewSrc}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <Eye className="w-3 h-3" /> Abrir visualizador alternativo
+          </a>
+          <button
+            type="button"
+            onClick={() => openFile(fileUrl)}
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <ExternalLink className="w-3 h-3" /> Nova aba
+          </button>
+          <button
+            type="button"
+            onClick={() => downloadFile(fileUrl, fileName)}
+            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
+          >
+            <Download className="w-3 h-3" /> Baixar
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   if (isVideo(fileName, fileUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden p-2">
