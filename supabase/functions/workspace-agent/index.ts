@@ -502,12 +502,13 @@ Regras:
     if (openaiKey) {
       const oaiHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` };
       chain.push(
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o-mini", label: "openai/gpt-4o-mini" },
         { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o", label: "openai/gpt-4o" },
+        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o-mini", label: "openai/gpt-4o-mini" },
       );
     }
     if (lovableKey) {
-      for (const m of ["google/gemini-2.5-flash-lite", "google/gemini-2.5-flash"]) {
+      // Prioriza modelo mais forte primeiro (Pro), com fallback progressivo.
+      for (const m of ["google/gemini-2.5-pro", "google/gemini-2.5-flash", "google/gemini-3-flash-preview"]) {
         chain.push({ url: "https://ai.gateway.lovable.dev/v1/chat/completions", headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` }, model: m, label: m });
       }
     }
