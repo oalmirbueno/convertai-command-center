@@ -49,7 +49,8 @@ export function useWorkspaceUploads() {
     // Fast path for small/medium files: direct upload avoids TUS handshake
     // overhead (create + PATCH per chunk) and is dramatically faster on the
     // typical marketing assets uploaded here (images, docs, short reels).
-    const FAST_PATH_MAX = 40 * 1024 * 1024;
+    // Single-PUT is reliable up to ~100 MB; larger goes through resumable TUS.
+    const FAST_PATH_MAX = 100 * 1024 * 1024;
     if (file.size <= FAST_PATH_MAX) {
       try {
         // Simulated smooth progress while the single PUT is in-flight — the
