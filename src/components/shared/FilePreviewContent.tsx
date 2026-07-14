@@ -171,7 +171,7 @@ interface Props {
 export default function FilePreviewContent({ fileName, fileUrl, fileId, storageBucket, storagePath, mimeType, extension }: Props) {
   const ext = (extension || resolveExtension(fileName, fileUrl)).replace(/^\./, "").toLowerCase();
   const mediaKind = mediaKindFromFile(fileName, fileUrl, mimeType, extension);
-  const officeLike = mediaKind === "office" || isOffice(fileName, fileUrl) || isOffice(fileName, previewUrl);
+  const officeLike = mediaKind === "office" || OFFICE_EXTS.includes(ext) || isOffice(fileName, fileUrl);
   const { url: resolvedUrl, loading: resolvingUrl, error: urlError, reload } = useResolvedFileUrl({
     fileUrl,
     storageBucket,
