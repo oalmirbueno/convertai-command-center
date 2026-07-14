@@ -31,6 +31,7 @@ import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
+import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -43,6 +44,7 @@ type Node = {
   __external_url?: string | null;
   __file_id?: string | null;
   __approval_status?: string | null;
+  __carousel_count?: number;
 };
 
 const VIRT_PREFIX = "virt:";
@@ -151,17 +153,29 @@ function suggestFolderName(n: Node): string {
 
 
 
-function virtFileNode(f: any, clientId: string): Node {
+function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
+  // Normalize `file_type` — legacy rows may store a bare extension ("mp4")
+  // instead of a full MIME. Fall back to extension inference so kindOf and
+  // FilePreview recognize videos/images correctly.
+  const rawType = (f.file_type || "").toLowerCase();
+  let mime: string | null = rawType || null;
+  if (mime && !mime.includes("/")) {
+    if (["mp4","mov","webm","mkv","m4v"].includes(mime)) mime = `video/${mime}`;
+    else if (["png","jpg","jpeg","gif","webp","avif","svg"].includes(mime)) mime = `image/${mime === "jpg" ? "jpeg" : mime}`;
+    else if (["mp3","wav","ogg","m4a","flac"].includes(mime)) mime = `audio/${mime}`;
+    else if (mime === "pdf") mime = "application/pdf";
+  }
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
     parent_id: null, scope: "client", client_id: clientId,
     kind: "file", name: f.file_name,
-    mime: f.file_type || null, size_bytes: null, storage_path: null,
+    mime, size_bytes: null, storage_path: null,
     duration_sec: null, sort_index: 0,
     sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
     created_by: f.uploaded_by || null, created_at: f.created_at,
     __virtual: true, __external_url: f.file_url, __file_id: f.id,
     __approval_status: f.approval_status,
+    __carousel_count: carouselCount,
   };
 }
 
@@ -296,12 +310,13 @@ export default function Workspace() {
   const { data: clientFiles } = useQuery({
     queryKey: ["workspace-client-files", clientId],
     queryFn: async () => {
-      if (!clientId) return [];
+      if (!clientId) return [] as any[];
+      // Fetch all files (parents + carousel children) so we can group carousels
+      // and show every slide inside the preview.
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by")
+        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by, parent_file_id")
         .eq("client_id", clientId)
-        .is("parent_file_id", null)
         .order("created_at", { ascending: false });
       return data || [];
     },
@@ -310,17 +325,36 @@ export default function Workspace() {
     placeholderData: (prev: any) => prev,
   });
 
+  // Group carousel children by parent for fast preview rendering
+  const virtChildrenMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const f of (clientFiles as any[]) || []) {
+      if (f.parent_file_id) {
+        const arr = map.get(f.parent_file_id) || [];
+        arr.push(f);
+        map.set(f.parent_file_id, arr);
+      }
+    }
+    return map;
+  }, [clientFiles]);
+  const virtChildIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of (clientFiles as any[]) || []) if (f.parent_file_id) s.add(f.id);
+    return s;
+  }, [clientFiles]);
+
 
   // Build virtual nodes for current view (root or inside a virtual folder)
   const virtualNodes: Node[] = useMemo(() => {
     if (scope !== "client" || !clientId || !clientFiles?.length) return [];
+    // Exclude carousel children — they render only inside the parent's preview.
+    const parents = (clientFiles as any[]).filter((f) => !f.parent_file_id);
     const currentVirtId = parent?.id;
     const insideVirtFolder = currentVirtId && currentVirtId.startsWith(VIRT_PREFIX + "folder:");
-    // At root of client scope → show virtual folders per distinct `folder` value + orphan files
     if (!parent) {
       const folders = new Map<string, number>();
       const orphans: any[] = [];
-      for (const f of clientFiles as any[]) {
+      for (const f of parents) {
         const fld = (f.folder || "").trim();
         if (fld) folders.set(fld, (folders.get(fld) || 0) + 1);
         else orphans.push(f);
@@ -337,14 +371,14 @@ export default function Workspace() {
           __virtual: true,
         });
       });
-      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId)));
+      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0)));
       return nodes;
     }
     if (insideVirtFolder) {
       const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
-      return (clientFiles as any[])
+      return parents
         .filter((f) => (f.folder || "").trim() === folderName)
-        .map((f) => virtFileNode(f, clientId));
+        .map((f) => virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0));
     }
     return [];
   }, [clientFiles, scope, clientId, parent]);
@@ -1414,6 +1448,11 @@ export default function Workspace() {
                       {n.sent_for_approval_file_id && (
                         <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
+                      {!!n.__carousel_count && n.__carousel_count > 0 && (
+                        <span className="absolute bottom-9 left-1.5 z-10 text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-primary/85 text-primary-foreground shadow">
+                          Carrossel · {n.__carousel_count + 1}
+                        </span>
+                      )}
                       <div className={cn(
                         "flex-1 flex items-center justify-center w-full relative overflow-hidden",
                         !cover && `bg-gradient-to-br ${isFolder ? "from-primary/20 via-primary/5 to-transparent" : KIND_META[k].gradient}`
@@ -1514,7 +1553,14 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <FilePreview node={selected} getUrl={urlFor} />
+              {selected.__virtual && selected.__file_id && (virtChildrenMap.get(selected.__file_id)?.length || 0) > 0 ? (
+                <SharedCarouselSlider
+                  parent={{ id: selected.__file_id, file_name: selected.name, file_url: selected.__external_url || "" }}
+                  initialChildren={virtChildrenMap.get(selected.__file_id) || []}
+                />
+              ) : (
+                <FilePreview node={selected} getUrl={urlFor} />
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" onClick={async () => openFile(await urlFor(selected))} className="gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
