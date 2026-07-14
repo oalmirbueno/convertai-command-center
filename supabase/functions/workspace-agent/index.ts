@@ -345,7 +345,7 @@ Regras absolutas:
     const lovableKey0 = Deno.env.get("LOVABLE_API_KEY");
     const routerKey = openaiKey0 || lovableKey0;
     const routerUrl = openaiKey0 ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const routerModel = openaiKey0 ? "gpt-4o-mini" : "google/gemini-2.5-flash";
+    const routerModel = openaiKey0 ? "gpt-5-mini" : "google/gemini-2.5-flash";
 
     type Orq = {
       intent: string;
