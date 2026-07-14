@@ -2270,6 +2270,8 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   // arquivos anexados à próxima mensagem (sincronizam com @ do input)
   const [attached, setAttached] = useState<FileRef[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Modal iframe para abrir links dentro do chat (sem sair da conversa)
+  const [linkPreview, setLinkPreview] = useState<string | null>(null);
   // recentes globais por usuário (top 8)
   const RECENT_KEY = "studio:recentMentions";
   const [recentIds, setRecentIds] = useState<string[]>(() => {
@@ -2645,6 +2647,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     const text = (override ?? input).trim();
     if (!text || streaming) return;
 
+    // ─── Comandos rápidos locais ───
+    // /abrir <url>   → abre modal iframe (não envia para o agente)
+    // /anexar        → abre o picker de arquivos
+    // /web <query>   → segue para o agente (backend força busca)
+    const mAbrir = text.match(/^\/abrir\s+(https?:\/\/\S+)/i);
+    if (mAbrir) { setLinkPreview(mAbrir[1]); setInput(""); return; }
+    if (/^\/anexar\b/i.test(text)) { setPickerOpen(true); setInput(""); return; }
+
 
     let tid = activeId;
     if (!tid) {
@@ -2887,30 +2897,108 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             </button>
             {onStructureToNotes && (
               <button
-                onClick={() => {
+                onClick={async () => {
                   if (!msgs.length) { toast({ title: "Nada para enviar", description: "Comece uma conversa primeiro." }); return; }
-                  // Empacota conversa completa + anexos como uma NOTA bruta para o modo "structure" reorganizar.
+                  toast({ title: "Empacotando", description: "Reunindo conversa, anexos, mídia, kanban e timeline…" });
+
+                  // ─── Cabeçalho ───
                   const header = [
                     `# Conversa do Studio`,
                     `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "raiz"}`,
                     `Exportado em ${new Date().toLocaleString("pt-BR")}`,
                     "",
                   ].join("\n");
+
+                  // ─── Diálogo completo ───
                   const convo = msgs.map(m => {
                     const who = m.role === "user" ? "**Eu**" : "**Agente**";
                     return `### ${who}\n\n${(m.content || "").trim()}`;
                   }).join("\n\n---\n\n");
-                  const atts = attached.length
-                    ? `\n\n---\n\n## Anexos referenciados\n${attached.map(a => `- [${a.name}](${a.url || `wsfile:${a.id}`})${a.meta ? ` · ${a.meta}` : ""}`).join("\n")}`
+
+                  // ─── Anexos com miniaturas / players ───
+                  const isImg = (s: string) => /\.(png|jpe?g|gif|webp|avif|svg)(\?|$)/i.test(s) || /^image\//i.test(s);
+                  const isVid = (s: string) => /\.(mp4|webm|mov|m4v)(\?|$)/i.test(s) || /^video\//i.test(s);
+                  const attsLines = attached.map(a => {
+                    const url = a.url || "";
+                    const mime = a.meta || "";
+                    if (url && (isImg(url) || isImg(mime))) return `- ![${a.name}](${url})\n  [Baixar](${url})`;
+                    if (url && (isVid(url) || isVid(mime))) return `- 🎬 **${a.name}** — [Reproduzir](${url}) · [Baixar](${url})`;
+                    if (url) return `- 📎 [${a.name}](${url})`;
+                    return `- 📎 ${a.name} · ref \`wsfile:${a.id}\``;
+                  });
+                  const atts = attsLines.length ? `\n\n---\n\n## Anexos e mídia\n${attsLines.join("\n")}` : "";
+
+                  // ─── Kanban do projeto (se houver projectId) ───
+                  let kanbanBlock = "";
+                  if (projectId) {
+                    try {
+                      const { data: tasks } = await supabase
+                        .from("tasks")
+                        .select("title,status,priority,due_date,description,assignee_id")
+                        .eq("project_id", projectId)
+                        .order("updated_at", { ascending: false })
+                        .limit(120);
+                      const rows = (tasks as any[]) || [];
+                      if (rows.length) {
+                        const ids = Array.from(new Set(rows.map(r => r.assignee_id).filter(Boolean)));
+                        const names: Record<string, string> = {};
+                        if (ids.length) {
+                          const { data: profs } = await supabase.from("profiles").select("id,full_name,email").in("id", ids);
+                          (profs as any[] || []).forEach(p => { names[p.id] = p.full_name || p.email || "-"; });
+                        }
+                        const cols: Record<string, any[]> = {};
+                        rows.forEach(r => { const k = r.status || "sem-status"; (cols[k] ||= []).push(r); });
+                        const order = ["todo", "doing", "review", "done", "sem-status"];
+                        const sortedKeys = Object.keys(cols).sort((a, b) => (order.indexOf(a) + 100) - (order.indexOf(b) + 100));
+                        const colBlocks = sortedKeys.map(k => {
+                          const items = cols[k].slice(0, 20).map(t => {
+                            const parts = [`**${t.title}**`];
+                            if (t.priority) parts.push(`prioridade ${t.priority}`);
+                            if (t.due_date) parts.push(`prazo ${t.due_date}`);
+                            if (t.assignee_id && names[t.assignee_id]) parts.push(`resp. ${names[t.assignee_id]}`);
+                            return `  - ${parts.join(" · ")}${t.description ? `\n    ${String(t.description).slice(0, 140)}` : ""}`;
+                          }).join("\n");
+                          return `### Coluna: ${k} (${cols[k].length})\n${items}`;
+                        }).join("\n\n");
+                        kanbanBlock = `\n\n---\n\n## Kanban do projeto\n${colBlocks}`;
+                      }
+                    } catch { /* ignore */ }
+                  }
+
+                  // ─── Board log do Kanban recente ───
+                  const boardBlock = boardLog?.length
+                    ? `\n\n## Atividade recente do Kanban\n${boardLog.slice(0, 20).map(l => `- ${l}`).join("\n")}`
                     : "";
-                  // Extrai imagens/URLs mencionadas para preservar prints e links de navegação
+
+                  // ─── URLs citados na conversa ───
                   const urls = Array.from(new Set((msgs.map(m => m.content).join("\n").match(/https?:\/\/[^\s)]+/g) || [])));
-                  const links = urls.length ? `\n\n## Links citados na conversa\n${urls.slice(0, 30).map(u => `- ${u}`).join("\n")}` : "";
-                  const pkg = header + convo + atts + links;
+                  const links = urls.length ? `\n\n## Links citados na conversa\n${urls.slice(0, 40).map(u => `- ${u}`).join("\n")}` : "";
+
+                  // ─── Timeline cronológica: navegação, buscas web (/web, /abrir), decisões, ações do agente ───
+                  const timelineItems: string[] = [];
+                  msgs.forEach(m => {
+                    const ts = m.created_at ? new Date(m.created_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : "--:--";
+                    const c = (m.content || "").trim();
+                    if (!c) return;
+                    if (m.role === "user") {
+                      const mWeb = c.match(/^\/web\s+(.+)/i);
+                      const mAbr = c.match(/^\/abrir\s+(https?:\/\/\S+)/i);
+                      if (mWeb) { timelineItems.push(`- **${ts}** · 🔎 Busca web: "${mWeb[1].slice(0, 120)}"`); return; }
+                      if (mAbr) { timelineItems.push(`- **${ts}** · 🌐 Navegou até ${mAbr[1]}`); return; }
+                      timelineItems.push(`- **${ts}** · 💬 Eu: ${c.slice(0, 160).replace(/\n/g, " ")}`);
+                    } else {
+                      const urlsIn = c.match(/https?:\/\/[^\s)]+/g) || [];
+                      const label = urlsIn.length ? `Agente respondeu com ${urlsIn.length} referência(s)` : `Agente respondeu`;
+                      timelineItems.push(`- **${ts}** · 🤖 ${label}: ${c.slice(0, 140).replace(/\n/g, " ")}${c.length > 140 ? "…" : ""}`);
+                    }
+                  });
+                  const timeline = timelineItems.length ? `\n\n## Timeline\n${timelineItems.join("\n")}` : "";
+
+                  const pkg = header + convo + atts + kanbanBlock + boardBlock + links + timeline;
                   onStructureToNotes(pkg);
                 }}
                 className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shrink-0"
-                title="Enviar conversa completa (mensagens, anexos, links, imagens) para as Notas — o agente organiza"
+                title="Enviar conversa completa (mensagens, mídia, kanban, links, timeline) para as Notas"
               >
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
@@ -3000,7 +3088,23 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
               )}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.content}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={{
+                  a: ({ href, children, ...rest }) => {
+                    const url = String(href || "");
+                    if (!/^https?:\/\//i.test(url)) return <a href={url} {...rest}>{children}</a>;
+                    return (
+                      <a
+                        href={url}
+                        onClick={(e) => { e.preventDefault(); setLinkPreview(url); }}
+                        className="text-primary hover:underline cursor-pointer"
+                        title="Abrir dentro do chat"
+                      >{children}</a>
+                    );
+                  },
+                }}
+              >{m.content}</ReactMarkdown>
             </article>
           )
         ))}
@@ -3205,6 +3309,32 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           if (picks.length) onAttachToNotes?.(picks);
         }}
       />
+
+      {/* Modal iframe: abre links dentro do chat sem sair da conversa */}
+      <Dialog open={!!linkPreview} onOpenChange={(v) => { if (!v) setLinkPreview(null); }}>
+        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden h-[85vh] flex flex-col">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
+            <Link2 className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="truncate flex-1 text-muted-foreground">{linkPreview}</span>
+            <button
+              onClick={() => linkPreview && window.open(linkPreview, "_blank", "noopener,noreferrer")}
+              className="px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+              title="Abrir em nova aba (alguns sites bloqueiam iframe)"
+            >Nova aba</button>
+            <button
+              onClick={() => setLinkPreview(null)}
+              className="px-2 py-1 rounded hover:bg-secondary text-muted-foreground border border-border"
+            >Fechar</button>
+          </div>
+          <iframe
+            src={linkPreview || "about:blank"}
+            className="flex-1 w-full bg-background"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            referrerPolicy="no-referrer"
+            title="Preview de link"
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
