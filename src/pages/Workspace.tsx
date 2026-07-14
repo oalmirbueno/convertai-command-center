@@ -526,7 +526,7 @@ export default function Workspace() {
           if (n.children?.length && id) await insertTree(n.children, id, true);
         }
       };
-      await insertTree(tpl.tree, parent?.id || null);
+      await insertTree(tpl.tree, parentIdForTpl);
       toast({ title: "Template aplicado", description: `${created} pastas criadas.` });
       setTemplateOpen(false);
       invalidate();
