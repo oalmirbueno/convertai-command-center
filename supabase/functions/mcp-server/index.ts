@@ -183,7 +183,7 @@ async function dispatch(
       return rpcError(id, RpcErrors.toolNotFound, `Unknown tool: ${name}`);
     }
 
-    if (!hasScope(ctx, tool.scopes)) {
+    if (!canInvoke(ctx, tool)) {
       await auditLog({
         correlationId, toolName: name, origin: ctx.origin, keyId: ctx.keyId,
         scopes: ctx.scopes, input: args,
