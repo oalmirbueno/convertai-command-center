@@ -345,21 +345,29 @@ Regras absolutas:
     const lovableKey0 = Deno.env.get("LOVABLE_API_KEY");
     const routerKey = openaiKey0 || lovableKey0;
     const routerUrl = openaiKey0 ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const routerModel = openaiKey0 ? "gpt-4o-mini" : "google/gemini-2.5-flash-lite";
+    const routerModel = openaiKey0 ? "gpt-4o-mini" : "google/gemini-2.5-flash";
 
-    type Orq = { intent: string; plan: string[]; needs_extra_agent: boolean; recommended_persona_id: string | null; reason: string };
-    let orq: Orq = { intent: "responder", plan: [], needs_extra_agent: false, recommended_persona_id: null, reason: "default" };
+    type Orq = {
+      intent: string;
+      plan: string[];
+      needs_extra_agent: boolean;
+      recommended_persona_id: string | null;
+      reason: string;
+      web_queries: string[];
+    };
+    let orq: Orq = { intent: "responder", plan: [], needs_extra_agent: false, recommended_persona_id: null, reason: "default", web_queries: [] };
 
     if (routerKey) {
       const catalog = inScope.length
         ? inScope.map(p => `- id=${p.id} · "${p.gpt_name || "sem nome"}" — ${(p.gpt_description || p.persona_prompt || "").slice(0, 200).replace(/\n/g, " ")}`).join("\n")
         : "(nenhum agente extra cadastrado)";
-      const orqSys = `Você é o ORQUESTRADOR interno do Workspace AcelerIQ. Sua função é planejar a execução da resposta em 3 etapas fixas: Orquestrador (você) → Preparo → Notas.
+      const orqSys = `Você é o ORQUESTRADOR interno do Workspace AcelerIQ. Planeje a execução (Orquestrador → Preparo → Notas) e decida se precisa BUSCAR NA WEB antes de responder.
 Regras:
-- SEMPRE devolva JSON válido: {"intent":"...","plan":["passo 1","passo 2"],"needs_extra_agent":bool,"recommended_persona_id":"uuid|null","reason":"..."}
-- Só marque needs_extra_agent=true quando a solicitação exigir DE FATO uma especialidade coberta por algum agente do catálogo (ex.: pedido é claramente vertical daquele GPT). Casos genéricos de pré-produção, roteiro, notas, checklist, planejamento → false (o executor padrão já resolve).
-- Se needs_extra_agent=true, recommended_persona_id DEVE ser um id do catálogo. Caso contrário, null.
-- plan: 2–4 passos curtos e acionáveis para o executor final.`;
+- SEMPRE devolva JSON válido: {"intent":"...","plan":["passo"],"needs_extra_agent":bool,"recommended_persona_id":"uuid|null","reason":"...","web_queries":["query"]}
+- needs_extra_agent=true APENAS quando o pedido for vertical de um GPT do catálogo. Casos genéricos → false.
+- Se needs_extra_agent=true, recommended_persona_id DEVE existir no catálogo. Caso contrário, null.
+- plan: 2–4 passos curtos e acionáveis.
+- web_queries: até 3 queries pt-BR quando exigir dados atuais, benchmarks, notícias, cotações, tendências, referências externas, concorrência, marca/pessoa pública, ou quando o usuário disser "pesquise", "busque", "procure na internet", "hoje", "atual", "última". Caso contrário [].`;
       try {
         const rr = await fetch(routerUrl, {
           method: "POST",
@@ -368,10 +376,10 @@ Regras:
             model: routerModel,
             messages: [
               { role: "system", content: orqSys },
-              { role: "user", content: `CATÁLOGO DE AGENTES EXTRAS:\n${catalog}\n\nCONTEXTO: cliente=${context?.client_name || "-"}, pasta=/${fpath || "raiz"}\n\nMENSAGEM DO USUÁRIO:\n${message.slice(0, 1200)}` },
+              { role: "user", content: `CATÁLOGO DE AGENTES EXTRAS:\n${catalog}\n\nCONTEXTO: cliente=${context?.client_name || "-"}, pasta=/${fpath || "raiz"}\n\nMENSAGEM DO USUÁRIO:\n${message.slice(0, 1400)}` },
             ],
             temperature: 0,
-            max_tokens: 300,
+            max_tokens: 400,
             response_format: { type: "json_object" },
           }),
         });
@@ -385,9 +393,59 @@ Regras:
             needs_extra_agent: !!parsed.needs_extra_agent,
             recommended_persona_id: parsed.recommended_persona_id && /[0-9a-f-]{36}/i.test(parsed.recommended_persona_id) ? parsed.recommended_persona_id : null,
             reason: String(parsed.reason || ""),
+            web_queries: Array.isArray(parsed.web_queries) ? parsed.web_queries.slice(0, 3).map((q: any) => String(q).slice(0, 120)).filter(Boolean) : [],
           };
         }
       } catch { /* mantém default */ }
+    }
+
+    // Comando explícito /web <query> força busca
+    const forcedWeb = message.match(/^\s*\/web\s+(.+)/i)?.[1]?.trim();
+    if (forcedWeb) orq.web_queries = [forcedWeb, ...orq.web_queries].slice(0, 3);
+
+    // ─── WEB SEARCH (DuckDuckGo HTML) — resultados injetados no contexto ───
+    const webBlocks: string[] = [];
+    if (orq.web_queries.length) {
+      const results = await Promise.all(orq.web_queries.map(async (q) => {
+        try {
+          const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+            headers: { "User-Agent": "Mozilla/5.0 (compatible; AcelerIQ-Studio/1.0)" },
+            signal: AbortSignal.timeout(7000),
+          });
+          if (!r.ok) return { q, items: [] as { title: string; url: string; snippet: string }[] };
+          const html = await r.text();
+          const items: { title: string; url: string; snippet: string }[] = [];
+          const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
+          let m: RegExpExecArray | null;
+          while ((m = re.exec(html)) && items.length < 5) {
+            let url = m[1];
+            const um = url.match(/[?&]uddg=([^&]+)/);
+            if (um) { try { url = decodeURIComponent(um[1]); } catch { /* keep */ } }
+            items.push({
+              url,
+              title: m[2].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 160),
+              snippet: m[3].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 260),
+            });
+          }
+          return { q, items };
+        } catch { return { q, items: [] as { title: string; url: string; snippet: string }[] }; }
+      }));
+      const topReads = await Promise.all(results.flatMap(r => r.items.slice(0, 2).map(async (it) => {
+        try {
+          const rr = await fetch(it.url, { headers: { "User-Agent": "Mozilla/5.0 AcelerIQ-Studio" }, signal: AbortSignal.timeout(5500) });
+          const ct = rr.headers.get("content-type") || "";
+          if (!rr.ok || !/text|html/i.test(ct)) return null;
+          const raw = await rr.text();
+          const clean = raw.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1600);
+          return { url: it.url, title: it.title, excerpt: clean };
+        } catch { return null; }
+      })));
+      results.forEach(r => {
+        if (!r.items.length) { webBlocks.push(`\n### Busca: "${r.q}"\n(sem resultados)`); return; }
+        webBlocks.push(`\n### Busca: "${r.q}"\n${r.items.map(it => `- [${it.title}](${it.url}) — ${it.snippet}`).join("\n")}`);
+      });
+      const reads = topReads.filter(Boolean) as { url: string; title: string; excerpt: string }[];
+      if (reads.length) webBlocks.push(`\n### Leitura das páginas top\n${reads.map(r => `\n#### ${r.title}\n${r.url}\n${r.excerpt}`).join("\n")}`);
     }
 
     // Resolve persona final: prioridade → forcedPersonaId > recomendação do Orq > nenhuma (usa SYSTEM_BASE)
