@@ -1307,7 +1307,7 @@ export default function Workspace() {
             {SMART_TAGS.filter(t => t.key !== "other" || tagCounts.other > 0).map(t => (
               <button
                 key={t.key}
-                onClick={() => setTagFilter(t.key)}
+                onClick={() => enterTagSection(t.key)}
                 title={t.hint}
                 className={cn(
                   "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
