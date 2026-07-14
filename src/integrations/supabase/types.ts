@@ -1107,6 +1107,51 @@ export type Database = {
         }
         Relationships: []
       }
+      project_memory: {
+        Row: {
+          client_id: string
+          content: string
+          created_at: string
+          created_by: string | null
+          id: string
+          kind: string
+          metadata: Json
+          project_id: string | null
+          source: string
+          tags: string[]
+          title: string | null
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          content: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+          project_id?: string | null
+          source?: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          content?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          kind?: string
+          metadata?: Json
+          project_id?: string | null
+          source?: string
+          tags?: string[]
+          title?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       project_payments: {
         Row: {
           client_id: string
