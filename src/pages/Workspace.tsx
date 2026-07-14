@@ -631,14 +631,16 @@ export default function Workspace() {
         toast({ title: "Nada classificável", description: "Arquivos não se encaixam no pipeline." });
         return;
       }
-      // Resolve/cria pastas destino no nível atual
-      const parentId = parent?.id || null;
-      const { data: existing } = await supabase
+      // Resolve/cria pastas destino no nível atual (nunca em tokens virtuais)
+      const parentId = parent?.id && !isVirt(parent.id) ? parent.id : null;
+      let existingQ: any = supabase
         .from("workspace_nodes")
         .select("id, name")
         .eq("scope", scope)
-        .eq("kind", "folder")
-        .is("parent_id", parentId as any);
+        .eq("kind", "folder");
+      existingQ = parentId ? existingQ.eq("parent_id", parentId) : existingQ.is("parent_id", null);
+      if (scope === "client") existingQ = existingQ.eq("client_id", clientId!);
+      const { data: existing } = await existingQ;
       const byName = new Map<string, string>();
       for (const r of (existing || []) as any[]) byName.set((r.name || "").toLowerCase(), r.id);
 
