@@ -227,6 +227,10 @@ export default function Workspace() {
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  // Separate cache for small thumbnail URLs (image transform). Keeping full-res
+  // URLs distinct in `signedUrls` ensures the preview modal never renders the
+  // downscaled cover instead of the actual file.
+  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
