@@ -335,7 +335,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }, [open, minimized]);
 
   // ── Fordista: linkagem com projeto + publicação + PDF ──
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; client_id?: string | null }[]>([]);
+  const [projectClient, setProjectClient] = useState<{ id: string; name: string } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(() => {
     try { return localStorage.getItem(`studio_project_v1:${contextKey}`) || null; } catch { return null; }
   });
