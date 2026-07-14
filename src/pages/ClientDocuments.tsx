@@ -254,7 +254,7 @@ export default function ClientDocuments() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
+              <CarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
               
               {/* Action buttons */}
               <div className="flex items-center gap-2">
