@@ -590,60 +590,232 @@ export type Database = {
         }
         Relationships: []
       }
+      file_content_chunks: {
+        Row: {
+          chunk_index: number
+          client_id: string
+          content_type: string
+          created_at: string
+          file_id: string
+          id: string
+          metadata: Json | null
+          page_number: number | null
+          project_id: string | null
+          search_vector: unknown
+          sheet_name: string | null
+          slide_number: number | null
+          text: string
+        }
+        Insert: {
+          chunk_index: number
+          client_id: string
+          content_type?: string
+          created_at?: string
+          file_id: string
+          id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          project_id?: string | null
+          search_vector?: unknown
+          sheet_name?: string | null
+          slide_number?: number | null
+          text: string
+        }
+        Update: {
+          chunk_index?: number
+          client_id?: string
+          content_type?: string
+          created_at?: string
+          file_id?: string
+          id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          project_id?: string | null
+          search_vector?: unknown
+          sheet_name?: string | null
+          slide_number?: number | null
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_content_chunks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_processing_jobs: {
+        Row: {
+          attempts: number
+          created_at: string
+          file_id: string
+          finished_at: string | null
+          id: string
+          job_type: string
+          last_error: string | null
+          payload: Json | null
+          progress: number
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          attempts?: number
+          created_at?: string
+          file_id: string
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          last_error?: string | null
+          payload?: Json | null
+          progress?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          attempts?: number
+          created_at?: string
+          file_id?: string
+          finished_at?: string | null
+          id?: string
+          job_type?: string
+          last_error?: string | null
+          payload?: Json | null
+          progress?: number
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_processing_jobs_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       files: {
         Row: {
           approval_status: string
+          archived_at: string | null
           caption: string | null
           carousel_text: string | null
           client_id: string
           created_at: string
           description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
           feedback: string | null
           file_name: string
           file_type: string | null
           file_url: string
           folder: string | null
           id: string
+          idempotency_key: string | null
+          mime_type: string | null
+          page_count: number | null
           parent_file_id: string | null
           project_id: string | null
+          requires_approval: boolean | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
           uploaded_by: string
           version: number | null
+          visibility: string | null
         }
         Insert: {
           approval_status?: string
+          archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
           client_id: string
           created_at?: string
           description?: string | null
+          extension?: string | null
+          extracted_metadata?: Json | null
+          extraction_error?: string | null
+          extraction_status?: string | null
           feedback?: string | null
           file_name: string
           file_type?: string | null
           file_url: string
           folder?: string | null
           id?: string
+          idempotency_key?: string | null
+          mime_type?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
           project_id?: string | null
+          requires_approval?: boolean | null
+          sensitivity?: string | null
+          sha256?: string | null
+          sheet_count?: number | null
+          size_bytes?: number | null
+          slide_count?: number | null
+          source?: string | null
+          status?: string | null
+          storage_bucket?: string | null
+          storage_path?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
           uploaded_by: string
           version?: number | null
+          visibility?: string | null
         }
         Update: {
           approval_status?: string
+          archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
           client_id?: string
           created_at?: string
           description?: string | null
+          extension?: string | null
+          extracted_metadata?: Json | null
+          extraction_error?: string | null
+          extraction_status?: string | null
           feedback?: string | null
           file_name?: string
           file_type?: string | null
           file_url?: string
           folder?: string | null
           id?: string
+          idempotency_key?: string | null
+          mime_type?: string | null
+          page_count?: number | null
           parent_file_id?: string | null
           project_id?: string | null
+          requires_approval?: boolean | null
+          sensitivity?: string | null
+          sha256?: string | null
+          sheet_count?: number | null
+          size_bytes?: number | null
+          slide_count?: number | null
+          source?: string | null
+          status?: string | null
+          storage_bucket?: string | null
+          storage_path?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
           uploaded_by?: string
           version?: number | null
+          visibility?: string | null
         }
         Relationships: [
           {
@@ -2349,6 +2521,8 @@ export type Database = {
           read_ct: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       user_owns_project: {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
