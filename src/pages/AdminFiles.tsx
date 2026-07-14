@@ -499,11 +499,30 @@ export default function AdminFiles() {
                 const badge = approvalBadge[f.approval_status] || approvalBadge.none;
                 const carouselChildren = childrenMap.get(f.id) || [];
                 const isCarousel = carouselChildren.length > 0;
+                const ext = (f.file_name?.split(".").pop() || "").toLowerCase();
+                const isImg = ["jpg","jpeg","png","gif","webp","avif","svg"].includes(ext);
+                const isVid = ["mp4","webm","mov","m4v"].includes(ext);
                 return (
-                  <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                  <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-2.5 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
                     <div className="flex items-center gap-3">
-                      <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                      <div className="w-12 h-12 rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative">
+                        {isImg ? (
+                          <img src={f.file_url} alt="" loading="lazy" decoding="async"
+                            className="w-full h-full object-cover"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
+                        ) : isVid ? (
+                          <>
+                            <video src={`${f.file_url}#t=0.1`} muted playsInline preload="metadata"
+                              className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+                              <Film className="w-4 h-4 text-white drop-shadow" />
+                            </div>
+                          </>
+                        ) : (
+                          <Icon className="w-5 h-5 text-muted-foreground" />
+                        )}
+                      </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-[13px] font-medium text-foreground truncate">
@@ -553,7 +572,7 @@ export default function AdminFiles() {
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="sm:hidden mt-2 ml-8">
+                    <div className="sm:hidden mt-2 ml-[60px]">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                     </div>
                   </div>
