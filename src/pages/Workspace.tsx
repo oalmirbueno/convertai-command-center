@@ -333,13 +333,14 @@ export default function Workspace() {
   // Build virtual nodes for current view (root or inside a virtual folder)
   const virtualNodes: Node[] = useMemo(() => {
     if (scope !== "client" || !clientId || !clientFiles?.length) return [];
+    // Exclude carousel children — they render only inside the parent's preview.
+    const parents = (clientFiles as any[]).filter((f) => !f.parent_file_id);
     const currentVirtId = parent?.id;
     const insideVirtFolder = currentVirtId && currentVirtId.startsWith(VIRT_PREFIX + "folder:");
-    // At root of client scope → show virtual folders per distinct `folder` value + orphan files
     if (!parent) {
       const folders = new Map<string, number>();
       const orphans: any[] = [];
-      for (const f of clientFiles as any[]) {
+      for (const f of parents) {
         const fld = (f.folder || "").trim();
         if (fld) folders.set(fld, (folders.get(fld) || 0) + 1);
         else orphans.push(f);
@@ -361,7 +362,7 @@ export default function Workspace() {
     }
     if (insideVirtFolder) {
       const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
-      return (clientFiles as any[])
+      return parents
         .filter((f) => (f.folder || "").trim() === folderName)
         .map((f) => virtFileNode(f, clientId));
     }
