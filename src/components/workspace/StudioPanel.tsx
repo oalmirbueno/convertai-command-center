@@ -2570,38 +2570,49 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
       if (script?.trim()) chunks.push(`## Roteiro em construção\n${script.slice(0, 2000)}`);
 
       const dossier = chunks.join("\n\n") || "(sem dados disponíveis para este escopo)";
+      const clientLabel = clientName || "cliente atual";
+      const projectLabel = projectId ? "o projeto selecionado" : "o cliente como um todo";
+      const scopeSummary = [
+        stats.projects ? `${stats.projects} projeto(s)` : null,
+        stats.tasks ? `${stats.tasks} tarefa(s)` : null,
+        stats.systemFiles ? `${stats.systemFiles} arquivo(s) no sistema` : null,
+        stats.workspaceFiles ? `${stats.workspaceFiles} arquivo(s) no workspace` : null,
+      ].filter(Boolean).join(" · ") || "base ainda enxuta";
       const prompt = [
-        "[MODO ORQUESTRADOR · AUTO-CONTEXTO]",
-        "Você é o Orquestrador de Pré-Produção da AcelerIQ. O sistema já leu tudo do cliente, projetos, tasks, briefing, contratos e pasta atual. Assuma o comando.",
+        `[MODO ORQUESTRADOR AUTÔNOMO — ${clientLabel}]`,
+        `Você é o Diretor de Pré-Produção da AcelerIQ operando sobre ${projectLabel}. Você acabou de ler o dossiê completo (${scopeSummary}). Assuma o comando como se fosse a primeira reunião de kickoff interno da conta.`,
         "",
-        "Regras de formatação (obrigatórias):",
-        "- Responda em Markdown limpo, com hierarquia clara.",
-        "- Use títulos de seção com '## ' (exatamente como abaixo). Nada de MAIÚSCULAS soltas nem asteriscos avulsos.",
-        "- Sem emojis, sem cumprimento, sem repetir o dossiê, sem enrolação.",
-        "- Frases curtas. Uma ideia por linha. Deixe uma linha em branco entre parágrafos e antes/depois de cada lista.",
-        "- Listas numeradas com '1. ', '2. ', '3. '. Listas simples com '- '.",
-        "- Pode usar **negrito** só para destacar 1 a 2 termos por seção. Nada de itálico decorativo.",
+        "PRINCÍPIOS:",
+        `- Fale sempre nomeando ${clientLabel}, o(s) projeto(s), tarefas, briefing, arquivos e datas reais que estão no dossiê. Nunca use frases genéricas do tipo "o cliente" ou "o projeto".`,
+        "- Cite pelo nome ao menos 3 evidências concretas do dossiê (arquivo, tarefa, item do briefing, marco, valor do plano, prazo).",
+        "- Se algo estiver ausente ou inconsistente, aponte com clareza — não invente.",
+        "- Se o pedido pedir dados atuais (mercado, concorrência, notícia, benchmark), diga explicitamente o que buscaria na web e prossiga com a análise do que tem em mãos.",
         "",
-        "Entregue exatamente esta estrutura, nesta ordem:",
+        "FORMATO (Markdown limpo, uma ideia por linha, sem emoji, sem asterisco decorativo):",
         "",
-        "## Diagnóstico",
-        "Até 3 linhas sobre onde o cliente está e o que trava o avanço.",
+        `## Leitura do momento — ${clientLabel}`,
+        "2 a 4 linhas descrevendo onde a conta está agora, com base em plano, status de projetos, briefing e últimos entregáveis.",
         "",
-        "## Lacunas críticas",
-        "Lista numerada das informações que faltam para destravar o próximo entregável.",
+        "## Sinais fortes",
+        "- 3 pontos objetivos do que já está bom (com nome do arquivo/tarefa/entrega que sustenta cada ponto).",
         "",
-        "## Perguntas para você responder",
-        "Entre 3 e 5 perguntas numeradas, diretas, uma frase cada, priorizadas pelo impacto no próximo passo.",
+        "## Riscos e lacunas",
+        "- 3 a 5 pontos do que trava o próximo entregável (tarefas paradas, briefing incompleto, arquivos sem aprovação, prazos vencendo). Nomeie cada evidência.",
         "",
-        "## Próximo entregável sugerido",
-        "Uma linha nomeando o artefato concreto (roteiro, checklist, briefing revisado, plano de gravação, storyboard, etc.).",
+        "## Próximo entregável",
+        "1 linha nomeando o artefato mais valioso agora (ex.: 'Roteiro do Reels de lançamento X', 'Storyboard do carrossel Y', 'Briefing revisado do projeto Z').",
         "",
-        "A cada resposta minha, refine o plano e avance para a próxima etapa mantendo essa mesma estrutura.",
+        "## Perguntas para destravar",
+        "3 a 5 perguntas numeradas, específicas ao contexto, uma frase cada. Nada genérico.",
         "",
-        "----- DOSSIÊ -----",
+        "A cada resposta minha, avance o plano mantendo esse padrão vivo e adaptado à conta.",
+        "",
+        "----- DOSSIÊ REAL -----",
         dossier,
       ].join("\n");
-      await send(prompt, { displayText: "Analisar contexto completo do cliente e do projeto" });
+      await send(prompt, { displayText: `Analisar contexto completo — ${clientLabel}` });
+
+
 
     } catch (e: any) {
       if (!opts.silent) toast({ title: "Falha ao preparar contexto", description: e?.message || "erro", variant: "destructive" });
