@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
+import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
 
 /**
  * Prefetch images into browser cache so carousel navigation is instantaneous.
