@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2 } from "lucide-react";
+import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers, Monitor } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
+import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
 
 /**
  * Prefetch images into browser cache so carousel navigation is instantaneous.
@@ -159,9 +160,17 @@ export const isExternalVideoUrl = (url: string) => !!getVideoEmbedUrl(url);
 interface Props {
   fileName: string;
   fileUrl: string;
+  fileId?: string;
 }
 
-export default function FilePreviewContent({ fileName, fileUrl }: Props) {
+export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props) {
+  const ext = resolveExtension(fileName, fileUrl);
+  const framesKind: "xlsx" | "pptx" | "pdf" | "docx" | null =
+    ["xlsx", "xls", "csv", "ods"].includes(ext) ? "xlsx" :
+    ["pptx", "ppt", "odp"].includes(ext) ? "pptx" :
+    ext === "pdf" ? "pdf" :
+    ["docx", "doc", "odt"].includes(ext) ? "docx" : null;
+  const [tab, setTab] = useState<"viewer" | "frames">("viewer");
   // External video providers (YouTube/Vimeo/Loom/Drive/Wistia) — embed iframe, no storage cost
   const embedUrl = getVideoEmbedUrl(fileUrl);
   if (embedUrl) {
@@ -184,9 +193,43 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     return <InlineImage fileName={fileName} fileUrl={fileUrl} />;
   }
 
+  const canShowFrames = !!fileId && !!framesKind;
+  const DocTabs = canShowFrames ? (
+    <div className="flex items-center gap-1 p-1 bg-secondary/60 border-b border-border">
+      <button
+        onClick={() => setTab("viewer")}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Monitor className="w-3.5 h-3.5" /> Visualizador
+      </button>
+      <button
+        onClick={() => setTab("frames")}
+        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+          tab === "frames" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+        }`}
+      >
+        <Layers className="w-3.5 h-3.5" />
+        {framesKind === "xlsx" ? "Abas" : framesKind === "pptx" ? "Slides" : "Páginas"}
+      </button>
+    </div>
+  ) : null;
+
+  if (canShowFrames && tab === "frames") {
+    return (
+      <div className="rounded-xl overflow-hidden border border-border bg-background">
+        {DocTabs}
+        <ExtractedFramesPreview fileId={fileId!} kind={framesKind!} />
+      </div>
+    );
+  }
+
+
   if (isPdf(fileName, fileUrl)) {
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border">
+        {DocTabs}
         {/* <object> is more reliable than <iframe> for cross-origin PDFs and supports
             inline fallback content for sandboxed environments where PDF plugin is blocked */}
         <object
@@ -236,6 +279,7 @@ export default function FilePreviewContent({ fileName, fileUrl }: Props) {
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-white">
+        {DocTabs}
         <iframe
           src={officeSrc}
           title={fileName}

@@ -1714,5 +1714,5 @@ function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promis
   // Delegate to the shared preview which handles images (zoom), PDFs (with
   // fallback UI), audio, video, and external providers (YouTube/Vimeo/Loom/Drive)
   // uniformly. Extension detection covers files uploaded without a mime type.
-  return <FilePreviewContent fileName={node.name} fileUrl={url} />;
+  return <FilePreviewContent fileName={node.name} fileUrl={url} fileId={node.id} />;
 }
