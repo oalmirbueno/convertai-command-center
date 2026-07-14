@@ -100,6 +100,9 @@ function kickWorker(jobId: string): void {
       }).catch(() => { /* worker will pick it up via cron */ })
     );
   } catch { /* ignore */ }
+}
+
+
 
 // ─── Idempotency (via files.idempotency_key unique index) ─────
 async function findByIdempotency(key: string) {
