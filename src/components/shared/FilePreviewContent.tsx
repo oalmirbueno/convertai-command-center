@@ -229,6 +229,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
   if (isPdf(fileName, fileUrl)) {
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border">
+        {DocTabs}
         {/* <object> is more reliable than <iframe> for cross-origin PDFs and supports
             inline fallback content for sandboxed environments where PDF plugin is blocked */}
         <object
