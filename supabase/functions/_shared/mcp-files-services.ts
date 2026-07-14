@@ -580,7 +580,8 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
   }).select('*').single();
   if (insErr) throw new FileError('validation:invalid_request', insErr.message);
 
-  await db().from('file_processing_jobs').insert({ file_id: newId, job_type: 'extract', payload: { mime_type: input.mime_type } });
+  const { data: vJob } = await db().from('file_processing_jobs').insert({ file_id: newId, job_type: 'extract', payload: { mime_type: input.mime_type } }).select('id').single();
+  if (vJob?.id) kickWorker(vJob.id);
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = newId;
   return _summarize(inserted, { parent_file_id: parent.id });
 }
