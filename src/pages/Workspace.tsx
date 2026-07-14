@@ -1448,6 +1448,11 @@ export default function Workspace() {
                       {n.sent_for_approval_file_id && (
                         <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
                       )}
+                      {!!n.__carousel_count && n.__carousel_count > 0 && (
+                        <span className="absolute bottom-9 left-1.5 z-10 text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-primary/85 text-primary-foreground shadow">
+                          Carrossel · {n.__carousel_count + 1}
+                        </span>
+                      )}
                       <div className={cn(
                         "flex-1 flex items-center justify-center w-full relative overflow-hidden",
                         !cover && `bg-gradient-to-br ${isFolder ? "from-primary/20 via-primary/5 to-transparent" : KIND_META[k].gradient}`
