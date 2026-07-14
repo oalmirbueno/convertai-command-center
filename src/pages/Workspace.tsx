@@ -1421,7 +1421,10 @@ export default function Workspace() {
                         {cover ? (
                           k === "video" ? (
                             <>
-                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata" />
+                              {/* preload="none" evita 20+ requests concorrentes de metadata que saturam
+                                  a banda e atrasam o vídeo que o usuário realmente clica. */}
+                              <video src={`${cover}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />
+
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent flex items-center justify-center">
                                 <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
                                   <Film className="w-5 h-5 text-black" />
@@ -1656,7 +1659,17 @@ function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promis
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
   const m = node.mime || "";
   if (m.startsWith("image/")) return <img src={url} alt={node.name} className="max-h-[60vh] mx-auto rounded-lg" />;
-  if (m.startsWith("video/")) return <video src={url} controls className="w-full max-h-[60vh] rounded-lg bg-black" preload="metadata" />;
+  if (m.startsWith("video/")) return (
+    <video
+      src={url}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      className="w-full max-h-[60vh] rounded-lg bg-black"
+    />
+  );
+
   if (m.startsWith("audio/")) return <audio src={url} controls className="w-full" />;
   if (m === "application/pdf") return <iframe src={url} className="w-full h-[60vh] rounded-lg border border-border" />;
   return <div className="h-40 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
