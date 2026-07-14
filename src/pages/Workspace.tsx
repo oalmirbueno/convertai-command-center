@@ -432,10 +432,10 @@ export default function Workspace() {
   // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
     const list = (filtered || []).filter(n =>
-      n.kind === "file" && !n.__virtual && n.storage_path && !signedUrls[n.storage_path!]
+      n.kind === "file" && !n.__virtual && n.storage_path
     );
-    const imgTargets = list.filter(n => kindOf(n) === "image").slice(0, 60);
-    const vidTargets = list.filter(n => kindOf(n) === "video").slice(0, 24);
+    const imgTargets = list.filter(n => kindOf(n) === "image" && !coverUrls[n.storage_path!]).slice(0, 60);
+    const vidTargets = list.filter(n => kindOf(n) === "video" && !signedUrls[n.storage_path!]).slice(0, 24);
     if (!imgTargets.length && !vidTargets.length) return;
     let alive = true;
     (async () => {
@@ -444,24 +444,26 @@ export default function Workspace() {
         jobs.push((supabase.storage.from("workspace") as any).createSignedUrls(
           imgTargets.map(n => n.storage_path!), 3600,
           { transform: { width: 400, quality: 70, resize: "cover" } }
-        ));
+        ).then((r: any) => ({ kind: "cover", data: r?.data })));
       }
       if (vidTargets.length) {
         jobs.push(supabase.storage.from("workspace").createSignedUrls(
           vidTargets.map(n => n.storage_path!), 3600
-        ));
+        ).then((r: any) => ({ kind: "full", data: r?.data })));
       }
       const results = await Promise.all(jobs);
       if (!alive) return;
-      setSignedUrls(prev => {
-        const next = { ...prev };
-        for (const r of results) {
-          for (const row of (r?.data as any[] | undefined) || []) {
-            if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
-          }
+      const coverPatch: Record<string, string> = {};
+      const fullPatch: Record<string, string> = {};
+      for (const r of results as any[]) {
+        for (const row of (r?.data as any[] | undefined) || []) {
+          if (!row?.signedUrl || !row?.path) continue;
+          if (r.kind === "cover") coverPatch[row.path] = row.signedUrl;
+          else fullPatch[row.path] = row.signedUrl;
         }
-        return next;
-      });
+      }
+      if (Object.keys(coverPatch).length) setCoverUrls(prev => ({ ...prev, ...coverPatch }));
+      if (Object.keys(fullPatch).length) setSignedUrls(prev => ({ ...prev, ...fullPatch }));
     })();
     return () => { alive = false; };
   }, [filtered]);
@@ -471,8 +473,9 @@ export default function Workspace() {
     const k = kindOf(n);
     if (k !== "image" && k !== "video") return null;
     if (n.__virtual) return n.__external_url || null;
-    if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
-    return null;
+    if (!n.storage_path) return null;
+    if (k === "image") return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
+    return signedUrls[n.storage_path] || null;
   };
 
 
