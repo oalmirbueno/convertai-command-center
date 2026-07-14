@@ -485,12 +485,15 @@ export default function Workspace() {
     setApplyingTpl(tpl.id);
     try {
       // Load existing folder names at the target parent to avoid duplicates
-      const { data: existing } = await supabase
+      const parentIdForTpl = parent?.id && !isVirt(parent.id) ? parent.id : null;
+      let existingQ: any = supabase
         .from("workspace_nodes")
         .select("name")
         .eq("scope", scope)
-        .eq("kind", "folder")
-        .is("parent_id", parent?.id || null as any);
+        .eq("kind", "folder");
+      existingQ = parentIdForTpl ? existingQ.eq("parent_id", parentIdForTpl) : existingQ.is("parent_id", null);
+      if (scope === "client") existingQ = existingQ.eq("client_id", clientId!);
+      const { data: existing } = await existingQ;
       const existingNames = new Set((existing || []).map((r: any) => r.name.toLowerCase()));
 
       let created = 0;
