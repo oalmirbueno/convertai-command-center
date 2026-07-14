@@ -2888,12 +2888,29 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
             {onStructureToNotes && (
               <button
                 onClick={() => {
-                  const lastAssistant = [...msgs].reverse().find(m => m.role === "assistant")?.content?.trim() || "";
-                  if (!lastAssistant) { toast({ title: "Nada para enviar", description: "Peça uma análise ao agente primeiro." }); return; }
-                  onStructureToNotes(lastAssistant);
+                  if (!msgs.length) { toast({ title: "Nada para enviar", description: "Comece uma conversa primeiro." }); return; }
+                  // Empacota conversa completa + anexos como uma NOTA bruta para o modo "structure" reorganizar.
+                  const header = [
+                    `# Conversa do Studio`,
+                    `Cliente: ${clientName || "-"} · Pasta: /${folderPath || "raiz"}`,
+                    `Exportado em ${new Date().toLocaleString("pt-BR")}`,
+                    "",
+                  ].join("\n");
+                  const convo = msgs.map(m => {
+                    const who = m.role === "user" ? "**Eu**" : "**Agente**";
+                    return `### ${who}\n\n${(m.content || "").trim()}`;
+                  }).join("\n\n---\n\n");
+                  const atts = attached.length
+                    ? `\n\n---\n\n## Anexos referenciados\n${attached.map(a => `- [${a.name}](${a.url || `wsfile:${a.id}`})${a.meta ? ` · ${a.meta}` : ""}`).join("\n")}`
+                    : "";
+                  // Extrai imagens/URLs mencionadas para preservar prints e links de navegação
+                  const urls = Array.from(new Set((msgs.map(m => m.content).join("\n").match(/https?:\/\/[^\s)]+/g) || [])));
+                  const links = urls.length ? `\n\n## Links citados na conversa\n${urls.slice(0, 30).map(u => `- ${u}`).join("\n")}` : "";
+                  const pkg = header + convo + atts + links;
+                  onStructureToNotes(pkg);
                 }}
                 className="h-7 w-7 flex items-center justify-center rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30 shrink-0"
-                title="Enviar última resposta do agente para as Notas"
+                title="Enviar conversa completa (mensagens, anexos, links, imagens) para as Notas — o agente organiza"
               >
                 <ArrowRight className="w-3.5 h-3.5" />
               </button>
