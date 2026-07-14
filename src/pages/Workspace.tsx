@@ -1744,6 +1744,7 @@ function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promis
 function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
   const ref = storageRefFromFile({ fileUrl: node.__external_url, storageBucket: node.__storage_bucket, storagePath: node.__storage_path });
   const k = kindOf(node);
+  const Icon = iconFor(node);
   const { url } = useResolvedFileUrl({
     fileUrl: cover || node.__external_url,
     storageBucket: cover ? null : ref?.bucket,
@@ -1751,7 +1752,13 @@ function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
     transform: k === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
     expiresIn: 3600,
   });
-  if (!url) return null;
+  if (!url) {
+    return (
+      <div className="absolute inset-0 flex items-center justify-center bg-secondary">
+        <Icon className="h-8 w-8 text-muted-foreground" />
+      </div>
+    );
+  }
   if (k === "video") {
     return <video src={`${url}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />;
   }
