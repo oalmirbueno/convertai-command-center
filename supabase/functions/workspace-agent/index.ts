@@ -170,7 +170,7 @@ Regras absolutas:
             { role: "system", content: sysMap[specialMode] },
             { role: "user", content: raw || "(vazio)" },
           ],
-          temperature: specialMode === "reflow" ? 0.15 : 0.2,
+          ...(/^gpt-5/i.test(model) ? {} : { temperature: specialMode === "reflow" ? 0.15 : 0.2 }),
           ...(specialMode === "enrich" ? { response_format: { type: "json_object" } } : {}),
         }),
       });
