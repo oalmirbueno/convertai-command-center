@@ -2647,6 +2647,14 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     const text = (override ?? input).trim();
     if (!text || streaming) return;
 
+    // ─── Comandos rápidos locais ───
+    // /abrir <url>   → abre modal iframe (não envia para o agente)
+    // /anexar        → abre o picker de arquivos
+    // /web <query>   → segue para o agente (backend força busca)
+    const mAbrir = text.match(/^\/abrir\s+(https?:\/\/\S+)/i);
+    if (mAbrir) { setLinkPreview(mAbrir[1]); setInput(""); return; }
+    if (/^\/anexar\b/i.test(text)) { setPickerOpen(true); setInput(""); return; }
+
 
     let tid = activeId;
     if (!tid) {
