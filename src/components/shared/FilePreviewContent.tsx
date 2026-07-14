@@ -235,18 +235,20 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   const canShowFrames = !!fileId && !!framesKind;
   const DocTabs = canShowFrames ? (
     <div className="flex items-center gap-1 p-1 bg-secondary/60 border-b border-border">
-      <button
-        onClick={() => setTab("viewer")}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-          tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-        }`}
-      >
-        <Monitor className="w-3.5 h-3.5" /> Visualizador
-      </button>
+      {!officeLike && (
+        <button
+          onClick={() => setTab("viewer")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Monitor className="w-3.5 h-3.5" /> Visualizador
+        </button>
+      )}
       <button
         onClick={() => setTab("frames")}
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-          tab === "frames" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          tab === "frames" || officeLike ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
         }`}
       >
         <Layers className="w-3.5 h-3.5" />
