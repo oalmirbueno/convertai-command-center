@@ -475,6 +475,7 @@ Regras:
       preparoBlock,
       deepLines.length ? `\n---BASE COMPLETA DO CLIENTE/PROJETO---\n${deepLines.join("\n")}` : "",
       ctxLines.length ? `\n---CONTEXTO DA SESSÃO---\n${ctxLines.join("\n")}` : "",
+      webBlocks.length ? `\n---PESQUISA WEB EM TEMPO REAL (${new Date().toISOString().slice(0,10)}) ---\nUse APENAS para dados atuais/externos. Cite as fontes entre parênteses (domínio) quando usar.\n${webBlocks.join("\n")}` : "",
     ].filter(Boolean).join("\n\n");
 
     const messages = [
