@@ -928,7 +928,8 @@ export default function Workspace() {
     e.preventDefault(); setDragOverId(null); setDragOverArea(false);
     const nodeId = e.dataTransfer.getData("application/x-ws-node");
     if (nodeId) {
-      const src = (nodes || []).find(x => x.id === nodeId);
+      const pool = [...(nodes || []), ...(virtualNodes || [])];
+      const src = pool.find(x => x.id === nodeId);
       if (src) await moveNode(src, folderId);
       return;
     }
