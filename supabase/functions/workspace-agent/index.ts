@@ -1,4 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory, memoryToPromptBlock } from "../_shared/project-memory-services.ts";
+import { getContextBundle as _sbGetContext, searchCode as _sbSearch, proposeUpdate as _sbPropose } from "../_shared/second-brain-github.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
