@@ -350,6 +350,7 @@ export async function finalizeFileUpload(input: z.infer<typeof finalizeUploadSch
   const { data: job } = await db().from('file_processing_jobs')
     .insert({ file_id: f.id, job_type: 'extract', payload: { mime_type: f.mime_type } })
     .select('id').single();
+  if (job?.id) kickWorker(job.id);
 
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = f.id;
   return {
