@@ -24,6 +24,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
+import { downloadFile } from "@/lib/fileActions";
+import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const FOLDERS = [
   { id: "estrategicos", label: "Estratégicos" },
@@ -51,6 +53,35 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Rejeitado" },
   none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
+
+function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: string }) {
+  const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
+  const Icon = fileIcon(file.file_name);
+  const { url } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform: kind === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  return (
+    <div className={`${className} rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative`}>
+      {url && kind === "image" ? (
+        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+      ) : url && kind === "video" ? (
+        <>
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/25">
+            <Film className="w-5 h-5 text-primary-foreground drop-shadow" />
+          </div>
+        </>
+      ) : (
+        <Icon className="w-7 h-7 text-muted-foreground" />
+      )}
+    </div>
+  );
+}
 
 function CarouselSlider({ files }: { files: any[] }) {
   const [idx, setIdx] = useState(0);
@@ -323,6 +354,10 @@ export default function AdminFiles() {
           file_name: fileName,
           file_url: urlData.publicUrl,
           file_type: isCarousel ? "creative" : uploadType,
+          mime_type: file.type || null,
+          extension: ext || null,
+          storage_bucket: "files",
+          storage_path: path,
           folder: uploadFolder,
           uploaded_by: user.id,
           project_id: uploadProject === "none" ? null : uploadProject || null,
@@ -499,30 +534,11 @@ export default function AdminFiles() {
                 const badge = approvalBadge[f.approval_status] || approvalBadge.none;
                 const carouselChildren = childrenMap.get(f.id) || [];
                 const isCarousel = carouselChildren.length > 0;
-                const ext = (f.file_name?.split(".").pop() || "").toLowerCase();
-                const isImg = ["jpg","jpeg","png","gif","webp","avif","svg"].includes(ext);
-                const isVid = ["mp4","webm","mov","m4v"].includes(ext);
                 return (
-                  <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-2.5 cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                  <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative">
-                        {isImg ? (
-                          <img src={f.file_url} alt="" loading="lazy" decoding="async"
-                            className="w-full h-full object-cover"
-                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = "none"; }} />
-                        ) : isVid ? (
-                          <>
-                            <video src={`${f.file_url}#t=0.1`} muted playsInline preload="metadata"
-                              className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/25">
-                              <Film className="w-4 h-4 text-white drop-shadow" />
-                            </div>
-                          </>
-                        ) : (
-                          <Icon className="w-5 h-5 text-muted-foreground" />
-                        )}
-                      </div>
+                      <FileThumb file={f} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                           <p className="text-[13px] font-medium text-foreground truncate">
@@ -562,17 +578,21 @@ export default function AdminFiles() {
                           ))}
                         </DropdownMenuContent>
                       </DropdownMenu>
-                      <a href={f.file_url} target="_blank" rel="noopener noreferrer"
+                      <button type="button"
                         className="text-muted-foreground hover:text-foreground transition-colors"
-                        onClick={(e) => e.stopPropagation()}>
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
+                          downloadFile(url, f.file_name);
+                        }}>
                         <Download className="w-4 h-4" />
-                      </a>
+                      </button>
                       <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url }); }}
                         className="text-muted-foreground hover:text-destructive transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
-                    <div className="sm:hidden mt-2 ml-[60px]">
+                    <div className="sm:hidden mt-2 ml-[92px]">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                     </div>
                   </div>
@@ -678,9 +698,18 @@ export default function AdminFiles() {
                 <Zap className="w-3 h-3" /> Criar Tarefa
               </Button>
             )}
-            <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" size="sm" className="gap-2"><Download className="w-3.5 h-3.5" /> Baixar</Button>
-            </a>
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              onClick={async () => {
+                if (!previewFile) return;
+                const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
+                downloadFile(url, previewFile.file_name);
+              }}
+            >
+              <Download className="w-3.5 h-3.5" /> Baixar
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

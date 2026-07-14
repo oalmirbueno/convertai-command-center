@@ -1,9 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileText, Film } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { supabase } from "@/integrations/supabase/client";
+import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
-type Slide = { id?: string; file_name: string; file_url: string };
+type Slide = {
+  id?: string;
+  file_name: string;
+  file_url: string;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  mime_type?: string | null;
+  extension?: string | null;
+};
 
 /**
  * Robust carousel preview. Always fetches sibling slides directly from the DB
@@ -26,7 +35,7 @@ export default function CarouselSlider({
     (async () => {
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url")
+        .select("id, file_name, file_url, storage_bucket, storage_path, mime_type, extension")
         .eq("parent_file_id", parent.id)
         .order("file_name", { ascending: true });
       if (!alive) return;
@@ -63,12 +72,30 @@ export default function CarouselSlider({
   const current = files[idx];
   if (!current) return null;
   if (files.length === 1) {
-    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />;
+    return (
+      <FilePreviewContent
+        fileName={current.file_name}
+        fileUrl={current.file_url}
+        fileId={(current as any).id}
+        storageBucket={current.storage_bucket}
+        storagePath={current.storage_path}
+        mimeType={current.mime_type}
+        extension={current.extension}
+      />
+    );
   }
 
   return (
     <div className="relative group">
-      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />
+      <FilePreviewContent
+        fileName={current.file_name}
+        fileUrl={current.file_url}
+        fileId={(current as any).id}
+        storageBucket={current.storage_bucket}
+        storagePath={current.storage_path}
+        mimeType={current.mime_type}
+        extension={current.extension}
+      />
       <button
         type="button"
         aria-label="Anterior"
@@ -99,6 +126,48 @@ export default function CarouselSlider({
       <span className="absolute z-10 top-2 right-2 bg-background/80 text-[10px] px-2 py-0.5 rounded-md text-muted-foreground">
         {idx + 1}/{files.length}
       </span>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1 scrollbar-hidden">
+        {files.map((file, i) => (
+          <button
+            key={file.id || `${file.file_name}-${i}`}
+            type="button"
+            aria-label={`Abrir item ${i + 1}`}
+            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            className={`relative flex w-24 h-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary transition-all ${
+              i === idx ? "border-primary ring-1 ring-primary/50" : "border-border hover:border-primary/40"
+            }`}
+          >
+            <SlideThumb slide={file} />
+            <span className="absolute bottom-1 right-1 rounded bg-background/80 px-1 text-[9px] font-mono text-muted-foreground">
+              {i + 1}
+            </span>
+          </button>
+        ))}
+      </div>
     </div>
   );
+}
+
+function SlideThumb({ slide }: { slide: Slide }) {
+  const kind = mediaKindFromFile(slide.file_name, slide.file_url, slide.mime_type, slide.extension);
+  const { url } = useResolvedFileUrl({
+    fileUrl: slide.file_url,
+    storageBucket: slide.storage_bucket,
+    storagePath: slide.storage_path,
+    transform: kind === "image" ? { width: 320, height: 320, quality: 70, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  if (url && kind === "image") return <img src={url} alt={slide.file_name} loading="lazy" className="h-full w-full object-cover" />;
+  if (url && kind === "video") {
+    return (
+      <>
+        <video src={`${url}#t=0.1`} muted playsInline preload="none" className="h-full w-full object-cover" />
+        <div className="absolute inset-0 flex items-center justify-center bg-background/30">
+          <Film className="h-5 w-5 text-foreground" />
+        </div>
+      </>
+    );
+  }
+  return <FileText className="h-7 w-7 text-muted-foreground" />;
 }

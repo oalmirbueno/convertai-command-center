@@ -3,6 +3,7 @@ import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
+import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 /**
  * Prefetch images into browser cache so carousel navigation is instantaneous.
@@ -161,18 +162,55 @@ interface Props {
   fileName: string;
   fileUrl: string;
   fileId?: string;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+  mimeType?: string | null;
+  extension?: string | null;
 }
 
-export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props) {
-  const ext = resolveExtension(fileName, fileUrl);
+export default function FilePreviewContent({ fileName, fileUrl, fileId, storageBucket, storagePath, mimeType, extension }: Props) {
+  const ext = (extension || resolveExtension(fileName, fileUrl)).replace(/^\./, "").toLowerCase();
+  const mediaKind = mediaKindFromFile(fileName, fileUrl, mimeType, extension);
+  const { url: resolvedUrl, loading: resolvingUrl, error: urlError, reload } = useResolvedFileUrl({
+    fileUrl,
+    storageBucket,
+    storagePath,
+    expiresIn: 3600,
+  });
+  const previewUrl = resolvedUrl || fileUrl;
   const framesKind: "xlsx" | "pptx" | "pdf" | "docx" | null =
     ["xlsx", "xls", "csv", "ods"].includes(ext) ? "xlsx" :
     ["pptx", "ppt", "odp"].includes(ext) ? "pptx" :
     ext === "pdf" ? "pdf" :
     ["docx", "doc", "odt"].includes(ext) ? "docx" : null;
   const [tab, setTab] = useState<"viewer" | "frames">("viewer");
+  const isStorageBacked = !!storagePath || fileUrl?.startsWith("mcp-files://");
+
+  useEffect(() => {
+    setTab("viewer");
+  }, [fileId, ext, mediaKind]);
+
+  if (resolvingUrl && isStorageBacked) {
+    return (
+      <div className="h-64 bg-secondary rounded-xl flex items-center justify-center gap-2 text-xs text-muted-foreground">
+        <Loader2 className="w-4 h-4 animate-spin" /> Carregando arquivo...
+      </div>
+    );
+  }
+
+  if (urlError) {
+    return (
+      <div className="bg-secondary rounded-xl flex flex-col items-center justify-center py-10 gap-3 text-center px-6">
+        <FileText className="w-10 h-10 text-muted-foreground/40" />
+        <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
+        <p className="text-xs text-muted-foreground">Não foi possível carregar o arquivo agora.</p>
+        <Button size="sm" variant="outline" onClick={reload}>Tentar novamente</Button>
+      </div>
+    );
+  }
+
   // External video providers (YouTube/Vimeo/Loom/Drive/Wistia) — embed iframe, no storage cost
-  const embedUrl = getVideoEmbedUrl(fileUrl);
+  const embedUrl = getVideoEmbedUrl(previewUrl);
   if (embedUrl) {
     return (
       <div className="bg-black rounded-xl overflow-hidden">
@@ -189,8 +227,8 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
     );
   }
 
-  if (isImage(fileName, fileUrl)) {
-    return <InlineImage fileName={fileName} fileUrl={fileUrl} />;
+  if (mediaKind === "image" || isImage(fileName, previewUrl)) {
+    return <InlineImage fileName={fileName} fileUrl={previewUrl} />;
   }
 
   const canShowFrames = !!fileId && !!framesKind;
@@ -226,44 +264,27 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
   }
 
 
-  if (isPdf(fileName, fileUrl)) {
+  if (mediaKind === "pdf" || isPdf(fileName, previewUrl)) {
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border">
         {DocTabs}
-        {/* <object> is more reliable than <iframe> for cross-origin PDFs and supports
-            inline fallback content for sandboxed environments where PDF plugin is blocked */}
-        <object
-          data={`${fileUrl}#toolbar=1&navpanes=0&view=FitH`}
-          type="application/pdf"
-          className="w-full h-[70vh] bg-white"
-        >
-          <div className="flex flex-col items-center justify-center gap-3 py-10 px-6 text-center bg-secondary">
-            <FileText className="w-10 h-10 text-muted-foreground" />
-            <p className="text-sm text-foreground font-medium">{fileName}</p>
-            <p className="text-xs text-muted-foreground">
-              A pré-visualização inline não está disponível neste navegador.
-            </p>
-            <div className="flex gap-2 pt-1">
-              <Button size="sm" onClick={() => openFile(fileUrl)} className="gap-1.5">
-                <Eye className="w-3.5 h-3.5" /> Abrir PDF
-              </Button>
-              <Button variant="outline" size="sm" onClick={() => downloadFile(fileUrl, fileName)} className="gap-1.5">
-                <Download className="w-3.5 h-3.5" /> Baixar
-              </Button>
-            </div>
-          </div>
-        </object>
+        <iframe
+          src={`${previewUrl}#toolbar=1&navpanes=0&view=FitH`}
+          title={fileName}
+          className="w-full h-[70vh] bg-white border-0"
+          loading="eager"
+        />
         <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border">
           <button
             type="button"
-            onClick={() => openFile(fileUrl)}
+            onClick={() => openFile(previewUrl)}
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
             <ExternalLink className="w-3 h-3" /> Abrir em nova aba
           </button>
           <button
             type="button"
-            onClick={() => downloadFile(fileUrl, fileName)}
+            onClick={() => downloadFile(previewUrl, fileName)}
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
             <Download className="w-3 h-3" /> Baixar
@@ -273,8 +294,8 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
     );
   }
 
-  if (isOffice(fileName, fileUrl)) {
-    const encoded = encodeURIComponent(fileUrl);
+  if (mediaKind === "office" || isOffice(fileName, previewUrl)) {
+    const encoded = encodeURIComponent(previewUrl);
     const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encoded}`;
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
@@ -297,14 +318,14 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
           </a>
           <button
             type="button"
-            onClick={() => openFile(fileUrl)}
+            onClick={() => openFile(previewUrl)}
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
             <ExternalLink className="w-3 h-3" /> Nova aba
           </button>
           <button
             type="button"
-            onClick={() => downloadFile(fileUrl, fileName)}
+            onClick={() => downloadFile(previewUrl, fileName)}
             className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
           >
             <Download className="w-3 h-3" /> Baixar
@@ -314,11 +335,11 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
     );
   }
 
-  if (isVideo(fileName, fileUrl)) {
+  if (mediaKind === "video" || isVideo(fileName, previewUrl)) {
     return (
       <div className="bg-secondary rounded-xl overflow-hidden p-2">
         <video
-          src={fileUrl}
+          src={previewUrl}
           controls
           playsInline
           preload="metadata"
@@ -328,11 +349,11 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
     );
   }
 
-  if (isAudio(fileName, fileUrl)) {
+  if (mediaKind === "audio" || isAudio(fileName, previewUrl)) {
     return (
       <div className="bg-secondary rounded-xl p-6 flex flex-col items-center gap-3">
         <p className="text-sm font-medium text-foreground text-center break-all">{fileName}</p>
-        <audio src={fileUrl} controls className="w-full" />
+        <audio src={previewUrl} controls className="w-full" />
       </div>
     );
   }
@@ -348,10 +369,10 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
         <p className="text-xs text-muted-foreground">Pré-visualização não disponível neste formato</p>
       </div>
       <div className="flex gap-2">
-        <Button variant="outline" size="sm" onClick={() => openFile(fileUrl)} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => openFile(previewUrl)} className="gap-1.5">
           <Eye className="w-3.5 h-3.5" /> Abrir
         </Button>
-        <Button variant="outline" size="sm" onClick={() => downloadFile(fileUrl, fileName)} className="gap-1.5">
+        <Button variant="outline" size="sm" onClick={() => downloadFile(previewUrl, fileName)} className="gap-1.5">
           <Download className="w-3.5 h-3.5" /> Baixar
         </Button>
       </div>

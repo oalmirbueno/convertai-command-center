@@ -33,6 +33,7 @@ import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
+import { mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -44,6 +45,10 @@ type Node = {
   __virtual?: boolean;
   __external_url?: string | null;
   __file_id?: string | null;
+  __storage_bucket?: string | null;
+  __storage_path?: string | null;
+  __mime_type?: string | null;
+  __extension?: string | null;
   __approval_status?: string | null;
   __carousel_count?: number;
 };
@@ -64,12 +69,9 @@ const iconFor = (n: Node) => {
 type MediaKind = "image" | "video" | "audio" | "doc" | "other";
 function kindOf(n: Node): MediaKind {
   if (n.kind === "folder") return "other";
-  const m = (n.mime || "").toLowerCase();
-  const name = (n.name || "").toLowerCase();
-  if (m.startsWith("image/") || /\.(png|jpe?g|gif|webp|svg|avif|bmp)$/.test(name)) return "image";
-  if (m.startsWith("video/") || /\.(mp4|mov|webm|mkv|avi|m4v)$/.test(name)) return "video";
-  if (m.startsWith("audio/") || /\.(mp3|wav|ogg|m4a|flac)$/.test(name)) return "audio";
-  if (m.includes("pdf") || /\.(pdf|docx?|xlsx?|pptx?|txt|md|csv)$/.test(name)) return "doc";
+  const k = mediaKindFromFile(n.name, n.__external_url || undefined, n.__mime_type || n.mime, n.__extension);
+  if (k === "image" || k === "video" || k === "audio") return k;
+  if (k === "pdf" || k === "office") return "doc";
   return "other";
 }
 const KIND_META: Record<MediaKind, { label: string; color: string; gradient: string; accent: string }> = {
@@ -158,7 +160,7 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
   // Normalize `file_type` — legacy rows may store a bare extension ("mp4")
   // instead of a full MIME. Fall back to extension inference so kindOf and
   // FilePreview recognize videos/images correctly.
-  const rawType = (f.file_type || "").toLowerCase();
+  const rawType = (f.mime_type || f.file_type || "").toLowerCase();
   let mime: string | null = rawType || null;
   if (mime && !mime.includes("/")) {
     if (["mp4","mov","webm","mkv","m4v"].includes(mime)) mime = `video/${mime}`;
@@ -175,6 +177,10 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
     sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
     created_by: f.uploaded_by || null, created_at: f.created_at,
     __virtual: true, __external_url: f.file_url, __file_id: f.id,
+    __storage_bucket: f.storage_bucket || null,
+    __storage_path: f.storage_path || null,
+    __mime_type: f.mime_type || null,
+    __extension: f.extension || null,
     __approval_status: f.approval_status,
     __carousel_count: carouselCount,
   };
@@ -320,7 +326,7 @@ export default function Workspace() {
       // and show every slide inside the preview.
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by, parent_file_id")
+        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, created_at, uploaded_by, parent_file_id")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       return data || [];
@@ -473,7 +479,7 @@ export default function Workspace() {
     if (n.kind !== "file") return null;
     const k = kindOf(n);
     if (k !== "image" && k !== "video") return null;
-    if (n.__virtual) return n.__external_url || null;
+    if (n.__virtual) return null;
     if (!n.storage_path) return null;
     if (k === "image") return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
     return signedUrls[n.storage_path] || null;
@@ -501,7 +507,9 @@ export default function Workspace() {
   }
 
   async function urlFor(n: Node): Promise<string> {
-    if (n.__virtual) return n.__external_url || "";
+    if (n.__virtual) {
+      return resolveFileUrl({ fileUrl: n.__external_url, storageBucket: n.__storage_bucket, storagePath: n.__storage_path });
+    }
     if (n.storage_path) return signedUrl(n.storage_path);
     return "";
   }
@@ -1465,12 +1473,10 @@ export default function Workspace() {
                         "flex-1 flex items-center justify-center w-full relative overflow-hidden",
                         !cover && `bg-gradient-to-br ${isFolder ? "from-primary/20 via-primary/5 to-transparent" : KIND_META[k].gradient}`
                       )}>
-                        {cover ? (
+                        {cover || (n.__virtual && (k === "image" || k === "video")) ? (
                           k === "video" ? (
                             <>
-                              {/* preload="none" evita 20+ requests concorrentes de metadata que saturam
-                                  a banda e atrasam o vídeo que o usuário realmente clica. */}
-                              <video src={`${cover}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />
+                              <WorkspaceThumb node={n} cover={cover} />
 
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent flex items-center justify-center">
                                 <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
@@ -1479,7 +1485,7 @@ export default function Workspace() {
                               </div>
                             </>
                           ) : (
-                            <img src={cover} alt={n.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />
+                            <WorkspaceThumb node={n} cover={cover} />
                           )
                         ) : (
                           <>
@@ -1563,7 +1569,15 @@ export default function Workspace() {
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
               {selected.__virtual && selected.__file_id && (virtChildrenMap.get(selected.__file_id)?.length || 0) > 0 ? (
                 <SharedCarouselSlider
-                  parent={{ id: selected.__file_id, file_name: selected.name, file_url: selected.__external_url || "" }}
+                  parent={{
+                    id: selected.__file_id,
+                    file_name: selected.name,
+                    file_url: selected.__external_url || "",
+                    storage_bucket: selected.__storage_bucket,
+                    storage_path: selected.__storage_path,
+                    mime_type: selected.__mime_type,
+                    extension: selected.__extension,
+                  }}
                   initialChildren={virtChildrenMap.get(selected.__file_id) || []}
                 />
               ) : (
@@ -1709,10 +1723,37 @@ export default function Workspace() {
 
 function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promise<string> }) {
   const [url, setUrl] = useState("");
-  useEffect(() => { setUrl(""); getUrl(node).then(setUrl); }, [node.id]);
+  useEffect(() => { setUrl(""); getUrl(node).then(setUrl).catch(() => setUrl("")); }, [node.id]);
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
   // Delegate to the shared preview which handles images (zoom), PDFs (with
   // fallback UI), audio, video, and external providers (YouTube/Vimeo/Loom/Drive)
   // uniformly. Extension detection covers files uploaded without a mime type.
-  return <FilePreviewContent fileName={node.name} fileUrl={url} fileId={node.id} />;
+  return (
+    <FilePreviewContent
+      fileName={node.name}
+      fileUrl={url}
+      fileId={node.__file_id || node.id}
+      storageBucket={node.__storage_bucket}
+      storagePath={node.__storage_path}
+      mimeType={node.__mime_type || node.mime}
+      extension={node.__extension}
+    />
+  );
+}
+
+function WorkspaceThumb({ node, cover }: { node: Node; cover: string | null }) {
+  const ref = storageRefFromFile({ fileUrl: node.__external_url, storageBucket: node.__storage_bucket, storagePath: node.__storage_path });
+  const k = kindOf(node);
+  const { url } = useResolvedFileUrl({
+    fileUrl: cover || node.__external_url,
+    storageBucket: cover ? null : ref?.bucket,
+    storagePath: cover ? null : ref?.path,
+    transform: k === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+  if (!url) return null;
+  if (k === "video") {
+    return <video src={`${url}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />;
+  }
+  return <img src={url} alt={node.name} loading="lazy" className="absolute inset-0 w-full h-full object-cover" />;
 }
