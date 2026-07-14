@@ -31,6 +31,7 @@ import { TemplatePicker } from "@/components/workspace/TemplatePicker";
 import { WorkspaceTemplate, TplNode } from "@/lib/workspaceTemplates";
 import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 
 type Node = {
@@ -227,6 +228,10 @@ export default function Workspace() {
   const [newFolderName, setNewFolderName] = useState("");
   const uploads = useWorkspaceUploads();
   const [signedUrls, setSignedUrls] = useState<Record<string, string>>({});
+  // Separate cache for small thumbnail URLs (image transform). Keeping full-res
+  // URLs distinct in `signedUrls` ensures the preview modal never renders the
+  // downscaled cover instead of the actual file.
+  const [coverUrls, setCoverUrls] = useState<Record<string, string>>({});
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
@@ -428,10 +433,10 @@ export default function Workspace() {
   // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
     const list = (filtered || []).filter(n =>
-      n.kind === "file" && !n.__virtual && n.storage_path && !signedUrls[n.storage_path!]
+      n.kind === "file" && !n.__virtual && n.storage_path
     );
-    const imgTargets = list.filter(n => kindOf(n) === "image").slice(0, 60);
-    const vidTargets = list.filter(n => kindOf(n) === "video").slice(0, 24);
+    const imgTargets = list.filter(n => kindOf(n) === "image" && !coverUrls[n.storage_path!]).slice(0, 60);
+    const vidTargets = list.filter(n => kindOf(n) === "video" && !signedUrls[n.storage_path!]).slice(0, 24);
     if (!imgTargets.length && !vidTargets.length) return;
     let alive = true;
     (async () => {
@@ -440,24 +445,26 @@ export default function Workspace() {
         jobs.push((supabase.storage.from("workspace") as any).createSignedUrls(
           imgTargets.map(n => n.storage_path!), 3600,
           { transform: { width: 400, quality: 70, resize: "cover" } }
-        ));
+        ).then((r: any) => ({ kind: "cover", data: r?.data })));
       }
       if (vidTargets.length) {
         jobs.push(supabase.storage.from("workspace").createSignedUrls(
           vidTargets.map(n => n.storage_path!), 3600
-        ));
+        ).then((r: any) => ({ kind: "full", data: r?.data })));
       }
       const results = await Promise.all(jobs);
       if (!alive) return;
-      setSignedUrls(prev => {
-        const next = { ...prev };
-        for (const r of results) {
-          for (const row of (r?.data as any[] | undefined) || []) {
-            if (row?.signedUrl && row?.path) next[row.path] = row.signedUrl;
-          }
+      const coverPatch: Record<string, string> = {};
+      const fullPatch: Record<string, string> = {};
+      for (const r of results as any[]) {
+        for (const row of (r?.data as any[] | undefined) || []) {
+          if (!row?.signedUrl || !row?.path) continue;
+          if (r.kind === "cover") coverPatch[row.path] = row.signedUrl;
+          else fullPatch[row.path] = row.signedUrl;
         }
-        return next;
-      });
+      }
+      if (Object.keys(coverPatch).length) setCoverUrls(prev => ({ ...prev, ...coverPatch }));
+      if (Object.keys(fullPatch).length) setSignedUrls(prev => ({ ...prev, ...fullPatch }));
     })();
     return () => { alive = false; };
   }, [filtered]);
@@ -467,8 +474,9 @@ export default function Workspace() {
     const k = kindOf(n);
     if (k !== "image" && k !== "video") return null;
     if (n.__virtual) return n.__external_url || null;
-    if (n.storage_path && signedUrls[n.storage_path]) return signedUrls[n.storage_path];
-    return null;
+    if (!n.storage_path) return null;
+    if (k === "image") return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
+    return signedUrls[n.storage_path] || null;
   };
 
 
@@ -1701,24 +1709,10 @@ export default function Workspace() {
 
 function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promise<string> }) {
   const [url, setUrl] = useState("");
-  useEffect(() => { getUrl(node).then(setUrl); }, [node.id]);
+  useEffect(() => { setUrl(""); getUrl(node).then(setUrl); }, [node.id]);
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
-  const m = node.mime || "";
-  if (m.startsWith("image/")) return <img src={url} alt={node.name} className="max-h-[60vh] mx-auto rounded-lg" />;
-  if (m.startsWith("video/")) return (
-    <video
-      src={url}
-      controls
-      autoPlay
-      playsInline
-      preload="auto"
-      className="w-full max-h-[60vh] rounded-lg bg-black"
-    />
-  );
-
-  if (m.startsWith("audio/")) return <audio src={url} controls className="w-full" />;
-  if (m === "application/pdf") return <iframe src={url} className="w-full h-[60vh] rounded-lg border border-border" />;
-  return <div className="h-40 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
-    <FileText className="w-8 h-8 opacity-40" /> Sem preview disponível. Use "Abrir" ou "Baixar".
-  </div>;
+  // Delegate to the shared preview which handles images (zoom), PDFs (with
+  // fallback UI), audio, video, and external providers (YouTube/Vimeo/Loom/Drive)
+  // uniformly. Extension detection covers files uploaded without a mime type.
+  return <FilePreviewContent fileName={node.name} fileUrl={url} />;
 }
