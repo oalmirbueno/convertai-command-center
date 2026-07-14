@@ -68,47 +68,57 @@ Deno.serve(async (req) => {
     const preview = await req.clone().json().catch(() => ({} as any));
     const specialMode = preview?.mode as "structure" | "enrich" | "reflow" | undefined;
     if (specialMode === "structure" || specialMode === "enrich" || specialMode === "reflow") {
-      const raw = String(preview?.text || "").slice(0, 12000);
+      const raw = String(preview?.text || "").slice(0, 32000);
       const ctxName = preview?.context?.client_name || "Global";
       const folderP = preview?.context?.folder_path || "raiz";
       const openaiKey = Deno.env.get("OPENAI_API_KEY");
       const lovableKey = Deno.env.get("LOVABLE_API_KEY");
       const url = openaiKey ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
       const key = openaiKey || lovableKey;
-      const model = openaiKey ? "gpt-4o-mini" : "google/gemini-2.5-flash-lite";
+      const model = openaiKey
+        ? (specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini")
+        : "google/gemini-2.5-flash";
       if (!key) return json({ error: "sem_motor" }, 500);
 
-      const sysStructure = `Você reescreve o texto do usuário como uma NOTA EXECUTIVA da AcelerIQ, com hierarquia visual clara. Devolva APENAS markdown, sem cercas, seguindo EXATAMENTE este layout:
+      const sysStructure = `Você é EDITOR EXECUTIVO da AcelerIQ. Recebe conversas cruas do Studio (mensagens do usuário e do agente, com anexos, links, imagens/prints em markdown ![](url), buscas web e trechos de navegação) e devolve uma NOTA de trabalho pronta, bonita e organizada. Devolva APENAS markdown, sem cercas \`\`\`, seguindo EXATAMENTE este layout:
 
 # {Título curto e específico}
-_{Subtítulo em 1 linha — contexto ou tese central}_
+_{Subtítulo em 1 linha — tese central da conversa}_
 
-## Resumo
-{3–5 linhas objetivas. O que é, para quem, por quê agora.}
+## Resumo da conversa
+{4–7 linhas objetivas: o que foi discutido, decidido e por quê. Escreva como quem organiza a mesa depois da reunião.}
 
-## Hipóteses
-- {hipótese 1 — verificável}
-- {hipótese 2}
-- {hipótese 3}
+## Decisões
+- {decisão tomada — quem decidiu, com que base}
+
+## Hipóteses e insights
+- {hipótese ou insight verificável}
 
 ## Plano
-1. {passo} — entrega: {o que sai}
-2. {passo} — entrega: {o que sai}
-3. {passo} — entrega: {o que sai}
+1. {passo} — entrega: {o que sai} · responsável: {quem} · prazo: {relativo}
 
 ## Próximos passos
 - [ ] {ação} · responsável: {quem} · prazo: {relativo}
-- [ ] {ação} · responsável: {quem} · prazo: {relativo}
 
-## Links e anexos
-- [{nome}]({url}) — {para que serve}
+## Referências e material
+{Preserve TODOS os links, imagens (![](url)), prints, e arquivos citados. Agrupe por tipo:}
+### Imagens e prints
+{repita cada ![alt](url) da conversa; se não houver, escreva "{{sem imagens}}"}
+### Links e navegação
+- [{título ou hostname}]({url}) — {para que serve}
+### Arquivos do workspace
+- [{nome}](wsfile:{id}) — {para que serve}
 
-Regras:
-- Preserve toda informação do usuário; só reorganize e clarifique.
-- Se uma seção não tiver base no texto, mantenha o título e escreva "{{a definir}}" — nunca invente dados.
-- Máximo 5 hipóteses, 6 passos no plano, 8 próximos passos, 8 links.
-- Sem emoji decorativo, sem "vamos juntos", sem asterisco solto como enfeite.
+## Trilha da conversa
+{Bullet points curtos, cronológicos, do que Eu perguntei e o que o Agente respondeu — max 12 bullets. Preserve nuance.}
+
+Regras absolutas:
+- Preserve 100% da informação técnica; só reorganize, clarifique e conecte frases soltas.
+- Nunca remova imagens ou links citados. Reprisar ![](url) exatamente como veio.
+- Se uma seção não tiver base, mantenha o título e escreva "{{a definir}}" — nunca invente dados.
+- Sem emoji decorativo, sem asterisco de enfeite, sem "vamos juntos".
 - Cliente: ${ctxName}. Pasta: /${folderP}.`;
+
 
       const sysEnrich = `Você enriquece um documento em andamento. Devolve APENAS JSON válido:
 {"checklist":["item"],"next_actions":["ação com responsável e prazo"],"suggestion":"1-2 linhas sugerindo o próximo bloco"}
