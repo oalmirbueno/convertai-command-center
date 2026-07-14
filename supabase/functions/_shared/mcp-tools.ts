@@ -148,7 +148,7 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
     'workspace:read', 'contracts:read',
   ],
   'aceleriq:write': [
-    'projects:write', 'tasks:write', 'reports:write',
+    'projects:write', 'tasks:write', 'reports:write', 'files:write',
   ],
 };
 
