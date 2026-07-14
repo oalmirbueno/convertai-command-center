@@ -345,7 +345,7 @@ Regras absolutas:
     const lovableKey0 = Deno.env.get("LOVABLE_API_KEY");
     const routerKey = openaiKey0 || lovableKey0;
     const routerUrl = openaiKey0 ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const routerModel = openaiKey0 ? "gpt-4o-mini" : "google/gemini-2.5-flash";
+    const routerModel = openaiKey0 ? "gpt-5-mini" : "google/gemini-2.5-flash";
 
     type Orq = {
       intent: string;
@@ -501,8 +501,11 @@ Regras:
     const chain: Provider[] = [];
     if (openaiKey) {
       const oaiHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` };
+      // Prioridade: GPT-5 (raciocínio topo) → GPT-5-mini (rápido/barato) → GPT-4.1 (fallback estável) → 4o-mini (último recurso)
       chain.push(
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o", label: "openai/gpt-4o" },
+        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-5", label: "openai/gpt-5" },
+        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-5-mini", label: "openai/gpt-5-mini" },
+        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4.1", label: "openai/gpt-4.1" },
         { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o-mini", label: "openai/gpt-4o-mini" },
       );
     }
