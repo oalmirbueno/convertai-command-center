@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Loader2, FileSpreadsheet, Presentation, FileText, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
   const [status, setStatus] = useState<string | null>(null);
   const [reprocessing, setReprocessing] = useState(false);
 
-  const load = async () => {
+  const load = useCallback(async () => {
     setLoading(true);
     const [{ data: file }, { data }] = await Promise.all([
       supabase.from("files").select("extraction_status, extraction_error").eq("id", fileId).maybeSingle(),
@@ -47,11 +47,11 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
     setChunks((data as Chunk[]) || []);
     setActiveIdx(0);
     setLoading(false);
-  };
+  }, [fileId]);
 
-  useEffect(() => { load(); /* eslint-disable-next-line */ }, [fileId]);
+  useEffect(() => { load(); }, [load]);
 
-  const reprocess = async () => {
+  const reprocess = useCallback(async () => {
     setReprocessing(true);
     try {
       await supabase.functions.invoke("mcp-files-worker", { body: { file_id: fileId, force: true } });
@@ -59,7 +59,16 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
     } finally {
       setReprocessing(false);
     }
-  };
+  }, [fileId, load]);
+
+  useEffect(() => {
+    if (loading || chunks.length > 0 || reprocessing) return;
+    if (["processing", "queued"].includes(status || "")) {
+      const timer = window.setTimeout(load, 2500);
+      return () => window.clearTimeout(timer);
+    }
+    reprocess();
+  }, [chunks.length, load, loading, reprocess, reprocessing, status]);
 
   const meta = KIND_META[kind];
   const Icon = meta.icon;

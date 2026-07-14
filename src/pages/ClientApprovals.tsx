@@ -17,10 +17,11 @@ import {
 import { FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
+import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
-  approved: { cls: "bg-success/10 text-success border-success/20", label: "✓ Aprovado" },
+  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
+  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado" },
   rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajuste Solicitado" },
 };
 
@@ -45,7 +46,36 @@ const isImage = (name: string, url?: string) => {
 
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
-function CarouselPreview({ images, small }: { images: { file_url: string; file_name: string }[]; small?: boolean }) {
+function ApprovalFileThumb({ file, className = "w-full h-full" }: { file: any; className?: string }) {
+  const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
+  const Icon = fileIcon(file.file_name);
+  const { url } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform: kind === "image" ? { width: 640, height: 640, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  return (
+    <div className={`${className} bg-secondary flex items-center justify-center overflow-hidden relative`}>
+      {url && kind === "image" ? (
+        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+      ) : url && kind === "video" ? (
+        <>
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-background/25">
+            <Film className="w-5 h-5 text-foreground" />
+          </div>
+        </>
+      ) : (
+        <Icon className="w-10 h-10 text-muted-foreground/40" />
+      )}
+    </div>
+  );
+}
+
+function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) {
   const [idx, setIdx] = useState(0);
   if (images.length === 0) return null;
   const current = images[idx];
@@ -54,11 +84,7 @@ function CarouselPreview({ images, small }: { images: { file_url: string; file_n
   return (
     <div className="relative group">
       <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
-        {isImage(current.file_name, current.file_url) ? (
-          <img src={current.file_url} alt={current.file_name} className={small ? "w-full h-full object-cover" : "max-w-full max-h-[400px] object-contain"} />
-        ) : (
-          <FileText className="w-12 h-12 text-muted-foreground/30" />
-        )}
+        <ApprovalFileThumb file={current} />
       </div>
       {images.length > 1 && (
         <>
@@ -302,7 +328,15 @@ export default function ClientApprovals() {
             return (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <div className="relative">
-                <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+                <FilePreviewContent
+                  fileName={current.file_name}
+                  fileUrl={current.file_url}
+                  fileId={current.id}
+                  storageBucket={current.storage_bucket}
+                  storagePath={current.storage_path}
+                  mimeType={current.mime_type || current.file_type}
+                  extension={current.extension}
+                />
                 {items.length > 1 && (
                   <>
                     <button type="button"
@@ -327,23 +361,23 @@ export default function ClientApprovals() {
                   {items.map((cf: any, i: number) => (
                     <button key={cf.id} onClick={() => setIdx(i)}
                       className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === currentIdx ? "border-primary ring-1 ring-primary/30" : "border-border opacity-60 hover:opacity-100"}`}>
-                      {isImage(cf.file_name, cf.file_url) ? (
-                        <img src={cf.file_url} alt={cf.file_name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-secondary flex items-center justify-center">
-                          <FileText className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      )}
+                      <ApprovalFileThumb file={cf} />
                     </button>
                   ))}
                 </div>
               )}
 
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(current.file_url)}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: current.file_url, storageBucket: current.storage_bucket, storagePath: current.storage_path });
+                  openFile(url);
+                }}>
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => downloadFile(current.file_url, current.file_name)}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: current.file_url, storageBucket: current.storage_bucket, storagePath: current.storage_path });
+                  downloadFile(url, current.file_name);
+                }}>
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
               </div>

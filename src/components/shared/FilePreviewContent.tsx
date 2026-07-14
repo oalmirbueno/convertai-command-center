@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers, Monitor } from "lucide-react";
+import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers, Monitor, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
@@ -171,6 +171,7 @@ interface Props {
 export default function FilePreviewContent({ fileName, fileUrl, fileId, storageBucket, storagePath, mimeType, extension }: Props) {
   const ext = (extension || resolveExtension(fileName, fileUrl)).replace(/^\./, "").toLowerCase();
   const mediaKind = mediaKindFromFile(fileName, fileUrl, mimeType, extension);
+  const officeLike = mediaKind === "office" || OFFICE_EXTS.includes(ext) || isOffice(fileName, fileUrl);
   const { url: resolvedUrl, loading: resolvingUrl, error: urlError, reload } = useResolvedFileUrl({
     fileUrl,
     storageBucket,
@@ -187,8 +188,8 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   const isStorageBacked = !!storagePath || fileUrl?.startsWith("mcp-files://");
 
   useEffect(() => {
-    setTab("viewer");
-  }, [fileId, ext, mediaKind]);
+    setTab((mediaKind === "office" || isOffice(fileName, fileUrl)) && fileId ? "frames" : "viewer");
+  }, [fileId, ext, mediaKind, fileName, fileUrl]);
 
   if (resolvingUrl && isStorageBacked) {
     return (
@@ -234,18 +235,20 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
   const canShowFrames = !!fileId && !!framesKind;
   const DocTabs = canShowFrames ? (
     <div className="flex items-center gap-1 p-1 bg-secondary/60 border-b border-border">
-      <button
-        onClick={() => setTab("viewer")}
-        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-          tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-        }`}
-      >
-        <Monitor className="w-3.5 h-3.5" /> Visualizador
-      </button>
+      {!officeLike && (
+        <button
+          onClick={() => setTab("viewer")}
+          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
+            tab === "viewer" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Monitor className="w-3.5 h-3.5" /> Visualizador
+        </button>
+      )}
       <button
         onClick={() => setTab("frames")}
         className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${
-          tab === "frames" ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
+          tab === "frames" || officeLike ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
         }`}
       >
         <Layers className="w-3.5 h-3.5" />
@@ -254,7 +257,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     </div>
   ) : null;
 
-  if (canShowFrames && tab === "frames") {
+  if (canShowFrames && (tab === "frames" || officeLike)) {
     return (
       <div className="rounded-xl overflow-hidden border border-border bg-background">
         {DocTabs}
@@ -294,40 +297,35 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     );
   }
 
-  if (mediaKind === "office" || isOffice(fileName, previewUrl)) {
+  if (officeLike) {
     const encoded = encodeURIComponent(previewUrl);
-    const officeSrc = `https://view.officeapps.live.com/op/embed.aspx?src=${encoded}`;
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
-      <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-white">
-        {DocTabs}
-        <iframe
-          src={officeSrc}
-          title={fileName}
-          className="w-full h-[70vh] border-0 bg-white"
-          allow="fullscreen"
-        />
-        <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border">
-          <a
-            href={gviewSrc}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-          >
-            <Eye className="w-3 h-3" /> Abrir visualizador alternativo
+      <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-card">
+        <div className="min-h-[320px] flex flex-col items-center justify-center gap-4 px-6 py-12 text-center bg-secondary/30">
+          <div className="w-16 h-16 rounded-2xl bg-background border border-border flex items-center justify-center">
+            <FileText className="w-8 h-8 text-muted-foreground" />
+          </div>
+          <div className="space-y-1 max-w-md">
+            <p className="text-sm font-medium text-foreground break-all">{fileName}</p>
+            <p className="text-xs text-muted-foreground">
+              Este arquivo precisa ser processado para aparecer como páginas internas. Enquanto isso, você pode abrir ou baixar o original.
+            </p>
+          </div>
+          {fileId && framesKind && (
+            <Button size="sm" variant="outline" onClick={() => setTab("frames")} className="gap-1.5">
+              <RefreshCw className="w-3.5 h-3.5" /> Ver processamento
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center justify-center gap-4 py-2 bg-secondary/50 border-t border-border flex-wrap">
+          <a href={gviewSrc} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
+            <Eye className="w-3 h-3" /> Visualizador alternativo
           </a>
-          <button
-            type="button"
-            onClick={() => openFile(previewUrl)}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-          >
+          <button type="button" onClick={() => openFile(previewUrl)} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
             <ExternalLink className="w-3 h-3" /> Nova aba
           </button>
-          <button
-            type="button"
-            onClick={() => downloadFile(previewUrl, fileName)}
-            className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline"
-          >
+          <button type="button" onClick={() => downloadFile(previewUrl, fileName)} className="inline-flex items-center gap-1.5 text-xs text-primary hover:underline">
             <Download className="w-3 h-3" /> Baixar
           </button>
         </div>
