@@ -357,13 +357,42 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => {
     let cancel = false;
     (async () => {
-      let q = supabase.from("projects").select("id, name").order("created_at", { ascending: false }).limit(50);
+      let q = supabase.from("projects").select("id, name, client_id").order("created_at", { ascending: false }).limit(50);
       if (clientId) q = q.eq("client_id", clientId);
       const { data } = await q;
       if (!cancel) setProjects((data as any) || []);
     })();
     return () => { cancel = true; };
   }, [clientId]);
+
+  // Resolve o cliente do projeto selecionado (usado quando o usuário está em
+  // escopo "Global" mas escolhe um projeto: o agente precisa herdar o cliente).
+  useEffect(() => {
+    let cancel = false;
+    if (!projectId) { setProjectClient(null); return; }
+    const local = projects.find(p => p.id === projectId);
+    (async () => {
+      let cid = local?.client_id || null;
+      if (!cid) {
+        const { data } = await supabase.from("projects").select("client_id").eq("id", projectId).maybeSingle();
+        cid = (data as any)?.client_id || null;
+      }
+      if (!cid) { if (!cancel) setProjectClient(null); return; }
+      const { data: prof } = await supabase.from("profiles").select("id, full_name, company_name").eq("id", cid).maybeSingle();
+      if (cancel) return;
+      const name = (prof as any)?.company_name || (prof as any)?.full_name || "Cliente";
+      setProjectClient({ id: cid, name });
+    })();
+    return () => { cancel = true; };
+  }, [projectId, projects]);
+
+  const effectiveClientId = clientId || projectClient?.id || null;
+  const effectiveClientName = clientName || projectClient?.name || contextLabel;
+  const activeProjectName = projects.find(p => p.id === projectId)?.name || null;
+  const scopeChipLabel = activeProjectName
+    ? `${projectClient?.name || clientName || contextLabel} › ${activeProjectName}`
+    : contextLabel;
+
 
   // ── Sincronização bidirecional em tempo real ──
   // Refs internas para evitar loops entre save e realtime e preservar edições locais
