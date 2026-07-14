@@ -553,6 +553,53 @@ export default function Workspace() {
     return PIPELINE_TARGETS[tag];
   }
 
+  // Friendly section names displayed as tag chips → folder mapping.
+  const TAG_SECTION_NAME: Record<SmartTag, string | null> = {
+    carrossel: "Carrossel",
+    "video-ready": "Vídeos prontos",
+    material: "Brutos",
+    static: "Estáticos",
+    doc: "Documentos",
+    audio: "Áudios",
+    other: null,
+  };
+
+  // Click on a smart chip = open (or create) the matching section folder at
+  // the current level. This gives clean isolation between contexts and makes
+  // uploads consistently land where the user is looking.
+  async function enterTagSection(tag: SmartTag) {
+    const targetName = TAG_SECTION_NAME[tag];
+    if (!targetName) { setTagFilter(tag); return; }
+    if (scope === "client" && !clientId) {
+      toast({ title: "Selecione um cliente", variant: "destructive" });
+      return;
+    }
+    try {
+      const parentId = parent && !isVirt(parent.id) ? parent.id : null;
+      let q: any = (supabase as any).from("workspace_nodes").select("*")
+        .eq("scope", scope).eq("kind", "folder").ilike("name", targetName);
+      q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
+      if (scope === "client") q = q.eq("client_id", clientId!);
+      const { data: existing } = await q.maybeSingle();
+      let folder: any = existing;
+      if (!folder) {
+        const { data: created, error } = await supabase.from("workspace_nodes").insert({
+          name: targetName, kind: "folder", scope,
+          client_id: scope === "client" ? clientId : null,
+          parent_id: parentId, created_by: user?.id ?? null,
+        }).select("*").single();
+        if (error) throw error;
+        folder = created;
+      }
+      setTagFilter("all");
+      nav.push(folder as Node);
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao abrir seção", description: e?.message || "Tente novamente.", variant: "destructive" });
+    }
+  }
+
+
   async function autoOrganize() {
     if (!user || organizing) return;
     if (scope === "client" && !clientId) {
@@ -1110,11 +1157,16 @@ export default function Workspace() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[75vh] overflow-hidden flex flex-col">
+          <PopoverContent
+            align="end"
+            collisionPadding={12}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[min(70svh,520px)] overflow-hidden flex flex-col"
+          >
             <div className="p-2 border-b border-border">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input autoFocus value={pickerQuery} onChange={e => setPickerQuery(e.target.value)} placeholder="Buscar cliente..." className="h-8 pl-8 text-xs" />
+                <Input value={pickerQuery} onChange={e => setPickerQuery(e.target.value)} placeholder="Buscar cliente..." className="h-9 md:h-8 pl-8 text-[16px] md:text-xs" />
               </div>
               <div className="flex items-center gap-1 mt-2">
                 {[
@@ -1255,7 +1307,7 @@ export default function Workspace() {
             {SMART_TAGS.filter(t => t.key !== "other" || tagCounts.other > 0).map(t => (
               <button
                 key={t.key}
-                onClick={() => setTagFilter(t.key)}
+                onClick={() => enterTagSection(t.key)}
                 title={t.hint}
                 className={cn(
                   "px-2.5 py-1 rounded-full text-[11px] font-medium border transition-colors",
