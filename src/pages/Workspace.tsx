@@ -44,6 +44,7 @@ type Node = {
   __external_url?: string | null;
   __file_id?: string | null;
   __approval_status?: string | null;
+  __carousel_count?: number;
 };
 
 const VIRT_PREFIX = "virt:";
