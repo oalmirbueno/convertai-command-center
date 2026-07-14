@@ -609,6 +609,37 @@ Regras:
             } else {
               await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
             }
+            // ── Memória persistente: grava turno como registro cumulativo ──
+            if (context?.client_id) {
+              try {
+                const briefTitle = userMessageToStore.slice(0, 90).replace(/\n/g, " ").trim();
+                const body = `**Pergunta:** ${userMessageToStore.slice(0, 1200)}\n\n**Resposta do agente:** ${full.slice(0, 3200)}`;
+                await _upsertProjectMemory({
+                  client_id: context.client_id,
+                  project_id: context.project_id ?? null,
+                  kind: "summary",
+                  source: "studio-agent",
+                  title: briefTitle,
+                  content: body,
+                  tags: [persona?.gpt_name || "prepro"].filter(Boolean) as string[],
+                  metadata: { thread_id, persona_id: persona?.id || null },
+                  created_by: user.id,
+                });
+              } catch (e) { console.warn("memory write failed", (e as Error).message); }
+              // Propaga um resumo enxuto ao Segundo Cérebro (inbox) — não bloqueia falhas.
+              try {
+                if (full.length > 400) {
+                  await _sbPropose({
+                    title: `Studio · ${(context.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
+                    summary: userMessageToStore.slice(0, 400),
+                    origin: "aceleriq-studio",
+                    correlation_id: thread_id,
+                    context: `client_id=${context.client_id}${context.project_id ? ` · project_id=${context.project_id}` : ""}`,
+                    body_markdown: `# Studio turn\n\n**Cliente:** ${context.client_name || context.client_id}\n\n## Pergunta\n${userMessageToStore.slice(0, 2000)}\n\n## Resposta do agente\n${full.slice(0, 8000)}`,
+                  });
+                }
+              } catch (e) { console.warn("second-brain propose failed", (e as Error).message); }
+            }
           }
         } catch (e) {
           controller.error(e);
