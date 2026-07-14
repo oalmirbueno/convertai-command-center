@@ -2270,6 +2270,8 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   // arquivos anexados à próxima mensagem (sincronizam com @ do input)
   const [attached, setAttached] = useState<FileRef[]>([]);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Modal iframe para abrir links dentro do chat (sem sair da conversa)
+  const [linkPreview, setLinkPreview] = useState<string | null>(null);
   // recentes globais por usuário (top 8)
   const RECENT_KEY = "studio:recentMentions";
   const [recentIds, setRecentIds] = useState<string[]>(() => {
