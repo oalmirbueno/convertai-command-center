@@ -553,6 +553,53 @@ export default function Workspace() {
     return PIPELINE_TARGETS[tag];
   }
 
+  // Friendly section names displayed as tag chips → folder mapping.
+  const TAG_SECTION_NAME: Record<SmartTag, string | null> = {
+    carrossel: "Carrossel",
+    "video-ready": "Vídeos prontos",
+    material: "Brutos",
+    static: "Estáticos",
+    doc: "Documentos",
+    audio: "Áudios",
+    other: null,
+  };
+
+  // Click on a smart chip = open (or create) the matching section folder at
+  // the current level. This gives clean isolation between contexts and makes
+  // uploads consistently land where the user is looking.
+  async function enterTagSection(tag: SmartTag) {
+    const targetName = TAG_SECTION_NAME[tag];
+    if (!targetName) { setTagFilter(tag); return; }
+    if (scope === "client" && !clientId) {
+      toast({ title: "Selecione um cliente", variant: "destructive" });
+      return;
+    }
+    try {
+      const parentId = parent && !isVirt(parent.id) ? parent.id : null;
+      let q: any = (supabase as any).from("workspace_nodes").select("*")
+        .eq("scope", scope).eq("kind", "folder").ilike("name", targetName);
+      q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
+      if (scope === "client") q = q.eq("client_id", clientId!);
+      const { data: existing } = await q.maybeSingle();
+      let folder: any = existing;
+      if (!folder) {
+        const { data: created, error } = await supabase.from("workspace_nodes").insert({
+          name: targetName, kind: "folder", scope,
+          client_id: scope === "client" ? clientId : null,
+          parent_id: parentId, created_by: user?.id ?? null,
+        }).select("*").single();
+        if (error) throw error;
+        folder = created;
+      }
+      setTagFilter("all");
+      nav.push(folder as Node);
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao abrir seção", description: e?.message || "Tente novamente.", variant: "destructive" });
+    }
+  }
+
+
   async function autoOrganize() {
     if (!user || organizing) return;
     if (scope === "client" && !clientId) {
