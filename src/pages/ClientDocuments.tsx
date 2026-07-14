@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
+import CarouselSlider from "@/components/shared/CarouselSlider";
 import { openFile, downloadFile } from "@/lib/fileActions";
 
 function CarouselSlider({ files }: { files: any[] }) {
