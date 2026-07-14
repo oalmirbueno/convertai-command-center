@@ -1421,7 +1421,10 @@ export default function Workspace() {
                         {cover ? (
                           k === "video" ? (
                             <>
-                              <video src={cover} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="metadata" />
+                              {/* preload="none" evita 20+ requests concorrentes de metadata que saturam
+                                  a banda e atrasam o vídeo que o usuário realmente clica. */}
+                              <video src={`${cover}#t=0.1`} className="absolute inset-0 w-full h-full object-cover" muted playsInline preload="none" />
+
                               <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent flex items-center justify-center">
                                 <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center shadow-lg">
                                   <Film className="w-5 h-5 text-black" />
