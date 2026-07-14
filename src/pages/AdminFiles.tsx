@@ -595,7 +595,7 @@ export default function AdminFiles() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <CarouselSlider files={[previewFile, ...(childrenMap.get(previewFile.id) || []).sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))]} />
+              <SharedCarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
                   {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
