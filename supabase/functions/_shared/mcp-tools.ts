@@ -1238,6 +1238,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   updateContractTool,
   sendContractTool,
   cancelContractTool,
+  // Persistent per-client/project memory (Studio + external agents)
+  getProjectMemoryTool,
+  upsertProjectMemoryTool,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
