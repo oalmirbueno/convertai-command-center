@@ -37,7 +37,15 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
     : 0;
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 w-[380px] max-w-[calc(100vw-2rem)] rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in">
+    <div
+      className="fixed z-50 rounded-xl border border-border bg-card shadow-2xl overflow-hidden animate-fade-in
+        left-2 right-2 w-auto
+        sm:left-auto sm:right-4 sm:w-[380px] sm:max-w-[calc(100vw-2rem)]"
+      style={{
+        bottom: `calc(env(safe-area-inset-bottom, 0px) + var(--mobile-upload-offset, 88px))`,
+      }}
+    >
+
       <button
         onClick={() => setCollapsed(c => !c)}
         className="w-full flex items-center gap-2 px-4 py-2.5 border-b border-border bg-secondary/40 text-left"
