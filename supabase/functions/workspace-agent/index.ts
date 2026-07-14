@@ -278,6 +278,29 @@ Regras absolutas:
       const doc = docRes.data as any;
       if (doc?.notes) deepLines.push(`\nNOTAS PUBLICADAS DO PROJETO:\n${String(doc.notes).slice(0, 2200)}`);
       if (!sysFiles.length && !wsNodes.length) deepLines.push("\nOBSERVAÇÃO: nenhuma base de arquivos foi encontrada para este cliente/projeto.");
+
+      // ── MEMÓRIA PERSISTENTE (últimas 25) por cliente/projeto ──
+      try {
+        const mem = await _listProjectMemory({ client_id: cidDeep, project_id: pidDeep ?? undefined, limit: 25 });
+        if (mem.length) {
+          deepLines.push(`\nMEMÓRIA PERSISTENTE DO CLIENTE/PROJETO (${mem.length} registros — do mais recente ao mais antigo):\n${memoryToPromptBlock(mem)}`);
+        }
+      } catch (e) { console.warn("memory read failed", (e as Error).message); }
+
+      // ── SEGUNDO CÉREBRO (bootstrap + busca contextual pelo nome do cliente) ──
+      try {
+        const bundle = await _sbGetContext();
+        const clientName = (prof?.company_name || prof?.full_name || "").toString().trim();
+        let hits: any[] = [];
+        if (clientName.length >= 3) {
+          try { hits = await _sbSearch(clientName, 6); } catch { hits = []; }
+        }
+        const bootstrap = (bundle.files || []).map((f: any) => `### ${f.path}\n${String(f.content || "").slice(0, 1200)}`).join("\n\n");
+        const searchBlock = hits.length ? `\n\nBUSCA no Segundo Cérebro por "${clientName}":\n${hits.map(h => `- ${h.path}${h.snippet ? ` — ${String(h.snippet).slice(0,200)}` : ""}`).join("\n")}` : "";
+        if (bootstrap || searchBlock) {
+          deepLines.push(`\nSEGUNDO CÉREBRO (OpenClaw memory — leitura viva):\n${bootstrap}${searchBlock}`);
+        }
+      } catch (e) { console.warn("second-brain read failed", (e as Error).message); }
     }
 
     // monta contexto
