@@ -2302,22 +2302,33 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
   useEffect(() => { try { localStorage.setItem("studio:threadScope", threadScope); } catch {} }, [threadScope]);
   const lastThreadKey = (cid?: string | null, fp?: string | null, scope?: string) =>
     `studio:lastThread:${scope || threadScope}:${cid || "_global"}:${scope === "folder" ? (fp || "_root") : "_any"}`;
+  const [clientNameMap, setClientNameMap] = useState<Record<string, string>>({});
   useEffect(() => { void loadThreads(); }, [clientId, folderPath, threadScope]);
   async function loadThreads() {
-    let q = supabase.from("workspace_agent_threads").select("id,title,updated_at,client_id,folder_path")
-      .order("updated_at", { ascending: false }).limit(50);
-    q = clientId ? q.eq("client_id", clientId) : q.is("client_id", null);
-    if (threadScope === "folder") {
-      q = folderPath ? q.eq("folder_path", folderPath) : q.is("folder_path", null);
-    }
-    const { data } = await q;
+    // Carrega TODAS as conversas visíveis (staff enxerga tudo por RLS) para
+    // que o painel lateral consiga agrupar por cliente e projeto/pasta.
+    const { data } = await supabase.from("workspace_agent_threads")
+      .select("id,title,updated_at,client_id,folder_path")
+      .order("updated_at", { ascending: false })
+      .limit(200);
     const list = (data as AgentThread[]) || [];
     setThreads(list);
-    if (!list.length) { setActiveId(null); return; }
+    // Resolve nomes de cliente para os agrupadores
+    const cids = Array.from(new Set(list.map(t => t.client_id).filter(Boolean))) as string[];
+    if (cids.length) {
+      const { data: profs } = await supabase.from("profiles")
+        .select("id,full_name,company_name").in("id", cids);
+      const map: Record<string, string> = {};
+      (profs || []).forEach((p: any) => { map[p.id] = p.company_name || p.full_name || "Cliente"; });
+      setClientNameMap(map);
+    }
+    // Restaura a última thread do escopo atual, se possível.
+    const scoped = list.filter(t => (clientId ? t.client_id === clientId : !t.client_id));
+    if (!scoped.length && !list.length) { setActiveId(null); return; }
     let restored: string | null = null;
     try { restored = localStorage.getItem(lastThreadKey(clientId, folderPath, threadScope)); } catch {}
-    const pick = (restored && list.find(t => t.id === restored)?.id) || list[0].id;
-    setActiveId(pick);
+    const preferred = (restored && list.find(t => t.id === restored)?.id) || scoped[0]?.id || list[0]?.id;
+    if (preferred) setActiveId(preferred);
   }
 
   // Persiste a última thread ativa por (escopo, cliente, pasta) para restaurar ao reabrir
