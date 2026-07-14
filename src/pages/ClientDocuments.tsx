@@ -14,10 +14,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink, ChevronLeft, ChevronRight } from "lucide-react";
-import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
+import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink } from "lucide-react";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import { openFile, downloadFile } from "@/lib/fileActions";
+import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 // CarouselSlider is imported from shared components (auto-fetches sibling slides).
 
@@ -44,11 +44,40 @@ const isImage = (name: string) => {
 const isPdf = (name: string) => name?.toLowerCase().endsWith(".pdf");
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning", label: "⏳ Pendente" },
-  approved: { cls: "bg-success/10 text-success", label: "✓ Aprovado" },
+  pending: { cls: "bg-warning/10 text-warning", label: "Pendente" },
+  approved: { cls: "bg-success/10 text-success", label: "Aprovado" },
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Ajuste Solicitado" },
-  none: { cls: "bg-muted text-muted-foreground", label: "—" },
+  none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
+
+function ClientFileThumb({ file }: { file: any }) {
+  const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
+  const Icon = fileIcon(file.file_name);
+  const { url } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform: kind === "image" ? { width: 320, height: 320, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  return (
+    <div className="w-14 h-14 rounded-lg bg-secondary border border-border overflow-hidden flex items-center justify-center shrink-0 relative">
+      {url && kind === "image" ? (
+        <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />
+      ) : url && kind === "video" ? (
+        <>
+          <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+          <div className="absolute inset-0 flex items-center justify-center bg-background/25">
+            <Film className="w-4 h-4 text-foreground" />
+          </div>
+        </>
+      ) : (
+        <Icon className="w-5 h-5 text-muted-foreground" />
+      )}
+    </div>
+  );
+}
 
 export default function ClientDocuments() {
   const { user } = useAuth();
@@ -207,14 +236,13 @@ export default function ClientDocuments() {
       ) : (
         <div className="space-y-2 stagger-children">
           {filteredFiles.map((f: any) => {
-            const Icon = fileIcon(f.file_name);
             const badge = approvalBadge[f.approval_status] || approvalBadge.none;
 
             return (
               <div key={f.id} className="bg-card border border-border rounded-xl px-4 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
                 <div className="flex items-center gap-3">
-                  <Icon className="w-5 h-5 text-muted-foreground shrink-0" />
+                  <ClientFileThumb file={f} />
                   <div className="flex-1 min-w-0">
                     <p className="text-[13px] font-medium text-foreground truncate">
                       {f.file_name}
@@ -229,7 +257,11 @@ export default function ClientDocuments() {
                     type="button"
                     title="Baixar"
                     className="text-muted-foreground hover:text-foreground transition-colors"
-                    onClick={(e) => { e.stopPropagation(); downloadFile(f.file_url, f.file_name); }}>
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const url = await resolveFileUrl({ fileUrl: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path });
+                      downloadFile(url, f.file_name);
+                    }}>
                     <Download className="w-4 h-4" />
                   </button>
                 </div>
@@ -258,10 +290,16 @@ export default function ClientDocuments() {
               
               {/* Action buttons */}
               <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => openFile(previewFile.file_url)}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
+                  openFile(url);
+                }}>
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button variant="outline" size="sm" className="gap-1.5" onClick={() => downloadFile(previewFile.file_url, previewFile.file_name)}>
+                <Button variant="outline" size="sm" className="gap-1.5" onClick={async () => {
+                  const url = await resolveFileUrl({ fileUrl: previewFile.file_url, storageBucket: previewFile.storage_bucket, storagePath: previewFile.storage_path });
+                  downloadFile(url, previewFile.file_name);
+                }}>
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
               </div>
