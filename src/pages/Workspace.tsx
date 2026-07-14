@@ -1659,7 +1659,17 @@ function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promis
   if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
   const m = node.mime || "";
   if (m.startsWith("image/")) return <img src={url} alt={node.name} className="max-h-[60vh] mx-auto rounded-lg" />;
-  if (m.startsWith("video/")) return <video src={url} controls className="w-full max-h-[60vh] rounded-lg bg-black" preload="metadata" />;
+  if (m.startsWith("video/")) return (
+    <video
+      src={url}
+      controls
+      autoPlay
+      playsInline
+      preload="auto"
+      className="w-full max-h-[60vh] rounded-lg bg-black"
+    />
+  );
+
   if (m.startsWith("audio/")) return <audio src={url} controls className="w-full" />;
   if (m === "application/pdf") return <iframe src={url} className="w-full h-[60vh] rounded-lg border border-border" />;
   return <div className="h-40 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
