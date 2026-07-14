@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
+import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 
 const FOLDERS = [
