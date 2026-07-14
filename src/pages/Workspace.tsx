@@ -371,7 +371,7 @@ export default function Workspace() {
           __virtual: true,
         });
       });
-      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId)));
+      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0)));
       return nodes;
     }
     if (insideVirtFolder) {
