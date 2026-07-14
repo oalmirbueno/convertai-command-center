@@ -160,9 +160,17 @@ export const isExternalVideoUrl = (url: string) => !!getVideoEmbedUrl(url);
 interface Props {
   fileName: string;
   fileUrl: string;
+  fileId?: string;
 }
 
-export default function FilePreviewContent({ fileName, fileUrl }: Props) {
+export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props) {
+  const ext = resolveExtension(fileName, fileUrl);
+  const framesKind: "xlsx" | "pptx" | "pdf" | "docx" | null =
+    ["xlsx", "xls", "csv", "ods"].includes(ext) ? "xlsx" :
+    ["pptx", "ppt", "odp"].includes(ext) ? "pptx" :
+    ext === "pdf" ? "pdf" :
+    ["docx", "doc", "odt"].includes(ext) ? "docx" : null;
+  const [tab, setTab] = useState<"viewer" | "frames">("viewer");
   // External video providers (YouTube/Vimeo/Loom/Drive/Wistia) — embed iframe, no storage cost
   const embedUrl = getVideoEmbedUrl(fileUrl);
   if (embedUrl) {
