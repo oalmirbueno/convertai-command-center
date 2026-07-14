@@ -1015,8 +1015,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <div className="grid h-full min-h-0 gap-3 p-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
                 <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-background/65">
                   <AgentChat
-                    clientId={clientId ?? null}
-                    clientName={clientName ?? null}
+                    clientId={effectiveClientId}
+                    clientName={effectiveClientName}
                     projectId={projectId}
                     folderId={folderId ?? null}
                     folderPath={folderPath ?? contextLabel}
