@@ -63,12 +63,12 @@ export default function CarouselSlider({
   const current = files[idx];
   if (!current) return null;
   if (files.length === 1) {
-    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />;
+    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />;
   }
 
   return (
     <div className="relative group">
-      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />
       <button
         type="button"
         aria-label="Anterior"
