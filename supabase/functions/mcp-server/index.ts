@@ -246,7 +246,7 @@ Deno.serve(async (req) => {
 
   if (req.method === 'GET' && path.endsWith('/.well-known/oauth-protected-resource')) {
     return jsonResponse(protectedResourceMetadata(), 200, {
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-store',
       'Link': `<${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
     });
   }
