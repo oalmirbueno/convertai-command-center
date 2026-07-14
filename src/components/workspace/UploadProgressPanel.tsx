@@ -64,7 +64,7 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
 
       {!collapsed && (
         <>
-          <ul className="max-h-[320px] overflow-y-auto divide-y divide-border">
+          <ul className="max-h-[45vh] sm:max-h-[320px] overflow-y-auto overscroll-contain divide-y divide-border">
             {items.map(item => (
               <li key={item.id} className="px-3 py-2.5 hover:bg-secondary/30">
                 <div className="flex items-start gap-2">
