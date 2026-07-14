@@ -133,7 +133,7 @@ export default function CarouselSlider({
             type="button"
             aria-label={`Abrir item ${i + 1}`}
             onClick={(e) => { e.stopPropagation(); setIdx(i); }}
-            className={`relative w-24 h-24 shrink-0 overflow-hidden rounded-lg border bg-secondary transition-all ${
+            className={`relative flex w-24 h-24 shrink-0 items-center justify-center overflow-hidden rounded-lg border bg-secondary transition-all ${
               i === idx ? "border-primary ring-1 ring-primary/50" : "border-border hover:border-primary/40"
             }`}
           >
