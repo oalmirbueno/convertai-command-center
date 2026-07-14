@@ -485,12 +485,15 @@ export default function Workspace() {
     setApplyingTpl(tpl.id);
     try {
       // Load existing folder names at the target parent to avoid duplicates
-      const { data: existing } = await supabase
+      const parentIdForTpl = parent?.id && !isVirt(parent.id) ? parent.id : null;
+      let existingQ: any = supabase
         .from("workspace_nodes")
         .select("name")
         .eq("scope", scope)
-        .eq("kind", "folder")
-        .is("parent_id", parent?.id || null as any);
+        .eq("kind", "folder");
+      existingQ = parentIdForTpl ? existingQ.eq("parent_id", parentIdForTpl) : existingQ.is("parent_id", null);
+      if (scope === "client") existingQ = existingQ.eq("client_id", clientId!);
+      const { data: existing } = await existingQ;
       const existingNames = new Set((existing || []).map((r: any) => r.name.toLowerCase()));
 
       let created = 0;
@@ -499,14 +502,15 @@ export default function Workspace() {
           let id: string | null = null;
           if (!skipCheck && !parentId && existingNames.has(n.name.toLowerCase())) {
             // Reuse existing top-level folder if present
-            const { data: found } = await supabase
+            let foundQ: any = supabase
               .from("workspace_nodes")
               .select("id")
               .eq("scope", scope)
               .eq("kind", "folder")
-              .is("parent_id", parent?.id || null as any)
-              .ilike("name", n.name)
-              .maybeSingle();
+              .ilike("name", n.name);
+            foundQ = parentIdForTpl ? foundQ.eq("parent_id", parentIdForTpl) : foundQ.is("parent_id", null);
+            if (scope === "client") foundQ = foundQ.eq("client_id", clientId!);
+            const { data: found } = await foundQ.maybeSingle();
             id = (found as any)?.id || null;
           }
           if (!id) {
@@ -522,7 +526,7 @@ export default function Workspace() {
           if (n.children?.length && id) await insertTree(n.children, id, true);
         }
       };
-      await insertTree(tpl.tree, parent?.id || null);
+      await insertTree(tpl.tree, parentIdForTpl);
       toast({ title: "Template aplicado", description: `${created} pastas criadas.` });
       setTemplateOpen(false);
       invalidate();
@@ -627,14 +631,16 @@ export default function Workspace() {
         toast({ title: "Nada classificável", description: "Arquivos não se encaixam no pipeline." });
         return;
       }
-      // Resolve/cria pastas destino no nível atual
-      const parentId = parent?.id || null;
-      const { data: existing } = await supabase
+      // Resolve/cria pastas destino no nível atual (nunca em tokens virtuais)
+      const parentId = parent?.id && !isVirt(parent.id) ? parent.id : null;
+      let existingQ: any = supabase
         .from("workspace_nodes")
         .select("id, name")
         .eq("scope", scope)
-        .eq("kind", "folder")
-        .is("parent_id", parentId as any);
+        .eq("kind", "folder");
+      existingQ = parentId ? existingQ.eq("parent_id", parentId) : existingQ.is("parent_id", null);
+      if (scope === "client") existingQ = existingQ.eq("client_id", clientId!);
+      const { data: existing } = await existingQ;
       const byName = new Map<string, string>();
       for (const r of (existing || []) as any[]) byName.set((r.name || "").toLowerCase(), r.id);
 
@@ -922,7 +928,8 @@ export default function Workspace() {
     e.preventDefault(); setDragOverId(null); setDragOverArea(false);
     const nodeId = e.dataTransfer.getData("application/x-ws-node");
     if (nodeId) {
-      const src = (nodes || []).find(x => x.id === nodeId);
+      const pool = [...(nodes || []), ...(virtualNodes || [])];
+      const src = pool.find(x => x.id === nodeId);
       if (src) await moveNode(src, folderId);
       return;
     }
