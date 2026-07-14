@@ -1121,6 +1121,83 @@ const cancelContractTool: ToolDefinition = {
   },
 };
 
+// ─── Project Memory (persistent, large context per client/project) ─────────
+import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
+
+const getProjectMemoryTool: ToolDefinition = {
+  name: 'aceleriq_get_project_memory',
+  title: 'Memória do projeto — ler',
+  description: 'Lê a memória persistente por cliente e (opcional) projeto. Retorna os N registros mais recentes, incluindo notas, resumos, decisões e fatos consolidados. Use para retomar contexto de onde parou.',
+  scopes: ['projects:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      kind: { type: 'string', enum: ['note','summary','decision','fact','second_brain','external'] },
+      limit: { type: 'integer', minimum: 1, maximum: 200 },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid(),
+      project_id: z.string().uuid().optional(),
+      kind: z.enum(['note','summary','decision','fact','second_brain','external']).optional(),
+      limit: z.number().int().min(1).max(200).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    const items = await _listProjectMemory(parsed.data);
+    return { count: items.length, items };
+  },
+};
+
+const upsertProjectMemoryTool: ToolDefinition = {
+  name: 'aceleriq_upsert_project_memory',
+  title: 'Memória do projeto — gravar',
+  description: 'Adiciona um registro persistente à memória de um cliente/projeto (nota, resumo, decisão, fato). Cumulativo — nunca sobrescreve. Ideal para o ChatGPT/Codex/Hermes registrarem contexto vindo de fora do painel.',
+  scopes: ['projects:write'] as const,
+  annotations: { ...WRITE_ANNOTATIONS, idempotentHint: false },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      kind: { type: 'string', enum: ['note','summary','decision','fact','second_brain','external'] },
+      source: { type: 'string', maxLength: 60 },
+      title: { type: 'string', maxLength: 200 },
+      content: { type: 'string', minLength: 3, maxLength: 20000 },
+      tags: { type: 'array', items: { type: 'string', maxLength: 40 }, maxItems: 20 },
+      metadata: { type: 'object' },
+    },
+    required: ['client_id', 'content'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: z.string().uuid(),
+      project_id: z.string().uuid().optional(),
+      kind: z.enum(['note','summary','decision','fact','second_brain','external']).optional(),
+      source: z.string().max(60).optional(),
+      title: z.string().max(200).optional(),
+      content: z.string().min(3).max(20000),
+      tags: z.array(z.string().max(40)).max(20).optional(),
+      metadata: z.record(z.unknown()).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    const created = await _upsertProjectMemory({
+      ...parsed.data,
+      source: parsed.data.source ?? ctx.origin ?? 'mcp',
+      metadata: { ...(parsed.data.metadata ?? {}), origin: ctx.origin, key_id: ctx.keyId },
+    });
+    return { ok: true, ...created };
+  },
+};
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
