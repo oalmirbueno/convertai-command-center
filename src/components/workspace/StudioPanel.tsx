@@ -3010,7 +3010,23 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                 "prose-blockquote:border-l-2 prose-blockquote:border-primary/40 prose-blockquote:pl-3 prose-blockquote:text-muted-foreground prose-blockquote:not-italic"
               )}
             >
-              <ReactMarkdown remarkPlugins={[remarkGfm, remarkBreaks]}>{m.content}</ReactMarkdown>
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                components={{
+                  a: ({ href, children, ...rest }) => {
+                    const url = String(href || "");
+                    if (!/^https?:\/\//i.test(url)) return <a href={url} {...rest}>{children}</a>;
+                    return (
+                      <a
+                        href={url}
+                        onClick={(e) => { e.preventDefault(); setLinkPreview(url); }}
+                        className="text-primary hover:underline cursor-pointer"
+                        title="Abrir dentro do chat"
+                      >{children}</a>
+                    );
+                  },
+                }}
+              >{m.content}</ReactMarkdown>
             </article>
           )
         ))}
