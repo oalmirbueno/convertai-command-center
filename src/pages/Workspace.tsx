@@ -502,14 +502,15 @@ export default function Workspace() {
           let id: string | null = null;
           if (!skipCheck && !parentId && existingNames.has(n.name.toLowerCase())) {
             // Reuse existing top-level folder if present
-            const { data: found } = await supabase
+            let foundQ: any = supabase
               .from("workspace_nodes")
               .select("id")
               .eq("scope", scope)
               .eq("kind", "folder")
-              .is("parent_id", parent?.id || null as any)
-              .ilike("name", n.name)
-              .maybeSingle();
+              .ilike("name", n.name);
+            foundQ = parentIdForTpl ? foundQ.eq("parent_id", parentIdForTpl) : foundQ.is("parent_id", null);
+            if (scope === "client") foundQ = foundQ.eq("client_id", clientId!);
+            const { data: found } = await foundQ.maybeSingle();
             id = (found as any)?.id || null;
           }
           if (!id) {
