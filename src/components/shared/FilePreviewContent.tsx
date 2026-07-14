@@ -183,11 +183,11 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     ["pptx", "ppt", "odp"].includes(ext) ? "pptx" :
     ext === "pdf" ? "pdf" :
     ["docx", "doc", "odt"].includes(ext) ? "docx" : null;
-  const [tab, setTab] = useState<"viewer" | "frames">(mediaKind === "office" && fileId ? "frames" : "viewer");
+  const [tab, setTab] = useState<"viewer" | "frames">("viewer");
   const isStorageBacked = !!storagePath || fileUrl?.startsWith("mcp-files://");
 
   useEffect(() => {
-    setTab(mediaKind === "office" && fileId ? "frames" : "viewer");
+    setTab("viewer");
   }, [fileId, ext, mediaKind]);
 
   if (resolvingUrl && isStorageBacked) {
