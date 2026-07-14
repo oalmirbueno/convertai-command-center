@@ -296,12 +296,13 @@ export default function Workspace() {
   const { data: clientFiles } = useQuery({
     queryKey: ["workspace-client-files", clientId],
     queryFn: async () => {
-      if (!clientId) return [];
+      if (!clientId) return [] as any[];
+      // Fetch all files (parents + carousel children) so we can group carousels
+      // and show every slide inside the preview.
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by")
+        .select("id, file_name, file_url, file_type, folder, approval_status, created_at, uploaded_by, parent_file_id")
         .eq("client_id", clientId)
-        .is("parent_file_id", null)
         .order("created_at", { ascending: false });
       return data || [];
     },
@@ -309,6 +310,24 @@ export default function Workspace() {
     staleTime: 60_000,
     placeholderData: (prev: any) => prev,
   });
+
+  // Group carousel children by parent for fast preview rendering
+  const virtChildrenMap = useMemo(() => {
+    const map = new Map<string, any[]>();
+    for (const f of (clientFiles as any[]) || []) {
+      if (f.parent_file_id) {
+        const arr = map.get(f.parent_file_id) || [];
+        arr.push(f);
+        map.set(f.parent_file_id, arr);
+      }
+    }
+    return map;
+  }, [clientFiles]);
+  const virtChildIds = useMemo(() => {
+    const s = new Set<string>();
+    for (const f of (clientFiles as any[]) || []) if (f.parent_file_id) s.add(f.id);
+    return s;
+  }, [clientFiles]);
 
 
   // Build virtual nodes for current view (root or inside a virtual folder)
