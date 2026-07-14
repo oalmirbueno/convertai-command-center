@@ -279,6 +279,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId }: Props)
     const gviewSrc = `https://docs.google.com/gview?embedded=1&url=${encoded}`;
     return (
       <div className="rounded-xl overflow-hidden flex flex-col border border-border bg-white">
+        {DocTabs}
         <iframe
           src={officeSrc}
           title={fileName}
