@@ -561,10 +561,13 @@ Regras:
     let aiRes: Response | null = null;
     let lastStatus = 0; let lastText = "";
     for (const p of chain) {
-      const r = await fetch(p.url, { method: "POST", headers: p.headers, body: JSON.stringify({ model: p.model, messages, stream: true, temperature: 0.55 }) });
+      const supportsTemp = !/^gpt-5/i.test(p.model);
+      const body: Record<string, unknown> = { model: p.model, messages, stream: true };
+      if (supportsTemp) body.temperature = 0.55;
+      const r = await fetch(p.url, { method: "POST", headers: p.headers, body: JSON.stringify(body) });
       if (r.ok && r.body) { aiRes = r; break; }
       lastStatus = r.status; lastText = await r.text().catch(() => "");
-      if (![401, 402, 429].includes(r.status)) break;
+      if (![400, 401, 402, 429].includes(r.status)) break;
     }
 
     if (!aiRes) {
