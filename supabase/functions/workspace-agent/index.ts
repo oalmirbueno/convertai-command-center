@@ -419,7 +419,7 @@ Regras:
               { role: "system", content: orqSys },
               { role: "user", content: `CATÁLOGO DE AGENTES EXTRAS:\n${catalog}\n\nCONTEXTO: cliente=${context?.client_name || "-"}, pasta=/${fpath || "raiz"}\n\nMENSAGEM DO USUÁRIO:\n${message.slice(0, 1400)}` },
             ],
-            temperature: 0,
+            ...(/^gpt-5/i.test(routerModel) ? {} : { temperature: 0 }),
             max_tokens: 400,
             response_format: { type: "json_object" },
           }),
