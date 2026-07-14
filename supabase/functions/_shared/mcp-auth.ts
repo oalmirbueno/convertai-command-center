@@ -216,12 +216,24 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 }
 
 
-// Kept for backward compat. Expands aggregate scopes (aceleriq:read/write)
-// into granular ones so this matches canInvoke() in mcp-tools.ts.
-import { expandScopes } from './mcp-tools.ts';
+// Kept for backward compat. Expands aggregate scopes so this matches
+// canInvoke() in mcp-tools.ts. Inlined to avoid a circular import.
+const SCOPE_EXPANSIONS_LOCAL: Record<string, string[]> = {
+  'aceleriq:read': ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read'],
+  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write'],
+};
+export function expandScopesLocal(granted: readonly string[]): Set<string> {
+  const out = new Set<string>();
+  for (const s of granted) {
+    out.add(s);
+    const exp = SCOPE_EXPANSIONS_LOCAL[s];
+    if (exp) for (const e of exp) out.add(e);
+  }
+  return out;
+}
 export function hasScope(ctx: AuthContext, required: readonly string[]): boolean {
   if (required.length === 0) return true;
-  const expanded = expandScopes(ctx.scopes);
+  const expanded = expandScopesLocal(ctx.scopes);
   if (expanded.has('admin')) return true;
   return required.some(s => expanded.has(s));
 }
