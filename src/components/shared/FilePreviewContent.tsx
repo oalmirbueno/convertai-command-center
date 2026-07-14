@@ -106,6 +106,10 @@ const isAudio = (fileName: string, fileUrl?: string) => {
   return ["mp3", "wav", "m4a", "ogg"].includes(ext);
 };
 
+const OFFICE_EXTS = ["doc", "docx", "ppt", "pptx", "xls", "xlsx", "csv", "odt", "ods", "odp"];
+const isOffice = (fileName: string, fileUrl?: string) =>
+  OFFICE_EXTS.includes(resolveExtension(fileName, fileUrl));
+
 // Detect external video providers and convert to embeddable URL
 export const getVideoEmbedUrl = (url: string): string | null => {
   if (!url) return null;
