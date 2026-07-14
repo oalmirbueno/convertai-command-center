@@ -2797,39 +2797,15 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
               <X className="w-3 h-3" />
             </button>
           </div>
-          <div className="flex items-center gap-0.5 px-2 py-1 border-b border-border bg-background/40">
-            <button onClick={() => setThreadScope("client")}
-              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
-                threadScope === "client" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
-              Cliente
-            </button>
-            <button onClick={() => setThreadScope("folder")}
-              className={cn("flex-1 text-[9px] uppercase tracking-wider py-1 rounded",
-                threadScope === "folder" ? "bg-primary/20 text-primary font-semibold" : "text-muted-foreground hover:bg-secondary")}>
-              Pasta
-            </button>
-          </div>
-          <div className="flex-1 min-h-0 overflow-y-auto">
-            {threads.length === 0 && <p className="text-[10px] text-muted-foreground px-3 py-2">Nenhuma conversa ainda.</p>}
-            {threads.map(t => (
-              <div key={t.id}
-                className={cn("group flex flex-col gap-0.5 px-2 py-1.5 hover:bg-secondary/60 cursor-pointer border-l-2",
-                  activeId === t.id ? "bg-secondary border-primary" : "border-transparent")}
-                onClick={() => { setActiveId(t.id); if (isMobile) setSidebarOpen(false); }}>
-                <div className="flex items-center gap-1">
-                  <MessageSquare className="w-3 h-3 text-muted-foreground shrink-0" />
-                  <span className="text-[11px] truncate flex-1">{t.title}</span>
-                  <button onClick={(e) => { e.stopPropagation(); deleteThread(t.id); }}
-                    className={cn("p-0.5 hover:text-destructive", isMobile ? "opacity-70" : "opacity-0 group-hover:opacity-100")}>
-                    <Trash2 className="w-3 h-3" />
-                  </button>
-                </div>
-                {threadScope === "client" && t.folder_path && (
-                  <span className="text-[9px] text-muted-foreground/70 truncate pl-4">/{t.folder_path}</span>
-                )}
-              </div>
-            ))}
-          </div>
+          <GroupedThreadList
+            threads={threads}
+            activeId={activeId}
+            currentClientId={clientId ?? null}
+            currentFolderPath={folderPath ?? null}
+            clientNameMap={clientNameMap}
+            onSelect={(id) => { setActiveId(id); if (isMobile) setSidebarOpen(false); }}
+            onDelete={(id) => deleteThread(id)}
+          />
           <div className="px-2 py-1 border-t border-border text-[9px] text-muted-foreground/70 hidden md:block">
             Alt+↑↓ alternar · Alt+N nova · Alt+B recolher
           </div>
