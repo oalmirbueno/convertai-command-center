@@ -41,12 +41,22 @@ const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const AUTHORIZATION_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
 const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
 
+const ALL_SUPPORTED_SCOPES = [
+  'openid','email','profile',
+  'aceleriq:read','aceleriq:write','aceleriq:finance',
+  'clients:read','projects:read','projects:write','tasks:read','tasks:write',
+  'reports:read','reports:write','briefings:read',
+  'files:read','files:write','files:sensitive:read','files:archive',
+  'workspace:read','contracts:read','contracts:write',
+  'memory:read','memory:propose','admin',
+];
+
 function protectedResourceMetadata() {
   return {
     resource: RESOURCE_URL,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ['openid', 'email', 'profile'],
+    scopes_supported: ALL_SUPPORTED_SCOPES,
     resource_name: 'Aceleriq OS MCP',
     resource_documentation: 'https://aceleriq.online/conectar-mcp',
     mcp: {
@@ -183,7 +193,7 @@ async function dispatch(
       return rpcError(id, RpcErrors.toolNotFound, `Unknown tool: ${name}`);
     }
 
-    if (!hasScope(ctx, tool.scopes)) {
+    if (!canInvoke(ctx, tool)) {
       await auditLog({
         correlationId, toolName: name, origin: ctx.origin, keyId: ctx.keyId,
         scopes: ctx.scopes, input: args,
@@ -236,7 +246,7 @@ Deno.serve(async (req) => {
 
   if (req.method === 'GET' && path.endsWith('/.well-known/oauth-protected-resource')) {
     return jsonResponse(protectedResourceMetadata(), 200, {
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-store',
       'Link': `<${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
     });
   }

@@ -15,6 +15,27 @@ const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const RESOURCE = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-server`;
 const AUTH_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
 
+const MCP_VERSION = '1.7.0';
+const MCP_PROTOCOL = '2025-06-18';
+
+const ALL_SUPPORTED_SCOPES = [
+  // OIDC identity
+  'openid', 'email', 'profile',
+  // Aceleriq aggregate
+  'aceleriq:read', 'aceleriq:write', 'aceleriq:finance',
+  // Granular
+  'clients:read',
+  'projects:read', 'projects:write',
+  'tasks:read', 'tasks:write',
+  'reports:read', 'reports:write',
+  'briefings:read',
+  'files:read', 'files:write', 'files:sensitive:read', 'files:archive',
+  'workspace:read',
+  'contracts:read', 'contracts:write',
+  'memory:read', 'memory:propose',
+  'admin',
+];
+
 async function proxyAuthorizationServerMetadata() {
   const upstream = await fetch(AUTH_SERVER_METADATA, {
     headers: { Accept: 'application/json' },
@@ -23,7 +44,7 @@ async function proxyAuthorizationServerMetadata() {
   return {
     ...metadata,
     issuer: AUTH_ISSUER,
-    scopes_supported: ['openid', 'profile', 'email', 'phone'],
+    scopes_supported: ALL_SUPPORTED_SCOPES,
     code_challenge_methods_supported: metadata.code_challenge_methods_supported ?? ['S256'],
     token_endpoint_auth_methods_supported: metadata.token_endpoint_auth_methods_supported ?? ['none'],
     mcp_resource: RESOURCE,
@@ -35,20 +56,17 @@ function protectedResourceMetadata() {
     resource: RESOURCE,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    // Supabase/Lovable Auth OAuth scopes are identity scopes. Aceleriq tool
-    // capabilities remain advertised per tool as `requiredScopes` and enforced
-    // server-side after token validation.
-    scopes_supported: ['openid', 'email', 'profile'],
+    scopes_supported: ALL_SUPPORTED_SCOPES,
     resource_documentation: 'https://aceleriq.online/conectar-mcp',
     resource_name: 'Aceleriq OS MCP',
     mcp: {
       transport: 'streamable-http',
-      protocol_version: '2025-06-18',
+      protocol_version: MCP_PROTOCOL,
       endpoint: RESOURCE,
       server_info: {
         name: 'aceleriq-mcp',
         title: 'Aceleriq OS MCP',
-        version: '1.2.0',
+        version: MCP_VERSION,
       },
     },
   };
@@ -72,7 +90,7 @@ Deno.serve(async (req) => {
     headers: {
       ...CORS,
       'Content-Type': 'application/json',
-      'Cache-Control': 'public, max-age=300',
+      'Cache-Control': 'no-store',
       'Link': `<${AUTH_SERVER_METADATA}>; rel="oauth-authorization-server"`,
     },
   });
