@@ -1110,11 +1110,16 @@ export default function Workspace() {
               <ChevronDown className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
             </button>
           </PopoverTrigger>
-          <PopoverContent align="end" className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[75vh] overflow-hidden flex flex-col">
+          <PopoverContent
+            align="end"
+            collisionPadding={12}
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            className="w-[320px] max-w-[calc(100vw-1rem)] p-0 max-h-[min(70svh,520px)] overflow-hidden flex flex-col"
+          >
             <div className="p-2 border-b border-border">
               <div className="relative">
                 <Search className="w-3.5 h-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-                <Input autoFocus value={pickerQuery} onChange={e => setPickerQuery(e.target.value)} placeholder="Buscar cliente..." className="h-8 pl-8 text-xs" />
+                <Input value={pickerQuery} onChange={e => setPickerQuery(e.target.value)} placeholder="Buscar cliente..." className="h-9 md:h-8 pl-8 text-[16px] md:text-xs" />
               </div>
               <div className="flex items-center gap-1 mt-2">
                 {[
