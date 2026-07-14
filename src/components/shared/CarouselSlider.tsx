@@ -3,7 +3,15 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { supabase } from "@/integrations/supabase/client";
 
-type Slide = { id?: string; file_name: string; file_url: string };
+type Slide = {
+  id?: string;
+  file_name: string;
+  file_url: string;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  mime_type?: string | null;
+  extension?: string | null;
+};
 
 /**
  * Robust carousel preview. Always fetches sibling slides directly from the DB
@@ -26,7 +34,7 @@ export default function CarouselSlider({
     (async () => {
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url")
+        .select("id, file_name, file_url, storage_bucket, storage_path, mime_type, extension")
         .eq("parent_file_id", parent.id)
         .order("file_name", { ascending: true });
       if (!alive) return;
@@ -63,12 +71,30 @@ export default function CarouselSlider({
   const current = files[idx];
   if (!current) return null;
   if (files.length === 1) {
-    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />;
+    return (
+      <FilePreviewContent
+        fileName={current.file_name}
+        fileUrl={current.file_url}
+        fileId={(current as any).id}
+        storageBucket={current.storage_bucket}
+        storagePath={current.storage_path}
+        mimeType={current.mime_type}
+        extension={current.extension}
+      />
+    );
   }
 
   return (
     <div className="relative group">
-      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={(current as any).id} />
+      <FilePreviewContent
+        fileName={current.file_name}
+        fileUrl={current.file_url}
+        fileId={(current as any).id}
+        storageBucket={current.storage_bucket}
+        storagePath={current.storage_path}
+        mimeType={current.mime_type}
+        extension={current.extension}
+      />
       <button
         type="button"
         aria-label="Anterior"
