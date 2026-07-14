@@ -3231,6 +3231,32 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           if (picks.length) onAttachToNotes?.(picks);
         }}
       />
+
+      {/* Modal iframe: abre links dentro do chat sem sair da conversa */}
+      <Dialog open={!!linkPreview} onOpenChange={(v) => { if (!v) setLinkPreview(null); }}>
+        <DialogContent className="max-w-5xl p-0 gap-0 overflow-hidden h-[85vh] flex flex-col">
+          <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/40 text-[11px]">
+            <Link2 className="w-3.5 h-3.5 text-primary shrink-0" />
+            <span className="truncate flex-1 text-muted-foreground">{linkPreview}</span>
+            <button
+              onClick={() => linkPreview && window.open(linkPreview, "_blank", "noopener,noreferrer")}
+              className="px-2 py-1 rounded bg-primary/10 hover:bg-primary/20 text-primary border border-primary/30"
+              title="Abrir em nova aba (alguns sites bloqueiam iframe)"
+            >Nova aba</button>
+            <button
+              onClick={() => setLinkPreview(null)}
+              className="px-2 py-1 rounded hover:bg-secondary text-muted-foreground border border-border"
+            >Fechar</button>
+          </div>
+          <iframe
+            src={linkPreview || "about:blank"}
+            className="flex-1 w-full bg-background"
+            sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
+            referrerPolicy="no-referrer"
+            title="Preview de link"
+          />
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
