@@ -79,6 +79,9 @@ export type ToolScope =
   | 'reports:write'
   | 'briefings:read'
   | 'files:read'
+  | 'files:write'
+  | 'files:sensitive:read'
+  | 'files:archive'
   | 'workspace:read'
   | 'contracts:read'
   | 'contracts:write'
@@ -99,6 +102,9 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'reports:write',
   'briefings:read',
   'files:read',
+  'files:write',
+  'files:sensitive:read',
+  'files:archive',
   'workspace:read',
   'contracts:read',
   'contracts:write',
@@ -120,7 +126,10 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'reports:read': { title: 'Relatórios — leitura', description: 'Listar e ler relatórios publicados.' },
   'reports:write': { title: 'Relatórios — escrita', description: 'Criar rascunhos de relatórios.', sensitive: true },
   'briefings:read': { title: 'Briefings — leitura', description: 'Listar e ler briefings enviados.' },
-  'files:read': { title: 'Arquivos — leitura', description: 'Listar e detalhar arquivos e entregas.' },
+  'files:read': { title: 'Arquivos — leitura', description: 'Consultar arquivos e conteúdos não restritos dos clientes autorizados.' },
+  'files:write': { title: 'Arquivos — escrita', description: 'Anexar arquivos, criar versões e atualizar seus metadados.', sensitive: true },
+  'files:sensitive:read': { title: 'Arquivos sensíveis — leitura', description: 'Ler contratos, documentos societários e outros arquivos marcados como confidenciais ou restritos.', sensitive: true },
+  'files:archive': { title: 'Arquivos — arquivar/restaurar', description: 'Arquivar e restaurar arquivos, mantendo o histórico.', sensitive: true },
   'workspace:read': { title: 'Workspace — leitura', description: 'Navegar pastas e nós do Workspace interno.' },
   'contracts:read': { title: 'Contratos — leitura', description: 'Listar e detalhar contratos e status de assinatura.' },
   'contracts:write': { title: 'Contratos — escrita', description: 'Criar, atualizar, enviar e cancelar contratos não assinados.', sensitive: true },
@@ -139,7 +148,7 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
     'workspace:read', 'contracts:read',
   ],
   'aceleriq:write': [
-    'projects:write', 'tasks:write', 'reports:write',
+    'projects:write', 'tasks:write', 'reports:write', 'files:write',
   ],
 };
 
@@ -192,7 +201,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.6.0',
+  version: '1.7.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1198,6 +1207,221 @@ const upsertProjectMemoryTool: ToolDefinition = {
   },
 };
 
+// ─── Files v2 (Bloco B — v1.7.0) ──────────────────────────────
+import {
+  FILE_WRITE_ENABLED,
+  archiveFile, archiveSchema,
+  createFileVersion, createVersionSchema,
+  finalizeFileUpload, finalizeUploadSchema,
+  getFileContent, getContentSchema,
+  getProcessingStatus, processingStatusSchema,
+  inlineUploadSchema, uploadFileInline,
+  prepareFileUpload, prepareUploadSchema,
+  restoreFile, restoreSchema,
+  searchFileContent, searchContentSchema,
+  updateFileMetadata, updateMetadataSchema,
+  FileError,
+} from './mcp-files-services.ts';
+
+const FILES_WRITE: readonly ToolScope[] = ['files:write'];
+const FILES_ARCHIVE: readonly ToolScope[] = ['files:archive'];
+const FILES_READ: readonly ToolScope[] = ['files:read'];
+
+function toRpc(e: unknown): Error {
+  if (e instanceof FileError) return new Error(`[${e.code}] ${e.message}`);
+  return e instanceof Error ? e : new Error(String(e));
+}
+
+function makeFileTool(
+  name: string, title: string, description: string,
+  scopes: readonly ToolScope[], schema: z.ZodTypeAny, jsonSchema: Record<string, unknown>,
+  fn: (input: any, ctx: any) => Promise<unknown>,
+  writeOp = false,
+): ToolDefinition {
+  return {
+    name, title, description, scopes,
+    annotations: writeOp ? { ...WRITE_ANNOTATIONS } : READ_ANNOTATIONS,
+    inputSchema: jsonSchema,
+    handler: async (input, ctx) => {
+      const parsed = schema.safeParse(input ?? {});
+      if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+      try {
+        return await fn(parsed.data, {
+          keyId: ctx.keyId, scopes: ctx.scopes, origin: ctx.origin,
+          correlationId: ctx.correlationId ?? crypto.randomUUID(),
+          resultRefHolder: ctx.resultRefHolder,
+        });
+      } catch (e) { throw toRpc(e); }
+    },
+  };
+}
+
+const prepareUploadTool = makeFileTool(
+  'aceleriq_prepare_file_upload', 'Preparar upload de arquivo',
+  'Cria registro provisório e devolve URL assinada de upload para o bucket privado mcp-files. Exige files:write. Valida cliente, projeto e MIME. project_id (se informado) precisa pertencer ao client_id.',
+  FILES_WRITE, prepareUploadSchema,
+  { type: 'object', additionalProperties: false, required: ['client_id','file_name','mime_type','size_bytes','folder','idempotency_key'], properties: {
+    client_id: { type: 'string', format: 'uuid' }, project_id: { type: 'string', format: 'uuid' },
+    file_name: { type: 'string', maxLength: 255 }, mime_type: { type: 'string' },
+    size_bytes: { type: 'integer', minimum: 1 }, sha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' },
+    folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
+    file_type: { type: 'string' },
+    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
+    sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
+    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    tags: { type: 'array', items: { type: 'string' } },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  prepareFileUpload, true,
+);
+
+const finalizeUploadTool = makeFileTool(
+  'aceleriq_finalize_file_upload', 'Finalizar upload de arquivo',
+  'Confirma upload no Storage, valida SHA-256 e tamanho, marca status=ready e enfileira extração. Coloca em quarentena se houver divergência.',
+  FILES_WRITE, finalizeUploadSchema,
+  { type: 'object', additionalProperties: false, required: ['file_id','idempotency_key'], properties: {
+    file_id: { type: 'string', format: 'uuid' },
+    sha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  finalizeFileUpload, true,
+);
+
+const inlineUploadTool = makeFileTool(
+  'aceleriq_upload_file_inline', 'Upload inline (base64)',
+  'Upload direto por conteúdo Base64. Limite padrão 10 MB. Ideal para anexos pequenos. Não registra Base64 em logs nem devolve na resposta.',
+  FILES_WRITE, inlineUploadSchema,
+  { type: 'object', additionalProperties: false, required: ['client_id','file_name','mime_type','content_base64','folder','idempotency_key'], properties: {
+    client_id: { type: 'string', format: 'uuid' }, project_id: { type: 'string', format: 'uuid' },
+    file_name: { type: 'string', maxLength: 255 }, mime_type: { type: 'string' },
+    content_base64: { type: 'string', description: 'Base64 do conteúdo (≤10MB decodificado).' },
+    folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
+    file_type: { type: 'string' },
+    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
+    sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
+    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    tags: { type: 'array', items: { type: 'string' } },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  uploadFileInline, true,
+);
+
+// aceleriq_upload_file (canal do ChatGPT Apps SDK) — atualmente usa o mesmo mecanismo inline;
+// o SDK oficial de anexos será plugado no Bloco C sem quebrar este contrato.
+const uploadFileTool = makeFileTool(
+  'aceleriq_upload_file', 'Anexar arquivo (canal ChatGPT)',
+  'Recebe arquivos anexados pelo usuário na conversa (ChatGPT/Codex). Atualmente aceita content_base64 como fallback universal; a integração oficial do Apps SDK de anexos é ativada por _meta.attachments quando disponível.',
+  FILES_WRITE, inlineUploadSchema,
+  { type: 'object', additionalProperties: false, required: ['client_id','file_name','mime_type','content_base64','folder','idempotency_key'], properties: {
+    client_id: { type: 'string', format: 'uuid' }, project_id: { type: 'string', format: 'uuid' },
+    file_name: { type: 'string', maxLength: 255 }, mime_type: { type: 'string' },
+    content_base64: { type: 'string' },
+    folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
+    file_type: { type: 'string' },
+    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
+    sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
+    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    tags: { type: 'array', items: { type: 'string' } },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  uploadFileInline, true,
+);
+
+const getContentTool = makeFileTool(
+  'aceleriq_get_file_content', 'Ler conteúdo do arquivo',
+  'Lê o conteúdo extraído (páginas/planilhas/slides/chunks) com paginação. Documentos confidenciais/restritos exigem files:sensitive:read. Arquivos em quarentena não devolvem conteúdo.',
+  FILES_READ, getContentSchema,
+  { type: 'object', additionalProperties: false, required: ['file_id'], properties: {
+    file_id: { type: 'string', format: 'uuid' },
+    mode: { type: 'string', enum: ['metadata','full','chunks','pages','sheets','slides'] },
+    start_page: { type: 'integer', minimum: 1 }, end_page: { type: 'integer', minimum: 1 },
+    sheet_name: { type: 'string' },
+    start_slide: { type: 'integer', minimum: 1 }, end_slide: { type: 'integer', minimum: 1 },
+    offset: { type: 'integer', minimum: 0 }, limit: { type: 'integer', minimum: 1, maximum: 200 },
+    include_metadata: { type: 'boolean' },
+  }},
+  getFileContent, false,
+);
+
+const searchContentTool = makeFileTool(
+  'aceleriq_search_file_content', 'Pesquisar dentro dos documentos',
+  'Full-text search em português dentro do conteúdo extraído. Respeita client_id, projeto, sensibilidade e escopos. Nunca retorna conteúdo sensível sem files:sensitive:read.',
+  FILES_READ, searchContentSchema,
+  { type: 'object', additionalProperties: false, required: ['query'], properties: {
+    query: { type: 'string', minLength: 1, maxLength: 500 },
+    client_id: { type: 'string', format: 'uuid' }, project_id: { type: 'string', format: 'uuid' },
+    file_id: { type: 'string', format: 'uuid' },
+    folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
+    file_type: { type: 'string' }, tags: { type: 'array', items: { type: 'string' } },
+    limit: { type: 'integer', minimum: 1, maximum: 100 }, offset: { type: 'integer', minimum: 0 },
+    include_snippets: { type: 'boolean' },
+  }},
+  searchFileContent, false,
+);
+
+const updateMetadataTool = makeFileTool(
+  'aceleriq_update_file_metadata', 'Atualizar metadados',
+  'Atualiza somente campos permitidos (folder, visibility, sensitivity, tags, descrição etc.). Nunca troca client_id, uploaded_by, sha256 ou storage_path. Não substitui o arquivo físico.',
+  FILES_WRITE, updateMetadataSchema,
+  { type: 'object', additionalProperties: false, required: ['file_id','idempotency_key'], properties: {
+    file_id: { type: 'string', format: 'uuid' }, project_id: { type: ['string','null'], format: 'uuid' },
+    folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
+    file_type: { type: 'string' },
+    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
+    sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
+    requires_approval: { type: 'boolean' }, description: { type: 'string' }, caption: { type: 'string' },
+    tags: { type: 'array', items: { type: 'string' } },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  updateFileMetadata, true,
+);
+
+const createVersionTool = makeFileTool(
+  'aceleriq_create_file_version', 'Criar nova versão',
+  'Cria nova versão herdando client_id, project_id, pasta, visibilidade e sensibilidade. Versão anterior permanece disponível. Contratos restritos são imutáveis.',
+  FILES_WRITE, createVersionSchema,
+  { type: 'object', additionalProperties: false, required: ['parent_file_id','content_base64','mime_type','idempotency_key'], properties: {
+    parent_file_id: { type: 'string', format: 'uuid' },
+    content_base64: { type: 'string' }, file_name: { type: 'string' }, mime_type: { type: 'string' },
+    version_notes: { type: 'string' },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  createFileVersion, true,
+);
+
+const archiveTool = makeFileTool(
+  'aceleriq_archive_file', 'Arquivar (soft delete)',
+  'Marca o arquivo como archived preservando histórico e Storage. Contratos oficiais assinados não podem ser arquivados via MCP.',
+  FILES_ARCHIVE, archiveSchema,
+  { type: 'object', additionalProperties: false, required: ['file_id','idempotency_key'], properties: {
+    file_id: { type: 'string', format: 'uuid' }, reason: { type: 'string' },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  archiveFile, true,
+);
+
+const restoreTool = makeFileTool(
+  'aceleriq_restore_file', 'Restaurar arquivo arquivado',
+  'Restaura arquivo previamente arquivado (status → ready). Registra auditoria.',
+  FILES_ARCHIVE, restoreSchema,
+  { type: 'object', additionalProperties: false, required: ['file_id','idempotency_key'], properties: {
+    file_id: { type: 'string', format: 'uuid' },
+    idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+  }},
+  restoreFile, true,
+);
+
+const processingStatusTool = makeFileTool(
+  'aceleriq_get_file_processing_status', 'Status de processamento',
+  'Consulta status de upload/validação/extração sem baixar conteúdo. Recebe file_id ou processing_job_id.',
+  FILES_READ, processingStatusSchema,
+  { type: 'object', additionalProperties: false, properties: {
+    file_id: { type: 'string', format: 'uuid' }, processing_job_id: { type: 'string', format: 'uuid' },
+  }},
+  getProcessingStatus, false,
+);
+
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -1241,6 +1465,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Persistent per-client/project memory (Studio + external agents)
   getProjectMemoryTool,
   upsertProjectMemoryTool,
+  // Files v2 (Bloco B — v1.7.0)
+  ...(FILE_WRITE_ENABLED ? [
+    prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,
+    updateMetadataTool, createVersionTool, archiveTool, restoreTool,
+  ] : []),
+  getContentTool, searchContentTool, processingStatusTool,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
