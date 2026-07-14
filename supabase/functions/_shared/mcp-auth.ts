@@ -216,8 +216,12 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 }
 
 
+// Kept for backward compat. Expands aggregate scopes (aceleriq:read/write)
+// into granular ones so this matches canInvoke() in mcp-tools.ts.
+import { expandScopes } from './mcp-tools.ts';
 export function hasScope(ctx: AuthContext, required: readonly string[]): boolean {
   if (required.length === 0) return true;
-  if (ctx.scopes.includes('admin')) return true;
-  return required.some(s => ctx.scopes.includes(s));
+  const expanded = expandScopes(ctx.scopes);
+  if (expanded.has('admin')) return true;
+  return required.some(s => expanded.has(s));
 }
