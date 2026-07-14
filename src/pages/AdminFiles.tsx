@@ -73,12 +73,12 @@ function CarouselSlider({ files }: { files: any[] }) {
 
   if (!current) return null;
   if (files.length === 1) {
-    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />;
+    return <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={current.id} />;
   }
 
   return (
     <div className="relative group">
-      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} />
+      <FilePreviewContent fileName={current.file_name} fileUrl={current.file_url} fileId={current.id} />
       <button
         type="button"
         className="absolute z-10 left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
