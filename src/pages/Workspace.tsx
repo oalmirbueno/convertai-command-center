@@ -1534,7 +1534,14 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <FilePreview node={selected} getUrl={urlFor} />
+              {selected.__virtual && selected.__file_id && (virtChildrenMap.get(selected.__file_id)?.length || 0) > 0 ? (
+                <SharedCarouselSlider
+                  parent={{ id: selected.__file_id, file_name: selected.name, file_url: selected.__external_url || "" }}
+                  initialChildren={virtChildrenMap.get(selected.__file_id) || []}
+                />
+              ) : (
+                <FilePreview node={selected} getUrl={urlFor} />
+              )}
               <div className="flex flex-wrap items-center gap-2">
                 <Button size="sm" variant="outline" onClick={async () => openFile(await urlFor(selected))} className="gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
