@@ -335,7 +335,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   }, [open, minimized]);
 
   // ── Fordista: linkagem com projeto + publicação + PDF ──
-  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string; client_id?: string | null }[]>([]);
+  const [projectClient, setProjectClient] = useState<{ id: string; name: string } | null>(null);
   const [projectId, setProjectId] = useState<string | null>(() => {
     try { return localStorage.getItem(`studio_project_v1:${contextKey}`) || null; } catch { return null; }
   });
@@ -356,13 +357,42 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   useEffect(() => {
     let cancel = false;
     (async () => {
-      let q = supabase.from("projects").select("id, name").order("created_at", { ascending: false }).limit(50);
+      let q = supabase.from("projects").select("id, name, client_id").order("created_at", { ascending: false }).limit(50);
       if (clientId) q = q.eq("client_id", clientId);
       const { data } = await q;
       if (!cancel) setProjects((data as any) || []);
     })();
     return () => { cancel = true; };
   }, [clientId]);
+
+  // Resolve o cliente do projeto selecionado (usado quando o usuário está em
+  // escopo "Global" mas escolhe um projeto: o agente precisa herdar o cliente).
+  useEffect(() => {
+    let cancel = false;
+    if (!projectId) { setProjectClient(null); return; }
+    const local = projects.find(p => p.id === projectId);
+    (async () => {
+      let cid = local?.client_id || null;
+      if (!cid) {
+        const { data } = await supabase.from("projects").select("client_id").eq("id", projectId).maybeSingle();
+        cid = (data as any)?.client_id || null;
+      }
+      if (!cid) { if (!cancel) setProjectClient(null); return; }
+      const { data: prof } = await supabase.from("profiles").select("id, full_name, company_name").eq("id", cid).maybeSingle();
+      if (cancel) return;
+      const name = (prof as any)?.company_name || (prof as any)?.full_name || "Cliente";
+      setProjectClient({ id: cid, name });
+    })();
+    return () => { cancel = true; };
+  }, [projectId, projects]);
+
+  const effectiveClientId = clientId || projectClient?.id || null;
+  const effectiveClientName = clientName || projectClient?.name || contextLabel;
+  const activeProjectName = projects.find(p => p.id === projectId)?.name || null;
+  const scopeChipLabel = activeProjectName
+    ? `${projectClient?.name || clientName || contextLabel} › ${activeProjectName}`
+    : contextLabel;
+
 
   // ── Sincronização bidirecional em tempo real ──
   // Refs internas para evitar loops entre save e realtime e preservar edições locais
@@ -900,8 +930,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             {/* Escopo · label limpo + 2 ações inline (recarregar / copiar contexto) */}
             <div className="flex items-center h-8 sm:h-7 rounded-full border border-border/70 bg-background/70 pl-2.5 pr-1 shrink-0 max-w-full">
               <Globe2 className="w-3.5 h-3.5 text-primary/80 shrink-0" />
-              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[200px] sm:max-w-[240px]" title={contextLabel}>
-                {contextLabel}
+              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[240px] sm:max-w-[300px]" title={scopeChipLabel}>
+                {scopeChipLabel}
               </span>
               <span className="mx-1.5 h-4 w-px bg-border/70 shrink-0" />
               <button
@@ -985,8 +1015,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               <div className="grid h-full min-h-0 gap-3 p-3 lg:grid-cols-[minmax(0,1.08fr)_minmax(340px,0.92fr)]">
                 <section className="min-h-0 overflow-hidden rounded-xl border border-border bg-background/65">
                   <AgentChat
-                    clientId={clientId ?? null}
-                    clientName={clientName ?? null}
+                    clientId={effectiveClientId}
+                    clientName={effectiveClientName}
                     projectId={projectId}
                     folderId={folderId ?? null}
                     folderPath={folderPath ?? contextLabel}
