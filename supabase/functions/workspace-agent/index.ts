@@ -1,4 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory, memoryToPromptBlock } from "../_shared/project-memory-services.ts";
+import { getContextBundle as _sbGetContext, searchCode as _sbSearch, proposeUpdate as _sbPropose } from "../_shared/second-brain-github.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -276,6 +278,29 @@ Regras absolutas:
       const doc = docRes.data as any;
       if (doc?.notes) deepLines.push(`\nNOTAS PUBLICADAS DO PROJETO:\n${String(doc.notes).slice(0, 2200)}`);
       if (!sysFiles.length && !wsNodes.length) deepLines.push("\nOBSERVAÇÃO: nenhuma base de arquivos foi encontrada para este cliente/projeto.");
+
+      // ── MEMÓRIA PERSISTENTE (últimas 25) por cliente/projeto ──
+      try {
+        const mem = await _listProjectMemory({ client_id: cidDeep, project_id: pidDeep ?? undefined, limit: 25 });
+        if (mem.length) {
+          deepLines.push(`\nMEMÓRIA PERSISTENTE DO CLIENTE/PROJETO (${mem.length} registros — do mais recente ao mais antigo):\n${memoryToPromptBlock(mem)}`);
+        }
+      } catch (e) { console.warn("memory read failed", (e as Error).message); }
+
+      // ── SEGUNDO CÉREBRO (bootstrap + busca contextual pelo nome do cliente) ──
+      try {
+        const bundle = await _sbGetContext();
+        const clientName = (prof?.company_name || prof?.full_name || "").toString().trim();
+        let hits: any[] = [];
+        if (clientName.length >= 3) {
+          try { hits = await _sbSearch(clientName, 6); } catch { hits = []; }
+        }
+        const bootstrap = (bundle.files || []).map((f: any) => `### ${f.path}\n${String(f.content || "").slice(0, 1200)}`).join("\n\n");
+        const searchBlock = hits.length ? `\n\nBUSCA no Segundo Cérebro por "${clientName}":\n${hits.map(h => `- ${h.path}${h.snippet ? ` — ${String(h.snippet).slice(0,200)}` : ""}`).join("\n")}` : "";
+        if (bootstrap || searchBlock) {
+          deepLines.push(`\nSEGUNDO CÉREBRO (OpenClaw memory — leitura viva):\n${bootstrap}${searchBlock}`);
+        }
+      } catch (e) { console.warn("second-brain read failed", (e as Error).message); }
     }
 
     // monta contexto
@@ -583,6 +608,37 @@ Regras:
               await admin.from("workspace_agent_threads").update({ title, updated_at: new Date().toISOString() }).eq("id", thread_id);
             } else {
               await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
+            }
+            // ── Memória persistente: grava turno como registro cumulativo ──
+            if (context?.client_id) {
+              try {
+                const briefTitle = userMessageToStore.slice(0, 90).replace(/\n/g, " ").trim();
+                const body = `**Pergunta:** ${userMessageToStore.slice(0, 1200)}\n\n**Resposta do agente:** ${full.slice(0, 3200)}`;
+                await _upsertProjectMemory({
+                  client_id: context.client_id,
+                  project_id: context.project_id ?? null,
+                  kind: "summary",
+                  source: "studio-agent",
+                  title: briefTitle,
+                  content: body,
+                  tags: [persona?.gpt_name || "prepro"].filter(Boolean) as string[],
+                  metadata: { thread_id, persona_id: persona?.id || null },
+                  created_by: user.id,
+                });
+              } catch (e) { console.warn("memory write failed", (e as Error).message); }
+              // Propaga um resumo enxuto ao Segundo Cérebro (inbox) — não bloqueia falhas.
+              try {
+                if (full.length > 400) {
+                  await _sbPropose({
+                    title: `Studio · ${(context.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
+                    summary: userMessageToStore.slice(0, 400),
+                    origin: "aceleriq-studio",
+                    correlation_id: thread_id,
+                    context: `client_id=${context.client_id}${context.project_id ? ` · project_id=${context.project_id}` : ""}`,
+                    body_markdown: `# Studio turn\n\n**Cliente:** ${context.client_name || context.client_id}\n\n## Pergunta\n${userMessageToStore.slice(0, 2000)}\n\n## Resposta do agente\n${full.slice(0, 8000)}`,
+                  });
+                }
+              } catch (e) { console.warn("second-brain propose failed", (e as Error).message); }
             }
           }
         } catch (e) {
