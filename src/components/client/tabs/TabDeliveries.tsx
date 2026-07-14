@@ -12,8 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, File, ChevronLeft, ChevronRight, Images } from "lucide-react";
+import { FileImage, FileText, File, ChevronLeft, ChevronRight, Images, Film } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 function useSwipe(onLeft: () => void, onRight: () => void, threshold = 50) {
   const start = useRef<{ x: number; y: number } | null>(null);
@@ -100,25 +101,40 @@ function groupFiles(files: any[]): DeliveryGroup[] {
 }
 
 function CarouselThumbnails({ files, onOpen }: { files: any[]; onOpen: (idx: number) => void }) {
-  const imageFiles = files.filter(f => isImage(f.file_name));
-  const show = imageFiles.slice(0, 4);
-  const extra = imageFiles.length - 4;
-
   return (
-    <div className="flex gap-1.5 overflow-hidden">
-      {show.map((f, i) => (
-        <button key={f.id} onClick={(e) => { e.stopPropagation(); onOpen(files.indexOf(f)); }}
+    <div className="flex gap-1.5 overflow-x-auto pb-1">
+      {files.map((f, i) => (
+        <button key={f.id} onClick={(e) => { e.stopPropagation(); onOpen(i); }}
           className="relative w-16 h-16 rounded-lg overflow-hidden border border-border shrink-0 hover:border-primary/50 transition-colors">
-          <img src={f.file_url} alt={f.file_name} className="w-full h-full object-cover" />
-          {i === 3 && extra > 0 && (
-            <div className="absolute inset-0 bg-background/70 flex items-center justify-center text-xs font-medium text-foreground">
-              +{extra}
-            </div>
-          )}
+          <DeliveryThumb file={f} />
         </button>
       ))}
     </div>
   );
+}
+
+function DeliveryThumb({ file }: { file: any }) {
+  const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
+  const { url } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform: kind === "image" ? { width: 320, height: 320, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  if (url && kind === "image") return <img src={url} alt={file.file_name} loading="lazy" decoding="async" className="w-full h-full object-cover" />;
+  if (url && kind === "video") {
+    return (
+      <>
+        <video src={`${url}#t=0.1`} muted playsInline preload="none" className="w-full h-full object-cover" />
+        <div className="absolute inset-0 flex items-center justify-center bg-background/30">
+          <Film className="w-4 h-4 text-foreground" />
+        </div>
+      </>
+    );
+  }
+  return <div className="w-full h-full bg-secondary flex items-center justify-center"><FileText className="w-4 h-4 text-muted-foreground" /></div>;
 }
 
 export default function TabDeliveries({ projectId }: { projectId: string }) {
@@ -267,7 +283,15 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                 setPreviewIndex={setPreviewIndex}
                 totalItems={previewGroup?.children.length || 1}
               >
-                <FilePreviewContent fileName={currentPreviewFile.file_name} fileUrl={currentPreviewFile.file_url} />
+                <FilePreviewContent
+                  fileName={currentPreviewFile.file_name}
+                  fileUrl={currentPreviewFile.file_url}
+                  fileId={currentPreviewFile.id}
+                  storageBucket={currentPreviewFile.storage_bucket}
+                  storagePath={currentPreviewFile.storage_path}
+                  mimeType={currentPreviewFile.mime_type || currentPreviewFile.file_type}
+                  extension={currentPreviewFile.extension}
+                />
 
                 {previewGroup && previewGroup.children.length > 1 && (
                   <>
@@ -305,13 +329,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                   {previewGroup.children.map((cf: any, i: number) => (
                     <button key={cf.id} onClick={() => setPreviewIndex(i)}
                       className={`shrink-0 w-14 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === previewIndex ? "border-primary ring-1 ring-primary/30" : "border-border opacity-60 hover:opacity-100"}`}>
-                      {isImage(cf.file_name) ? (
-                        <img src={cf.file_url} alt={cf.file_name} className="w-full h-full object-cover" />
-                      ) : (
-                        <div className="w-full h-full bg-secondary flex items-center justify-center">
-                          <FileText className="w-4 h-4 text-muted-foreground" />
-                        </div>
-                      )}
+                      <DeliveryThumb file={cf} />
                     </button>
                   ))}
                 </div>

@@ -25,10 +25,29 @@ export function isMcpFileUrl(value?: string | null) {
   return !!value && value.startsWith(MCP_FILE_PREFIX);
 }
 
+function storageRefFromStorageUrl(value?: string | null): { bucket: string; path: string } | null {
+  if (!value || !/^https?:\/\//i.test(value)) return null;
+  try {
+    const url = new URL(value);
+    const marker = "/storage/v1/object/";
+    const idx = url.pathname.indexOf(marker);
+    if (idx < 0) return null;
+    const rest = url.pathname.slice(idx + marker.length);
+    const parts = rest.split("/").filter(Boolean);
+    if (parts[0] === "public" || parts[0] === "sign" || parts[0] === "authenticated") parts.shift();
+    const bucket = parts.shift();
+    const path = parts.join("/");
+    if (!bucket || !path) return null;
+    return { bucket: decodeURIComponent(bucket), path: decodeURIComponent(path) };
+  } catch {
+    return null;
+  }
+}
+
 export function storageRefFromFile(input: ResolveInput): { bucket: string; path: string } | null {
   const bucket = input.storageBucket || (isMcpFileUrl(input.fileUrl) ? "mcp-files" : null);
   const path = input.storagePath || (isMcpFileUrl(input.fileUrl) ? input.fileUrl!.slice(MCP_FILE_PREFIX.length) : null);
-  if (!bucket || !path) return null;
+  if (!bucket || !path) return storageRefFromStorageUrl(input.fileUrl);
   return { bucket, path };
 }
 
