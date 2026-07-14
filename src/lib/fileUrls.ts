@@ -46,7 +46,10 @@ export async function resolveFileUrl(input: UseResolvedInput): Promise<string> {
       input.expiresIn || 3600,
       options,
     );
-    if (error || !data?.signedUrl) throw error || new Error("URL indisponível");
+    if (error || !data?.signedUrl) {
+      if (isDirectFileUrl(input.fileUrl)) return input.fileUrl!;
+      throw error || new Error("URL indisponível");
+    }
     return data.signedUrl;
   }
   if (isDirectFileUrl(input.fileUrl)) return input.fileUrl!;
