@@ -1465,6 +1465,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   // Persistent per-client/project memory (Studio + external agents)
   getProjectMemoryTool,
   upsertProjectMemoryTool,
+  // Files v2 (Bloco B — v1.7.0)
+  ...(FILE_WRITE_ENABLED ? [
+    prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,
+    updateMetadataTool, createVersionTool, archiveTool, restoreTool,
+  ] : []),
+  getContentTool, searchContentTool, processingStatusTool,
 ];
 
 // Bloco D: augment each tool's `scopes` with its granular resource scope so
