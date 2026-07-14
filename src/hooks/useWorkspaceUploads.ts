@@ -46,6 +46,42 @@ export function useWorkspaceUploads() {
 
     patch(id, { status: "uploading", progress: 0, error: undefined });
 
+    // Fast path for small/medium files: direct upload avoids TUS handshake
+    // overhead (create + PATCH per chunk) and is dramatically faster on the
+    // typical marketing assets uploaded here (images, docs, short reels).
+    const FAST_PATH_MAX = 40 * 1024 * 1024;
+    if (file.size <= FAST_PATH_MAX) {
+      try {
+        // Simulated smooth progress while the single PUT is in-flight — the
+        // real byte-level progress is not exposed by supabase-js, so we ramp
+        // to 90% and jump to 100% on success.
+        let simulated = 0;
+        const tick = setInterval(() => {
+          simulated = Math.min(90, simulated + (simulated < 40 ? 8 : 3));
+          patch(id, { progress: simulated });
+        }, 250);
+        const { error } = await supabase.storage.from("workspace").upload(key, file, {
+          cacheControl: "3600",
+          contentType: file.type || "application/octet-stream",
+          upsert: false,
+        });
+        clearInterval(tick);
+        if (error) throw error;
+        const { error: insErr } = await supabase.from("workspace_nodes").insert({
+          name: file.name, kind: "file", scope,
+          client_id: scope === "client" ? clientId : null,
+          parent_id: parentId, mime: file.type || null,
+          size_bytes: file.size, storage_path: key, created_by: userId,
+        });
+        if (insErr) throw insErr;
+        patch(id, { status: "done", progress: 100, storagePath: key });
+        onDone?.();
+      } catch (e: any) {
+        patch(id, { status: "error", error: e?.message || "Erro no envio" });
+      }
+      return;
+    }
+
     const startedAt = Date.now();
     let lastLoaded = 0; let lastAt = startedAt;
 
@@ -104,6 +140,7 @@ export function useWorkspaceUploads() {
     } catch {}
     upload.start();
   }, []);
+
 
   const enqueue = useCallback((args: StartArgs) => {
     const newItems: UploadItem[] = args.files.map(file => {
