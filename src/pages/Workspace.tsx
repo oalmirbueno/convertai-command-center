@@ -153,17 +153,29 @@ function suggestFolderName(n: Node): string {
 
 
 
-function virtFileNode(f: any, clientId: string): Node {
+function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
+  // Normalize `file_type` — legacy rows may store a bare extension ("mp4")
+  // instead of a full MIME. Fall back to extension inference so kindOf and
+  // FilePreview recognize videos/images correctly.
+  const rawType = (f.file_type || "").toLowerCase();
+  let mime: string | null = rawType || null;
+  if (mime && !mime.includes("/")) {
+    if (["mp4","mov","webm","mkv","m4v"].includes(mime)) mime = `video/${mime}`;
+    else if (["png","jpg","jpeg","gif","webp","avif","svg"].includes(mime)) mime = `image/${mime === "jpg" ? "jpeg" : mime}`;
+    else if (["mp3","wav","ogg","m4a","flac"].includes(mime)) mime = `audio/${mime}`;
+    else if (mime === "pdf") mime = "application/pdf";
+  }
   return {
     id: `${VIRT_PREFIX}file:${f.id}`,
     parent_id: null, scope: "client", client_id: clientId,
     kind: "file", name: f.file_name,
-    mime: f.file_type || null, size_bytes: null, storage_path: null,
+    mime, size_bytes: null, storage_path: null,
     duration_sec: null, sort_index: 0,
     sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
     created_by: f.uploaded_by || null, created_at: f.created_at,
     __virtual: true, __external_url: f.file_url, __file_id: f.id,
     __approval_status: f.approval_status,
+    __carousel_count: carouselCount,
   };
 }
 
