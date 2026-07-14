@@ -378,7 +378,7 @@ export default function Workspace() {
       const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
       return parents
         .filter((f) => (f.folder || "").trim() === folderName)
-        .map((f) => virtFileNode(f, clientId));
+        .map((f) => virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0));
     }
     return [];
   }, [clientFiles, scope, clientId, parent]);
