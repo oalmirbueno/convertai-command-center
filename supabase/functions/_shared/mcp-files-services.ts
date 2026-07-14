@@ -400,9 +400,10 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
   }).select('*').single();
   if (insErr) throw new FileError('validation:invalid_request', insErr.message);
 
-  await db().from('file_processing_jobs').insert({
+  const { data: jobRow } = await db().from('file_processing_jobs').insert({
     file_id: fileId, job_type: 'extract', payload: { mime_type: input.mime_type },
-  });
+  }).select('id').single();
+  if (jobRow?.id) kickWorker(jobRow.id);
 
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = fileId;
 
