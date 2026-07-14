@@ -86,6 +86,21 @@ function ensureWriteAllowed(_ctx: FileCtx) {
   if (!FILE_WRITE_ENABLED) throw new FileError('write:forbidden', 'File write disabled (MCP_FILE_WRITE_V2=false)');
 }
 
+// Fire-and-forget worker trigger. Never awaited: extraction must not block the tool call.
+function kickWorker(jobId: string): void {
+  try {
+    const url = `${Deno.env.get('SUPABASE_URL')}/functions/v1/mcp-files-worker`;
+    const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    // deno-lint-ignore no-explicit-any
+    (globalThis as any).EdgeRuntime?.waitUntil?.(
+      fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}`, apikey: key },
+        body: JSON.stringify({ job_id: jobId }),
+      }).catch(() => { /* worker will pick it up via cron */ })
+    );
+  } catch { /* ignore */ }
+
 // ─── Idempotency (via files.idempotency_key unique index) ─────
 async function findByIdempotency(key: string) {
   const { data } = await db().from('files').select('*').eq('idempotency_key', key).maybeSingle();
