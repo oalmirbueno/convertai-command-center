@@ -930,8 +930,8 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
             {/* Escopo · label limpo + 2 ações inline (recarregar / copiar contexto) */}
             <div className="flex items-center h-8 sm:h-7 rounded-full border border-border/70 bg-background/70 pl-2.5 pr-1 shrink-0 max-w-full">
               <Globe2 className="w-3.5 h-3.5 text-primary/80 shrink-0" />
-              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[200px] sm:max-w-[240px]" title={contextLabel}>
-                {contextLabel}
+              <span className="ml-1.5 text-[11.5px] font-medium text-foreground truncate max-w-[240px] sm:max-w-[300px]" title={scopeChipLabel}>
+                {scopeChipLabel}
               </span>
               <span className="mx-1.5 h-4 w-px bg-border/70 shrink-0" />
               <button
