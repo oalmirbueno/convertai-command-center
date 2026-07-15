@@ -21,6 +21,16 @@ export function openFile(url: string) {
   }
 }
 
+function safeFileName(value?: string) {
+  return (value || "arquivo").replace(/[\\/:*?"<>|\u0000-\u001f]/g, "_").slice(0, 180) || "arquivo";
+}
+
+function isIOSLike() {
+  if (typeof navigator === "undefined") return false;
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === "MacIntel" && (navigator as any).maxTouchPoints > 1);
+}
+
 export async function downloadFile(url: string, fileName?: string) {
   if (!url || url === "#") return;
   try {
@@ -30,12 +40,18 @@ export async function downloadFile(url: string, fileName?: string) {
     const blobUrl = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = blobUrl;
-    a.download = fileName || url.split("/").pop() || "arquivo";
+    a.download = safeFileName(fileName || url.split("/").pop());
     a.rel = "noopener";
+    a.target = "_blank";
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+    if (isIOSLike()) {
+      setTimeout(() => openFile(blobUrl), 50);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
+    } else {
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+    }
   } catch {
     // Network/CORS failure → just open it
     openFile(url);

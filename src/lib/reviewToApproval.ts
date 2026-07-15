@@ -25,6 +25,9 @@ const resolveExt = (fileName: string, fileUrl?: string) => getExt(fileName) || g
 const isGraphicAsset = (fileName: string, fileUrl?: string) =>
   GRAPHIC_EXTS.includes(resolveExt(fileName, fileUrl));
 
+const isImageAsset = (fileName: string, fileUrl?: string) =>
+  IMAGE_EXTS.includes(resolveExt(fileName, fileUrl));
+
 const buildGraphicName = (taskTitle: string, originalName: string, index?: number, total?: number) => {
   const ext = resolveExt(originalName) || "png";
 
@@ -87,11 +90,17 @@ export async function sendTaskAttachmentsToApproval(
   const otherAttachments = newAttachments.filter(
     (attachment) => !isGraphicAsset(attachment.file_name, attachment.file_url)
   );
+  const imageAttachments = graphicAttachments.filter((attachment) =>
+    isImageAsset(attachment.file_name, attachment.file_url)
+  );
+  const singleGraphicAttachments = graphicAttachments.filter((attachment) =>
+    !isImageAsset(attachment.file_name, attachment.file_url)
+  );
 
   let insertedCount = 0;
 
-  if (graphicAttachments.length > 1) {
-    const parentAttachment = graphicAttachments[0];
+  if (imageAttachments.length > 1) {
+    const parentAttachment = imageAttachments[0];
     const { data: parentFile, error: parentError } = await supabase
       .from("files")
       .insert({
@@ -112,10 +121,10 @@ export async function sendTaskAttachmentsToApproval(
     if (parentError) throw parentError;
     insertedCount += 1;
 
-    const childRows = graphicAttachments.slice(1).map((attachment, index) => ({
+    const childRows = imageAttachments.slice(1).map((attachment, index) => ({
       approval_status: "none",
       client_id: project.client_id,
-      file_name: buildGraphicName(taskTitle, attachment.file_name, index + 2, graphicAttachments.length),
+      file_name: buildGraphicName(taskTitle, attachment.file_name, index + 2, imageAttachments.length),
       file_type: "creative",
       file_url: attachment.file_url,
       folder: "materiais",
@@ -129,22 +138,32 @@ export async function sendTaskAttachmentsToApproval(
       if (childrenError) throw childrenError;
       insertedCount += childRows.length;
     }
-  } else if (graphicAttachments.length === 1) {
-    const attachment = graphicAttachments[0];
-    const { error: graphicError } = await supabase.from("files").insert({
+  } else if (imageAttachments.length === 1) {
+    singleGraphicAttachments.unshift(imageAttachments[0]);
+  }
+
+  if (singleGraphicAttachments.length > 0) {
+    const singleRows = singleGraphicAttachments.map((attachment) => ({
       approval_status: "pending",
       client_id: project.client_id,
       description: `Gerado automaticamente da tarefa \"${taskTitle}\"`,
       file_name: buildGraphicName(taskTitle, attachment.file_name),
-      file_type: "creative",
+      file_type: isImageAsset(attachment.file_name, attachment.file_url) ? "creative" : "video",
       file_url: attachment.file_url,
       folder: "materiais",
       project_id: projectId,
       uploaded_by: attachment.uploaded_by || authorId,
+    }));
+    const { error: graphicError } = await supabase.from("files").insert({
+      ...singleRows[0],
     });
 
     if (graphicError) throw graphicError;
-    insertedCount += 1;
+    if (singleRows.length > 1) {
+      const { error: moreGraphicError } = await supabase.from("files").insert(singleRows.slice(1));
+      if (moreGraphicError) throw moreGraphicError;
+    }
+    insertedCount += singleRows.length;
   }
 
   if (otherAttachments.length > 0) {
@@ -169,7 +188,7 @@ export async function sendTaskAttachmentsToApproval(
 
   const approvalLabel =
     graphicAttachments.length > 1
-      ? "Carrossel"
+      ? (imageAttachments.length > 1 ? "Carrossel" : "Arquivos")
       : graphicAttachments.length === 1
         ? "Arte"
         : otherAttachments.length > 1

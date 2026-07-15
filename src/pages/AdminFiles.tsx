@@ -25,7 +25,7 @@ import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePrev
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
-import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const FOLDERS = [
   { id: "estrategicos", label: "Estratégicos" },
@@ -350,7 +350,8 @@ export default function AdminFiles() {
       }
 
       const totalFiles = uploadFiles.length;
-      const isCarousel = uploadMode === "carousel" && totalFiles > 1;
+      const carouselSafe = uploadFiles.every((file) => mediaKindFromFile(file.name, undefined, file.type) === "image");
+      const isCarousel = uploadMode === "carousel" && totalFiles > 1 && carouselSafe;
       // For carousel: first file gets the main record, others are linked via parent_file_id
       let parentFileId: string | null = null;
 
@@ -384,7 +385,7 @@ export default function AdminFiles() {
           caption: i === 0 ? (uploadCaption.trim() || null) : null,
           carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
           description: i === 0 ? (uploadDescription.trim() || null) : null,
-          parent_file_id: parentFileId,
+          parent_file_id: isCarousel && i > 0 ? parentFileId : null,
         }).select("id").single();
 
         if (i === 0 && inserted) {
@@ -572,7 +573,7 @@ export default function AdminFiles() {
               {filteredFiles.map((f: any) => {
                 const badge = approvalBadge[f.approval_status] || approvalBadge.none;
                 const carouselChildren = childrenMap.get(f.id) || [];
-                const isCarousel = carouselChildren.length > 0;
+                const isCarousel = isCarouselAssetGroup(f, carouselChildren);
                 return (
                   <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
@@ -606,7 +607,7 @@ export default function AdminFiles() {
                 const Icon = fileIcon(f.file_name);
                 const badge = approvalBadge[f.approval_status] || approvalBadge.none;
                 const carouselChildren = childrenMap.get(f.id) || [];
-                const isCarousel = carouselChildren.length > 0;
+                const isCarousel = isCarouselAssetGroup(f, carouselChildren);
                 return (
                   <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
@@ -707,7 +708,19 @@ export default function AdminFiles() {
           </DialogHeader>
           {previewFile && (
             <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
-              <SharedCarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
+              {isCarouselAssetGroup(previewFile, childrenMap.get(previewFile.id) || []) ? (
+                <SharedCarouselSlider parent={previewFile} initialChildren={childrenMap.get(previewFile.id) || []} />
+              ) : (
+                <FilePreviewContent
+                  fileName={previewFile.file_name}
+                  fileUrl={previewFile.file_url}
+                  fileId={previewFile.id}
+                  storageBucket={previewFile.storage_bucket}
+                  storagePath={previewFile.storage_path}
+                  mimeType={previewFile.mime_type || previewFile.file_type}
+                  extension={previewFile.extension}
+                />
+              )}
               <div className="flex items-center gap-2 flex-wrap">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
                   {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}

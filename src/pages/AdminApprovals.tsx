@@ -8,7 +8,10 @@ import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, RefreshCw, ExternalLink, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { FileImage, FileText, Film, RefreshCw, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import FilePreviewContent from "@/components/shared/FilePreviewContent";
+import { downloadFile } from "@/lib/fileActions";
+import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
@@ -23,38 +26,49 @@ const TABS = [
   { id: "rejected", label: "Rejeitados" },
 ];
 
-const fileIcon = (name: string) => {
-  const ext = name?.split(".").pop()?.toLowerCase() || "";
-  if (["jpg","jpeg","png","gif","webp"].includes(ext)) return FileImage;
-  if (["mp4"].includes(ext)) return Film;
-  if (["zip"].includes(ext)) return Archive;
-  return FileText;
-};
+function ApprovalThumb({ file }: { file: any }) {
+  const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
+  const { url } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform: kind === "image" ? { width: 640, quality: 72, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
 
-const getExt = (value?: string) => {
-  if (!value) return "";
-  const normalized = value.split("?")[0].split("#")[0];
-  return normalized.split(".").pop()?.toLowerCase() || "";
-};
+  if (kind === "image" && url) {
+    return <img src={url} alt={file.file_name} className="w-full h-full object-cover" loading="lazy" />;
+  }
+  if (kind === "video" && url) {
+    return <video src={`${url}#t=0.1`} className="w-full h-full object-cover" muted playsInline preload="metadata" />;
+  }
+  const Icon = kind === "video" ? Film : kind === "image" ? FileImage : FileText;
+  return <Icon className="w-12 h-12 text-muted-foreground/30" />;
+}
 
-const isImage = (name: string, url?: string) => {
-  const ext = getExt(name) || getExt(url);
-  return ["jpg","jpeg","png","gif","webp"].includes(ext);
-};
-
-function CarouselPreview({ images, small }: { images: { file_url: string; file_name: string }[]; small?: boolean }) {
+function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) {
   const [idx, setIdx] = useState(0);
   if (images.length === 0) return null;
   const current = images[idx];
-  const maxH = small ? "h-32" : "min-h-[200px] max-h-[400px]";
+  const maxH = small ? "h-32" : "min-h-[260px]";
 
   return (
     <div className="relative group">
       <div className={`${maxH} bg-secondary flex items-center justify-center overflow-hidden`}>
-        {isImage(current.file_name, current.file_url) ? (
-          <img src={current.file_url} alt={current.file_name} className={small ? "w-full h-full object-cover" : "max-w-full max-h-[400px] object-contain"} />
+        {small ? (
+          <ApprovalThumb file={current} />
         ) : (
-          <FileText className="w-12 h-12 text-muted-foreground/30" />
+          <div className="w-full">
+            <FilePreviewContent
+              fileName={current.file_name}
+              fileUrl={current.file_url}
+              fileId={current.id}
+              storageBucket={current.storage_bucket}
+              storagePath={current.storage_path}
+              mimeType={current.mime_type || current.file_type}
+              extension={current.extension}
+            />
+          </div>
         )}
       </div>
       {images.length > 1 && (
@@ -113,10 +127,21 @@ export default function AdminApprovals() {
 
   const getCarouselImages = (f: any) => {
     const children = childrenMap.get(f.id) || [];
-    if (children.length > 0) {
+    if (isCarouselAssetGroup(f, children)) {
       return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
     }
     return [f];
+  };
+
+  const handleDownload = async (file: any) => {
+    if (!file) return;
+    const url = await resolveFileUrl({
+      fileUrl: file.file_url,
+      storageBucket: file.storage_bucket,
+      storagePath: file.storage_path,
+      expiresIn: 3600,
+    });
+    await downloadFile(url, file.file_name);
   };
 
   const handleResend = async (fileId: string) => {
@@ -317,9 +342,7 @@ export default function AdminApprovals() {
                 )}
               </>
             )}
-            <a href={previewFile?.file_url} target="_blank" rel="noopener noreferrer">
-              <Button variant="outline" className="gap-2">Baixar</Button>
-            </a>
+            <Button variant="outline" className="gap-2" onClick={() => handleDownload(previewFile)}>Baixar</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
