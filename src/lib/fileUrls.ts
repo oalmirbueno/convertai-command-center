@@ -131,7 +131,7 @@ export function fileExtension(fileName?: string | null, fileUrl?: string | null,
   for (const value of [fileName, fileUrl].filter(Boolean) as string[]) {
     const clean = value.split("?")[0].split("#")[0];
     const matches = [...clean.matchAll(/\.([a-z0-9]{1,8})(?=$|[\s_\-()\[\]\/])/gi)];
-    const ext = matches.at(-1)?.[1]?.toLowerCase();
+    const ext = matches.length ? matches[matches.length - 1]?.[1]?.toLowerCase() : "";
     if (ext) return ext;
   }
   return "";
