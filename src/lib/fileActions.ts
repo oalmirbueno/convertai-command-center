@@ -85,13 +85,16 @@ export async function downloadFile(url: string, fileName?: string) {
     emit("file-download:start", { id, name, total });
 
     const reader = res.body.getReader();
-    const chunks: Uint8Array[] = [];
+    const chunks: BlobPart[] = [];
     let loaded = 0;
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
       if (value) {
-        chunks.push(value);
+        // Copy into a fresh ArrayBuffer-backed Uint8Array (BlobPart compatible)
+        const copy = new Uint8Array(value.byteLength);
+        copy.set(value);
+        chunks.push(copy);
         loaded += value.byteLength;
         emit("file-download:progress", { id, loaded, total });
       }
