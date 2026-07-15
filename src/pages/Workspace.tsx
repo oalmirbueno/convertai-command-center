@@ -1078,7 +1078,10 @@ export default function Workspace() {
               <DropdownMenuItem onSelect={() => setSelected(n)}>
                 <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={async () => downloadFile(await urlFor(n), n.name)}>
+              <DropdownMenuItem onSelect={() => openNodeFile(n)}>
+                <ExternalLink className="w-3.5 h-3.5 mr-2" /> Abrir
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => downloadNodeFile(n)}>
                 <Download className="w-3.5 h-3.5 mr-2" /> Baixar
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => copyLink(n)}>
@@ -1195,10 +1198,10 @@ export default function Workspace() {
               <ContextMenuItem onSelect={() => setSelected(n)}>
                 <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
               </ContextMenuItem>
-              <ContextMenuItem onSelect={async () => openFile(await urlFor(n))}>
+              <ContextMenuItem onSelect={() => openNodeFile(n)}>
                 <ExternalLink className="w-3.5 h-3.5 mr-2" /> Abrir em nova aba
               </ContextMenuItem>
-              <ContextMenuItem onSelect={async () => downloadFile(await urlFor(n), n.name)}>
+              <ContextMenuItem onSelect={() => downloadNodeFile(n)}>
                 <Download className="w-3.5 h-3.5 mr-2" /> Baixar
               </ContextMenuItem>
               <ContextMenuItem onSelect={() => copyLink(n)}>
@@ -1668,10 +1671,10 @@ export default function Workspace() {
                 <FilePreview node={selected} getUrl={urlFor} />
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={async () => openFile(await urlFor(selected))} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => openNodeFile(selected)} className="gap-1.5">
                   <ExternalLink className="w-3.5 h-3.5" /> Abrir
                 </Button>
-                <Button size="sm" variant="outline" onClick={async () => downloadFile(await urlFor(selected), selected.name)} className="gap-1.5">
+                <Button size="sm" variant="outline" onClick={() => downloadNodeFile(selected)} className="gap-1.5">
                   <Download className="w-3.5 h-3.5" /> Baixar
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
