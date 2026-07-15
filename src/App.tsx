@@ -143,6 +143,7 @@ const App = () => (
     <ThemeProvider>
       <TooltipProvider>
         <Sonner />
+        <DownloadProgressOverlay />
         <AuthProvider>
           <ImpersonationProvider profile={null} clientId={null}>
             <BrowserRouter>
