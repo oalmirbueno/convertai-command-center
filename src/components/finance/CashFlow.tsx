@@ -371,7 +371,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       category: form.category || defaultCat,
       amount: parseFloat(form.amount) || 0,
       due_date: form.due_date,
-      paid_date: form.status === "paid" ? (form.paid_date || form.due_date) : null,
+      paid_date: form.status === "paid" ? (form.paid_date || new Date().toISOString().slice(0, 10)) : null,
       status: form.status || "pending",
       recurrence: form.recurrence || "none",
       supplier: form.supplier || null,
