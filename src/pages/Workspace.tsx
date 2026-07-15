@@ -33,7 +33,7 @@ import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
-import { mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -111,17 +111,6 @@ function tagOf(n: Node, siblings?: Node[]): SmartTag {
   if (k === "video") return isRaw && !isFinal ? "material" : "video-ready";
   if (k === "image") {
     if (/(carrossel|carousel|slide|slides?)/i.test(ctx)) return "carrossel";
-    // Sibling heuristic: multiple images sharing a numeric suffix pattern
-    if (siblings && siblings.length) {
-      const base = name.replace(/[-_ ]?\(?\d{1,3}\)?\.[a-z0-9]+$/i, "");
-      if (base && base !== name) {
-        const family = siblings.filter(s =>
-          s.kind === "file" && kindOf(s) === "image" &&
-          (s.name || "").toLowerCase().startsWith(base) && s.id !== n.id
-        );
-        if (family.length >= 1) return "carrossel";
-      }
-    }
     if (isRaw && !isFinal) return "material";
     return "static";
   }
@@ -382,14 +371,20 @@ export default function Workspace() {
           __virtual: true,
         });
       });
-      orphans.forEach((f) => nodes.push(virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0)));
+      orphans.forEach((f) => {
+        const children = virtChildrenMap.get(f.id) || [];
+        nodes.push(virtFileNode(f, clientId, isCarouselAssetGroup(f, children) ? children.length : 0));
+      });
       return nodes;
     }
     if (insideVirtFolder) {
       const folderName = currentVirtId.substring((VIRT_PREFIX + "folder:").length);
       return parents
         .filter((f) => (f.folder || "").trim() === folderName)
-        .map((f) => virtFileNode(f, clientId, virtChildrenMap.get(f.id)?.length || 0));
+        .map((f) => {
+          const children = virtChildrenMap.get(f.id) || [];
+          return virtFileNode(f, clientId, isCarouselAssetGroup(f, children) ? children.length : 0);
+        });
     }
     return [];
   }, [clientFiles, scope, clientId, parent]);
@@ -512,6 +507,28 @@ export default function Workspace() {
     }
     if (n.storage_path) return signedUrl(n.storage_path);
     return "";
+  }
+
+  async function removeStoredObjects(rows: Array<{ file_url?: string | null; storage_bucket?: string | null; storage_path?: string | null }>) {
+    const byBucket = new Map<string, Set<string>>();
+    for (const row of rows) {
+      const ref = storageRefFromFile({ fileUrl: row.file_url, storageBucket: row.storage_bucket, storagePath: row.storage_path });
+      if (!ref) continue;
+      if (!byBucket.has(ref.bucket)) byBucket.set(ref.bucket, new Set());
+      byBucket.get(ref.bucket)!.add(ref.path);
+    }
+    await Promise.all(Array.from(byBucket.entries()).map(async ([bucket, paths]) => {
+      if (!paths.size) return;
+      await supabase.storage.from(bucket).remove(Array.from(paths));
+    }));
+  }
+
+  async function deleteFileRecords(rows: any[]) {
+    const ids = Array.from(new Set(rows.map((row) => row?.id).filter(Boolean)));
+    if (!ids.length) return;
+    await removeStoredObjects(rows);
+    const { error } = await (supabase as any).from("files").delete().in("id", ids);
+    if (error) throw error;
   }
 
   async function createFolder() {
@@ -807,39 +824,52 @@ export default function Workspace() {
 
 
   async function performDelete(n: Node) {
-    // Virtual folder (grouping of files.folder) — clear folder field on those files
+    // Virtual folder (grouping of files.folder) — delete every file inside it.
     if (n.__virtual && n.kind === "folder") {
       const folderName = n.id.substring((VIRT_PREFIX + "folder:").length);
-      await (supabase as any).from("files").update({ folder: null })
-        .eq("client_id", clientId).eq("folder", folderName);
+      const parents = ((clientFiles as any[]) || []).filter((f) => !f.parent_file_id && (f.folder || "").trim() === folderName);
+      const parentIds = new Set(parents.map((f) => f.id));
+      const rows = ((clientFiles as any[]) || []).filter((f) => parentIds.has(f.id) || parentIds.has(f.parent_file_id));
+      await deleteFileRecords(rows);
       setSelected(null); setConfirmDelete(null);
-      toast({ title: "Pasta virtual removida", description: "Os arquivos permanecem em Arquivos." });
+      toast({ title: "Excluído" });
       invalidate(); return;
     }
     // Virtual file — delete from public.files
     if (n.__virtual && n.kind === "file" && n.__file_id) {
-      await (supabase as any).from("files").delete().eq("id", n.__file_id);
+      const rows = ((clientFiles as any[]) || []).filter((f) => f.id === n.__file_id || f.parent_file_id === n.__file_id);
+      await deleteFileRecords(rows.length ? rows : [{ id: n.__file_id, file_url: n.__external_url, storage_bucket: n.__storage_bucket, storage_path: n.__storage_path }]);
       setSelected(null); setConfirmDelete(null);
       toast({ title: "Excluído" });
       invalidate(); return;
     }
     if (n.kind === "folder") {
+      const nodeIds: string[] = [n.id];
       const collected: string[] = [];
+      const approvalIds: string[] = [];
       const stack = [n.id];
       while (stack.length) {
         const pid = stack.pop()!;
         const { data: children } = await (supabase as any).from("workspace_nodes")
-          .select("id, kind, storage_path").eq("parent_id", pid);
+          .select("id, kind, storage_path, sent_for_approval_file_id").eq("parent_id", pid);
         for (const c of children || []) {
+          nodeIds.push(c.id);
           if (c.kind === "folder") stack.push(c.id);
           else if (c.storage_path) collected.push(c.storage_path);
+          if (c.sent_for_approval_file_id) approvalIds.push(c.sent_for_approval_file_id);
         }
       }
+      if (n.sent_for_approval_file_id) approvalIds.push(n.sent_for_approval_file_id);
       if (collected.length) await supabase.storage.from("workspace").remove(collected);
+      if (approvalIds.length) await (supabase as any).from("files").delete().in("id", Array.from(new Set(approvalIds)));
+      await (supabase as any).from("workspace_nodes").delete().in("id", nodeIds);
     } else if (n.storage_path) {
+      if (n.sent_for_approval_file_id) await (supabase as any).from("files").delete().eq("id", n.sent_for_approval_file_id);
       await supabase.storage.from("workspace").remove([n.storage_path]);
+      await supabase.from("workspace_nodes").delete().eq("id", n.id);
+    } else {
+      await supabase.from("workspace_nodes").delete().eq("id", n.id);
     }
-    await supabase.from("workspace_nodes").delete().eq("id", n.id);
     setSelected(null); setConfirmDelete(null);
     toast({ title: "Excluído" });
     invalidate();
@@ -932,28 +962,49 @@ export default function Workspace() {
     invalidate();
   }
 
+  function canSendToApproval(n: Node | null) {
+    if (!n || n.kind !== "file" || scope !== "client" || !clientId) return false;
+    if (n.__virtual) return !!n.__file_id && n.__approval_status !== "pending" && n.__approval_status !== "approved";
+    return !!n.storage_path && !n.sent_for_approval_file_id;
+  }
+
   async function sendToApproval(n: Node) {
-    if (!user || n.kind !== "file" || !n.storage_path) return;
+    if (!user || n.kind !== "file") return;
     if (scope !== "client" || !clientId) {
       toast({ title: "Selecione um cliente", description: "Aprovação é enviada em contexto de cliente.", variant: "destructive" });
       return;
     }
     try {
-      const { data: blobData, error: dlErr } = await supabase.storage.from("workspace").download(n.storage_path);
-      if (dlErr) throw dlErr;
-      const newKey = `${clientId}/${crypto.randomUUID()}-${n.name}`;
-      const { error: upErr } = await supabase.storage.from("files").upload(newKey, blobData, {
-        contentType: n.mime || undefined, upsert: false,
+      if (n.__virtual && n.__file_id) {
+        const { error } = await (supabase as any).from("files").update({ approval_status: "pending" }).eq("id", n.__file_id);
+        if (error) throw error;
+      } else if (n.storage_path) {
+        const ext = extOf(n.name).toLowerCase() || null;
+        const { data: fileRow, error: insErr } = await supabase.from("files").insert({
+          file_name: n.name,
+          file_url: `workspace://${n.storage_path}`,
+          file_type: n.mime || mediaKindFromFile(n.name, undefined, n.mime),
+          mime_type: n.mime || null,
+          extension: ext,
+          storage_bucket: "workspace",
+          storage_path: n.storage_path,
+          file_size: n.size_bytes || 0,
+          uploaded_by: user.id,
+          client_id: clientId,
+          approval_status: "pending",
+          folder: "materiais",
+        }).select("id").single();
+        if (insErr) throw insErr;
+        await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: (fileRow as any).id }).eq("id", n.id);
+      } else {
+        throw new Error("Arquivo sem origem de armazenamento.");
+      }
+      await supabase.from("notifications").insert({
+        user_id: clientId,
+        message: `Arquivo para aprovação: ${n.name}`,
+        notification_type: "approval",
+        link: "/aprovacoes",
       });
-      if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("files").getPublicUrl(newKey);
-      const { data: fileRow, error: insErr } = await supabase.from("files").insert({
-        file_name: n.name, file_url: pub.publicUrl, file_type: n.mime || "application/octet-stream",
-        file_size: n.size_bytes || 0, uploaded_by: user.id, client_id: clientId,
-        approval_status: "pending", folder: "materiais",
-      }).select().single();
-      if (insErr) throw insErr;
-      await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: fileRow.id }).eq("id", n.id);
       toast({ title: "Enviado para aprovação" });
       invalidate();
       qc.invalidateQueries({ queryKey: ["files"] });
@@ -1003,9 +1054,17 @@ export default function Workspace() {
             </DropdownMenuItem>
           )}
           {n.kind === "file" && (
-            <DropdownMenuItem onSelect={() => setSelected(n)}>
-              <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
-            </DropdownMenuItem>
+            <>
+              <DropdownMenuItem onSelect={() => setSelected(n)}>
+                <ExternalLink className="w-3.5 h-3.5 mr-2" /> Visualizar
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={async () => downloadFile(await urlFor(n), n.name)}>
+                <Download className="w-3.5 h-3.5 mr-2" /> Baixar
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => copyLink(n)}>
+                <Link2 className="w-3.5 h-3.5 mr-2" /> Copiar link
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuItem onSelect={() => { setRaming(n); setRenameValue(n.name); }}>
             <Pencil className="w-3.5 h-3.5 mr-2" /> Renomear
@@ -1043,6 +1102,11 @@ export default function Workspace() {
                 ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
+          {canSendToApproval(n) && (
+            <DropdownMenuItem onSelect={() => sendToApproval(n)}>
+              <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
+            </DropdownMenuItem>
+          )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
             <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
@@ -1090,7 +1154,7 @@ export default function Workspace() {
 
   function renderContextMenu(n: Node, children: React.ReactNode) {
     const isFolder = n.kind === "folder";
-    const canApprove = !isFolder && !n.__virtual && !!n.storage_path && scope === "client" && !!clientId;
+    const canApprove = canSendToApproval(n);
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -1458,7 +1522,7 @@ export default function Workspace() {
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
                       )}
                     >
-                      <div className="absolute top-1.5 right-1.5 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <div className="absolute top-1.5 right-1.5 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         {renderActionsMenu(n)}
                       </div>
                       {n.sent_for_approval_file_id && (
@@ -1567,7 +1631,7 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {selected.__virtual && selected.__file_id && (virtChildrenMap.get(selected.__file_id)?.length || 0) > 0 ? (
+              {selected.__virtual && selected.__file_id && selected.__carousel_count && selected.__carousel_count > 0 ? (
                 <SharedCarouselSlider
                   parent={{
                     id: selected.__file_id,
@@ -1593,7 +1657,7 @@ export default function Workspace() {
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
-                {scope === "client" && !selected.__virtual && !selected.sent_for_approval_file_id && (
+                {canSendToApproval(selected) && (
                   <Button size="sm" onClick={() => sendToApproval(selected)} className="gap-1.5 bg-primary">
                     <Send className="w-3.5 h-3.5" /> Enviar para aprovação
                   </Button>

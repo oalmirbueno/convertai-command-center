@@ -141,3 +141,40 @@ export function mediaKindFromFile(fileName?: string | null, fileUrl?: string | n
   if (["documento", "contrato", "relatório", "relatorio", "doc", "office"].includes(m)) return "office";
   return "other";
 }
+
+type CarouselLikeFile = {
+  file_name?: string | null;
+  name?: string | null;
+  file_url?: string | null;
+  mime_type?: string | null;
+  file_type?: string | null;
+  mime?: string | null;
+  extension?: string | null;
+  caption?: string | null;
+  carousel_text?: string | null;
+  description?: string | null;
+  folder?: string | null;
+};
+
+export function isCarouselAssetGroup(parent?: CarouselLikeFile | null, children: CarouselLikeFile[] = []) {
+  if (!parent || children.length === 0) return false;
+  const all = [parent, ...children];
+  const allImages = all.every((file) =>
+    mediaKindFromFile(
+      file.file_name || file.name,
+      file.file_url,
+      file.mime_type || file.mime || file.file_type,
+      file.extension,
+    ) === "image"
+  );
+  if (!allImages) return false;
+  const context = [
+    parent.file_type,
+    parent.caption,
+    parent.carousel_text,
+    parent.description,
+    parent.file_name || parent.name,
+    parent.folder,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /carrossel|carousel|slides?|sequ[eê]ncia|feed/.test(context) || children.length >= 1;
+}

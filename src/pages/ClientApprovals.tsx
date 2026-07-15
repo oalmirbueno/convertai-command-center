@@ -17,7 +17,7 @@ import {
 import { FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
-import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
@@ -135,15 +135,14 @@ export default function ClientApprovals() {
   useEffect(() => {
     if (!previewFile) return;
     const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
-    const urls = [previewFile, ...children].map((f: any) => f?.file_url).filter(Boolean);
+    const urls = getCarouselImages(previewFile).map((f: any) => f?.file_url).filter(Boolean);
     prefetchImages(urls);
   }, [previewFile]);
 
   // Keyboard arrows for carousel navigation inside preview.
   useEffect(() => {
     if (!previewFile) return;
-    const children = (allFilesList as any[]).filter((x) => x.parent_file_id === previewFile.id);
-    const len = 1 + children.length;
+    const len = getCarouselImages(previewFile).length;
     if (len <= 1) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "ArrowLeft") setPreviewIdx((i) => (i - 1 + len) % len);
@@ -170,7 +169,7 @@ export default function ClientApprovals() {
 
   const getCarouselImages = (f: any) => {
     const children = childrenMap.get(f.id) || [];
-    if (children.length > 0) {
+    if (isCarouselAssetGroup(f, children)) {
       return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
     }
     return [f];

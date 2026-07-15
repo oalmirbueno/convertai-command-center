@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, FileText, Film } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { supabase } from "@/integrations/supabase/client";
-import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { isCarouselAssetGroup, mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Slide = {
   id?: string;
@@ -45,7 +45,8 @@ export default function CarouselSlider({
   }, [parent?.id]);
 
   const files = useMemo(() => {
-    const list: Slide[] = [parent, ...children.filter((c) => c.id !== parent.id)];
+    const validChildren = isCarouselAssetGroup(parent, children) ? children : [];
+    const list: Slide[] = [parent, ...validChildren.filter((c) => c.id !== parent.id)];
     // Natural sort by trailing number in filename so "slide 2" comes before "slide 10"
     const num = (s: string) => {
       const m = /(\d+)(?!.*\d)/.exec(s || "");
