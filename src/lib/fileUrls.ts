@@ -20,9 +20,14 @@ type UseResolvedInput = ResolveInput & {
 };
 
 const MCP_FILE_PREFIX = "mcp-files://";
+const WORKSPACE_FILE_PREFIX = "workspace://";
 
 export function isMcpFileUrl(value?: string | null) {
   return !!value && value.startsWith(MCP_FILE_PREFIX);
+}
+
+export function isWorkspaceFileUrl(value?: string | null) {
+  return !!value && value.startsWith(WORKSPACE_FILE_PREFIX);
 }
 
 function storageRefFromStorageUrl(value?: string | null): { bucket: string; path: string } | null {
@@ -45,8 +50,12 @@ function storageRefFromStorageUrl(value?: string | null): { bucket: string; path
 }
 
 export function storageRefFromFile(input: ResolveInput): { bucket: string; path: string } | null {
-  const bucket = input.storageBucket || (isMcpFileUrl(input.fileUrl) ? "mcp-files" : null);
-  const path = input.storagePath || (isMcpFileUrl(input.fileUrl) ? input.fileUrl!.slice(MCP_FILE_PREFIX.length) : null);
+  const bucket = input.storageBucket
+    || (isMcpFileUrl(input.fileUrl) ? "mcp-files" : null)
+    || (isWorkspaceFileUrl(input.fileUrl) ? "workspace" : null);
+  const path = input.storagePath
+    || (isMcpFileUrl(input.fileUrl) ? input.fileUrl!.slice(MCP_FILE_PREFIX.length) : null)
+    || (isWorkspaceFileUrl(input.fileUrl) ? input.fileUrl!.slice(WORKSPACE_FILE_PREFIX.length) : null);
   if (!bucket || !path) return storageRefFromStorageUrl(input.fileUrl);
   return { bucket, path };
 }
@@ -119,11 +128,13 @@ export function useResolvedFileUrl(input: UseResolvedInput) {
 
 export function fileExtension(fileName?: string | null, fileUrl?: string | null, explicit?: string | null) {
   if (explicit) return explicit.replace(/^\./, "").toLowerCase();
-  const source = [fileName, fileUrl]
-    .filter(Boolean)
-    .map((value) => value!.split("?")[0].split("#")[0])
-    .find((value) => /\.[a-z0-9]{1,8}$/i.test(value));
-  return source?.split(".").pop()?.toLowerCase() || "";
+  for (const value of [fileName, fileUrl].filter(Boolean) as string[]) {
+    const clean = value.split("?")[0].split("#")[0];
+    const matches = [...clean.matchAll(/\.([a-z0-9]{1,8})(?=$|[\s_\-()\[\]\/])/gi)];
+    const ext = matches.at(-1)?.[1]?.toLowerCase();
+    if (ext) return ext;
+  }
+  return "";
 }
 
 export function mediaKindFromFile(fileName?: string | null, fileUrl?: string | null, mime?: string | null, extension?: string | null) {
