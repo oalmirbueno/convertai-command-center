@@ -33,7 +33,7 @@ import { Sparkles } from "lucide-react";
 import { StudioPanel } from "@/components/workspace/StudioPanel";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
-import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { fileExtension, isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Node = {
   id: string; parent_id: string | null; scope: "global" | "client";
@@ -82,8 +82,7 @@ const KIND_META: Record<MediaKind, { label: string; color: string; gradient: str
   other: { label: "Outros",     color: "text-muted-foreground", gradient: "from-secondary/50 via-secondary/20 to-transparent", accent: "text-muted-foreground" },
 };
 function extOf(name: string) {
-  const m = /\.([a-z0-9]{1,5})$/i.exec(name || "");
-  return m ? m[1].toUpperCase() : "";
+  return fileExtension(name).toUpperCase();
 }
 
 // Smart auto-tagging: detects content role beyond raw mime.
@@ -161,7 +160,7 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
     id: `${VIRT_PREFIX}file:${f.id}`,
     parent_id: null, scope: "client", client_id: clientId,
     kind: "file", name: f.file_name,
-    mime, size_bytes: null, storage_path: null,
+    mime, size_bytes: f.size_bytes || null, storage_path: null,
     duration_sec: null, sort_index: 0,
     sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
     created_by: f.uploaded_by || null, created_at: f.created_at,
@@ -315,7 +314,7 @@ export default function Workspace() {
       // and show every slide inside the preview.
       const { data } = await (supabase as any)
         .from("files")
-        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, created_at, uploaded_by, parent_file_id")
+        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, created_at, uploaded_by, parent_file_id, size_bytes")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       return data || [];
@@ -486,12 +485,13 @@ export default function Workspace() {
 
   async function signedUrl(path: string) {
     if (signedUrls[path]) return signedUrls[path];
-    const { data } = await supabase.storage.from("workspace").createSignedUrl(path, 3600);
+    const { data, error } = await supabase.storage.from("workspace").createSignedUrl(path, 3600);
+    if (error) throw error;
     if (data?.signedUrl) {
       setSignedUrls(p => ({ ...p, [path]: data.signedUrl }));
       return data.signedUrl;
     }
-    return "";
+    throw new Error("URL do arquivo indisponível.");
   }
 
   function invalidate() {
@@ -506,7 +506,27 @@ export default function Workspace() {
       return resolveFileUrl({ fileUrl: n.__external_url, storageBucket: n.__storage_bucket, storagePath: n.__storage_path });
     }
     if (n.storage_path) return signedUrl(n.storage_path);
-    return "";
+    throw new Error("Arquivo sem origem de armazenamento.");
+  }
+
+  async function openNodeFile(n: Node) {
+    try {
+      const url = await urlFor(n);
+      if (!url) throw new Error("URL do arquivo indisponível.");
+      openFile(url);
+    } catch (e: any) {
+      toast({ title: "Não foi possível abrir", description: e?.message || "Tente novamente.", variant: "destructive" });
+    }
+  }
+
+  async function downloadNodeFile(n: Node) {
+    try {
+      const url = await urlFor(n);
+      if (!url) throw new Error("URL do arquivo indisponível.");
+      await downloadFile(url, n.name);
+    } catch (e: any) {
+      toast({ title: "Não foi possível baixar", description: e?.message || "Tente novamente.", variant: "destructive" });
+    }
   }
 
   async function removeStoredObjects(rows: Array<{ file_url?: string | null; storage_bucket?: string | null; storage_path?: string | null }>) {
@@ -988,7 +1008,7 @@ export default function Workspace() {
           extension: ext,
           storage_bucket: "workspace",
           storage_path: n.storage_path,
-          file_size: n.size_bytes || 0,
+          size_bytes: n.size_bytes || 0,
           uploaded_by: user.id,
           client_id: clientId,
           approval_status: "pending",
