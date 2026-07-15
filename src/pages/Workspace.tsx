@@ -262,6 +262,7 @@ export default function Workspace() {
   const { data: nodes, isLoading } = useQuery({
     queryKey: ["workspace-nodes", scope, clientId, parent?.id || null],
     queryFn: async () => {
+      if (parent?.id && isVirt(parent.id)) return [] as Node[];
       let q: any = (supabase as any).from("workspace_nodes").select("*").eq("scope", scope);
       if (scope === "client") q = q.eq("client_id", clientId!);
       q = parent ? q.eq("parent_id", parent.id) : q.is("parent_id", null);
@@ -553,10 +554,18 @@ export default function Workspace() {
 
   async function createFolder() {
     if (!newFolderName.trim() || !user) return;
+    let parentId: string | null = null;
+    try {
+      parentId = await resolveRealParentId(parent?.id || null);
+      assertRealParent(parentId);
+    } catch (e: any) {
+      toast({ title: "Erro ao preparar pasta", description: e?.message || "Tente novamente.", variant: "destructive" });
+      return;
+    }
     const { error } = await supabase.from("workspace_nodes").insert({
       name: newFolderName.trim(), kind: "folder", scope,
       client_id: scope === "client" ? clientId : null,
-      parent_id: parent?.id || null, created_by: user.id,
+      parent_id: parentId, created_by: user.id,
     });
     if (error) { toast({ title: "Erro ao criar pasta", description: error.message, variant: "destructive" }); return; }
     setNewFolderName(""); setNewFolderOpen(false);
