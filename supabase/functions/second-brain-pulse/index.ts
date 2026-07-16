@@ -74,9 +74,20 @@ Deno.serve(async (req) => {
       fetched_at: new Date().toISOString(),
     });
   } catch (e) {
-    if (e instanceof SecondBrainError) {
-      return json(502, { error: 'bridge_error', detail: e.error });
-    }
-    return json(500, { error: 'internal', detail: String((e as Error)?.message ?? e) });
+    const detail = e instanceof SecondBrainError
+      ? e.error
+      : { kind: 'internal', detail: String((e as Error)?.message ?? e) };
+    // GitHub API can return transient 5xx. Respond 200 with a fallback signal
+    // so the widget shows a soft error instead of the SDK throwing.
+    return json(200, {
+      configured: true,
+      status,
+      pulse: null,
+      commits: [],
+      inbox: [],
+      fetched_at: new Date().toISOString(),
+      error: 'bridge_unavailable',
+      detail,
+    });
   }
 });
