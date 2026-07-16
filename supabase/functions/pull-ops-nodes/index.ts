@@ -119,6 +119,17 @@ Deno.serve(async (req) => {
     });
   }
 
+  const OPS_SECRET =
+    Deno.env.get("OPS_WEBHOOK_SECRET") ??
+    Deno.env.get("PORTAL_TO_OPS_SECRET") ?? "";
+  const provided = req.headers.get("x-webhook-secret") ?? "";
+  if (!OPS_SECRET || provided !== OPS_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = await req.json().catch(() => ({}));
     const projectFilter: string | undefined = body?.project_id;
