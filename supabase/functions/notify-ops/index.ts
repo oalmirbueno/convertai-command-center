@@ -13,9 +13,10 @@ const cors = {
 
 const OPS_URL =
   "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
-const OPS_SECRET =
-  Deno.env.get("OPS_WEBHOOK_SECRET") ??
-  "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
+if (!OPS_SECRET) {
+  console.error("notify-ops: OPS_WEBHOOK_SECRET not configured");
+}
 
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
