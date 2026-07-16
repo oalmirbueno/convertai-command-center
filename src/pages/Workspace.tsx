@@ -229,6 +229,7 @@ export default function Workspace() {
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
+  const [deletingNode, setDeletingNode] = useState(false);
   const [moveCreate, setMoveCreate] = useState<{ node: Node; parentId: string | null; parentLabel: string } | null>(null);
   const [moveCreateName, setMoveCreateName] = useState("");
   const [dragOverId, setDragOverId] = useState<string | "root" | null>(null);
@@ -853,55 +854,42 @@ export default function Workspace() {
 
 
   async function performDelete(n: Node) {
-    // Virtual folder (grouping of files.folder) — delete every file inside it.
-    if (n.__virtual && n.kind === "folder") {
-      const folderName = n.id.substring((VIRT_PREFIX + "folder:").length);
-      const parents = ((clientFiles as any[]) || []).filter((f) => !f.parent_file_id && (f.folder || "").trim() === folderName);
-      const parentIds = new Set(parents.map((f) => f.id));
-      const rows = ((clientFiles as any[]) || []).filter((f) => parentIds.has(f.id) || parentIds.has(f.parent_file_id));
-      await deleteFileRecords(rows);
-      setSelected(null); setConfirmDelete(null);
-      toast({ title: "Excluído" });
-      invalidate(); return;
-    }
-    // Virtual file — delete from public.files
-    if (n.__virtual && n.kind === "file" && n.__file_id) {
-      const rows = ((clientFiles as any[]) || []).filter((f) => f.id === n.__file_id || f.parent_file_id === n.__file_id);
-      await deleteFileRecords(rows.length ? rows : [{ id: n.__file_id, file_url: n.__external_url, storage_bucket: n.__storage_bucket, storage_path: n.__storage_path }]);
-      setSelected(null); setConfirmDelete(null);
-      toast({ title: "Excluído" });
-      invalidate(); return;
-    }
-    if (n.kind === "folder") {
-      const nodeIds: string[] = [n.id];
-      const collected: string[] = [];
-      const approvalIds: string[] = [];
-      const stack = [n.id];
-      while (stack.length) {
-        const pid = stack.pop()!;
-        const { data: children } = await (supabase as any).from("workspace_nodes")
-          .select("id, kind, storage_path, sent_for_approval_file_id").eq("parent_id", pid);
-        for (const c of children || []) {
-          nodeIds.push(c.id);
-          if (c.kind === "folder") stack.push(c.id);
-          else if (c.storage_path) collected.push(c.storage_path);
-          if (c.sent_for_approval_file_id) approvalIds.push(c.sent_for_approval_file_id);
+    if (deletingNode) return;
+    setDeletingNode(true);
+    try {
+      if (n.__virtual && n.kind === "folder") {
+        const folderName = n.id.substring((VIRT_PREFIX + "folder:").length);
+        const parentIds = ((clientFiles as any[]) || [])
+          .filter((f) => !f.parent_file_id && (f.folder || "").trim() === folderName)
+          .map((f) => f.id);
+        if (parentIds.length) {
+          const { data, error } = await supabase.functions.invoke("delete-file-assets", {
+            body: { target: "files", fileIds: parentIds },
+          });
+          if (error) throw error;
+          if ((data as any)?.error) throw new Error((data as any).error);
         }
+      } else if (n.__virtual && n.kind === "file" && n.__file_id) {
+        const { data, error } = await supabase.functions.invoke("delete-file-assets", {
+          body: { target: "files", fileIds: [n.__file_id] },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
+      } else {
+        const { data, error } = await supabase.functions.invoke("delete-file-assets", {
+          body: { target: "workspace_node", nodeId: n.id },
+        });
+        if (error) throw error;
+        if ((data as any)?.error) throw new Error((data as any).error);
       }
-      if (n.sent_for_approval_file_id) approvalIds.push(n.sent_for_approval_file_id);
-      if (collected.length) await supabase.storage.from("workspace").remove(collected);
-      if (approvalIds.length) await (supabase as any).from("files").delete().in("id", Array.from(new Set(approvalIds)));
-      await (supabase as any).from("workspace_nodes").delete().in("id", nodeIds);
-    } else if (n.storage_path) {
-      if (n.sent_for_approval_file_id) await (supabase as any).from("files").delete().eq("id", n.sent_for_approval_file_id);
-      await supabase.storage.from("workspace").remove([n.storage_path]);
-      await supabase.from("workspace_nodes").delete().eq("id", n.id);
-    } else {
-      await supabase.from("workspace_nodes").delete().eq("id", n.id);
+      setSelected(null); setConfirmDelete(null);
+      toast({ title: "Excluído" });
+      invalidate();
+    } catch (e: any) {
+      toast({ title: "Erro ao excluir", description: e?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setDeletingNode(false);
     }
-    setSelected(null); setConfirmDelete(null);
-    toast({ title: "Excluído" });
-    invalidate();
   }
 
   async function renameNode() {
@@ -1762,7 +1750,7 @@ export default function Workspace() {
       </Dialog>
 
       {/* Confirm delete */}
-      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && setConfirmDelete(null)}>
+      <Dialog open={!!confirmDelete} onOpenChange={(o) => !o && !deletingNode && setConfirmDelete(null)}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
             <DialogTitle>Excluir {confirmDelete?.kind === "folder" ? "pasta" : "arquivo"}?</DialogTitle>
@@ -1773,8 +1761,11 @@ export default function Workspace() {
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmDelete(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={() => confirmDelete && performDelete(confirmDelete)}>Excluir</Button>
+            <Button variant="outline" onClick={() => setConfirmDelete(null)} disabled={deletingNode}>Cancelar</Button>
+            <Button variant="destructive" onClick={() => confirmDelete && performDelete(confirmDelete)} disabled={deletingNode}>
+              {deletingNode && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {deletingNode ? "Excluindo..." : "Excluir"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
