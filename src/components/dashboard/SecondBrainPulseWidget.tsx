@@ -18,6 +18,8 @@ interface PulseResponse {
   commits: Array<{ sha: string; short: string; message: string; author: string | null; committed_at: string; url: string }>;
   inbox: Array<{ path: string; sha: string; size: number }>;
   fetched_at: string;
+  error?: string;
+  detail?: unknown;
 }
 
 async function fetchPulse(): Promise<PulseResponse> {
