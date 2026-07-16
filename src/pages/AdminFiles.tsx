@@ -995,7 +995,6 @@ export default function AdminFiles() {
         description={`Este arquivo${confirmDeleteFile?.name ? ` (${confirmDeleteFile.name})` : ""} será removido permanentemente do sistema.`}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDeleteFile(null)}
-        loading={deletingFile}
       />
     </div>
   );
