@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         email: authUser.email || "",
         company_name: meta.company_name || null,
         avatar_url: meta.avatar_url || null,
-        role: (meta.role as AppRole) || "client",
+        role: "client" as AppRole,
       };
     }
   }, []);
