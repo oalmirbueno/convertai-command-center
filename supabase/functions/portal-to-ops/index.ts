@@ -51,6 +51,15 @@ Deno.serve(async (req) => {
     });
   }
 
+  // Require shared webhook secret — this is a server-to-server endpoint.
+  const provided = req.headers.get("x-webhook-secret") ?? "";
+  if (!OPS_WEBHOOK_SECRET || provided !== OPS_WEBHOOK_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const body = (await req.json()) as PortalEvent;
     const { event, task_id, source } = body || ({} as PortalEvent);
