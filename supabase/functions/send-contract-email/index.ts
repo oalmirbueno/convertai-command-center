@@ -31,6 +31,8 @@ Deno.serve(async (req) => {
       );
       const { data: userData, error: userErr } = await supabaseAuth.auth.getUser();
       if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
+      const { data: isStaff } = await supabaseAuth.rpc("is_staff", { _user_id: userData.user.id });
+      if (!isStaff) return json({ error: "forbidden" }, 403);
     }
 
 
