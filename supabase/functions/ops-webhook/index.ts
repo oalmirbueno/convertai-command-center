@@ -47,16 +47,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    // Optional shared-secret validation
-    const expectedSecret = Deno.env.get("OPS_WEBHOOK_SECRET");
-    if (expectedSecret) {
-      const provided = req.headers.get("x-webhook-secret");
-      if (provided !== expectedSecret) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    // Required shared-secret validation
+    const expectedSecret = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
+    const provided = req.headers.get("x-webhook-secret") ?? "";
+    if (!expectedSecret || provided !== expectedSecret) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body = (await req.json()) as OpsEvent;
