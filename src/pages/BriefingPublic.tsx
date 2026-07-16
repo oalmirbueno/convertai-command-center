@@ -49,7 +49,7 @@ export default function BriefingPublic() {
   useEffect(() => {
     if (!token) { setPhase("invalid"); return; }
     supabase
-      .rpc("briefing_public_get", { _token: token })
+      .rpc("briefing_public_get" as any, { _token: token })
       .then(({ data }: any) => {
         const row = Array.isArray(data) ? data[0] : data;
         if (!row || row.submitted) {
