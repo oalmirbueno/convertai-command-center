@@ -13,7 +13,10 @@ const OPS_RECEIVE_URL =
 const OPS_WEBHOOK_SECRET =
   Deno.env.get("OPS_WEBHOOK_SECRET") ??
   Deno.env.get("PORTAL_TO_OPS_SECRET") ??
-  "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+  "";
+if (!OPS_WEBHOOK_SECRET) {
+  console.error("portal-to-ops: OPS_WEBHOOK_SECRET not configured");
+}
 
 // kanban -> ops
 const KANBAN_TO_OPS_STATUS: Record<string, string> = {
