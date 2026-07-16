@@ -8,6 +8,19 @@ const corsHeaders = {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
+  const CRON_SECRET =
+    Deno.env.get("CRON_SECRET") ??
+    Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
+  const provided =
+    req.headers.get("x-cron-secret") ??
+    req.headers.get("x-webhook-secret") ?? "";
+  if (!CRON_SECRET || provided !== CRON_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
   try {
     const supabase = createClient(
       Deno.env.get("SUPABASE_URL")!,
