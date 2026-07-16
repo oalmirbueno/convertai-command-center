@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
+import { FunctionsHttpError } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
-import { Brain, GitCommit, Inbox, RefreshCw, Radio } from "lucide-react";
+import { AlertCircle, Brain, GitCommit, Inbox, RefreshCw, Radio } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -22,11 +23,36 @@ interface PulseResponse {
   detail?: unknown;
 }
 
+function softBridgeFallback(detail?: unknown): PulseResponse {
+  return {
+    configured: true,
+    pulse: null,
+    commits: [],
+    inbox: [],
+    fetched_at: new Date().toISOString(),
+    error: "bridge_unavailable",
+    detail,
+  };
+}
+
 async function fetchPulse(): Promise<PulseResponse> {
   const { data, error } = await supabase.functions.invoke("second-brain-pulse", {
     method: "GET",
   });
-  if (error) throw error;
+  if (error) {
+    if (error instanceof FunctionsHttpError) {
+      try {
+        const details = await error.context.clone().json();
+        const status = Number(details?.detail?.status ?? details?.status ?? 0);
+        const isBridgeUpstreamError = details?.error === "bridge_error" && status >= 500;
+        if (isBridgeUpstreamError) return softBridgeFallback(details.detail);
+      } catch {
+        const status = Number(error.context?.status ?? 0);
+        if (status >= 500) return softBridgeFallback({ kind: "upstream", status });
+      }
+    }
+    throw error;
+  }
   return data as PulseResponse;
 }
 
@@ -82,6 +108,16 @@ export default function SecondBrainPulseWidget() {
         <p className="text-xs text-muted-foreground">
           Bridge não configurado. Defina os segredos <code className="font-mono">SECOND_BRAIN_GITHUB_*</code>.
         </p>
+      )}
+
+      {data?.configured && data.error === "bridge_unavailable" && (
+        <div className="flex items-start gap-2 rounded-lg border border-border/60 bg-muted/25 p-3 text-xs text-muted-foreground">
+          <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+          <div>
+            <p className="text-foreground">Segundo Cérebro temporariamente indisponível.</p>
+            <p className="mt-0.5">O painel continua ativo e tentará sincronizar novamente automaticamente.</p>
+          </div>
+        </div>
       )}
 
       {data?.configured && data.pulse && (
