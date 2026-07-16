@@ -13,7 +13,10 @@ const OPS_RECEIVE_URL =
 const OPS_WEBHOOK_SECRET =
   Deno.env.get("OPS_WEBHOOK_SECRET") ??
   Deno.env.get("PORTAL_TO_OPS_SECRET") ??
-  "aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q";
+  "";
+if (!OPS_WEBHOOK_SECRET) {
+  console.error("portal-to-ops: OPS_WEBHOOK_SECRET not configured");
+}
 
 // kanban -> ops
 const KANBAN_TO_OPS_STATUS: Record<string, string> = {
@@ -44,6 +47,15 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Method not allowed" }), {
       status: 405,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  // Require shared webhook secret — this is a server-to-server endpoint.
+  const provided = req.headers.get("x-webhook-secret") ?? "";
+  if (!OPS_WEBHOOK_SECRET || provided !== OPS_WEBHOOK_SECRET) {
+    return new Response(JSON.stringify({ error: "Unauthorized" }), {
+      status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   }

@@ -23,8 +23,6 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.describe-schema]
     verify_jwt = false
-  [functions.e2e-runner]
-    verify_jwt = false
   [functions.manage-team]
     verify_jwt = false
   [functions.notify-ops]

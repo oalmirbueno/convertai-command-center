@@ -2486,6 +2486,18 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      briefing_public_get: {
+        Args: { _token: string }
+        Returns: {
+          id: string
+          responses: Json
+          submitted: boolean
+        }[]
+      }
+      briefing_public_submit: {
+        Args: { _responses: Json; _token: string }
+        Returns: boolean
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean

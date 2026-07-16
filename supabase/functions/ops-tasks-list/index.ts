@@ -17,15 +17,13 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const expected = Deno.env.get("OPS_WEBHOOK_SECRET");
-    if (expected) {
-      const provided = req.headers.get("x-webhook-secret");
-      if (provided !== expected) {
-        return new Response(JSON.stringify({ error: "Unauthorized" }), {
-          status: 401,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
+    const expected = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
+    const provided = req.headers.get("x-webhook-secret") ?? "";
+    if (!expected || provided !== expected) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
     const body = await req.json().catch(() => ({}));
