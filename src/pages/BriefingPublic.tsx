@@ -49,19 +49,15 @@ export default function BriefingPublic() {
   useEffect(() => {
     if (!token) { setPhase("invalid"); return; }
     supabase
-      .from("briefings")
-      .select("id, submitted")
-      .eq("token", token)
-      .maybeSingle()
-      .then(({ data }) => {
-        if (!data || data.submitted) {
-          // Clean up any saved progress for submitted briefings
+      .rpc("briefing_public_get", { _token: token })
+      .then(({ data }: any) => {
+        const row = Array.isArray(data) ? data[0] : data;
+        if (!row || row.submitted) {
           localStorage.removeItem(`briefing_answers_${token}`);
           localStorage.removeItem(`briefing_idx_${token}`);
           setPhase("invalid");
         } else {
-          setBriefingId(data.id);
-          // Check if there's saved progress
+          setBriefingId(row.id);
           const savedIdx = localStorage.getItem(`briefing_idx_${token}`);
           if (savedIdx && parseInt(savedIdx, 10) > 0) {
             setHasRestoredProgress(true);
