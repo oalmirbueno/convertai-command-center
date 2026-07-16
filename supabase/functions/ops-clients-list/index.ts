@@ -10,7 +10,7 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   const SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
-  if (SECRET && req.headers.get("x-webhook-secret") !== SECRET) {
+  if (!SECRET || req.headers.get("x-webhook-secret") !== SECRET) {
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...cors, "Content-Type": "application/json" },
