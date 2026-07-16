@@ -72,8 +72,8 @@ export default function BriefingPublic() {
   };
 
   const handleComplete = async () => {
-    if (!briefingId) return;
-    await supabase.from("briefings").update({ responses: answers, submitted: true }).eq("id", briefingId);
+    if (!briefingId || !token) return;
+    await supabase.rpc("briefing_public_submit" as any, { _token: token, _responses: answers });
     
     // Clean up saved progress
     if (token) {
