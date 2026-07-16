@@ -454,25 +454,28 @@ export default function AdminFiles() {
     setUploadVideoUrl("");
   };
 
-  const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; url: string; storageBucket?: string | null; storagePath?: string | null } | null>(null);
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; name?: string } | null>(null);
+  const [deletingFile, setDeletingFile] = useState(false);
 
   const handleDelete = async () => {
-    if (!confirmDeleteFile) return;
+    if (!confirmDeleteFile || deletingFile) return;
+    setDeletingFile(true);
     try {
-      const bucket = confirmDeleteFile.storageBucket || (confirmDeleteFile.url?.startsWith("mcp-files://") ? "mcp-files" : null);
-      const path = confirmDeleteFile.storagePath || (confirmDeleteFile.url?.startsWith("mcp-files://") ? confirmDeleteFile.url.replace("mcp-files://", "") : null);
-      if (bucket && path) {
-        await supabase.storage.from(bucket).remove([path]);
-      } else {
-        const urlParts = confirmDeleteFile.url.split("/files/");
-        if (urlParts[1]) await supabase.storage.from("files").remove([urlParts[1]]);
-      }
-      await supabase.from("files").delete().eq("id", confirmDeleteFile.id);
+      const { data, error } = await supabase.functions.invoke("delete-file-assets", {
+        body: { target: "files", fileIds: [confirmDeleteFile.id] },
+      });
+      if (error) throw error;
+      if ((data as any)?.error) throw new Error((data as any).error);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+      queryClient.invalidateQueries({ queryKey: ["workspace-client-files"] });
+      if (previewFile?.id === confirmDeleteFile.id) setPreviewFile(null);
       toast({ title: "Arquivo excluído" });
       setConfirmDeleteFile(null);
-    } catch {
-      toast({ title: "Erro ao excluir", variant: "destructive" });
+    } catch (e: any) {
+      toast({ title: "Erro ao excluir", description: e?.message || "Tente novamente.", variant: "destructive" });
+    } finally {
+      setDeletingFile(false);
     }
   };
 
@@ -590,7 +593,7 @@ export default function AdminFiles() {
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
                         <div className="flex items-center gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path }); }}
+                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
                             className="text-muted-foreground hover:text-destructive transition-colors">
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -661,7 +664,7 @@ export default function AdminFiles() {
                         }}>
                         <Download className="w-4 h-4" />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, url: f.file_url, storageBucket: f.storage_bucket, storagePath: f.storage_path }); }}
+                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
                         className="text-muted-foreground hover:text-destructive transition-colors">
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -989,9 +992,10 @@ export default function AdminFiles() {
       <ConfirmModal
         open={!!confirmDeleteFile}
         title="Excluir arquivo"
-        description="Este arquivo será removido permanentemente do sistema."
+        description={`Este arquivo${confirmDeleteFile?.name ? ` (${confirmDeleteFile.name})` : ""} será removido permanentemente do sistema.`}
         onConfirm={handleDelete}
         onCancel={() => setConfirmDeleteFile(null)}
+        loading={deletingFile}
       />
     </div>
   );
