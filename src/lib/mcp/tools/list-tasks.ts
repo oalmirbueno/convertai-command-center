@@ -1,6 +1,6 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
-import { normalizeTaskStatus, TASK_STATUS_VALUES } from "../compat";
+import { taskStatusFilter, TASK_STATUS_VALUES } from "../compat";
 import { requireAuth, supabaseForUser } from "../supabase";
 
 export default defineTool({
@@ -22,7 +22,12 @@ export default defineTool({
       .order("created_at", { ascending: false })
       .limit(limit ?? 100);
     if (project_id) q = q.eq("project_id", project_id);
-    if (status) q = q.eq("status", normalizeTaskStatus(status));
+    if (status) {
+      const statuses = taskStatusFilter(status);
+      q = statuses.length === 1
+        ? q.eq("status", statuses[0])
+        : q.in("status", statuses);
+    }
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return {
