@@ -48,6 +48,9 @@ var TASK_STATUS_VALUES = [
 function normalizeTaskStatus(status) {
   return status === "todo" || !status ? "backlog" : status;
 }
+function taskStatusFilter(status) {
+  return status === "todo" || status === "backlog" ? ["backlog", "todo"] : [status];
+}
 function sanitizeProfileSearch(search) {
   return (search ?? "").trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
@@ -165,7 +168,10 @@ var list_tasks_default = defineTool4({
     const sb = supabaseForUser(ctx);
     let q = sb.from("tasks").select("id, title, description, status, priority, due_date, project_id, assigned_to, created_at").is("deleted_at", null).order("created_at", { ascending: false }).limit(limit ?? 100);
     if (project_id) q = q.eq("project_id", project_id);
-    if (status) q = q.eq("status", normalizeTaskStatus(status));
+    if (status) {
+      const statuses = taskStatusFilter(status);
+      q = statuses.length === 1 ? q.eq("status", statuses[0]) : q.in("status", statuses);
+    }
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return {
