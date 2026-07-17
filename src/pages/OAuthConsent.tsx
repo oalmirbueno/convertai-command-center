@@ -121,8 +121,8 @@ export default function OAuthConsent() {
             Conectar <span className="text-primary">{clientName}</span> à sua conta
           </h1>
           <p className="text-sm text-muted-foreground">
-            Este aplicativo poderá usar as ferramentas MCP do Aceleriq OS agindo em seu nome
-            enquanto você estiver conectado. Isso não ignora RLS nem políticas do backend.
+            Esta conexão é exclusiva para a equipe interna da Aceleriq e poderá ler ou atualizar
+            dados operacionais conforme as permissões verificadas pelo servidor.
           </p>
         </div>
 
