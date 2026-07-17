@@ -63,26 +63,35 @@ export default function Team() {
     const toRemove = initialAssignedIds.filter((id) => !assignedClientIds.includes(id));
     const toAdd = assignedClientIds.filter((id) => !initialAssignedIds.includes(id));
     if (toRemove.length) {
-      await supabase.from("team_client_assignments").delete().eq("user_id", userId).in("client_id", toRemove);
+      const { error } = await supabase
+        .from("team_client_assignments")
+        .delete()
+        .eq("user_id", userId)
+        .in("client_id", toRemove);
+      if (error) throw error;
     }
     if (toAdd.length) {
-      await supabase.from("team_client_assignments").insert(toAdd.map((cid) => ({ user_id: userId, client_id: cid })));
+      const { error } = await supabase
+        .from("team_client_assignments")
+        .insert(toAdd.map((cid) => ({ user_id: userId, client_id: cid })));
+      if (error) throw error;
     }
   };
 
   const handleCreate = async () => {
     if (!name.trim() || !email.trim()) { toast.error("Preencha nome e email"); return; }
-    if (password && password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
+    if (!password || password.length < 8) { toast.error("Defina uma senha inicial com no mínimo 8 caracteres"); return; }
     setSaving(true);
     try {
-      const res = await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password: password || undefined });
+      const res = await callManageTeam({ action: "create", email: email.trim(), full_name: name.trim(), role, password });
       const newUserId = res?.user_id || res?.user?.id;
       if (newUserId && role !== "admin" && assignedClientIds.length) {
-        await supabase.from("team_client_assignments").insert(
+        const { error } = await supabase.from("team_client_assignments").insert(
           assignedClientIds.map((cid) => ({ user_id: newUserId, client_id: cid }))
         );
+        if (error) throw new Error("Membro criado, mas não foi possível atribuir os clientes");
       }
-      toast.success(password ? "Membro criado com a senha definida!" : "Membro criado! Senha temporária: Temp@2026!");
+      toast.success("Membro criado com a senha definida!");
       queryClient.invalidateQueries({ queryKey: ["team-members"] });
       setCreateOpen(false);
       resetForm();
@@ -94,13 +103,17 @@ export default function Team() {
 
   const handleEdit = async () => {
     if (!editMember || !name.trim()) { toast.error("Preencha o nome"); return; }
-    if (password && password.length < 6) { toast.error("Senha deve ter no mínimo 6 caracteres"); return; }
+    if (password && password.length < 8) { toast.error("Senha deve ter no mínimo 8 caracteres"); return; }
     setSaving(true);
     try {
-      await supabase.from("profiles").update({ full_name: name.trim() }).eq("id", editMember.id);
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update({ full_name: name.trim() })
+        .eq("id", editMember.id);
+      if (profileError) throw profileError;
 
       if (role !== editMember.role) {
-        await supabase.from("user_roles").update({ role: role as any }).eq("user_id", editMember.id);
+        await callManageTeam({ action: "update_role", user_id: editMember.id, role });
       }
 
       if (password) {
@@ -316,10 +329,10 @@ export default function Team() {
 
               <div className="space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  {editMember ? "Nova Senha" : "Senha Inicial"}
+                  {editMember ? "Nova Senha" : "Senha Inicial *"}
                 </label>
                 <input value={password} onChange={e => setPassword(e.target.value)} type="password"
-                  placeholder={editMember ? "Deixe vazio para manter atual" : "Deixe vazio para padrão (Temp@2026!)"}
+                  placeholder={editMember ? "Deixe vazio para manter atual" : "Mínimo 8 caracteres"}
                   className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
               </div>
             </div>
