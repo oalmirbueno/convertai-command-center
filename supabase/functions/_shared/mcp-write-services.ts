@@ -6,6 +6,7 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { z } from 'https://esm.sh/zod@3.23.8';
+import { auditPrincipalSelector } from './mcp-security.ts';
 
 // ─── Config ───────────────────────────────────────────────────
 const IDEMPOTENCY_TTL_HOURS = 24;
@@ -42,22 +43,30 @@ export class WriteError extends Error {
 
 // ─── Idempotency ──────────────────────────────────────────────
 // Uses public.mcp_audit_log (already present) — no new tables.
-// We only match successful prior calls with the same tool_name + key_id +
-// idempotency_key, within the TTL window, and recover __result_ref.
+// We only match successful prior calls with the same tool + principal +
+// idempotency_key, within the TTL window, and recover __result_ref. API keys
+// use key_id; OAuth uses the sanitized __principal metadata.
 async function findIdempotentResult(
   toolName: string,
   keyId: string,
   idempotencyKey: string,
 ): Promise<{ correlationId: string; resultRef: string | null; record: unknown } | null> {
   const since = new Date(Date.now() - IDEMPOTENCY_TTL_HOURS * 3600 * 1000).toISOString();
-  const { data, error } = await db()
+  let query = db()
     .from('mcp_audit_log')
     .select('correlation_id, sanitized_input')
     .eq('tool_name', toolName)
-    .eq('key_id', keyId)
     .eq('success', true)
-    .gte('created_at', since)
-    .contains('sanitized_input', { idempotency_key: idempotencyKey } as any)
+    .gte('created_at', since);
+  const principal = auditPrincipalSelector(keyId);
+  query = principal.keyId
+    ? query.eq('key_id', principal.keyId)
+    : query.is('key_id', null);
+  const auditMatch = principal.principal
+    ? { __principal: principal.principal, idempotency_key: idempotencyKey }
+    : { idempotency_key: idempotencyKey };
+  const { data, error } = await query
+    .contains('sanitized_input', auditMatch as any)
     .order('created_at', { ascending: false })
     .limit(1);
   if (error || !data || data.length === 0) return null;

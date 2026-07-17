@@ -7,6 +7,7 @@
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { z } from 'https://esm.sh/zod@3.23.8';
 import { WriteError, type WriteCtx } from './mcp-write-services.ts';
+import { auditPrincipalSelector } from './mcp-security.ts';
 
 let cached: SupabaseClient | null = null;
 function db(): SupabaseClient {
@@ -54,12 +55,20 @@ async function findIdempotentResult(
   toolName: string, keyId: string, idempotencyKey: string,
 ) {
   const since = new Date(Date.now() - 24 * 3600 * 1000).toISOString();
-  const { data } = await db()
+  let query = db()
     .from('mcp_audit_log')
     .select('correlation_id, sanitized_input')
-    .eq('tool_name', toolName).eq('key_id', keyId).eq('success', true)
-    .gte('created_at', since)
-    .contains('sanitized_input', { idempotency_key: idempotencyKey } as any)
+    .eq('tool_name', toolName).eq('success', true)
+    .gte('created_at', since);
+  const principal = auditPrincipalSelector(keyId);
+  query = principal.keyId
+    ? query.eq('key_id', principal.keyId)
+    : query.is('key_id', null);
+  const auditMatch = principal.principal
+    ? { __principal: principal.principal, idempotency_key: idempotencyKey }
+    : { idempotency_key: idempotencyKey };
+  const { data } = await query
+    .contains('sanitized_input', auditMatch as any)
     .order('created_at', { ascending: false }).limit(1);
   const row: any = data?.[0];
   if (!row) return null;
