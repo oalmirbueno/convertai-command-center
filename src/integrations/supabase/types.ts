@@ -2533,6 +2533,14 @@ export type Database = {
           read_ct: number
         }[]
       }
+      replace_managed_user_role: {
+        Args: {
+          _actor_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: undefined
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       user_owns_project: {
