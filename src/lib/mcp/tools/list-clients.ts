@@ -1,5 +1,6 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
+import { sanitizeProfileSearch } from "../compat";
 import { requireAuth, supabaseForUser } from "../supabase";
 
 export default defineTool({
@@ -14,16 +15,45 @@ export default defineTool({
   handler: async ({ limit, search }, ctx) => {
     const guard = requireAuth(ctx); if (guard) return guard;
     const sb = supabaseForUser(ctx);
+
+    const { data: clientRoles, error: rolesError } = await sb
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "client")
+      .limit(1000);
+    if (rolesError) {
+      return { content: [{ type: "text", text: rolesError.message }], isError: true };
+    }
+
+    const clientIds = [...new Set((clientRoles ?? []).map((row) => row.user_id))];
+    if (clientIds.length === 0) {
+      return {
+        content: [{ type: "text", text: "0 clientes." }],
+        structuredContent: { clients: [] },
+      };
+    }
+
     let q = sb.from("profiles")
-      .select("id, full_name, email, company_name, status, created_at")
+      .select("id, full_name, email, company_name, plan_status, plan_name, client_type, created_at")
+      .in("id", clientIds)
+      .is("deleted_at", null)
       .limit(limit ?? 50)
       .order("created_at", { ascending: false });
-    if (search) q = q.or(`full_name.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%`);
+    const safeSearch = sanitizeProfileSearch(search);
+    if (safeSearch) {
+      q = q.or(
+        `full_name.ilike.%${safeSearch}%,company_name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`,
+      );
+    }
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const clients = (data ?? []).map((client) => ({
+      ...client,
+      status: client.plan_status,
+    }));
     return {
-      content: [{ type: "text", text: `${data?.length ?? 0} clientes.` }],
-      structuredContent: { clients: data ?? [] },
+      content: [{ type: "text", text: `${clients.length} clientes.` }],
+      structuredContent: { clients },
     };
   },
 });
