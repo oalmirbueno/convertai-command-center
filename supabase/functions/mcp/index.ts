@@ -35,6 +35,23 @@ var health_default = defineTool({
 import { defineTool as defineTool2 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z } from "npm:zod@^3.25.76";
 
+// src/lib/mcp/compat.ts
+var TASK_STATUS_VALUES = [
+  "backlog",
+  "todo",
+  "doing",
+  "review",
+  "approved",
+  "blocked",
+  "done"
+];
+function normalizeTaskStatus(status) {
+  return status === "todo" || !status ? "backlog" : status;
+}
+function sanitizeProfileSearch(search) {
+  return (search ?? "").trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
+}
+
 // src/lib/mcp/supabase.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.97.0";
 function supabaseForUser(ctx) {
@@ -69,13 +86,33 @@ var list_clients_default = defineTool2({
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("profiles").select("id, full_name, email, company_name, status, created_at").limit(limit ?? 50).order("created_at", { ascending: false });
-    if (search) q = q.or(`full_name.ilike.%${search}%,company_name.ilike.%${search}%,email.ilike.%${search}%`);
+    const { data: clientRoles, error: rolesError } = await sb.from("user_roles").select("user_id").eq("role", "client").limit(1e3);
+    if (rolesError) {
+      return { content: [{ type: "text", text: rolesError.message }], isError: true };
+    }
+    const clientIds = [...new Set((clientRoles ?? []).map((row) => row.user_id))];
+    if (clientIds.length === 0) {
+      return {
+        content: [{ type: "text", text: "0 clientes." }],
+        structuredContent: { clients: [] }
+      };
+    }
+    let q = sb.from("profiles").select("id, full_name, email, company_name, plan_status, plan_name, client_type, created_at").in("id", clientIds).is("deleted_at", null).limit(limit ?? 50).order("created_at", { ascending: false });
+    const safeSearch = sanitizeProfileSearch(search);
+    if (safeSearch) {
+      q = q.or(
+        `full_name.ilike.%${safeSearch}%,company_name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`
+      );
+    }
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const clients = (data ?? []).map((client) => ({
+      ...client,
+      status: client.plan_status
+    }));
     return {
-      content: [{ type: "text", text: `${data?.length ?? 0} clientes.` }],
-      structuredContent: { clients: data ?? [] }
+      content: [{ type: "text", text: `${clients.length} clientes.` }],
+      structuredContent: { clients }
     };
   }
 });
@@ -97,7 +134,7 @@ var list_projects_default = defineTool3({
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("projects").select("id, name, status, progress, client_id, created_at, updated_at").order("updated_at", { ascending: false }).limit(limit ?? 50);
+    let q = sb.from("projects").select("id, name, status, progress, client_id, created_at, updated_at").is("deleted_at", null).order("updated_at", { ascending: false }).limit(limit ?? 50);
     if (client_id) q = q.eq("client_id", client_id);
     if (status) q = q.eq("status", status);
     const { data, error } = await q;
@@ -118,7 +155,7 @@ var list_tasks_default = defineTool4({
   description: "Lista tarefas do Kanban vis\xEDveis ao usu\xE1rio autenticado (RLS aplicado).",
   inputSchema: {
     project_id: z3.string().uuid().optional(),
-    status: z3.enum(["todo", "doing", "review", "done"]).optional(),
+    status: z3.enum(TASK_STATUS_VALUES).optional(),
     limit: z3.number().int().min(1).max(200).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -126,9 +163,9 @@ var list_tasks_default = defineTool4({
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("tasks").select("id, title, description, status, priority, due_date, project_id, assigned_to, created_at").order("created_at", { ascending: false }).limit(limit ?? 100);
+    let q = sb.from("tasks").select("id, title, description, status, priority, due_date, project_id, assigned_to, created_at").is("deleted_at", null).order("created_at", { ascending: false }).limit(limit ?? 100);
     if (project_id) q = q.eq("project_id", project_id);
-    if (status) q = q.eq("status", status);
+    if (status) q = q.eq("status", normalizeTaskStatus(status));
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return {
@@ -149,7 +186,7 @@ var create_task_default = defineTool5({
     project_id: z4.string().uuid().describe("ID do projeto."),
     title: z4.string().min(1).max(200),
     description: z4.string().optional(),
-    status: z4.enum(["todo", "doing", "review", "done"]).optional(),
+    status: z4.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
     priority: z4.enum(["low", "medium", "high", "urgent"]).optional(),
     due_date: z4.string().optional().describe("ISO date (YYYY-MM-DD).")
   },
@@ -158,11 +195,13 @@ var create_task_default = defineTool5({
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
+    const status = normalizeTaskStatus(input.status);
     const { data, error } = await sb.from("tasks").insert({
       project_id: input.project_id,
       title: input.title,
       description: input.description ?? null,
-      status: input.status ?? "todo",
+      status,
+      kanban_status: status,
       priority: input.priority ?? "medium",
       due_date: input.due_date ?? null
     }).select().single();
@@ -191,7 +230,7 @@ var list_contracts_default = defineTool6({
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("contracts").select("id, title, status, client_id, total_value, currency, start_date, end_date, created_at").order("created_at", { ascending: false }).limit(limit ?? 50);
+    let q = sb.from("contracts").select("id, title, description, status, client_id, project_id, sent_at, admin_signed_at, client_signed_at, created_at, updated_at").order("created_at", { ascending: false }).limit(limit ?? 50);
     if (client_id) q = q.eq("client_id", client_id);
     if (status) q = q.eq("status", status);
     const { data, error } = await q;
