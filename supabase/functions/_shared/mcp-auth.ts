@@ -3,6 +3,7 @@
 // which already filters revoked_at + expires_at. Does NOT touch api-gateway.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
+import { oauthScopesForStaff } from './mcp-security.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -143,33 +144,36 @@ function readJwtClaimsUnsafe(token: string): Record<string, any> | null {
   }
 }
 
-async function verifySupabaseJwtViaAuth(token: string): Promise<Record<string, any> | null> {
-  // Delegate to Supabase Auth: aceita qualquer assinatura (HS256/ES256/RS256)
-  // e qualquer variação de issuer (proxy .lovable.cloud vs direto .supabase.co)
-  // que o servidor considere válida. Isso é o que garante que o token emitido
-  // pelo /oauth/token do ChatGPT seja aceito mesmo quando a JWKS local ainda
-  // não conhece a chave usada para assinar.
+function readUnexpiredJwtClaims(token: string): Record<string, any> | null {
+  // This fallback only parses claims. `authenticate` always validates the same
+  // token with Supabase Auth before trusting the subject or checking roles.
   const claims = readJwtClaimsUnsafe(token);
   if (!claims) return null;
   const now = Math.floor(Date.now() / 1000);
   if (claims.exp && claims.exp < now) return null;
+  return claims;
+}
+
+async function hasVerifiedSubject(token: string, expectedSubject: string): Promise<boolean> {
+  if (!expectedSubject) return false;
   try {
     const { data, error } = await admin().auth.getUser(token);
-    if (error || !data?.user) return null;
-    return claims;
+    if (error || !data?.user) return false;
+    return String(data.user.id) === expectedSubject;
   } catch {
-    return null;
+    return false;
   }
 }
 
-const OAUTH_DEFAULT_SCOPES = [
-  'aceleriq:read',
-  'aceleriq:write',
-  'contracts:read',
-  'contracts:write',
-  'memory:read',
-  'memory:propose',
-];
+async function isStaffUser(userId: string): Promise<boolean> {
+  if (!userId) return false;
+  try {
+    const { data, error } = await admin().rpc('is_staff', { _user_id: userId });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
 
 export async function authenticate(req: Request): Promise<AuthResult> {
   const token = extractBearer(req);
@@ -193,19 +197,33 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     }
   }
 
-  // 2) Supabase OAuth JWT path (issued via /oauth/token). Grants a fixed,
-  //    conservative scope set; api_keys ainda governa acessos privilegiados.
-  const claims = (await verifySupabaseJwt(token)) ?? (await verifySupabaseJwtViaAuth(token));
+  // 2) Supabase OAuth JWT path (issued via /oauth/token). Handlers below use
+  //    service_role, so a valid JWT authenticates the user but does not by
+  //    itself authorize broad MCP access. Only canonical internal staff may
+  //    continue; client users fail closed before any tool handler runs.
+  let claims: Record<string, any> | null = null;
+  try {
+    claims = await verifySupabaseJwt(token);
+  } catch {
+    // JWKS can be temporarily unavailable. Supabase Auth remains the source of
+    // truth below and verifies the token before any claim is trusted.
+  }
+  claims ??= readUnexpiredJwtClaims(token);
   if (claims) {
     const sub = String(claims.sub ?? '');
     const clientId = String(claims.client_id ?? claims.azp ?? '');
+    if (!(await hasVerifiedSubject(token, sub))) {
+      return { ok: false, error: { kind: 'invalid' } };
+    }
+    const scopes = oauthScopesForStaff(await isStaffUser(sub));
+    if (!scopes) return { ok: false, error: { kind: 'invalid' } };
     return {
       ok: true,
       ctx: {
-        keyId: `oauth:${sub || clientId || 'anon'}`,
+        keyId: `oauth:${sub}`,
         keyName: `oauth:${clientId || 'user'}`,
-        scopes: OAUTH_DEFAULT_SCOPES,
-        origin: clientId ? `oauth:${clientId}` : 'oauth',
+        scopes,
+        origin: `oauth:${clientId || 'user'}:${sub}`,
       },
     };
   }
