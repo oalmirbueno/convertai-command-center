@@ -1,15 +1,36 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const root = process.cwd();
-const roleMigration = readFileSync(
-  resolve(root, "supabase/migrations/20260717203622_papel_gerenciado_atomico.sql"),
-  "utf8",
+const migrationsDir = resolve(root, "supabase/migrations");
+
+const readUniqueMigrationContaining = (...markers: string[]) => {
+  const matches = readdirSync(migrationsDir)
+    .filter((name) => name.endsWith(".sql"))
+    .map((name) => ({
+      name,
+      content: readFileSync(resolve(migrationsDir, name), "utf8"),
+    }))
+    .filter(({ content }) => markers.every((marker) => content.includes(marker)));
+
+  if (matches.length !== 1) {
+    throw new Error(
+      `Expected one migration containing ${markers.join(", ")}; found ${matches.length}: ${matches.map(({ name }) => name).join(", ")}`,
+    );
+  }
+
+  return matches[0].content;
+};
+
+const roleMigration = readUniqueMigrationContaining(
+  "CREATE OR REPLACE FUNCTION public.replace_managed_user_role",
+  "the last administrator cannot be demoted",
 );
-const authMigration = readFileSync(
-  resolve(root, "supabase/migrations/20260717203628_seguranca_identidade_auth.sql"),
-  "utf8",
+const authMigration = readUniqueMigrationContaining(
+  "VALUES (NEW.id, 'client'::public.app_role)",
+  "REVOKE ALL ON FUNCTION public.handle_new_user()",
+  "CREATE OR REPLACE FUNCTION public.is_staff",
 );
 const manageTeam = readFileSync(
   resolve(root, "supabase/functions/manage-team/index.ts"),
