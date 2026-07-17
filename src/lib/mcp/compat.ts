@@ -19,6 +19,17 @@ export function normalizeTaskStatus(status?: McpTaskStatus): Exclude<McpTaskStat
 }
 
 /**
+ * Existing work can still be stored as `todo`. Filtering either compatibility
+ * name must therefore include both database values until the legacy rows are
+ * normalized in a separate, authorized data migration.
+ */
+export function taskStatusFilter(status: McpTaskStatus): McpTaskStatus[] {
+  return status === "todo" || status === "backlog"
+    ? ["backlog", "todo"]
+    : [status];
+}
+
+/**
  * PostgREST `.or()` uses commas and parentheses as syntax. Replacing those
  * characters keeps a user supplied search term inside the intended filters.
  */
