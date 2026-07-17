@@ -1,5 +1,6 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
+import { normalizeTaskStatus, TASK_STATUS_VALUES } from "../compat";
 import { requireAuth, supabaseForUser } from "../supabase";
 
 export default defineTool({
@@ -8,7 +9,7 @@ export default defineTool({
   description: "Lista tarefas do Kanban visíveis ao usuário autenticado (RLS aplicado).",
   inputSchema: {
     project_id: z.string().uuid().optional(),
-    status: z.enum(["todo", "doing", "review", "done"]).optional(),
+    status: z.enum(TASK_STATUS_VALUES).optional(),
     limit: z.number().int().min(1).max(200).optional(),
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
@@ -17,10 +18,11 @@ export default defineTool({
     const sb = supabaseForUser(ctx);
     let q = sb.from("tasks")
       .select("id, title, description, status, priority, due_date, project_id, assigned_to, created_at")
+      .is("deleted_at", null)
       .order("created_at", { ascending: false })
       .limit(limit ?? 100);
     if (project_id) q = q.eq("project_id", project_id);
-    if (status) q = q.eq("status", status);
+    if (status) q = q.eq("status", normalizeTaskStatus(status));
     const { data, error } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
     return {
