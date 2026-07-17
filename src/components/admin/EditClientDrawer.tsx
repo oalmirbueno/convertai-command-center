@@ -234,8 +234,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       toast.error("Preencha nome e empresa");
       return;
     }
-    if (clientPassword && clientPassword.length < 6) {
-      toast.error("Senha deve ter no mínimo 6 caracteres");
+    if (clientPassword && clientPassword.length < 8) {
+      toast.error("Senha deve ter no mínimo 8 caracteres");
       return;
     }
     setSaving(true);
