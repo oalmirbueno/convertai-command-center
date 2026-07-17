@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeTaskStatus,
   sanitizeProfileSearch,
+  taskStatusFilter,
   TASK_STATUS_VALUES,
 } from "@/lib/mcp/compat";
 
@@ -22,6 +23,12 @@ describe("MCP compatibility helpers", () => {
       "blocked",
       "done",
     ]);
+  });
+
+  it("includes legacy todo rows when filtering the backlog", () => {
+    expect(taskStatusFilter("backlog")).toEqual(["backlog", "todo"]);
+    expect(taskStatusFilter("todo")).toEqual(["backlog", "todo"]);
+    expect(taskStatusFilter("review")).toEqual(["review"]);
   });
 
   it("removes PostgREST control characters from profile search", () => {
