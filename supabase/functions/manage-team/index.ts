@@ -5,6 +5,8 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
+const MANAGED_ROLES = new Set(["admin", "client", "design", "traffic", "manager"]);
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -34,31 +36,91 @@ Deno.serve(async (req) => {
 
     const { action, ...payload } = await req.json();
 
+    const replaceManagedRole = async (userId: string, role: string) => {
+      if (!MANAGED_ROLES.has(role)) throw new Error("Invalid role");
+
+      const { error } = await adminClient.rpc("replace_managed_user_role", {
+        _actor_id: caller.id,
+        _user_id: userId,
+        _role: role,
+      });
+
+      if (error) throw new Error(error.message || "Failed to assign role");
+    };
+
     if (action === "create") {
       const { email, full_name, role, password, company_name } = payload;
-      if (!email || !full_name || !role) throw new Error("Missing fields");
+      if (!email || !full_name || !role || !password) throw new Error("Missing fields");
+      if (!MANAGED_ROLES.has(role)) throw new Error("Invalid role");
+      if (typeof password !== "string" || password.length < 8) {
+        throw new Error("Password must be at least 8 characters");
+      }
 
       const { data: newUser, error: createError } = await adminClient.auth.admin.createUser({
         email,
-        password: password || "Temp@2026!",
-        email_confirm: true,
-        user_metadata: { full_name, role, company_name: company_name || null },
+        password,
+        // The account cannot sign in while profile and role are being prepared.
+        email_confirm: false,
+        // Authorization never comes from user_metadata because users can edit it.
+        user_metadata: { full_name, company_name: company_name || null },
+        app_metadata: { managed_by_aceleriq: true },
       });
       if (createError) throw createError;
 
-      await adminClient.from("profiles").upsert({
+      const rollbackCreatedUser = async (reason: string) => {
+        // Strip every application role first. Even if deleting the Auth user
+        // fails, the unconfirmed account remains without panel privileges.
+        const { error: stripRoleError } = await adminClient
+          .from("user_roles")
+          .delete()
+          .eq("user_id", newUser.user.id);
+        const { error: rollbackError } = await adminClient.auth.admin.deleteUser(newUser.user.id);
+        if (stripRoleError || rollbackError) {
+          console.error("manage-team rollback incomplete", {
+            user_id: newUser.user.id,
+            role_stripped: !stripRoleError,
+            auth_user_deleted: !rollbackError,
+          });
+        }
+        throw new Error(reason);
+      };
+
+      const { error: profileError } = await adminClient.from("profiles").upsert({
         id: newUser.user.id,
         email,
         full_name,
         company_name: company_name || null,
       }, { onConflict: "id" });
+      if (profileError) await rollbackCreatedUser("Failed to create profile");
 
-      await adminClient.from("user_roles").upsert({
-        user_id: newUser.user.id,
-        role,
-      }, { onConflict: "user_id,role" });
+      try {
+        await replaceManagedRole(newUser.user.id, role);
+      } catch {
+        await rollbackCreatedUser("Failed to assign role");
+      }
+
+      const { error: confirmError } = await adminClient.auth.admin.updateUserById(
+        newUser.user.id,
+        { email_confirm: true },
+      );
+      if (confirmError) await rollbackCreatedUser("Failed to activate user");
 
       return new Response(JSON.stringify({ success: true, user_id: newUser.user.id }), {
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    if (action === "update_role") {
+      const { user_id, role } = payload;
+      if (!user_id || !role) throw new Error("Missing user_id or role");
+      if (!MANAGED_ROLES.has(role)) throw new Error("Invalid role");
+      if (user_id === caller.id && role !== "admin") {
+        throw new Error("You cannot demote your own administrator account");
+      }
+
+      await replaceManagedRole(user_id, role);
+
+      return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
@@ -67,6 +129,18 @@ Deno.serve(async (req) => {
       const { user_id } = payload;
       if (!user_id) throw new Error("Missing user_id");
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
+
+      // Administrator accounts must be demoted through the locked role RPC
+      // before deletion. This prevents concurrent deletes from ever removing
+      // the last administrator.
+      const { data: targetRoles, error: targetRoleError } = await adminClient
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", user_id);
+      if (targetRoleError) throw new Error("Failed to verify target role");
+      if (targetRoles?.some(({ role }) => role === "admin")) {
+        throw new Error("Demote the administrator before deleting this account");
+      }
 
       // Clean up ALL foreign key references before deleting auth user
       const cleanup = async (label: string, promise: any) => {
@@ -126,7 +200,9 @@ Deno.serve(async (req) => {
     if (action === "update_password") {
       const { user_id, password } = payload;
       if (!user_id || !password) throw new Error("Missing user_id or password");
-      if (password.length < 6) throw new Error("Password must be at least 6 characters");
+      if (typeof password !== "string" || password.length < 8) {
+        throw new Error("Password must be at least 8 characters");
+      }
 
       const { error: updateError } = await adminClient.auth.admin.updateUserById(user_id, { password });
       if (updateError) throw updateError;
