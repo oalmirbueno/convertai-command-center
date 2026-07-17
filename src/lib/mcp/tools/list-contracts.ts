@@ -16,7 +16,7 @@ export default defineTool({
     const guard = requireAuth(ctx); if (guard) return guard;
     const sb = supabaseForUser(ctx);
     let q = sb.from("contracts")
-      .select("id, title, status, client_id, total_value, currency, start_date, end_date, created_at")
+      .select("id, title, description, status, client_id, project_id, sent_at, admin_signed_at, client_signed_at, created_at, updated_at")
       .order("created_at", { ascending: false })
       .limit(limit ?? 50);
     if (client_id) q = q.eq("client_id", client_id);

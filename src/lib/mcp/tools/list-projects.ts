@@ -17,6 +17,7 @@ export default defineTool({
     const sb = supabaseForUser(ctx);
     let q = sb.from("projects")
       .select("id, name, status, progress, client_id, created_at, updated_at")
+      .is("deleted_at", null)
       .order("updated_at", { ascending: false })
       .limit(limit ?? 50);
     if (client_id) q = q.eq("client_id", client_id);

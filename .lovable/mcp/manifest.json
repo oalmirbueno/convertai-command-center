@@ -111,9 +111,12 @@
             "status": {
               "type": "string",
               "enum": [
+                "backlog",
                 "todo",
                 "doing",
                 "review",
+                "approved",
+                "blocked",
                 "done"
               ]
             },
@@ -187,6 +190,7 @@
             "status": {
               "type": "string",
               "enum": [
+                "backlog",
                 "todo",
                 "doing",
                 "review",
