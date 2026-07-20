@@ -9,6 +9,12 @@ import { useClients, useTeamMembers } from "@/hooks/useSupabaseData";
 import { projectTemplates } from "@/lib/projectTemplates";
 import { format, addDays } from "date-fns";
 import { Loader2, Sparkles, FolderPlus } from "lucide-react";
+import {
+  buildPaymentInstallments,
+  normalizeMoney,
+  splitAmount,
+} from "@/lib/paymentInstallments";
+import { compensateNewIncome } from "@/lib/newIncomeCompensation";
 
 const PROJECT_TYPES = [
   { value: "site", label: "Site", desc: "Desenvolvimento de site institucional/landing · design, código, SEO básico, deploy." },
@@ -48,7 +54,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
   const [totalValue, setTotalValue] = useState("");
   const [paymentMode, setPaymentMode] = useState<"a_vista" | "parcelado">("a_vista");
   const [installmentsCount, setInstallmentsCount] = useState("2");
-  const [firstDueDate, setFirstDueDate] = useState(new Date().toISOString().slice(0, 10));
+  const [firstDueDate, setFirstDueDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [alreadyPaid, setAlreadyPaid] = useState(false);
   const [paidInstallments, setPaidInstallments] = useState("0");
 
@@ -56,6 +62,13 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     () => (clients || []).find((c: any) => c.id === clientId),
     [clients, clientId]
   );
+  const normalizedPreviewTotal = useMemo(() => {
+    try {
+      return normalizeMoney(Number(totalValue));
+    } catch {
+      return null;
+    }
+  }, [totalValue]);
 
   // Auto-fill name + description when type/client changes (only in 'new' mode)
   useEffect(() => {
@@ -86,18 +99,25 @@ export default function NewIncomeModal({ open, onClose }: Props) {
     setClientId(""); setProjectMode("new"); setExistingProjectId("");
     setProjectType("site"); setName(""); setDescription(""); setBrand("sitebolt");
     setGenerateTasks(true); setTotalValue(""); setPaymentMode("a_vista");
-    setInstallmentsCount("2"); setFirstDueDate(new Date().toISOString().slice(0, 10));
+    setInstallmentsCount("2"); setFirstDueDate(format(new Date(), "yyyy-MM-dd"));
     setAlreadyPaid(false); setPaidInstallments("0");
   };
 
   const handleSave = async () => {
     if (!clientId) return toast.error("Selecione o cliente");
-    const total = parseFloat(totalValue);
-    if (!total || total <= 0) return toast.error("Informe o valor total");
+    let total: number;
+    try {
+      total = normalizeMoney(Number(totalValue));
+    } catch (error) {
+      return toast.error(error instanceof Error ? error.message : "Informe o valor total");
+    }
     if (projectMode === "existing" && !existingProjectId) return toast.error("Selecione o projeto");
     if (projectMode === "new" && !name.trim()) return toast.error("Informe o nome do projeto");
 
     setSaving(true);
+    let createdProjectId: string | null = null;
+    let createdPaymentId: string | null = null;
+
     try {
       let projectId = existingProjectId;
 
@@ -125,6 +145,7 @@ export default function NewIncomeModal({ open, onClose }: Props) {
           .single();
         if (error) throw error;
         projectId = newProject.id;
+        createdProjectId = newProject.id;
 
         // Auto-generate milestones + tasks from template
         if (generateTasks && projectTemplates[projectType]) {
@@ -138,49 +159,46 @@ export default function NewIncomeModal({ open, onClose }: Props) {
           for (let mIdx = 0; mIdx < tmpls.length; mIdx++) {
             const tmpl = tmpls[mIdx];
             const targetDate = format(addDays(startDate, tmpl.offsetDays), "yyyy-MM-dd");
-            const { data: milestone } = await supabase.from("milestones").insert({
-              project_id: projectId,
-              title: tmpl.title,
-              target_date: targetDate,
-              status: "pending",
-              milestone_order: mIdx + 1,
-            }).select().single();
-            if (milestone) {
-              const taskRows = tmpl.tasks.map((t, tIdx) => ({
+            const { data: milestone, error: milestoneError } = await supabase
+              .from("milestones")
+              .insert({
                 project_id: projectId,
-                milestone_id: milestone.id,
-                title: t.title,
-                description: t.description || null,
-                priority: t.priority,
-                assigned_to: roleMap[t.role] || null,
-                status: "backlog",
-                task_order: tIdx + 1,
-              }));
-              await supabase.from("tasks").insert(taskRows);
-            }
+                title: tmpl.title,
+                target_date: targetDate,
+                status: "pending",
+                milestone_order: mIdx + 1,
+              })
+              .select()
+              .single();
+            if (milestoneError) throw milestoneError;
+
+            const taskRows = tmpl.tasks.map((t, tIdx) => ({
+              project_id: projectId,
+              milestone_id: milestone.id,
+              title: t.title,
+              description: t.description || null,
+              priority: t.priority,
+              assigned_to: roleMap[t.role] || null,
+              status: "backlog",
+              task_order: tIdx + 1,
+            }));
+            const { error: taskError } = await supabase.from("tasks").insert(taskRows);
+            if (taskError) throw taskError;
           }
         }
 
         // System update
-        await supabase.from("updates").insert({
+        const { error: updateError } = await supabase.from("updates").insert({
           project_id: projectId,
           author_id: user!.id,
           message: `Projeto avulso "${name.trim()}" criado via Fluxo de Caixa`,
           update_type: "system",
         });
-
-        // Notify client
-        await supabase.from("notifications").insert({
-          user_id: clientId,
-          message: `Novo projeto criado: ${name.trim()}`,
-          notification_type: "project",
-          link: "/dashboard",
-        });
+        if (updateError) throw updateError;
       }
 
-      // 2. Create payment plan (à vista = 1 parcela; parcelado = N parcelas iguais)
+      // 2. Create payment plan (à vista = 1 parcela; parcelado = N parcelas)
       const iCount = paymentMode === "a_vista" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
-      const perInstallment = total / iCount;
       const paidCount = alreadyPaid
         ? (paymentMode === "a_vista" ? iCount : Math.min(parseInt(paidInstallments) || 0, iCount))
         : 0;
@@ -199,33 +217,47 @@ export default function NewIncomeModal({ open, onClose }: Props) {
         .select()
         .single();
       if (payErr) throw payErr;
+      createdPaymentId = paymentData.id;
 
-      const baseDate = new Date(firstDueDate + "T12:00:00");
-      const instRows: any[] = [];
-      for (let i = 1; i <= iCount; i++) {
-        const d = new Date(baseDate);
-        if (i > 1) d.setMonth(d.getMonth() + (i - 1));
-        const isPaid = i <= paidCount;
-        instRows.push({
-          payment_id: paymentData.id,
-          installment_number: i,
-          amount: perInstallment,
-          due_date: format(d, "yyyy-MM-dd"),
-          status: isPaid ? "paid" : "pending",
-          paid_at: isPaid ? new Date().toISOString() : null,
-          description: iCount === 1 ? "Pagamento à vista" : `Parcela ${i}/${iCount}`,
-        });
-      }
-      if (instRows.length) await supabase.from("payment_installments").insert(instRows);
+      const instRows = buildPaymentInstallments({
+        paymentId: paymentData.id,
+        total,
+        installmentsCount: iCount,
+        firstDueDate,
+        paidInstallments: paidCount,
+      });
+      const { error: installmentError } = await supabase
+        .from("payment_installments")
+        .insert(instRows);
+      if (installmentError) throw installmentError;
 
       // 3. Auto-upgrade client to "hybrid" if previously recurring
       if (selectedClient?.client_type === "recurring") {
-        await supabase.from("profiles").update({ client_type: "hybrid" }).eq("id", clientId);
+        const { error: profileError } = await supabase
+          .from("profiles")
+          .update({ client_type: "hybrid" })
+          .eq("id", clientId);
+        if (profileError) throw profileError;
         toast.success(`${selectedClient.company_name || selectedClient.full_name} agora é cliente híbrido`);
       }
 
+      // Notificação é posterior ao núcleo financeiro. Uma indisponibilidade
+      // pontual não desfaz o lançamento que já foi salvo com consistência.
+      if (projectMode === "new") {
+        const { error: notificationError } = await supabase.from("notifications").insert({
+          user_id: clientId,
+          message: `Novo projeto criado: ${name.trim()}`,
+          notification_type: "project",
+          link: "/dashboard",
+        });
+        if (notificationError) {
+          console.warn("Falha ao notificar cliente sobre novo projeto", notificationError);
+          toast.warning("Entrada salva, mas a notificação do cliente não foi enviada");
+        }
+      }
+
       toast.success("Entrada avulsa registrada");
-      await Promise.all([
+      await Promise.allSettled([
         qc.invalidateQueries({ queryKey: ["all-project-payments-finance"] }),
         qc.invalidateQueries({ queryKey: ["project_payments"] }),
         qc.invalidateQueries({ queryKey: ["projects"] }),
@@ -238,7 +270,23 @@ export default function NewIncomeModal({ open, onClose }: Props) {
       onClose();
     } catch (e: any) {
       console.error(e);
-      toast.error(e.message || "Erro ao registrar entrada");
+      try {
+        await compensateNewIncome(
+          { createdProjectId, createdPaymentId },
+          async (table, id) => {
+            const { data, error } = await supabase
+              .from(table)
+              .delete()
+              .eq("id", id)
+              .select("id");
+            return { error, deletedCount: data?.length ?? 0 };
+          },
+        );
+        toast.error(e.message || "Erro ao registrar entrada; nenhuma alteração foi mantida");
+      } catch (cleanupError: any) {
+        console.error("Falha ao desfazer entrada incompleta", cleanupError);
+        toast.error("O lançamento ficou incompleto. Não tente novamente; revise o financeiro antes de continuar.");
+      }
     } finally {
       setSaving(false);
     }
@@ -415,11 +463,22 @@ export default function NewIncomeModal({ open, onClose }: Props) {
               </div>
             )}
 
-            {totalValue && parseFloat(totalValue) > 0 && (
+            {normalizedPreviewTotal !== null && (
               <p className="text-[11px] text-muted-foreground">
                 {paymentMode === "a_vista"
-                  ? <>Total: <span className="text-foreground font-mono">R$ {parseFloat(totalValue).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
-                  : <>{installmentsCount}× de <span className="text-foreground font-mono">R$ {(parseFloat(totalValue) / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
+                  ? <>Total: <span className="text-foreground font-mono">R$ {normalizedPreviewTotal.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>
+                  : (() => {
+                      const amounts = splitAmount(
+                        normalizedPreviewTotal,
+                        Math.max(parseInt(installmentsCount) || 1, 1),
+                      );
+                      const regular = amounts[0];
+                      const last = amounts[amounts.length - 1];
+                      return <>
+                        {amounts.length}× · primeiras <span className="text-foreground font-mono">R$ {regular.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
+                        {last !== regular && <> · última <span className="text-foreground font-mono">R$ {last.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span></>}
+                      </>;
+                    })()
                 }
               </p>
             )}
