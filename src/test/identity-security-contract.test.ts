@@ -112,14 +112,28 @@ describe("identity boundary required by the internal agent Kanban", () => {
     expect(notifyStart).toBeGreaterThan(-1);
     expect(deleteNotification).toContain('Deno.env.get("OPS_WEBHOOK_SECRET")');
     expect(deleteNotification).toContain('"x-webhook-secret": opsWebhookSecret');
+    expect(deleteNotification).toContain("if (!opsWebhookSecret)");
+    expect(deleteNotification.indexOf("if (!opsWebhookSecret)")).toBeLessThan(
+      deleteNotification.indexOf("await fetch"),
+    );
     expect(deleteNotification).toContain("if (!notifyResponse.ok)");
+    expect(deleteNotification).not.toContain("serviceRoleKey");
+    expect(deleteNotification).toContain(
+      'body: JSON.stringify({\n                type: "profile_deleted",\n                data: { id: user_id },\n              })',
+    );
     expect(deleteNotification).not.toMatch(
       /"x-webhook-secret":\s*["'][^"']+["']/,
     );
 
     expect(notifyOps).toContain('req.headers.get("x-webhook-secret")');
     expect(notifyOps).toContain("if (!OPS_SECRET || provided !== OPS_SECRET)");
+    expect(notifyOps.indexOf("provided !== OPS_SECRET")).toBeLessThan(
+      notifyOps.indexOf("await req.json()"),
+    );
     expect(notifyOps).toContain('error: "Unauthorized"');
+    expect(notifyOps).not.toMatch(
+      /Deno\.env\.get\("OPS_WEBHOOK_SECRET"\)\s*\?\?\s*["'][^"']+["']/,
+    );
     expect(notifyOps).not.toMatch(
       /JSON\.stringify\([^)]*(?:OPS_SECRET|provided)/,
     );
