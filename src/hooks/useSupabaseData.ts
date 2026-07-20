@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 
 export function useProjects() {
   const { user, profile } = useAuth();
@@ -136,7 +137,7 @@ export function useClients() {
         const idArr = Array.from(clientIds);
         const { data, error } = await supabase
           .from("profiles")
-          .select("*")
+          .select(PROFILE_SAFE_SELECT)
           .in("id", idArr)
           .is("deleted_at", null);
         if (error) throw error;
