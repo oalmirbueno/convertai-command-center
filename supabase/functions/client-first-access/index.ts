@@ -54,8 +54,8 @@ Deno.serve(async (req) => {
 
     // Setting the password (form submit)
     if (action === "set_password") {
-      if (!password || typeof password !== "string" || password.length < 6) {
-        return json({ error: "A senha deve ter no mínimo 6 caracteres." }, 400);
+      if (!password || typeof password !== "string" || password.length < 8) {
+        return json({ error: "A senha deve ter no mínimo 8 caracteres." }, 400);
       }
 
       const { error: pwError } = await admin.auth.admin.updateUserById(
@@ -64,12 +64,12 @@ Deno.serve(async (req) => {
       );
       if (pwError) throw pwError;
 
-      // Store the chosen password so the admin can view/manage it,
-      // mark the token as used (single-use).
+      // Passwords belong exclusively to Supabase Auth. The profile keeps only
+      // the single-use invitation state and removes any legacy plaintext value.
       const { error: updError } = await admin
         .from("profiles")
         .update({
-          portal_password: password,
+          portal_password: null,
           first_access_used_at: new Date().toISOString(),
           first_access_token: null,
         })
