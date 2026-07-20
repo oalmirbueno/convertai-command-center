@@ -138,7 +138,6 @@ export default function CreateClientModal({ open, onClose }: Props) {
           brand: brand || null,
           first_access_token: firstAccessToken,
           first_access_used_at: null,
-          portal_password: null,
         };
         if (showRecurring && planValueNum > 0) {
           profileUpdate.plan_value = planValueNum;
