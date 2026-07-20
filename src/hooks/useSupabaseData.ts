@@ -291,7 +291,7 @@ export function useTeamMembers() {
 
       const { data, error } = await supabase
         .from("profiles")
-        .select("*")
+        .select(PROFILE_SAFE_SELECT)
         .in("id", userIds);
       if (error) throw error;
 
