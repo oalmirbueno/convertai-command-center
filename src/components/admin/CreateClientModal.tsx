@@ -279,8 +279,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
               </div>
 
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                Assim que o cliente criar a senha, ela fica disponível no cadastro dele
-                (aba do cliente → <strong>Senha de Acesso</strong>), onde você pode visualizar ou alterar.
+                A senha criada pelo cliente permanece privada e protegida. Se necessário,
+                um administrador pode definir uma nova senha no cadastro, sem visualizar a atual.
               </p>
 
             </div>
