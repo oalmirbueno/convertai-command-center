@@ -59,7 +59,6 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [planValue, setPlanValue] = useState("");
   const [planStatus, setPlanStatus] = useState("active");
   const [clientPassword, setClientPassword] = useState("");
-  const [showStoredPw, setShowStoredPw] = useState(false);
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
