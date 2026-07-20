@@ -6,7 +6,7 @@ import { Loader2, Eye, EyeOff, ArrowRight, Check, ShieldCheck, AlertTriangle } f
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
-  if (pw.length < 6) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
+  if (pw.length < 8) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
   let score = 0;
   if (pw.length >= 8) score++;
   if (/[A-Z]/.test(pw)) score++;
@@ -65,8 +65,8 @@ export default function FirstAccess() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (password.length < 6) {
-      setError("A senha deve ter no mínimo 6 caracteres.");
+    if (password.length < 8) {
+      setError("A senha deve ter no mínimo 8 caracteres.");
       return;
     }
     if (password !== confirm) {
@@ -182,7 +182,7 @@ export default function FirstAccess() {
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Crie sua senha</label>
                 <div className="relative">
                   <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPw ? "text" : "password"}
-                    placeholder="Mínimo 6 caracteres" autoFocus
+                    placeholder="Mínimo 8 caracteres" autoFocus
                     style={{ fontSize: "16px" }}
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 pr-10 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
                   <button type="button" onClick={() => setShowPw(!showPw)}
