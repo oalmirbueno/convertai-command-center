@@ -176,20 +176,37 @@ Deno.serve(async (req) => {
       }
 
       // Notify Ops (best-effort) — local-first delete already done.
-      try {
-        await fetch(
-          `${supabaseUrl}/functions/v1/notify-ops`,
-          {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              type: "profile_deleted",
-              data: { id: user_id },
-            }),
-          },
+      // The shared secret stays server-side and authenticates this function-to-function call.
+      const opsWebhookSecret = Deno.env.get("OPS_WEBHOOK_SECRET");
+      if (!opsWebhookSecret) {
+        console.warn(
+          "notify-ops profile_deleted skipped: OPS_WEBHOOK_SECRET not configured",
         );
-      } catch (e) {
-        console.warn("notify-ops profile_deleted failed:", e);
+      } else {
+        try {
+          const notifyResponse = await fetch(
+            `${supabaseUrl}/functions/v1/notify-ops`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                "x-webhook-secret": opsWebhookSecret,
+              },
+              body: JSON.stringify({
+                type: "profile_deleted",
+                data: { id: user_id },
+              }),
+            },
+          );
+
+          if (!notifyResponse.ok) {
+            console.warn("notify-ops profile_deleted rejected:", {
+              status: notifyResponse.status,
+            });
+          }
+        } catch (e) {
+          console.warn("notify-ops profile_deleted failed:", e);
+        }
       }
 
       return new Response(JSON.stringify({ success: true }), {
