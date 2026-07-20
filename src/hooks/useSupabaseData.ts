@@ -137,7 +137,7 @@ export function useClients() {
         const idArr = Array.from(clientIds);
         const { data, error } = await supabase
           .from("profiles")
-          .select("*")
+          .select(PROFILE_SAFE_SELECT)
           .in("id", idArr)
           .is("deleted_at", null);
         if (error) throw error;
