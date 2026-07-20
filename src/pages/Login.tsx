@@ -33,7 +33,7 @@ function useCountUp(target: number, duration = 1000, delay = 700) {
 
 /* ─── Password strength ─── */
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
-  if (pw.length < 6) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
+  if (pw.length < 8) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
   let score = 0;
   if (pw.length >= 8) score++;
   if (/[A-Z]/.test(pw)) score++;
@@ -97,7 +97,7 @@ export default function Login() {
 
     if (mode === "signup") {
       if (!fullName.trim()) { triggerError("Informe seu nome completo"); return; }
-      if (password.length < 6) { triggerError("A senha deve ter no mínimo 6 caracteres"); return; }
+      if (password.length < 8) { triggerError("A senha deve ter no mínimo 8 caracteres"); return; }
       if (password !== confirmPassword) { triggerError("As senhas não coincidem"); return; }
       if (!acceptTerms) { triggerError("Aceite os termos para continuar"); return; }
       setSubmitting(true);
@@ -306,7 +306,7 @@ export default function Login() {
                 <div className="relative">
                   <input
                     type={showPw ? "text" : "password"}
-                    placeholder={mode === "signup" ? "Mínimo 6 caracteres" : "••••••••"}
+                    placeholder={mode === "signup" ? "Mínimo 8 caracteres" : "••••••••"}
                     value={password}
                     onChange={e => setPassword(e.target.value)}
                     autoComplete={mode === "login" ? "current-password" : "new-password"}

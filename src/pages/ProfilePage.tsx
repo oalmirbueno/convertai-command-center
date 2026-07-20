@@ -54,8 +54,8 @@ export default function ProfilePage() {
   };
 
   const handleChangePassword = async () => {
-    if (!newPassword || newPassword.length < 6) {
-      toast.error("A senha deve ter no mínimo 6 caracteres");
+    if (!newPassword || newPassword.length < 8) {
+      toast.error("A senha deve ter no mínimo 8 caracteres");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -140,12 +140,12 @@ export default function ProfilePage() {
         <div className="space-y-3">
           <div className="space-y-1.5">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nova Senha</label>
-            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" placeholder="Mínimo 6 caracteres"
+            <input value={newPassword} onChange={e => setNewPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Mínimo 8 caracteres"
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
           </div>
           <div className="space-y-1.5">
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Confirmar Nova Senha</label>
-            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" placeholder="Repita a nova senha"
+            <input value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} type="password" autoComplete="new-password" placeholder="Repita a nova senha"
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
           </div>
         </div>

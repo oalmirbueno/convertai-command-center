@@ -18,6 +18,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
 import ClientVaultPage from "@/pages/ClientVaultPage";
 import type { UserProfile } from "@/contexts/AuthContext";
+import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 
 const clientTabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -67,7 +68,7 @@ export default function AdminViewAsClient() {
       (async () => {
         const { data } = await supabase
           .from("profiles")
-          .select("*")
+          .select(PROFILE_SAFE_SELECT)
           .eq("id", clientId)
           .maybeSingle();
         if (!data) {

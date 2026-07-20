@@ -224,6 +224,18 @@ Deno.serve(async (req) => {
       const { error: updateError } = await adminClient.auth.admin.updateUserById(user_id, { password });
       if (updateError) throw updateError;
 
+      // Keep credentials exclusively in Auth and invalidate pending first
+      // access links after an administrator defines a new password.
+      const { error: profileError } = await adminClient
+        .from("profiles")
+        .update({
+          portal_password: null,
+          first_access_token: null,
+          first_access_used_at: new Date().toISOString(),
+        })
+        .eq("id", user_id);
+      if (profileError) throw profileError;
+
       return new Response(JSON.stringify({ success: true }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });

@@ -1,4 +1,5 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { sanitizeAuditError, sanitizeAuditInput } from '../_shared/mcp-security.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -24,6 +25,44 @@ function requireFields(params: Record<string, unknown>, fields: string[]) {
   const missing = fields.filter(f => params[f] === undefined || params[f] === null || params[f] === '')
   if (missing.length > 0) throw new Error(`Missing required fields: ${missing.join(', ')}`)
 }
+
+const SAFE_PROFILE_COLUMNS = [
+  'id',
+  'full_name',
+  'email',
+  'company_name',
+  'avatar_url',
+  'plan_renewal_date',
+  'plan_status',
+  'services_config',
+  'onboarding_done',
+  'created_at',
+  'updated_at',
+  'phone',
+  'plan_name',
+  'plan_value',
+  'client_type',
+  'brand',
+  'first_access_used_at',
+  'overdue_since',
+  'deleted_at',
+].join(',')
+
+const SAFE_PROFILE_UPDATES = new Set([
+  'full_name',
+  'company_name',
+  'avatar_url',
+  'plan_renewal_date',
+  'plan_status',
+  'services_config',
+  'onboarding_done',
+  'phone',
+  'plan_name',
+  'plan_value',
+  'client_type',
+  'brand',
+  'overdue_since',
+])
 
 // ─── Handlers ───────────────────────────────────────────────
 
@@ -60,7 +99,7 @@ const handlers: Record<string, Handler> = {
     if (rolesErr) throw rolesErr
     const clientIds = (roles || []).map((r: any) => r.user_id)
     if (clientIds.length === 0) return ok([])
-    let q = db.from('profiles').select('*').in('id', clientIds)
+    let q = db.from('profiles').select(SAFE_PROFILE_COLUMNS).in('id', clientIds)
     if (p.plan_status) q = q.eq('plan_status', p.plan_status)
     if (p.limit) q = q.limit(p.limit)
     const { data, error } = await q.order('created_at', { ascending: false })
@@ -70,7 +109,7 @@ const handlers: Record<string, Handler> = {
 
   get_client: async (db, p) => {
     requireFields(p, ['client_id'])
-    const { data, error } = await db.from('profiles').select('*').eq('id', p.client_id).single()
+    const { data, error } = await db.from('profiles').select(SAFE_PROFILE_COLUMNS).eq('id', p.client_id).single()
     if (error) throw error
     return ok(data)
   },
@@ -103,9 +142,18 @@ const handlers: Record<string, Handler> = {
 
   update_client: async (db, p) => {
     requireFields(p, ['client_id'])
-    const { client_id, ...updates } = p
-    delete updates.action
-    const { data, error } = await db.from('profiles').update(updates).eq('id', client_id).select().single()
+    const updates = Object.fromEntries(
+      Object.entries(p).filter(([key]) => SAFE_PROFILE_UPDATES.has(key)),
+    )
+    if (Object.keys(updates).length === 0) {
+      throw new Error('No supported profile fields to update')
+    }
+    const { data, error } = await db
+      .from('profiles')
+      .update(updates)
+      .eq('id', p.client_id)
+      .select(SAFE_PROFILE_COLUMNS)
+      .single()
     if (error) throw error
     return ok(data)
   },
@@ -440,7 +488,10 @@ const handlers: Record<string, Handler> = {
 
   // ── User Roles ──
   list_team: async (db) => {
-    const { data, error } = await db.from('user_roles').select('*, profiles(*)').neq('role', 'client')
+    const { data, error } = await db
+      .from('user_roles')
+      .select(`*, profiles(${SAFE_PROFILE_COLUMNS})`)
+      .neq('role', 'client')
     if (error) throw error
     return ok(data)
   },
@@ -617,7 +668,7 @@ Deno.serve(async (req) => {
       action,
       ip_address: ip,
       status_code: response.status,
-      params: Object.keys(params).length > 0 ? params : null,
+      params: Object.keys(params).length > 0 ? sanitizeAuditInput(params) : null,
       key_name: keyName,
     }).then(() => {})
 
@@ -631,7 +682,7 @@ Deno.serve(async (req) => {
         action: body?.action || 'unknown',
         ip_address: ip,
         status_code: 500,
-        error_message: e.message || 'Internal error',
+        error_message: sanitizeAuditError(e.message || 'Internal error'),
       }).then(() => {})
     } catch {}
 
