@@ -36,6 +36,10 @@ const manageTeam = readFileSync(
   resolve(root, "supabase/functions/manage-team/index.ts"),
   "utf8",
 );
+const notifyOps = readFileSync(
+  resolve(root, "supabase/functions/notify-ops/index.ts"),
+  "utf8",
+);
 const teamPage = readFileSync(resolve(root, "src/pages/Team.tsx"), "utf8");
 const editClientDrawer = readFileSync(
   resolve(root, "src/components/admin/EditClientDrawer.tsx"),
@@ -98,6 +102,27 @@ describe("identity boundary required by the internal agent Kanban", () => {
     expect(manageTeam).not.toContain("Password must be at least 6 characters");
     expect(manageTeam).toContain("Demote the administrator before deleting this account");
     expect(manageTeam).toMatch(/targetRoles\?\.some\(\(\{ role \}\) => role === "admin"\)/);
+  });
+
+  it("authenticates the internal Ops notification after deleting a member", () => {
+    const notifyStart = manageTeam.indexOf("// Notify Ops (best-effort)");
+    const notifyEnd = manageTeam.indexOf("return new Response", notifyStart);
+    const deleteNotification = manageTeam.slice(notifyStart, notifyEnd);
+
+    expect(notifyStart).toBeGreaterThan(-1);
+    expect(deleteNotification).toContain('Deno.env.get("OPS_WEBHOOK_SECRET")');
+    expect(deleteNotification).toContain('"x-webhook-secret": opsWebhookSecret');
+    expect(deleteNotification).toContain("if (!notifyResponse.ok)");
+    expect(deleteNotification).not.toMatch(
+      /"x-webhook-secret":\s*["'][^"']+["']/,
+    );
+
+    expect(notifyOps).toContain('req.headers.get("x-webhook-secret")');
+    expect(notifyOps).toContain("if (!OPS_SECRET || provided !== OPS_SECRET)");
+    expect(notifyOps).toContain('error: "Unauthorized"');
+    expect(notifyOps).not.toMatch(
+      /JSON\.stringify\([^)]*(?:OPS_SECRET|provided)/,
+    );
   });
 
   it("keeps role writes and explicit passwords behind the server boundary", () => {
