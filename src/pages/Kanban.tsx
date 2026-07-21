@@ -62,18 +62,11 @@ export default function Kanban() {
 
   const isClient = profile?.role === "client";
 
-  // ── Pull from Ops on mount + realtime subscription ──────────────────────
+  // ── Realtime subscription (Ops pull is server-side only) ────────────────
   useEffect(() => {
-    // Initial sync (past + present nodes from Ops)
-    supabase.functions.invoke("pull-ops-nodes", { body: {} })
-      .then(() => queryClient.invalidateQueries({ queryKey: ["tasks"] }))
-      .catch(() => {});
-
-    // Periodic refresh as a safety net
+    // Periodic refetch as a safety net for the tasks query
     const poll = setInterval(() => {
-      supabase.functions.invoke("pull-ops-nodes", { body: {} })
-        .then(() => queryClient.invalidateQueries({ queryKey: ["tasks"] }))
-        .catch(() => {});
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     }, 30000);
 
     // Realtime: any change on tasks table refreshes the board instantly
