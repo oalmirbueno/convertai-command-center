@@ -590,6 +590,60 @@ export type Database = {
         }
         Relationships: []
       }
+      external_accounts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          display_name: string
+          external_id: string | null
+          handle: string | null
+          id: string
+          platform: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          display_name: string
+          external_id?: string | null
+          handle?: string | null
+          id?: string
+          platform: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          display_name?: string
+          external_id?: string | null
+          handle?: string | null
+          id?: string
+          platform?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_content_chunks: {
         Row: {
           chunk_index: number
@@ -1278,6 +1332,62 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      project_external_accounts: {
+        Row: {
+          client_id: string
+          created_at: string
+          created_by: string | null
+          external_account_id: string
+          id: string
+          project_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string
+          created_by?: string | null
+          external_account_id: string
+          id?: string
+          project_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string
+          created_by?: string | null
+          external_account_id?: string
+          id?: string
+          project_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "project_external_accounts_account_fk"
+            columns: ["external_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "project_external_accounts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_external_accounts_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "project_external_accounts_project_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
       }
       project_memory: {
         Row: {
@@ -2498,6 +2608,8 @@ export type Database = {
         Args: { _responses: Json; _token: string }
         Returns: boolean
       }
+      can_access_client: { Args: { _client_id: string }; Returns: boolean }
+      can_manage_client: { Args: { _client_id: string }; Returns: boolean }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
