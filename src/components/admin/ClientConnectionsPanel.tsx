@@ -135,6 +135,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
   };
 
   const startEditing = (account: any) => {
+    resetForm();
     setEditingId(account.id);
     setEditPlatform(account.platform);
     setEditDisplayName(account.display_name);
@@ -165,7 +166,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
     setEditSubmitting(true);
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
         .from("external_accounts")
         .update({
           platform: editPlatform,
@@ -174,8 +175,11 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
           external_id: editExternalId.trim() || null,
         })
         .eq("id", editingId)
-        .eq("client_id", clientId);
+        .eq("client_id", clientId)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!data) throw new Error("Nenhuma conta foi atualizada");
 
       toast.success("Conta atualizada");
       cancelEditing();
@@ -221,12 +225,15 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
   const toggleStatus = async (acc: any) => {
     if (!canManage) return;
     const next = acc.status === "active" ? "inactive" : "active";
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("external_accounts")
       .update({ status: next })
       .eq("id", acc.id)
-      .eq("client_id", clientId);
+      .eq("client_id", clientId)
+      .select("id")
+      .maybeSingle();
     if (error) return toast.error(friendly(error));
+    if (!data) return toast.error("O canal não foi alterado. Atualize a tela e tente novamente.");
     toast.success(next === "active" ? "Conta ativada" : "Conta inativada");
     invalidate();
   };
@@ -243,7 +250,8 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
       external_account_id: accountId,
     });
     if (error) {
-      toast.error(friendly(error, LINK_DUPLICATE_ERROR));
+      const isDuplicate = /duplicate|unique/i.test(String(error.message || ""));
+      toast.error(isDuplicate ? LINK_DUPLICATE_ERROR : friendly(error));
       return;
     }
     toast.success("Vinculado ao projeto");
@@ -254,23 +262,24 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
   const unlink = async (linkId: string) => {
     if (!canManage) return;
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from("project_external_accounts")
       .delete()
       .eq("id", linkId)
-      .eq("client_id", clientId);
+      .eq("client_id", clientId)
+      .select("id")
+      .maybeSingle();
     if (error) return toast.error(friendly(error));
+    if (!data) return toast.error("O vínculo não foi removido. Atualize a tela e tente novamente.");
     toast.success("Vínculo removido");
     invalidate();
   };
-
-  const hasQueryError = accountsError || projectsError || linksError;
 
   return (
     <div className="pt-2">
       <div className="flex items-center justify-between mb-2">
         <label className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Plug className="w-3 h-3" /> Contas &amp; Canais
+          <Plug className="w-3 h-3" /> Contas e Canais
         </label>
         {canManage && !creating && !editingId && (
           <button
@@ -278,10 +287,13 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
             onClick={() => setCreating(true)}
             className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] text-primary border border-primary/30 hover:bg-primary/5 transition-colors bg-transparent"
           >
-            <Plus className="w-3 h-3" /> Nova conta
+            <Plus className="w-3 h-3" /> Adicionar canal
           </button>
         )}
       </div>
+      <p className="mb-3 text-[11px] leading-relaxed text-muted-foreground">
+        Confira aqui Instagram, site, WhatsApp e outros canais deste cliente. O cliente já está cadastrado, você só adiciona os canais que ele usa.
+      </p>
 
       {permissionsError && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
@@ -290,10 +302,17 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         </div>
       )}
 
-      {hasQueryError && (
+      {accountsError && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
           <AlertTriangle className="w-3.5 h-3.5" />
-          Não foi possível carregar as conexões. Tente novamente em instantes.
+          Não foi possível carregar os canais deste cliente. Tente novamente em instantes.
+        </div>
+      )}
+
+      {(projectsError || linksError) && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Os canais carregaram, mas os vínculos com projetos estão indisponíveis no momento.
         </div>
       )}
 
@@ -301,8 +320,9 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         <div className="rounded-xl bg-secondary/50 border border-border p-3 space-y-2 mb-2">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
-              <label className="text-[10px] text-muted-foreground">Plataforma *</label>
+              <label htmlFor="new-channel-platform" className="text-[10px] text-muted-foreground">Canal ou plataforma *</label>
               <select
+                id="new-channel-platform"
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
@@ -312,35 +332,38 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
               </select>
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground">Nome de exibição *</label>
+              <label htmlFor="new-channel-name" className="text-[10px] text-muted-foreground">Nome para identificar *</label>
               <input
+                id="new-channel-name"
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
-                placeholder="Ex: Perfil oficial"
+                placeholder="Ex.: Instagram oficial"
                 className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground">Handle / endereço</label>
+              <label htmlFor="new-channel-address" className="text-[10px] text-muted-foreground">Usuário, link ou domínio</label>
               <input
+                id="new-channel-address"
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
-                placeholder="@usuario ou domínio"
+                placeholder="Ex.: @cliente ou cliente.com.br"
                 className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground">ID externo (opcional)</label>
+              <label htmlFor="new-channel-code" className="text-[10px] text-muted-foreground">Código da conta (opcional)</label>
               <input
+                id="new-channel-code"
                 value={externalId}
                 onChange={(e) => setExternalId(e.target.value)}
-                placeholder="123456789"
+                placeholder="Pode deixar em branco"
                 className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
               />
             </div>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            Cadastro apenas informativo. Não armazenamos senha, token ou chave de API.
+            Este campo serve só para organização. Não coloque senha, token ou chave de acesso.
           </p>
           <div className="flex gap-2">
             <button
@@ -353,7 +376,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
               className="flex-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 border-none inline-flex items-center justify-center gap-1"
             >
               {submitting && <Loader2 className="w-3 h-3 animate-spin" />}
-              Cadastrar
+              Salvar canal
             </button>
           </div>
         </div>
@@ -361,8 +384,10 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
       {isLoading ? (
         <div className="text-[12px] text-muted-foreground py-2">Carregando…</div>
-      ) : !accounts || accounts.length === 0 ? (
-        <div className="text-[12px] text-muted-foreground py-2">Nenhuma conta cadastrada.</div>
+      ) : accountsError ? null : !accounts || accounts.length === 0 ? (
+        <div className="rounded-xl border border-dashed border-border px-3 py-3 text-[12px] text-muted-foreground">
+          Nenhum canal adicionado ainda. O cliente já está cadastrado, use “Adicionar canal” somente para incluir Instagram, site, WhatsApp ou outra conta dele.
+        </div>
       ) : (
         <div className="space-y-2">
           {accounts.map((acc: any) => {
@@ -372,13 +397,14 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
             const isInactive = acc.status !== "active";
             const isEditing = editingId === acc.id;
             return (
-              <div key={acc.id} className={`rounded-xl border border-border bg-secondary/40 ${isInactive ? "opacity-60" : ""}`}>
+              <div key={acc.id} className="rounded-xl border border-border bg-secondary/40">
                 {isEditing ? (
                   <div className="p-3 space-y-2">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Plataforma *</label>
+                        <label htmlFor={`edit-channel-platform-${acc.id}`} className="text-[10px] text-muted-foreground">Canal ou plataforma *</label>
                         <select
+                          id={`edit-channel-platform-${acc.id}`}
                           value={editPlatform}
                           onChange={(e) => setEditPlatform(e.target.value)}
                           className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
@@ -388,25 +414,28 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                         </select>
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Nome de exibição *</label>
+                        <label htmlFor={`edit-channel-name-${acc.id}`} className="text-[10px] text-muted-foreground">Nome para identificar *</label>
                         <input
+                          id={`edit-channel-name-${acc.id}`}
                           value={editDisplayName}
                           onChange={(e) => setEditDisplayName(e.target.value)}
                           className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground">Handle / endereço</label>
+                        <label htmlFor={`edit-channel-address-${acc.id}`} className="text-[10px] text-muted-foreground">Usuário, link ou domínio</label>
                         <input
+                          id={`edit-channel-address-${acc.id}`}
                           value={editHandle}
                           onChange={(e) => setEditHandle(e.target.value)}
-                          placeholder="@usuario ou domínio"
+                          placeholder="Ex.: @cliente ou cliente.com.br"
                           className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
                         />
                       </div>
                       <div>
-                        <label className="text-[10px] text-muted-foreground">ID externo</label>
+                        <label htmlFor={`edit-channel-code-${acc.id}`} className="text-[10px] text-muted-foreground">Código da conta (opcional)</label>
                         <input
+                          id={`edit-channel-code-${acc.id}`}
                           value={editExternalId}
                           onChange={(e) => setEditExternalId(e.target.value)}
                           className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
@@ -434,7 +463,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                     </div>
                   </div>
                 ) : (
-                  <div className="px-3 py-2 flex items-center justify-between gap-2">
+                  <div className={`flex flex-col gap-2 px-3 py-2 sm:flex-row sm:items-center sm:justify-between ${isInactive ? "opacity-60" : ""}`}>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <p className="text-[13px] font-medium text-foreground truncate">{acc.display_name}</p>
@@ -453,44 +482,54 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                         </p>
                       )}
                     </div>
-                    {canManage && (
-                      <div className="flex items-center gap-1 shrink-0">
+                    {canManage && !creating && !editingId && (
+                      <div className="flex shrink-0 flex-wrap items-center gap-1">
                         <button
                           type="button"
                           onClick={() => startEditing(acc)}
                           title="Editar conta"
-                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
+                          aria-label="Editar canal"
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
                         >
-                          <Pencil className="w-3.5 h-3.5" />
+                          <Pencil className="w-3.5 h-3.5" /> Editar
                         </button>
                         <button
                           type="button"
                           onClick={() => toggleStatus(acc)}
                           title={isInactive ? "Ativar" : "Inativar"}
-                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
+                          aria-label={isInactive ? "Ativar canal" : "Inativar canal"}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
                         >
                           {isInactive ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
+                          {isInactive ? "Ativar" : "Inativar"}
                         </button>
                         <button
                           type="button"
                           onClick={() => { setLinkOpenFor(linkOpenFor === acc.id ? null : acc.id); setSelectedProjectId(""); }}
-                          title={availableProjects.length > 0 ? "Vincular a projeto" : "Todos os projetos já estão vinculados"}
-                          disabled={availableProjects.length === 0}
-                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                          title={
+                            projectsError || linksError
+                              ? "Vínculos indisponíveis no momento"
+                              : availableProjects.length > 0
+                                ? "Vincular a projeto"
+                                : "Todos os projetos já estão vinculados"
+                          }
+                          aria-label="Vincular canal a um projeto"
+                          disabled={projectsError || linksError || availableProjects.length === 0}
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         >
-                          <Link2 className="w-3.5 h-3.5" />
+                          <Link2 className="w-3.5 h-3.5" /> Projeto
                         </button>
                       </div>
                     )}
                   </div>
                 )}
 
-                {canManage && !isEditing && linkOpenFor === acc.id && availableProjects.length > 0 && (
-                  <div className="px-3 pb-2 flex gap-2">
+                {canManage && !isEditing && !projectsError && !linksError && linkOpenFor === acc.id && availableProjects.length > 0 && (
+                  <div className="flex flex-col gap-2 px-3 pb-2 sm:flex-row">
                     <select
                       value={selectedProjectId}
                       onChange={(e) => setSelectedProjectId(e.target.value)}
-                      className="flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+                      className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
                     >
                       <option value="">Selecione um projeto…</option>
                       {availableProjects.map((p: any) => (
@@ -506,7 +545,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                   </div>
                 )}
 
-                {accLinks.length > 0 && (
+                {!projectsError && !linksError && accLinks.length > 0 && (
                   <div className="px-3 pb-2 flex flex-wrap gap-1.5">
                     {accLinks.map((l: any) => {
                       const proj = (projects || []).find((p: any) => p.id === l.project_id);
@@ -518,6 +557,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                               type="button"
                               onClick={() => unlink(l.id)}
                               title="Desvincular"
+                              aria-label={`Desvincular do projeto ${proj?.name || "selecionado"}`}
                               className="text-muted-foreground hover:text-destructive"
                             >
                               <Link2Off className="w-3 h-3" />
