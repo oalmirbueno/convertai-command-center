@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Plug, Plus, Power, PowerOff, Link2, Link2Off, Loader2, AlertTriangle } from "lucide-react";
+import { Plug, Plus, Power, PowerOff, Link2, Link2Off, Loader2, AlertTriangle, Pencil, Save, X } from "lucide-react";
 
 interface Props {
   clientId: string;
@@ -18,6 +18,12 @@ const PLATFORMS = [
   { value: "linkedin", label: "LinkedIn" },
   { value: "google_analytics", label: "Google Analytics" },
   { value: "google_business", label: "Google Business" },
+  { value: "google_search_console", label: "Google Search Console" },
+  { value: "whatsapp", label: "WhatsApp" },
+  { value: "website", label: "Site" },
+  { value: "domain", label: "Domínio" },
+  { value: "crm", label: "CRM" },
+  { value: "email", label: "E-mail" },
   { value: "outro", label: "Outro" },
 ];
 
@@ -43,18 +49,26 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
   const [submitting, setSubmitting] = useState(false);
   const [linkOpenFor, setLinkOpenFor] = useState<string | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<string>("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editPlatform, setEditPlatform] = useState("");
+  const [editDisplayName, setEditDisplayName] = useState("");
+  const [editHandle, setEditHandle] = useState("");
+  const [editExternalId, setEditExternalId] = useState("");
+  const [editSubmitting, setEditSubmitting] = useState(false);
 
-  const { data: canManage = false } = useQuery({
+  const {
+    data: canManage = false,
+    isLoading: permissionsLoading,
+    isError: permissionsError,
+  } = useQuery({
     queryKey: ["can-manage-client", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.rpc("can_manage_client", { _client_id: clientId });
-      if (error) {
-        console.warn("[connections] can_manage_client failed, assuming read-only:", error.message);
-        return false;
-      }
+      if (error) throw error;
       return !!data;
     },
     enabled: !!clientId,
+    retry: false,
   });
 
   const {
@@ -118,6 +132,59 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
     setDisplayName("");
     setHandle("");
     setExternalId("");
+  };
+
+  const startEditing = (account: any) => {
+    setEditingId(account.id);
+    setEditPlatform(account.platform);
+    setEditDisplayName(account.display_name);
+    setEditHandle(account.handle || "");
+    setEditExternalId(account.external_id || "");
+    setLinkOpenFor(null);
+    setSelectedProjectId("");
+  };
+
+  const cancelEditing = () => {
+    setEditingId(null);
+    setEditPlatform("");
+    setEditDisplayName("");
+    setEditHandle("");
+    setEditExternalId("");
+  };
+
+  const saveEditing = async () => {
+    if (!canManage || !editingId) return;
+    if (!editPlatform) {
+      toast.error("Selecione uma plataforma");
+      return;
+    }
+    if (!editDisplayName.trim()) {
+      toast.error("Nome de exibição é obrigatório");
+      return;
+    }
+
+    setEditSubmitting(true);
+    try {
+      const { error } = await supabase
+        .from("external_accounts")
+        .update({
+          platform: editPlatform,
+          display_name: editDisplayName.trim(),
+          handle: editHandle.trim() || null,
+          external_id: editExternalId.trim() || null,
+        })
+        .eq("id", editingId)
+        .eq("client_id", clientId);
+      if (error) throw error;
+
+      toast.success("Conta atualizada");
+      cancelEditing();
+      invalidate();
+    } catch (e: any) {
+      toast.error(friendly(e, "Falha ao atualizar a conta."));
+    } finally {
+      setEditSubmitting(false);
+    }
   };
 
   const handleCreate = async () => {
@@ -203,9 +270,9 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
     <div className="pt-2">
       <div className="flex items-center justify-between mb-2">
         <label className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-          <Plug className="w-3 h-3" /> Conexões
+          <Plug className="w-3 h-3" /> Contas &amp; Canais
         </label>
-        {canManage && !creating && (
+        {canManage && !creating && !editingId && (
           <button
             type="button"
             onClick={() => setCreating(true)}
@@ -216,6 +283,13 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         )}
       </div>
 
+      {permissionsError && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
+          <AlertTriangle className="w-3.5 h-3.5" />
+          Não foi possível confirmar sua permissão. Os canais estão em modo de leitura.
+        </div>
+      )}
+
       {hasQueryError && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2 text-[12px] text-destructive">
           <AlertTriangle className="w-3.5 h-3.5" />
@@ -223,9 +297,9 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         </div>
       )}
 
-      {canManage && creating && (
+      {canManage && !permissionsLoading && creating && (
         <div className="rounded-xl bg-secondary/50 border border-border p-3 space-y-2 mb-2">
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
             <div>
               <label className="text-[10px] text-muted-foreground">Plataforma *</label>
               <select
@@ -247,11 +321,11 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
               />
             </div>
             <div>
-              <label className="text-[10px] text-muted-foreground">Handle / Usuário</label>
+              <label className="text-[10px] text-muted-foreground">Handle / endereço</label>
               <input
                 value={handle}
                 onChange={(e) => setHandle(e.target.value)}
-                placeholder="@usuario"
+                placeholder="@usuario ou domínio"
                 className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
               />
             </div>
@@ -296,50 +370,122 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
             const linkedProjectIds = new Set(accLinks.map((l: any) => l.project_id));
             const availableProjects = (projects || []).filter((p: any) => !linkedProjectIds.has(p.id));
             const isInactive = acc.status !== "active";
+            const isEditing = editingId === acc.id;
             return (
               <div key={acc.id} className={`rounded-xl border border-border bg-secondary/40 ${isInactive ? "opacity-60" : ""}`}>
-                <div className="px-3 py-2 flex items-center justify-between gap-2">
-                  <div className="min-w-0">
-                    <div className="flex items-center gap-2">
-                      <p className="text-[13px] font-medium text-foreground truncate">{acc.display_name}</p>
-                      <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground">
-                        {PLATFORMS.find(p => p.value === acc.platform)?.label || acc.platform}
-                      </span>
-                      {isInactive && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Inativa</span>
+                {isEditing ? (
+                  <div className="p-3 space-y-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Plataforma *</label>
+                        <select
+                          value={editPlatform}
+                          onChange={(e) => setEditPlatform(e.target.value)}
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                        >
+                          <option value="">Selecione uma plataforma</option>
+                          {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Nome de exibição *</label>
+                        <input
+                          value={editDisplayName}
+                          onChange={(e) => setEditDisplayName(e.target.value)}
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">Handle / endereço</label>
+                        <input
+                          value={editHandle}
+                          onChange={(e) => setEditHandle(e.target.value)}
+                          placeholder="@usuario ou domínio"
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-muted-foreground">ID externo</label>
+                        <input
+                          value={editExternalId}
+                          onChange={(e) => setEditExternalId(e.target.value)}
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                        />
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={cancelEditing}
+                        disabled={editSubmitting}
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[12px] border border-border text-muted-foreground hover:text-foreground bg-transparent disabled:opacity-50"
+                      >
+                        <X className="w-3 h-3" /> Cancelar
+                      </button>
+                      <button
+                        type="button"
+                        onClick={saveEditing}
+                        disabled={editSubmitting || !editPlatform || !editDisplayName.trim()}
+                        className="flex-1 inline-flex items-center justify-center gap-1 px-3 py-1.5 rounded-lg text-[12px] bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50 border-none"
+                      >
+                        {editSubmitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
+                        Salvar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="px-3 py-2 flex items-center justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-[13px] font-medium text-foreground truncate">{acc.display_name}</p>
+                        <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-background border border-border text-muted-foreground">
+                          {PLATFORMS.find(p => p.value === acc.platform)?.label || acc.platform}
+                        </span>
+                        {isInactive && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Inativa</span>
+                        )}
+                      </div>
+                      {(acc.handle || acc.external_id) && (
+                        <p className="text-[11px] text-muted-foreground truncate">
+                          {acc.handle && <span>{acc.handle}</span>}
+                          {acc.handle && acc.external_id && <span> · </span>}
+                          {acc.external_id && <span>ID {acc.external_id}</span>}
+                        </p>
                       )}
                     </div>
-                    {(acc.handle || acc.external_id) && (
-                      <p className="text-[11px] text-muted-foreground truncate">
-                        {acc.handle && <span>{acc.handle}</span>}
-                        {acc.handle && acc.external_id && <span> · </span>}
-                        {acc.external_id && <span>ID {acc.external_id}</span>}
-                      </p>
+                    {canManage && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => startEditing(acc)}
+                          title="Editar conta"
+                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => toggleStatus(acc)}
+                          title={isInactive ? "Ativar" : "Inativar"}
+                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
+                        >
+                          {isInactive ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => { setLinkOpenFor(linkOpenFor === acc.id ? null : acc.id); setSelectedProjectId(""); }}
+                          title={availableProjects.length > 0 ? "Vincular a projeto" : "Todos os projetos já estão vinculados"}
+                          disabled={availableProjects.length === 0}
+                          className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          <Link2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     )}
                   </div>
-                  {canManage && (
-                    <div className="flex items-center gap-1 shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => toggleStatus(acc)}
-                        title={isInactive ? "Ativar" : "Inativar"}
-                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
-                      >
-                        {isInactive ? <Power className="w-3.5 h-3.5" /> : <PowerOff className="w-3.5 h-3.5" />}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => { setLinkOpenFor(linkOpenFor === acc.id ? null : acc.id); setSelectedProjectId(""); }}
-                        title="Vincular a projeto"
-                        className="p-1.5 rounded-lg border border-border text-muted-foreground hover:text-foreground bg-transparent"
-                      >
-                        <Link2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
-                </div>
+                )}
 
-                {canManage && linkOpenFor === acc.id && (
+                {canManage && !isEditing && linkOpenFor === acc.id && availableProjects.length > 0 && (
                   <div className="px-3 pb-2 flex gap-2">
                     <select
                       value={selectedProjectId}
