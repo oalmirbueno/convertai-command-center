@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { UserPlus, Link2, CalendarClock, AlertTriangle, Eye } from "lucide-react";
+import { UserPlus, Link2, CalendarClock, AlertTriangle, Eye, Search, X, ChevronRight } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
@@ -24,6 +24,7 @@ function getRenewalStatus(dateStr: string | null | undefined) {
 }
 
 const STATUS_TABS = [
+  { value: "all", label: "Todos" },
   { value: "active", label: "Ativos" },
   { value: "onboarding", label: "Em Andamento" },
   { value: "standby", label: "Standby" },
@@ -57,21 +58,46 @@ const typeBadge: Record<string, { label: string; cls: string }> = {
   hybrid: { label: "Híbrido", cls: "bg-accent/10 text-accent-foreground border-accent/30" },
 };
 
+function normalizeSearch(value: string) {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
 export default function Clients() {
   const { profile } = useAuth();
   const navigate = useNavigate();
   const isAdmin = profile?.role === "admin";
-  const { data: clients, isLoading } = useClients();
+  const { data: clients, isLoading, isError, refetch } = useClients();
   const [createOpen, setCreateOpen] = useState(false);
   const [editClient, setEditClient] = useState<any>(null);
   const [briefingOpen, setBriefingOpen] = useState(false);
-  const [tab, setTab] = useState("active");
+  const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [search, setSearch] = useState("");
+
+  const searchTerm = normalizeSearch(search);
+  const searching = searchTerm.length > 0;
 
   const filtered = (clients || []).filter((c: any) => {
     const status = c.plan_status || "active";
-    if (status !== tab) return false;
+    if (tab !== "all" && status !== tab) return false;
     if (typeFilter !== "all" && (c.client_type || "recurring") !== typeFilter) return false;
+
+    if (searching) {
+      const searchable = normalizeSearch([
+        c.company_name,
+        c.full_name,
+        c.email,
+        c.phone,
+      ].filter(Boolean).join(" "));
+      const searchedDigits = search.replace(/\D/g, "");
+      const phoneDigits = String(c.phone || "").replace(/\D/g, "");
+      const matchesPhone = searchedDigits.length > 0 && phoneDigits.includes(searchedDigits);
+      if (!searchable.includes(searchTerm) && !matchesPhone) return false;
+    }
     return true;
   });
 
@@ -112,6 +138,7 @@ export default function Clients() {
             <button
               key={t.value}
               onClick={() => setTab(t.value)}
+              aria-pressed={tab === t.value}
               className={`px-3 py-1.5 rounded-md text-[13px] transition-colors cursor-pointer border-none ${
                 tab === t.value
                   ? "bg-background text-foreground font-medium shadow-sm"
@@ -128,6 +155,7 @@ export default function Clients() {
             <button
               key={t.value}
               onClick={() => setTypeFilter(t.value)}
+              aria-pressed={typeFilter === t.value}
               className={`px-3 py-1.5 rounded-md text-[12px] transition-colors cursor-pointer border-none ${
                 typeFilter === t.value
                   ? "bg-background text-foreground font-medium shadow-sm"
@@ -139,14 +167,70 @@ export default function Clients() {
           ))}
         </div>
       </div>
+
+      <div className="mt-3" data-tour="clients-search">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Digite o nome da empresa, contato, e-mail ou telefone"
+            aria-label="Buscar cliente existente"
+            className="h-11 w-full rounded-xl border border-border bg-card pl-10 pr-10 text-[16px] text-foreground outline-none transition-colors placeholder:text-muted-foreground focus:border-primary/60 md:text-sm"
+          />
+          {searching && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              aria-label="Limpar busca"
+              title="Limpar busca"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-lg border-none bg-transparent p-2 text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        <p aria-live="polite" className="mt-1.5 text-[11px] text-muted-foreground">
+          {searching
+            ? filtered.length === 1
+              ? "1 cliente encontrado entre os clientes disponíveis."
+              : `${filtered.length} clientes encontrados entre os clientes disponíveis.`
+            : "Busque um cliente que já existe para abrir e conferir o cadastro. Você não precisa cadastrá-lo novamente."}
+        </p>
+      </div>
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-3 pb-4 md:overflow-visible md:px-0 md:pt-0 md:pb-0">
-      {isLoading ? (
+      {isError ? (
+        <div className="py-8 text-center">
+          <p className="text-sm text-destructive">Não foi possível carregar os clientes.</p>
+          <p className="mt-1 text-xs text-muted-foreground">Não cadastre novamente agora, isso pode criar um cliente duplicado.</p>
+          <button
+            type="button"
+            onClick={() => refetch()}
+            className="mt-3 rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-foreground hover:border-muted-foreground/50"
+          >
+            Tentar carregar novamente
+          </button>
+        </div>
+      ) : isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">
-          Nenhum cliente encontrado com os filtros aplicados.
+        <div className="py-8 text-center">
+          <p className="text-sm text-muted-foreground">
+            {searching
+              ? `Nenhum cliente encontrado para "${search.trim()}".`
+              : "Nenhum cliente encontrado com os filtros aplicados."}
+          </p>
+          {searching && (
+            <button
+              type="button"
+              onClick={() => setSearch("")}
+              className="mt-3 rounded-lg border border-border bg-transparent px-3 py-1.5 text-xs text-foreground hover:border-muted-foreground/50"
+            >
+              Limpar busca
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-1 stagger-children">
@@ -154,7 +238,16 @@ export default function Clients() {
             <div
               key={c.id}
               onClick={() => setEditClient(c)}
-              className="bg-card border border-border rounded-xl px-4 py-3.5 md:px-5 md:py-4 flex items-center gap-3 md:gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  setEditClient(c);
+                }
+              }}
+              role="button"
+              tabIndex={0}
+              aria-label={`Abrir cliente ${c.company_name || c.full_name}`}
+              className="bg-card border border-border rounded-xl px-4 py-3.5 md:px-5 md:py-4 flex items-center gap-3 md:gap-4 hover:border-muted-foreground/30 transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
             >
               <Avatar className="w-10 h-10 shrink-0">
                 {c.avatar_url && <AvatarImage src={c.avatar_url} alt={c.full_name} />}
@@ -165,6 +258,11 @@ export default function Clients() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                   <p className="text-sm font-medium text-foreground truncate">{c.company_name || c.full_name}</p>
+                  {(searching || tab === "all") && (
+                    <span className="inline-flex items-center rounded-md border border-border bg-secondary/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
+                      {statusLabel[c.plan_status || "active"] || "Sem status"}
+                    </span>
+                  )}
                   {(() => {
                     const t = typeBadge[(c as any).client_type || "recurring"];
                     return t ? (
@@ -179,7 +277,10 @@ export default function Clients() {
                     </span>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground">{c.email}</p>
+                <p className="truncate text-[11px] text-muted-foreground">
+                  {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
+                  {[c.email, c.phone].filter(Boolean).join(" · ")}
+                </p>
               </div>
               {isAdmin && ((c as any).plan_name || (c as any).plan_value) && (
                 <span className="hidden sm:inline-flex px-2.5 py-0.5 rounded-full text-[10px] font-medium bg-primary/10 text-primary border border-primary/20">
@@ -220,7 +321,14 @@ export default function Clients() {
                 <p className="text-xs font-mono text-foreground">{c.projectCount}</p>
                 <p className="text-[10px] text-muted-foreground">projetos</p>
               </div>
-              <div className={`w-2 h-2 rounded-full shrink-0 ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`} />
+              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-muted-foreground">
+                Abrir <ChevronRight className="h-3.5 w-3.5" />
+              </span>
+              <span
+                role="img"
+                aria-label={`Status: ${statusLabel[c.plan_status || "active"] || "sem status"}`}
+                className={`w-2 h-2 rounded-full shrink-0 ${statusDot[c.plan_status || "active"] || "bg-muted-foreground"}`}
+              />
             </div>
           ))}
         </div>
