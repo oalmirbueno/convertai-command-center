@@ -1,0 +1,61 @@
+name: Supabase DB Tests (RLS)
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-db-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  db-tests:
+    name: Supabase local + pgTAP + build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: 1.226.4
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Start Supabase local stack
+        run: supabase start --exclude realtime,storage-api,imgproxy,edge-runtime,logflare,vector,pgadmin-schema-diff,studio,mailpit,inbucket
+
+      - name: Apply migrations
+        run: supabase db reset --local --no-seed
+
+      - name: Run pgTAP database tests
+        run: supabase test db
+
+      - name: Run unit tests
+        run: npm test -- --run
+
+      - name: Build application
+        run: npm run build
+
+      - name: Stop Supabase local stack
+        if: always()
+        run: supabase stop --no-backup
