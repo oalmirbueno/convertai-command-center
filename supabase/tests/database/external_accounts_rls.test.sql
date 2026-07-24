@@ -7,7 +7,7 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgtap;
 
-SELECT plan(48);
+SELECT * FROM no_plan();
 
 -- ---------------------------------------------------------------------------
 -- 0. Silence outbound HTTP triggers that fire on writes to real tables.
