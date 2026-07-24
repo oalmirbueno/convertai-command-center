@@ -10,6 +10,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
+import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 
 
@@ -655,6 +656,10 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               </label>
               <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
             </div>
+
+            {/* Conexões (contas externas cadastradas manualmente, sem credenciais) */}
+            <ClientConnectionsPanel key={client.id} clientId={client.id} />
+
 
 
             {/* Pagamentos de projetos não recorrentes */}
