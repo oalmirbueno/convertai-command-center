@@ -10,6 +10,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
 import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
+import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
 
 
