@@ -1,10 +1,9 @@
 import { useEffect, useState, useRef } from "react";
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -171,7 +170,9 @@ function CarouselSlider({ files }: { files: any[] }) {
 }
 
 export default function AdminFiles() {
-  const { user } = useAuth();
+  const { user, profile, loading: loadingAuth } = useAuth();
+  const isStaff = profile?.role === "admin"
+    || ["design", "traffic", "manager"].includes(profile?.role || "");
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
   const { data: allFiles, isLoading: loadingFiles } = useAllFiles();
@@ -213,7 +214,7 @@ export default function AdminFiles() {
   const [editNameValue, setEditNameValue] = useState("");
 
   useEffect(() => {
-    if (!clients) return;
+    if (!isStaff || !clients) return;
 
     if (requestedClientId) {
       const clientExists = clients.some((client: any) => client.id === requestedClientId);
@@ -251,6 +252,7 @@ export default function AdminFiles() {
     shouldOpenNewContent,
     toast,
     activeFolder,
+    isStaff,
   ]);
 
   const handleClientChange = (clientId: string) => {
@@ -363,6 +365,14 @@ export default function AdminFiles() {
   };
 
   const handleUpload = async () => {
+    if (!isStaff) {
+      toast({
+        title: "Acesso restrito",
+        description: "Somente a equipe da Aceleriq pode criar entregas por esta tela.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!user || !selectedClient || selectedClient === "all") {
       toast({ title: "Selecione um cliente", variant: "destructive" });
       return;
@@ -498,13 +508,12 @@ export default function AdminFiles() {
       }
 
       if (uploadProject && uploadProject !== "none") {
-        const { data: upd } = await supabase.from("updates").insert({
+        await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
           message: fileLabel,
           update_type: "creative",
-        }).select().single();
-        notifyOpsUpdate(upd);
+        });
       }
 
       setUploadProgress(100);
@@ -563,6 +572,14 @@ export default function AdminFiles() {
   const selectedClientProfile = (clients || []).find((client: any) => client.id === selectedClient);
 
   // formatDate already defined above
+
+  if (loadingAuth) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!isStaff) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
