@@ -110,6 +110,14 @@ export const adminTourSteps: TourStep[] = [
     route: "/clientes",
   },
   {
+    target: "[data-tour='clients-search']",
+    title: "Encontre um cliente já cadastrado",
+    description:
+      "Digite o nome da empresa, da pessoa, o e-mail ou o telefone. A busca procura entre os clientes disponíveis e você pode refinar por status. Depois, clique em Abrir para conferir o cadastro, as contas e os canais.",
+    placement: "bottom",
+    route: "/clientes",
+  },
+  {
     target: "[data-tour='clients-create-btn']",
     title: "Cadastrar Novo Cliente",
     description:
@@ -521,6 +529,12 @@ export const pageTours: PageTourConfig[] = [
     label: "Clientes",
     admin: [
       {
+        target: "[data-tour='clients-search']",
+        title: "Buscar cliente já cadastrado",
+        description: "Digite o nome da empresa, da pessoa, o e-mail ou o telefone. Com o filtro Todos, a busca também encontra clientes inativos, em standby e em andamento. Clique em Abrir para conferir os dados e os canais.",
+        placement: "bottom",
+      },
+      {
         target: "[data-tour='clients-create-btn']",
         title: "Cadastrar Cliente",
         description: "Crie a conta de um novo cliente com nome, empresa, email e telefone. Após o cadastro, o cliente poderá acessar o portal para acompanhar seus projetos.",
@@ -535,7 +549,7 @@ export const pageTours: PageTourConfig[] = [
       {
         target: "[data-tour='welcome']",
         title: "Gestão de Clientes",
-        description: "Clique em qualquer cliente na lista para abrir o painel lateral com todos os dados: projetos vinculados, status do plano, contato e ações rápidas.",
+        description: "Ao abrir um cliente, o painel lateral confirma o nome selecionado e mostra cadastro, projetos, status, Contas e Canais. O botão Novo Cliente deve ser usado somente quando a empresa ainda não existe no sistema.",
         placement: "center",
       },
     ],
