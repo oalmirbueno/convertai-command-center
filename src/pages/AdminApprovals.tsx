@@ -1,29 +1,29 @@
-import { useState } from "react";
-import { useAllFiles, useProjects } from "@/hooks/useSupabaseData";
-import { useAuth } from "@/contexts/AuthContext";
+import { useEffect, useState } from "react";
+import { Link, useSearchParams } from "react-router-dom";
+import { useAllFiles, useClients } from "@/hooks/useSupabaseData";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileImage, FileText, Film, RefreshCw, Zap, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
-  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "⏳ Pendente" },
-  approved: { cls: "bg-success/10 text-success border-success/20", label: "✓ Aprovado" },
-  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Rejeitado" },
+  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
+  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado pelo cliente" },
+  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Cliente pediu ajustes" },
 };
 
 const TABS = [
   { id: "all", label: "Todos" },
-  { id: "pending", label: "Pendentes" },
+  { id: "pending", label: "Aguardando cliente" },
   { id: "approved", label: "Aprovados" },
-  { id: "rejected", label: "Rejeitados" },
+  { id: "rejected", label: "Pediu ajustes" },
 ];
 
 function ApprovalThumb({ file }: { file: any }) {
@@ -102,10 +102,12 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 }
 
 export default function AdminApprovals() {
-  const { user } = useAuth();
   const { data: allFiles, isLoading } = useAllFiles();
+  const { data: clients } = useClients();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedClient = searchParams.get("client") || "all";
   const [activeTab, setActiveTab] = useState("all");
   const [previewFile, setPreviewFile] = useState<any>(null);
 
@@ -121,9 +123,42 @@ export default function AdminApprovals() {
   });
 
   // Only parent/standalone files with approval status
-  const approvalFiles = allFilesList.filter((f: any) => f.approval_status !== "none" && !f.parent_file_id);
+  const approvalFiles = allFilesList.filter((f: any) => {
+    if (f.approval_status === "none" || f.parent_file_id) return false;
+    if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
+    return true;
+  });
   const filtered = activeTab === "all" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === activeTab);
   const pendingCount = approvalFiles.filter((f: any) => f.approval_status === "pending").length;
+  const selectedClientProfile = (clients || []).find((client: any) => client.id === selectedClient);
+  const activeTabLabel = TABS.find((tab) => tab.id === activeTab)?.label || "selecionado";
+
+  const handleClientChange = (clientId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (clientId === "all") {
+      next.delete("client");
+    } else {
+      next.set("client", clientId);
+    }
+    setActiveTab("all");
+    setSearchParams(next, { replace: true });
+  };
+
+  useEffect(() => {
+    if (!clients || selectedClient === "all") return;
+    const clientExists = clients.some((client: any) => client.id === selectedClient);
+    if (clientExists) return;
+
+    const next = new URLSearchParams(searchParams);
+    next.delete("client");
+    setActiveTab("all");
+    setSearchParams(next, { replace: true });
+    toast({
+      title: "Cliente não encontrado",
+      description: "O filtro foi removido. Escolha um cliente existente.",
+      variant: "destructive",
+    });
+  }, [clients, searchParams, selectedClient, setSearchParams, toast]);
 
   const getCarouselImages = (f: any) => {
     const children = childrenMap.get(f.id) || [];
@@ -131,6 +166,15 @@ export default function AdminApprovals() {
       return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
     }
     return [f];
+  };
+
+  const getCorrectionUrl = (file: any) => {
+    const params = new URLSearchParams({
+      client: file.client_id,
+      folder: "materiais",
+      novo: "1",
+    });
+    return `/arquivos?${params.toString()}`;
   };
 
   const handleDownload = async (file: any) => {
@@ -142,35 +186,6 @@ export default function AdminApprovals() {
       expiresIn: 3600,
     });
     await downloadFile(url, file.file_name);
-  };
-
-  const handleResend = async (fileId: string) => {
-    try {
-      const file = approvalFiles.find((f: any) => f.id === fileId);
-      await supabase.from("files").update({ approval_status: "pending", feedback: null }).eq("id", fileId);
-      if (file?.project_id) {
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-        if (authUser) {
-          const { data: upd } = await supabase.from("updates").insert({
-            project_id: file.project_id, author_id: authUser.id,
-            message: `Criativo reenviado para aprovação: ${file.file_name}`, update_type: "delivery",
-          }).select().single();
-          notifyOpsUpdate(upd);
-        }
-        if (file.client_id) {
-          await supabase.from("notifications").insert({
-            user_id: file.client_id,
-            message: `Criativo atualizado para aprovação: ${file.file_name}`,
-            notification_type: "approval",
-            link: "/aprovacoes",
-          });
-        }
-      }
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      toast({ title: "Reenviado para aprovação" });
-    } catch {
-      toast({ title: "Erro", variant: "destructive" });
-    }
   };
 
   const handleCreateAdjustTask = async (file: any) => {
@@ -196,16 +211,54 @@ export default function AdminApprovals() {
   return (
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <p className="heading-page">Aprovações</p>
-          {pendingCount > 0 && (
-            <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">
-              {pendingCount} pendente{pendingCount > 1 ? "s" : ""}
-            </span>
-          )}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <div className="flex items-center gap-3">
+            <p className="heading-page">Aprovações</p>
+            {pendingCount > 0 && (
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">
+                {pendingCount} aguardando cliente
+              </span>
+            )}
+          </div>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Acompanhe a decisão do cliente e os pedidos de ajuste.
+          </p>
         </div>
+
+        <Select value={selectedClient} onValueChange={handleClientChange}>
+          <SelectTrigger className="w-full bg-card border-border rounded-xl text-sm sm:w-[240px]">
+            <SelectValue placeholder="Todos os clientes" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os clientes</SelectItem>
+            {(clients || []).map((client: any) => (
+              <SelectItem key={client.id} value={client.id}>
+                {client.company_name || client.full_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
+
+      {selectedClientProfile && (
+        <div className="mt-3 flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Cliente selecionado
+            </p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">
+              {selectedClientProfile.company_name || selectedClientProfile.full_name}
+            </p>
+          </div>
+          <Link
+            to={`/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`}
+            className="inline-flex items-center justify-center rounded-lg border border-primary bg-primary px-3 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Novo conteúdo
+          </Link>
+        </div>
+      )}
 
       <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hidden">
         {TABS.map((t) => (
@@ -230,7 +283,31 @@ export default function AdminApprovals() {
           {[1,2,3].map(i => <Skeleton key={i} className="h-48 rounded-xl" />)}
         </div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground">Nenhuma aprovação encontrada</div>
+        <div className="flex flex-col items-center gap-3 py-12 text-center text-sm text-muted-foreground">
+          <p>
+            {activeTab !== "all"
+              ? `Nenhum item em "${activeTabLabel}"${selectedClientProfile ? ` para ${selectedClientProfile.company_name || selectedClientProfile.full_name}` : ""}.`
+              : selectedClientProfile
+              ? `Nenhuma aprovação encontrada para ${selectedClientProfile.company_name || selectedClientProfile.full_name}.`
+              : "Nenhuma aprovação encontrada."}
+          </p>
+          {activeTab !== "all" ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
+            >
+              Ver todas as aprovações
+            </button>
+          ) : selectedClientProfile ? (
+            <Link
+              to={`/arquivos?client=${encodeURIComponent(selectedClient)}&folder=materiais&novo=1`}
+              className="rounded-lg border border-border bg-card px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
+            >
+              Criar conteúdo
+            </Link>
+          ) : null}
+        </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start stagger-children">
           {filtered.map((f: any) => {
@@ -270,9 +347,10 @@ export default function AdminApprovals() {
 
                   {f.approval_status === "rejected" && (
                     <div className="flex gap-2 pt-1 flex-wrap">
-                      <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1"
-                        onClick={(e) => { e.stopPropagation(); handleResend(f.id); }}>
-                        <RefreshCw className="w-3 h-3" /> Reenviar
+                      <Button asChild size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1">
+                        <Link to={getCorrectionUrl(f)} onClick={(event) => event.stopPropagation()}>
+                          <RefreshCw className="w-3 h-3" /> Criar correção
+                        </Link>
                       </Button>
                       {f.project_id && (
                         <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1 border-warning/50 text-warning hover:bg-warning/10"
@@ -330,9 +408,10 @@ export default function AdminApprovals() {
           <DialogFooter className="flex gap-2">
             {previewFile?.approval_status === "rejected" && (
               <>
-                <Button size="sm" variant="outline" className="gap-1"
-                  onClick={() => { handleResend(previewFile.id); setPreviewFile(null); }}>
-                  <RefreshCw className="w-3 h-3" /> Reenviar
+                <Button asChild size="sm" variant="outline" className="gap-1">
+                  <Link to={getCorrectionUrl(previewFile)} onClick={() => setPreviewFile(null)}>
+                    <RefreshCw className="w-3 h-3" /> Criar correção
+                  </Link>
                 </Button>
                 {previewFile.project_id && (
                   <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"

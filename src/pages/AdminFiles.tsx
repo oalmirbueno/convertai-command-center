@@ -1,17 +1,17 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { useClients, useProjects, useAllFiles } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Progress } from "@/components/ui/progress";
 import {
@@ -34,10 +34,11 @@ const FOLDERS = [
   { id: "relatorios", label: "Relatórios" },
   { id: "operacionais", label: "Operacionais" },
 ];
+const FOLDER_IDS = new Set(FOLDERS.map((folder) => folder.id));
 
 const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
 const ACCEPTED = "*/*";
-const MAX_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
+const MAX_SIZE = 100 * 1024 * 1024; // Mesmo limite configurado no bucket.
 
 const fileIcon = (name: string) => {
   const ext = name?.split(".").pop()?.toLowerCase() || "";
@@ -169,15 +170,26 @@ function CarouselSlider({ files }: { files: any[] }) {
 }
 
 export default function AdminFiles() {
-  const { user } = useAuth();
+  const { user, profile, loading: loadingAuth } = useAuth();
+  const isStaff = profile?.role === "admin"
+    || ["design", "traffic", "manager"].includes(profile?.role || "");
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
   const { data: allFiles, isLoading: loadingFiles } = useAllFiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedClientId = searchParams.get("client");
+  const requestedFolderId = searchParams.get("folder");
+  const shouldOpenNewContent = searchParams.get("novo") === "1";
+  const initialFolder = requestedFolderId && FOLDER_IDS.has(requestedFolderId)
+    ? requestedFolderId
+    : "estrategicos";
 
-  const [selectedClient, setSelectedClient] = useState<string>("all");
-  const [activeFolder, setActiveFolder] = useState("estrategicos");
+  const selectedClient = requestedClientId || "all";
+  const activeFolder = requestedFolderId && FOLDER_IDS.has(requestedFolderId)
+    ? requestedFolderId
+    : "estrategicos";
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -189,9 +201,9 @@ export default function AdminFiles() {
   const [uploadMode, setUploadMode] = useState<"single" | "carousel" | "video_link">("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
-  const [uploadFolder, setUploadFolder] = useState(activeFolder);
+  const [uploadFolder, setUploadFolder] = useState(initialFolder);
   const [uploadProject, setUploadProject] = useState("");
-  const [uploadType, setUploadType] = useState("documento");
+  const [uploadType, setUploadType] = useState("criativo");
   const [uploadApproval, setUploadApproval] = useState(false);
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
@@ -200,6 +212,65 @@ export default function AdminFiles() {
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+
+  useEffect(() => {
+    if (!isStaff || !clients) return;
+
+    if (requestedClientId) {
+      const clientExists = clients.some((client: any) => client.id === requestedClientId);
+      if (!clientExists) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("client");
+        next.delete("novo");
+        setSearchParams(next, { replace: true });
+        toast({
+          title: "Cliente não encontrado",
+          description: "Escolha um cliente existente antes de criar a entrega.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
+    if (requestedFolderId && FOLDER_IDS.has(requestedFolderId)) {
+      setUploadFolder(requestedFolderId);
+    }
+
+    if (shouldOpenNewContent && requestedClientId) {
+      setUploadFolder(activeFolder);
+      setUploadOpen(true);
+      const next = new URLSearchParams(searchParams);
+      next.delete("novo");
+      setSearchParams(next, { replace: true });
+    }
+  }, [
+    clients,
+    requestedClientId,
+    requestedFolderId,
+    searchParams,
+    setSearchParams,
+    shouldOpenNewContent,
+    toast,
+    activeFolder,
+    isStaff,
+  ]);
+
+  const handleClientChange = (clientId: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (clientId === "all") {
+      next.delete("client");
+    } else {
+      next.set("client", clientId);
+    }
+    next.delete("novo");
+    setSearchParams(next, { replace: true });
+  };
+
+  const handleFolderChange = (folderId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("folder", folderId);
+    setSearchParams(next, { replace: true });
+  };
 
   const handleRename = async () => {
     if (!previewFile || !editNameValue.trim()) return;
@@ -260,7 +331,11 @@ export default function AdminFiles() {
     const valid: File[] = [];
     for (const file of newFiles) {
       if (file.size > MAX_SIZE) {
-        toast({ title: "Arquivo muito grande", description: `${file.name} excede 2GB.`, variant: "destructive" });
+        toast({ title: "Arquivo muito grande", description: `${file.name} excede 100 MB.`, variant: "destructive" });
+        continue;
+      }
+      if (uploadMode === "carousel" && mediaKindFromFile(file.name, undefined, file.type) !== "image") {
+        toast({ title: "Formato não aceito", description: `${file.name} não é uma imagem para carrossel.`, variant: "destructive" });
         continue;
       }
       valid.push(file);
@@ -282,14 +357,22 @@ export default function AdminFiles() {
     setUploadFiles(prev => prev.filter((_, i) => i !== index));
   };
 
-  const handleDrop = useCallback((e: React.DragEvent) => {
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const files = Array.from(e.dataTransfer.files);
     if (files.length > 0) handleFilesSelect(files);
-  }, [activeFolder, uploadFiles.length]);
+  };
 
   const handleUpload = async () => {
+    if (!isStaff) {
+      toast({
+        title: "Acesso restrito",
+        description: "Somente a equipe da Aceleriq pode criar entregas por esta tela.",
+        variant: "destructive",
+      });
+      return;
+    }
     if (!user || !selectedClient || selectedClient === "all") {
       toast({ title: "Selecione um cliente", variant: "destructive" });
       return;
@@ -322,7 +405,7 @@ export default function AdminFiles() {
             return `Vídeo • ${u.hostname.replace(/^www\./, "")}`;
           } catch { return "Vídeo externo"; }
         })();
-        await supabase.from("files").insert({
+        const { error: fileError } = await supabase.from("files").insert({
           client_id: selectedClient,
           file_name: displayName,
           file_url: url,
@@ -334,6 +417,7 @@ export default function AdminFiles() {
           caption: uploadCaption.trim() || null,
           description: uploadDescription.trim() || null,
         });
+        if (fileError) throw fileError;
         setUploadProgress(100);
         await supabase.from("notifications").insert({
           user_id: selectedClient,
@@ -369,7 +453,7 @@ export default function AdminFiles() {
           ? (uploadName || file.name)
           : (isCarousel ? `${uploadName || uploadFiles[0].name} (${i + 1}/${totalFiles})` : file.name);
 
-        const { data: inserted } = await supabase.from("files").insert({
+        const { data: inserted, error: insertError } = await supabase.from("files").insert({
           client_id: selectedClient,
           file_name: fileName,
           file_url: urlData.publicUrl,
@@ -387,6 +471,10 @@ export default function AdminFiles() {
           description: i === 0 ? (uploadDescription.trim() || null) : null,
           parent_file_id: isCarousel && i > 0 ? parentFileId : null,
         }).select("id").single();
+        if (insertError) {
+          await supabase.storage.from("files").remove([path]);
+          throw insertError;
+        }
 
         if (i === 0 && inserted) {
           parentFileId = inserted.id;
@@ -420,13 +508,12 @@ export default function AdminFiles() {
       }
 
       if (uploadProject && uploadProject !== "none") {
-        const { data: upd } = await supabase.from("updates").insert({
+        await supabase.from("updates").insert({
           project_id: uploadProject,
           author_id: user.id,
           message: fileLabel,
           update_type: "creative",
-        }).select().single();
-        notifyOpsUpdate(upd);
+        });
       }
 
       setUploadProgress(100);
@@ -445,7 +532,7 @@ export default function AdminFiles() {
     setUploadFiles([]);
     setUploadName("");
     setUploadProject("");
-    setUploadType("documento");
+    setUploadType("criativo");
     setUploadApproval(false);
     setUploadProgress(0);
     setUploadCaption("");
@@ -482,15 +569,29 @@ export default function AdminFiles() {
   const clientProjects = (projects || []).filter((p: any) =>
     selectedClient === "all" || p.client_id === selectedClient
   );
+  const selectedClientProfile = (clients || []).find((client: any) => client.id === selectedClient);
 
   // formatDate already defined above
+
+  if (loadingAuth) {
+    return <div className="py-8 text-center text-sm text-muted-foreground">Carregando...</div>;
+  }
+
+  if (!isStaff) {
+    return <Navigate to="/dashboard" replace />;
+  }
 
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <p className="heading-page">Arquivos</p>
+        <div>
+          <p className="heading-page">Conteúdos e arquivos</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Organize entregas, legendas e materiais do cliente.
+          </p>
+        </div>
         <div className="flex items-center gap-3">
-          <Select value={selectedClient} onValueChange={setSelectedClient}>
+          <Select value={selectedClient} onValueChange={handleClientChange}>
             <SelectTrigger className="w-full sm:w-[220px] bg-card border-border rounded-xl text-sm">
               <SelectValue placeholder="Todos os clientes" />
             </SelectTrigger>
@@ -504,12 +605,31 @@ export default function AdminFiles() {
         </div>
       </div>
 
+      {selectedClientProfile && (
+        <div className="flex flex-col gap-3 rounded-xl border border-primary/20 bg-primary/[0.04] px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+              Cliente selecionado
+            </p>
+            <p className="mt-0.5 text-sm font-medium text-foreground">
+              {selectedClientProfile.company_name || selectedClientProfile.full_name}
+            </p>
+          </div>
+          <Link
+            to={`/aprovacoes?client=${encodeURIComponent(selectedClient)}`}
+            className="inline-flex items-center justify-center rounded-lg border border-border bg-background px-3 py-2 text-xs font-medium text-foreground transition-colors hover:border-primary/40"
+          >
+            Acompanhar aprovações
+          </Link>
+        </div>
+      )}
+
       {/* Folder tabs */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
         {FOLDERS.map((f) => (
           <button
             key={f.id}
-            onClick={() => setActiveFolder(f.id)}
+            onClick={() => handleFolderChange(f.id)}
             className={`px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
               activeFolder === f.id
                 ? "text-foreground border-b-2 border-primary bg-secondary/50"
@@ -559,7 +679,7 @@ export default function AdminFiles() {
               disabled={selectedClient === "all"}
             >
               <Upload className="w-4 h-4" />
-              Upload
+              Novo conteúdo
             </Button>
           </div>
 
@@ -807,7 +927,12 @@ export default function AdminFiles() {
       <Dialog open={uploadOpen} onOpenChange={(o) => { if (!uploading) { setUploadOpen(o); if (!o) resetUploadForm(); } }}>
         <DialogContent className="max-w-lg p-0 gap-0 flex flex-col max-h-[85vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
-            <DialogTitle>Upload de Arquivo</DialogTitle>
+            <DialogTitle>Novo conteúdo</DialogTitle>
+            {selectedClientProfile && (
+              <p className="text-xs text-muted-foreground">
+                Cliente: {selectedClientProfile.company_name || selectedClientProfile.full_name}
+              </p>
+            )}
           </DialogHeader>
           <div className="space-y-4 overflow-y-auto flex-1 px-6 py-4">
             {/* Mode selector */}
@@ -822,7 +947,7 @@ export default function AdminFiles() {
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  Arquivo
+                  Arquivo único
                 </button>
                 <button
                   onClick={() => setUploadMode("carousel")}
@@ -842,7 +967,7 @@ export default function AdminFiles() {
                       : "bg-secondary text-muted-foreground border-border hover:text-foreground"
                   }`}
                 >
-                  Link vídeo
+                  Vídeo
                 </button>
               </div>
               {uploadMode === "video_link" && (
@@ -889,7 +1014,7 @@ export default function AdminFiles() {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept={ACCEPTED}
+                  accept={uploadMode === "carousel" ? "image/*" : ACCEPTED}
                   multiple={uploadMode === "carousel"}
                   className="hidden"
                   onChange={(e) => {
@@ -968,13 +1093,46 @@ export default function AdminFiles() {
                 </div>
               )}
               <div>
-                <Label className="label-sm">Descrição interna (opcional)</Label>
-                <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Notas para o cliente..."
+                <Label className="label-sm">Observação para o cliente (opcional)</Label>
+                <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Contexto ou orientação que o cliente poderá ler..."
                   className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
               </div>
-              <div className="flex items-center justify-between py-2">
-                <Label className="label-sm">Enviar para aprovação do cliente?</Label>
-                <Switch checked={uploadApproval} onCheckedChange={setUploadApproval} />
+              <div>
+                <Label className="label-sm mb-1.5 block">O que fazer depois de salvar?</Label>
+                <RadioGroup
+                  value={uploadApproval ? "approval" : "delivery"}
+                  onValueChange={(value) => setUploadApproval(value === "approval")}
+                  className="grid grid-cols-1 gap-2 sm:grid-cols-2"
+                >
+                  <Label
+                    htmlFor="delivery-without-approval"
+                    className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                      !uploadApproval
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <RadioGroupItem id="delivery-without-approval" value="delivery" className="mt-0.5 shrink-0" />
+                    <span>
+                      <span className="block font-medium">Disponibilizar ao cliente</span>
+                      <span className="mt-0.5 block text-[10px] opacity-75">Entrega sem exigir resposta.</span>
+                    </span>
+                  </Label>
+                  <Label
+                    htmlFor="delivery-for-approval"
+                    className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                      uploadApproval
+                        ? "border-primary bg-primary/10 text-foreground"
+                        : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    <RadioGroupItem id="delivery-for-approval" value="approval" className="mt-0.5 shrink-0" />
+                    <span>
+                      <span className="block font-medium">Enviar para aprovação</span>
+                      <span className="mt-0.5 block text-[10px] opacity-75">O cliente aprova ou pede ajuste.</span>
+                    </span>
+                  </Label>
+                </RadioGroup>
               </div>
             </div>
 
@@ -983,7 +1141,11 @@ export default function AdminFiles() {
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
             <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
             <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
-              {uploading ? "Enviando..." : uploadMode === "video_link" ? "Adicionar vídeo" : uploadFiles.length > 1 ? `Enviar ${uploadFiles.length} arquivos` : "Enviar"}
+              {uploading
+                ? "Salvando..."
+                : uploadApproval
+                  ? "Enviar para aprovação"
+                  : "Disponibilizar ao cliente"}
             </Button>
           </DialogFooter>
         </DialogContent>

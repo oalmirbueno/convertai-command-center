@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Pause, Play } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,7 @@ interface Props {
 export default function EditClientDrawer({ open, onClose, client }: Props) {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -148,14 +150,17 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     enabled: !!client?.id && clientProjectIds.length > 0,
   });
 
-  const { data: clientFiles } = useQuery({
-    queryKey: ["client-exec-files", client?.id],
+  const { data: clientPendingFiles } = useQuery({
+    queryKey: ["client-pending-approvals", client?.id],
     queryFn: async () => {
-      const { data } = await supabase.from("files").select("id, approval_status, created_at")
-        .eq("client_id", client.id).order("created_at", { ascending: false }).limit(20);
+      const { data } = await supabase.from("files").select("id")
+        .eq("client_id", client.id)
+        .eq("approval_status", "pending")
+        .is("parent_file_id", null);
       return data || [];
     },
     enabled: !!client?.id,
+    refetchInterval: 15_000,
   });
 
   const { data: clientReports } = useQuery({
@@ -183,7 +188,7 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const execActiveProjects = (clientProjects || []).filter((p: any) => p.status !== "done").length;
   const execOpenTasks = (clientTasks || []).filter((t: any) => t.status !== "done").length;
   const execUrgentTasks = (clientTasks || []).filter((t: any) => (t.priority === "urgent" || t.priority === "high") && t.status !== "done").length;
-  const execPendingFiles = (clientFiles || []).filter((f: any) => f.approval_status === "pending").length;
+  const execPendingFiles = (clientPendingFiles || []).length;
   const execPublishedReports = (clientReports || []).filter((r: any) => r.status === "published").length;
   const execPendingBills = (clientBilling || []).filter((b: any) => b.status === "pending").length;
   const execOverdueBills = (clientBilling || []).filter((b: any) => b.status === "pending" && new Date(b.due_date) < new Date()).length;
@@ -249,6 +254,27 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   };
 
   if (!open || !client) return null;
+
+  const hasUnsavedChanges =
+    fullName !== (client.full_name || "") ||
+    company !== (client.company_name || "") ||
+    phone !== (client.phone || "") ||
+    planName !== (client.plan_name || "") ||
+    planValue !== (client.plan_value != null ? String(client.plan_value) : "") ||
+    planStatus !== (client.plan_status || "active") ||
+    renewalDate !== (client.plan_renewal_date || "") ||
+    JSON.stringify(services) !== JSON.stringify(client.services_config || {}) ||
+    clientType !== (client.client_type || "recurring") ||
+    brand !== (client.brand || "") ||
+    clientPassword.length > 0;
+
+  const openClientOperation = (path: string) => {
+    if (hasUnsavedChanges && !window.confirm("Você alterou o cadastro e ainda não salvou. Sair sem salvar essas mudanças?")) {
+      return;
+    }
+    onClose();
+    navigate(path);
+  };
 
   const toggleService = (key: string) => {
     setServices((prev) => ({ ...prev, [key]: !prev[key] }));
@@ -455,6 +481,57 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
                 </div>
               </div>
             )}
+
+            <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-3.5">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                    Operação do cliente
+                  </p>
+                  <p className="mt-1 text-[12px] text-muted-foreground">
+                    Crie uma entrega ou acompanhe o que já foi enviado.
+                  </p>
+                </div>
+                {execPendingFiles > 0 && (
+                  <span className="shrink-0 rounded-full bg-warning/10 px-2 py-1 text-[10px] font-medium text-warning">
+                    {execPendingFiles} aguardando cliente
+                  </span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais&novo=1`);
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-primary bg-primary px-3 py-2.5 text-left text-[12px] font-medium text-primary-foreground transition-opacity hover:opacity-90"
+                >
+                  <Plus className="h-4 w-4 shrink-0" />
+                  Novo conteúdo
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openClientOperation(`/arquivos?client=${encodeURIComponent(client.id)}&folder=materiais`);
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-[12px] font-medium text-foreground transition-colors hover:border-primary/40"
+                >
+                  <FolderOpen className="h-4 w-4 shrink-0 text-primary" />
+                  Ver entregas
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    openClientOperation(`/aprovacoes?client=${encodeURIComponent(client.id)}`);
+                  }}
+                  className="flex items-center gap-2 rounded-lg border border-border bg-background px-3 py-2.5 text-left text-[12px] font-medium text-foreground transition-colors hover:border-primary/40"
+                >
+                  <PackageCheck className="h-4 w-4 shrink-0 text-warning" />
+                  Aprovações
+                </button>
+              </div>
+            </div>
 
             {/* Contas e canais cadastrados manualmente, sem credenciais */}
             <ClientConnectionsPanel key={client.id} clientId={client.id} />
