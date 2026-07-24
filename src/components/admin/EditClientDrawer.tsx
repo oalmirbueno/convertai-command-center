@@ -69,6 +69,8 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
 
   // Payment management state
   const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
@@ -185,6 +187,29 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const execPublishedReports = (clientReports || []).filter((r: any) => r.status === "published").length;
   const execPendingBills = (clientBilling || []).filter((b: any) => b.status === "pending").length;
   const execOverdueBills = (clientBilling || []).filter((b: any) => b.status === "pending" && new Date(b.due_date) < new Date()).length;
+
+  useEffect(() => {
+    if (!open) return;
+
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    const focusFrame = window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      previousFocusRef.current?.focus();
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape" && !confirmDelete && !briefingOpen) onClose();
+    };
+
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [open, onClose, confirmDelete, briefingOpen]);
+
   useEffect(() => {
     if (client) {
       setFullName(client.full_name || "");
@@ -360,10 +385,20 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
     <>
       <div className="fixed inset-0 z-50 flex justify-end">
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-        <div className="relative bg-card border-l border-border w-full max-w-[520px] h-full animate-in slide-in-from-right duration-200 flex flex-col">
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="client-drawer-title"
+          className="relative bg-card border-l border-border w-full max-w-[520px] h-full animate-in slide-in-from-right duration-200 flex flex-col"
+        >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
-            <h2 className="text-sm font-semibold text-foreground">Editar Cliente</h2>
-            <button onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
+            <div className="min-w-0">
+              <h2 id="client-drawer-title" className="truncate text-sm font-semibold text-foreground">
+                Cliente: {client.company_name || client.full_name}
+              </h2>
+              <p className="text-[11px] text-muted-foreground">Cadastro, contas e canais</p>
+            </div>
+            <button ref={closeButtonRef} aria-label="Fechar dados do cliente" onClick={onClose} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1">
               <X className="w-4 h-4" />
             </button>
           </div>
