@@ -657,6 +657,10 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
               <ClientVault clientId={client.id} canManage={isAdmin || ["design","traffic","manager"].includes(profile?.role || "")} />
             </div>
 
+            {/* Conexões (contas externas cadastradas manualmente, sem credenciais) */}
+            <ClientConnectionsPanel key={client.id} clientId={client.id} />
+
+
 
             {/* Pagamentos de projetos não recorrentes */}
             {isAdmin && nonRecurringProjects && nonRecurringProjects.length > 0 && (
