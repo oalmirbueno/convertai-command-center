@@ -91,6 +91,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setTotalValue("");
       setEntryPct("50");
       setInstallmentsCount("1");
+      setFinancialMode("create");
       setStartDate(new Date());
       setDeadline(undefined);
       setScope("");
