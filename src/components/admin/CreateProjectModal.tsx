@@ -47,6 +47,8 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const [totalValue, setTotalValue] = useState("");
   const [entryPct, setEntryPct] = useState("50");
   const [installmentsCount, setInstallmentsCount] = useState("1");
+  // "create" = gerar plano agora | "already" = já cobrado/lançado fora | "none" = sem cobrança neste projeto
+  const [financialMode, setFinancialMode] = useState<"create" | "already" | "none">("create");
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [scope, setScope] = useState("");
