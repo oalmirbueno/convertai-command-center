@@ -644,62 +644,6 @@ export type Database = {
           },
         ]
       }
-      file_content_chunks: {
-        Row: {
-          chunk_index: number
-          client_id: string
-          content_type: string
-          created_at: string
-          file_id: string
-          id: string
-          metadata: Json | null
-          page_number: number | null
-          project_id: string | null
-          search_vector: unknown
-          sheet_name: string | null
-          slide_number: number | null
-          text: string
-        }
-        Insert: {
-          chunk_index: number
-          client_id: string
-          content_type?: string
-          created_at?: string
-          file_id: string
-          id?: string
-          metadata?: Json | null
-          page_number?: number | null
-          project_id?: string | null
-          search_vector?: unknown
-          sheet_name?: string | null
-          slide_number?: number | null
-          text: string
-        }
-        Update: {
-          chunk_index?: number
-          client_id?: string
-          content_type?: string
-          created_at?: string
-          file_id?: string
-          id?: string
-          metadata?: Json | null
-          page_number?: number | null
-          project_id?: string | null
-          search_vector?: unknown
-          sheet_name?: string | null
-          slide_number?: number | null
-          text?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "file_content_chunks_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       file_approval_events: {
         Row: {
           actor_id: string | null
@@ -759,6 +703,76 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "file_approval_events_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      file_content_chunks: {
+        Row: {
+          chunk_index: number
+          client_id: string
+          content_type: string
+          created_at: string
+          file_id: string
+          id: string
+          metadata: Json | null
+          page_number: number | null
+          project_id: string | null
+          search_vector: unknown
+          sheet_name: string | null
+          slide_number: number | null
+          text: string
+        }
+        Insert: {
+          chunk_index: number
+          client_id: string
+          content_type?: string
+          created_at?: string
+          file_id: string
+          id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          project_id?: string | null
+          search_vector?: unknown
+          sheet_name?: string | null
+          slide_number?: number | null
+          text: string
+        }
+        Update: {
+          chunk_index?: number
+          client_id?: string
+          content_type?: string
+          created_at?: string
+          file_id?: string
+          id?: string
+          metadata?: Json | null
+          page_number?: number | null
+          project_id?: string | null
+          search_vector?: unknown
+          sheet_name?: string | null
+          slide_number?: number | null
+          text?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_content_chunks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_content_chunks_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
         ]
       }
       file_processing_jobs: {
@@ -812,6 +826,13 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "file_processing_jobs_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
         ]
       }
       files: {
@@ -820,14 +841,14 @@ export type Database = {
           agency_feedback: string | null
           agency_reviewed_at: string | null
           agency_reviewed_by: string | null
-          approval_status: string
           approval_requested_at: string | null
+          approval_status: string
           archived_at: string | null
           caption: string | null
           carousel_text: string | null
-          client_id: string
           client_decided_at: string | null
           client_decided_by: string | null
+          client_id: string
           created_at: string
           description: string | null
           extension: string | null
@@ -868,14 +889,14 @@ export type Database = {
           agency_feedback?: string | null
           agency_reviewed_at?: string | null
           agency_reviewed_by?: string | null
-          approval_status?: string
           approval_requested_at?: string | null
+          approval_status?: string
           archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
-          client_id: string
           client_decided_at?: string | null
           client_decided_by?: string | null
+          client_id: string
           created_at?: string
           description?: string | null
           extension?: string | null
@@ -916,14 +937,14 @@ export type Database = {
           agency_feedback?: string | null
           agency_reviewed_at?: string | null
           agency_reviewed_by?: string | null
-          approval_status?: string
           approval_requested_at?: string | null
+          approval_status?: string
           archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
-          client_id?: string
           client_decided_at?: string | null
           client_decided_by?: string | null
+          client_id?: string
           created_at?: string
           description?: string | null
           extension?: string | null
@@ -968,15 +989,15 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "files_client_id_fkey"
-            columns: ["client_id"]
+            foreignKeyName: "files_client_decided_by_fkey"
+            columns: ["client_decided_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "files_client_decided_by_fkey"
-            columns: ["client_decided_by"]
+            foreignKeyName: "files_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -986,6 +1007,13 @@ export type Database = {
             columns: ["parent_file_id"]
             isOneToOne: false
             referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_parent_file_id_fkey"
+            columns: ["parent_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
             referencedColumns: ["id"]
           },
           {
@@ -1000,6 +1028,13 @@ export type Database = {
             columns: ["revision_of_file_id"]
             isOneToOne: false
             referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_revision_of_file_id_fkey"
+            columns: ["revision_of_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
             referencedColumns: ["id"]
           },
           {
@@ -2701,11 +2736,135 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "workspace_nodes_sent_for_approval_file_id_fkey"
+            columns: ["sent_for_approval_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
         ]
       }
     }
     Views: {
-      [_ in never]: never
+      staff_files_secure: {
+        Row: {
+          agency_approval_status: string | null
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string | null
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client: Json | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string | null
+          created_at: string | null
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string | null
+          file_type: string | null
+          file_url: string | null
+          folder: string | null
+          id: string | null
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project: Json | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string | null
+          uploader: Json | null
+          version: number | null
+          visibility: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "files_agency_reviewed_by_fkey"
+            columns: ["agency_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_client_decided_by_fkey"
+            columns: ["client_decided_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_parent_file_id_fkey"
+            columns: ["parent_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_parent_file_id_fkey"
+            columns: ["parent_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_revision_of_file_id_fkey"
+            columns: ["revision_of_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_revision_of_file_id_fkey"
+            columns: ["revision_of_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       briefing_public_get: {
@@ -2728,6 +2887,10 @@ export type Database = {
         Args: { _project_id: string }
         Returns: boolean
       }
+      can_staff_access_workspace_path: {
+        Args: { _name: string }
+        Returns: boolean
+      }
       can_write_file: { Args: { _file_id: string }; Returns: boolean }
       complete_contract_signature: {
         Args: {
@@ -2741,7 +2904,7 @@ export type Database = {
         Args: {
           p_decision: string
           p_expected_version: number
-          p_feedback?: string | null
+          p_feedback?: string
           p_file_id: string
         }
         Returns: string
@@ -2755,6 +2918,34 @@ export type Database = {
         Args: { payload: Json; queue_name: string }
         Returns: number
       }
+      file_guard_state: {
+        Args: { p_file_id: string }
+        Returns: {
+          agency_approval_status: string
+          approval_status: string
+          client_id: string
+          locked_at: string
+          parent_file_id: string
+          version: number
+          visibility: string
+        }[]
+      }
+      file_is_editable: { Args: { _file_id: string }; Returns: boolean }
+      file_is_locked: { Args: { _file_id: string }; Returns: boolean }
+      file_root_id: { Args: { _file_id: string }; Returns: string }
+      file_storage_matches_client: {
+        Args: { _bucket: string; _client_id: string; _path: string }
+        Returns: boolean
+      }
+      file_storage_reference_is_canonical: {
+        Args: { _bucket: string; _path: string; _url: string }
+        Returns: boolean
+      }
+      files_reference_matches: {
+        Args: { _path: string; _url: string }
+        Returns: boolean
+      }
+      files_reference_path: { Args: { _url: string }; Returns: string }
       get_admin_user_id: { Args: never; Returns: string }
       has_role: {
         Args: {
@@ -2783,11 +2974,60 @@ export type Database = {
       }
       release_file_to_client: {
         Args: { p_file_id: string; p_mode: string }
-        Returns: Database["public"]["Tables"]["files"]["Row"]
-      }
-      request_file_agency_review: {
-        Args: { p_file_id: string }
-        Returns: Database["public"]["Tables"]["files"]["Row"]
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       replace_managed_user_role: {
         Args: {
@@ -2797,16 +3037,132 @@ export type Database = {
         }
         Returns: undefined
       }
-      review_file_agency: {
-        Args: {
-          p_decision: string
-          p_feedback?: string | null
-          p_file_id: string
+      request_file_agency_review: {
+        Args: { p_file_id: string }
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
         }
-        Returns: Database["public"]["Tables"]["files"]["Row"]
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      review_file_agency: {
+        Args: { p_decision: string; p_feedback?: string; p_file_id: string }
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      storage_client_from_path: { Args: { _name: string }; Returns: string }
+      storage_object_read_allowed: {
+        Args: { _bucket: string; _name: string }
+        Returns: boolean
+      }
+      storage_object_write_allowed: {
+        Args: { _bucket: string; _name: string }
+        Returns: boolean
+      }
+      try_uuid: { Args: { _value: string }; Returns: string }
       user_owns_project: {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
