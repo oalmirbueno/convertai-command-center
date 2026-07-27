@@ -113,7 +113,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       return;
     }
 
-    if (billingMode === "one_off") {
+    if (billingMode === "one_off" && financialMode !== "none") {
       const total = parseFloat(totalValue);
       if (!total || total <= 0) {
         toast.error("Informe o valor total do projeto avulso");
