@@ -48,6 +48,16 @@ jobs:
           supabase db reset --help
           supabase test db --help
 
+      - name: Restore production-only legacy quiz table in CI
+        run: |
+          cat > supabase/migrations/20260528163000_ci_quiz_submissions_compat.sql <<'SQL'
+          CREATE TABLE IF NOT EXISTS public.quiz_submissions (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            submitted_at timestamptz
+          );
+          ALTER TABLE public.quiz_submissions ENABLE ROW LEVEL SECURITY;
+          SQL
+
       - name: Start Supabase local stack
         run: supabase start
 
