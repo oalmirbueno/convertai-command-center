@@ -153,7 +153,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         if (error) throw error;
 
         // ── Auto-create payment plan for one_off projects ──
-        if (billingMode === "one_off" && newProject) {
+        if (billingMode === "one_off" && financialMode === "create" && newProject) {
           try {
             const total = parseFloat(totalValue);
             const ePct = parseFloat(entryPct) || 0;
