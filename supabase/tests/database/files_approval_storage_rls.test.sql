@@ -1099,58 +1099,46 @@ SELECT ok(
   ),
   'client cannot delete an internal Storage object'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.tasks
-    WHERE id = 'e0000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.tasks
+      WHERE id = 'e0000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read its own internal task'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.task_comments
-    WHERE id = 'e1000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.task_comments
+      WHERE id = 'e1000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read its own internal task comment'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.task_checklist_items
-    WHERE id = 'e2000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.task_checklist_items
+      WHERE id = 'e2000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read its own internal checklist'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.file_content_chunks
-    WHERE id = 'e3000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.file_content_chunks
+      WHERE id = 'e3000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read internal extracted chunks'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.file_processing_jobs
-    WHERE id = 'e4000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.file_processing_jobs
+      WHERE id = 'e4000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read internal processing jobs'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.updates
-    WHERE id = 'e5000000-0000-0000-0000-00000000000a'
+SELECT ok(
+  pg_temp.statement_blocked(
+    $sql$SELECT 1 FROM public.updates
+      WHERE id = 'e5000000-0000-0000-0000-00000000000a'$sql$
   ),
-  0,
   'client cannot read an internal project update'
 );
 
