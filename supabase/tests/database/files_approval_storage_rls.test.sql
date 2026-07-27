@@ -2098,8 +2098,8 @@ SELECT is(
   0,
   'released file row cannot be deleted while approval is pending'
 );
-SELECT is(
-  pg_temp.statement_row_count(
+SELECT ok(
+  pg_temp.statement_fails(
     $sql$
       DELETE FROM storage.objects
       WHERE bucket_id = 'files'
@@ -2107,7 +2107,6 @@ SELECT is(
           'a0000000-0000-0000-0000-00000000000a/f0000000-0000-0000-0000-000000000001/1/approval-a.pdf'
     $sql$
   ),
-  0,
   'released physical object cannot be deleted while approval is pending'
 );
 SELECT ok(

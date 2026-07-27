@@ -690,12 +690,13 @@ GRANT EXECUTE ON FUNCTION public.can_staff_access_project(uuid)
 CREATE OR REPLACE FUNCTION public.files_secure_guard()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY INVOKER
+SECURITY DEFINER
 SET search_path = ''
 AS $$
 DECLARE
   _trusted_approval_write boolean :=
-    current_user NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
+    COALESCE(auth.role(), current_user)
+      NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
   _previous public.files%ROWTYPE;
   _contract public.contracts%ROWTYPE;
   _root_locked boolean;
