@@ -129,7 +129,7 @@ function AppRoutes() {
       <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
       <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
-      <Route path="/workspace" element={<ProtectedRoute><AppLayout><Workspace /></AppLayout></ProtectedRoute>} />
+      <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/contratos" element={<ProtectedRoute><AppLayout><AdminContracts /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

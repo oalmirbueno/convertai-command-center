@@ -70,7 +70,17 @@ export default function ProfilePage() {
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      toast.error(err.message || "Erro ao alterar senha");
+      const raw = (err?.message || "").toLowerCase();
+      const code = (err?.code || err?.error_code || "").toLowerCase();
+      if (code === "same_password" || raw.includes("different from the old") || raw.includes("should be different")) {
+        toast.error("A nova senha precisa ser diferente da senha atual.");
+      } else if (raw.includes("weak") || raw.includes("pwned") || raw.includes("compromised")) {
+        toast.error("Essa senha é muito fraca ou já vazou. Escolha uma senha mais forte.");
+      } else if (raw.includes("session")) {
+        toast.error("Sua sessão expirou. Faça login novamente para trocar a senha.");
+      } else {
+        toast.error(err.message || "Erro ao alterar senha");
+      }
     }
     setSavingPassword(false);
   };

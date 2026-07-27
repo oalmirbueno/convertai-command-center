@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, HardDrive, Bell, FolderOpen } from "lucide-react";
+import { LayoutDashboard, HardDrive, Bell, FolderOpen, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Props {
   unreadCount: number;
@@ -12,6 +13,9 @@ interface Props {
  * O Studio agora abre pelo botão no topo (TopBar), não pelo tab bar.
  */
 export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Props) {
+  const { profile } = useAuth();
+  const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
+
   const tabBase =
     "flex-1 flex flex-col items-center justify-center gap-0.5 h-full text-[10px] font-medium transition-colors";
 
@@ -38,13 +42,23 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
           <span>Projetos</span>
         </NavLink>
 
-        <NavLink
-          to="/workspace"
-          className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
-        >
-          <HardDrive className="w-5 h-5" />
-          <span>Workspace</span>
-        </NavLink>
+        {isStaff ? (
+          <NavLink
+            to="/workspace"
+            className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
+          >
+            <HardDrive className="w-5 h-5" />
+            <span>Workspace</span>
+          </NavLink>
+        ) : (
+          <NavLink
+            to="/aprovacoes"
+            className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
+          >
+            <CheckSquare className="w-5 h-5" />
+            <span>Aprovações</span>
+          </NavLink>
+        )}
 
         <button
           type="button"
