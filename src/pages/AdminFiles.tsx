@@ -536,9 +536,17 @@ export default function AdminFiles() {
     setUploadProgress(5);
 
     try {
+      // Garante que a sessão está fresca antes de inserir — evita RLS por JWT expirado.
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData?.user?.id) {
+        throw new Error("Sua sessão expirou. Faça login novamente para enviar arquivos.");
+      }
+      const authUid = authData.user.id;
+
       let rootFileId: string | null = null;
       const revisionOfFileId = revisionSource?.client_id === selectedClient ? revisionSource.id : null;
       const nextVersion = revisionOfFileId ? revisionVersion : 1;
+
 
       // Links externos também nascem internos e só ficam visíveis após os gates.
       if (uploadMode === "video_link") {
@@ -557,7 +565,7 @@ export default function AdminFiles() {
           file_url: url,
           file_type: "video",
           folder: uploadFolder,
-          uploaded_by: user.id,
+          uploaded_by: authUid,
           project_id: uploadProject === "none" ? null : uploadProject || null,
           approval_status: "none",
           agency_approval_status: "not_requested",
@@ -618,7 +626,7 @@ export default function AdminFiles() {
           storage_bucket: "files",
           storage_path: path,
           folder: uploadFolder,
-          uploaded_by: user.id,
+          uploaded_by: authUid,
           project_id: uploadProject === "none" ? null : uploadProject || null,
           approval_status: "none",
           agency_approval_status: "not_requested",
@@ -693,10 +701,15 @@ export default function AdminFiles() {
       next.delete("revisionOf");
       setSearchParams(next, { replace: true });
     } catch (err: any) {
-      toast({ title: "Erro no upload", description: err.message, variant: "destructive" });
+      const raw = err?.message || "";
+      const friendly = /row-level security|permission denied|JWT|sessão/i.test(raw)
+        ? "Sua sessão expirou ou perdeu permissão. Saia e entre novamente para continuar."
+        : raw || "Não foi possível enviar o arquivo.";
+      toast({ title: "Erro no upload", description: friendly, variant: "destructive" });
     }
     setUploading(false);
   };
+
 
   const resetUploadForm = () => {
     setUploadMode("single");
