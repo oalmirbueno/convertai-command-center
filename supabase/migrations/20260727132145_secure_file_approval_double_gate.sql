@@ -687,19 +687,47 @@ GRANT EXECUTE ON FUNCTION public.can_staff_access_project(uuid)
 -- --------------------------------------------------------------------------
 -- 3. Guard direct writes and preserve terminal versions
 -- --------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.file_guard_state(p_file_id uuid)
+RETURNS TABLE (
+  client_id uuid,
+  parent_file_id uuid,
+  locked_at timestamptz,
+  visibility text,
+  agency_approval_status text,
+  approval_status text,
+  version integer
+)
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+  SELECT
+    file_row.client_id,
+    file_row.parent_file_id,
+    file_row.locked_at,
+    file_row.visibility::text,
+    file_row.agency_approval_status::text,
+    file_row.approval_status::text,
+    file_row.version
+  FROM public.files AS file_row
+  WHERE file_row.id = p_file_id
+    AND public.can_read_file(file_row.id)
+  FOR UPDATE
+$$;
+
+REVOKE ALL ON FUNCTION public.file_guard_state(uuid) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.file_guard_state(uuid)
+  TO authenticated, service_role;
+
 CREATE OR REPLACE FUNCTION public.files_secure_guard()
 RETURNS trigger
 LANGUAGE plpgsql
-SECURITY DEFINER
+SECURITY INVOKER
 SET search_path = ''
 AS $$
 DECLARE
   _trusted_approval_write boolean :=
-    COALESCE(
-      NULLIF(current_setting('request.jwt.claim.role', true), ''),
-      NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
-      current_user
-    ) NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
+    current_user NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
   _previous public.files%ROWTYPE;
   _contract public.contracts%ROWTYPE;
   _root_locked boolean;
@@ -737,13 +765,13 @@ BEGIN
   IF TG_OP = 'INSERT' THEN
     IF NEW.parent_file_id IS NOT NULL THEN
       SELECT
-        file_row.client_id,
-        file_row.parent_file_id,
-        file_row.locked_at,
-        file_row.visibility,
-        file_row.agency_approval_status,
-        file_row.approval_status,
-        file_row.version
+        file_state.client_id,
+        file_state.parent_file_id,
+        file_state.locked_at,
+        file_state.visibility,
+        file_state.agency_approval_status,
+        file_state.approval_status,
+        file_state.version
       INTO
         _previous.client_id,
         _previous.parent_file_id,
@@ -752,10 +780,7 @@ BEGIN
         _previous.agency_approval_status,
         _previous.approval_status,
         _previous.version
-      FROM public.files
-      AS file_row
-      WHERE file_row.id = NEW.parent_file_id
-      FOR UPDATE;
+      FROM public.file_guard_state(NEW.parent_file_id) AS file_state;
 
       IF NOT FOUND OR _previous.client_id IS DISTINCT FROM NEW.client_id THEN
         RAISE EXCEPTION 'carousel parent must belong to the same client';
@@ -776,13 +801,13 @@ BEGIN
 
     IF NEW.revision_of_file_id IS NOT NULL THEN
       SELECT
-        file_row.client_id,
-        file_row.parent_file_id,
-        file_row.locked_at,
-        file_row.visibility,
-        file_row.agency_approval_status,
-        file_row.approval_status,
-        file_row.version
+        file_state.client_id,
+        file_state.parent_file_id,
+        file_state.locked_at,
+        file_state.visibility,
+        file_state.agency_approval_status,
+        file_state.approval_status,
+        file_state.version
       INTO
         _previous.client_id,
         _previous.parent_file_id,
@@ -791,10 +816,7 @@ BEGIN
         _previous.agency_approval_status,
         _previous.approval_status,
         _previous.version
-      FROM public.files
-      AS file_row
-      WHERE file_row.id = NEW.revision_of_file_id
-      FOR UPDATE;
+      FROM public.file_guard_state(NEW.revision_of_file_id) AS file_state;
 
       IF NOT FOUND THEN
         RAISE EXCEPTION 'revision source not found';
@@ -2254,6 +2276,7 @@ USING (public.can_write_file(id));
 REVOKE ALL ON public.files FROM PUBLIC, anon;
 REVOKE UPDATE ON public.files FROM authenticated;
 REVOKE SELECT ON public.files FROM authenticated;
+GRANT ALL ON public.files TO service_role;
 GRANT INSERT, DELETE ON public.files TO authenticated;
 GRANT SELECT (
   id,
