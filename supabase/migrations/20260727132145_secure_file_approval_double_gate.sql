@@ -2869,6 +2869,14 @@ BEGIN
 END
 $$;
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.tasks TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.task_comments TO authenticated;
+GRANT SELECT, INSERT, DELETE ON public.task_attachments TO authenticated;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.task_checklist_items TO authenticated;
+GRANT SELECT ON public.file_content_chunks TO authenticated;
+GRANT SELECT ON public.file_processing_jobs TO authenticated;
+GRANT SELECT, INSERT ON public.updates TO authenticated;
+
 CREATE POLICY tasks_staff_select
 ON public.tasks
 FOR SELECT TO authenticated
