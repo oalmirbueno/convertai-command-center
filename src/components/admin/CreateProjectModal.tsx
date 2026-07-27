@@ -130,7 +130,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         project_type: projectType,
         billing_mode: billingMode,
         brand: brand || null,
-        total_value: billingMode === "one_off" ? parseFloat(totalValue) : null,
+        total_value: billingMode === "one_off" && financialMode !== "none" ? parseFloat(totalValue) : null,
         start_date: format(startDate, "yyyy-MM-dd"),
         deadline: format(deadline, "yyyy-MM-dd"),
         scope: scope.trim() || null,
