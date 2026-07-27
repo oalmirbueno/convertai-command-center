@@ -19,6 +19,10 @@ ALTER TABLE public.files
 ALTER TABLE public.updates
   ADD COLUMN IF NOT EXISTS client_visible boolean NOT NULL DEFAULT false;
 
+-- Make a remotely interrupted execution resumable. The compatibility
+-- backfill must run before the immutable-version guard is installed again.
+DROP TRIGGER IF EXISTS files_secure_guard_trg ON public.files;
+
 -- Recover metadata for legacy public URLs before the bucket becomes private.
 -- Only persist a canonical path that actually exists in storage.objects.
 UPDATE public.files AS file_row
