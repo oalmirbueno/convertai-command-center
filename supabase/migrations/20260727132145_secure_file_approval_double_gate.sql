@@ -695,8 +695,11 @@ SET search_path = ''
 AS $$
 DECLARE
   _trusted_approval_write boolean :=
-    COALESCE(auth.role(), current_user)
-      NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
+    COALESCE(
+      NULLIF(current_setting('request.jwt.claim.role', true), ''),
+      NULLIF(current_setting('request.jwt.claims', true), '')::jsonb ->> 'role',
+      current_user
+    ) NOT IN ('anon', 'authenticated', 'service_role', 'authenticator');
   _previous public.files%ROWTYPE;
   _contract public.contracts%ROWTYPE;
   _root_locked boolean;

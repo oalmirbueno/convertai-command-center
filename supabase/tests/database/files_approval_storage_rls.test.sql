@@ -2505,15 +2505,14 @@ SELECT is(
   0,
   'client-shared file is immutable for staff'
 );
-SELECT is(
-  pg_temp.statement_row_count(
+SELECT ok(
+  pg_temp.statement_fails(
     $sql$
       DELETE FROM storage.objects
       WHERE bucket_id = 'files'
         AND name LIKE 'a0000000-0000-0000-0000-00000000000b/%'
     $sql$
   ),
-  0,
   'client-shared physical object is immutable for staff'
 );
 
