@@ -666,6 +666,14 @@ REVOKE ALL ON FUNCTION public.file_storage_reference_is_canonical(
   text, text, text
 ) FROM PUBLIC, anon, authenticated, service_role;
 
+GRANT EXECUTE ON FUNCTION public.files_reference_path(text)
+  TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.file_storage_matches_client(text, text, uuid)
+  TO authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.file_storage_reference_is_canonical(
+  text, text, text
+) TO authenticated, service_role;
+
 REVOKE EXECUTE ON FUNCTION public.try_uuid(text) FROM authenticated, service_role;
 REVOKE EXECUTE ON FUNCTION public.files_reference_matches(text, text)
   FROM authenticated, service_role;
