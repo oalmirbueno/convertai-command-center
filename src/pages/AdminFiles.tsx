@@ -32,9 +32,12 @@ const FOLDERS = [
   { id: "estrategicos", label: "Estratégicos" },
   { id: "contratos", label: "Contratos" },
   { id: "materiais", label: "Materiais Gráficos" },
+  { id: "entregas", label: "Entregas" },
+  { id: "criativos", label: "Criativos" },
   { id: "relatorios", label: "Relatórios" },
   { id: "operacionais", label: "Operacionais" },
 ];
+
 const FOLDER_IDS = new Set(FOLDERS.map((folder) => folder.id));
 
 const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
