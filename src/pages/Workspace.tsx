@@ -1182,10 +1182,20 @@ export default function Workspace() {
                 ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-          {canSendToApproval(n) && (
-            <DropdownMenuItem onSelect={() => sendToApproval(n)}>
-              <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
+          {canRequestInternalReview(n) && (
+            <DropdownMenuItem onSelect={() => sendToInternalReview(n)}>
+              <Send className="w-3.5 h-3.5 mr-2" /> Solicitar revisão interna
             </DropdownMenuItem>
+          )}
+          {canReleaseToClient(n) && (
+            <>
+              <DropdownMenuItem onSelect={() => releaseToClient(n, "client_shared")}>
+                <Check className="w-3.5 h-3.5 mr-2" /> Disponibilizar ao cliente
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => releaseToClient(n, "approval")}>
+                <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
+              </DropdownMenuItem>
+            </>
           )}
           <DropdownMenuSeparator />
           <DropdownMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
@@ -1234,7 +1244,8 @@ export default function Workspace() {
 
   function renderContextMenu(n: Node, children: React.ReactNode) {
     const isFolder = n.kind === "folder";
-    const canApprove = canSendToApproval(n);
+    const canReview = canRequestInternalReview(n);
+    const canRelease = canReleaseToClient(n);
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -1303,12 +1314,24 @@ export default function Workspace() {
                 ))}
             </ContextMenuSubContent>
           </ContextMenuSub>
-          {canApprove && (
+          {(canReview || canRelease) && (
             <>
               <ContextMenuSeparator />
-              <ContextMenuItem onSelect={() => sendToApproval(n)}>
-                <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
-              </ContextMenuItem>
+              {canReview && (
+                <ContextMenuItem onSelect={() => sendToInternalReview(n)}>
+                  <Send className="w-3.5 h-3.5 mr-2" /> Solicitar revisão interna
+                </ContextMenuItem>
+              )}
+              {canRelease && (
+                <>
+                  <ContextMenuItem onSelect={() => releaseToClient(n, "client_shared")}>
+                    <Check className="w-3.5 h-3.5 mr-2" /> Disponibilizar ao cliente
+                  </ContextMenuItem>
+                  <ContextMenuItem onSelect={() => releaseToClient(n, "approval")}>
+                    <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
+                  </ContextMenuItem>
+                </>
+              )}
             </>
           )}
           <ContextMenuSeparator />
@@ -1737,10 +1760,20 @@ export default function Workspace() {
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
-                {canSendToApproval(selected) && (
-                  <Button size="sm" onClick={() => sendToApproval(selected)} className="gap-1.5 bg-primary">
-                    <Send className="w-3.5 h-3.5" /> Enviar para aprovação
+                {canRequestInternalReview(selected) && (
+                  <Button size="sm" variant="outline" onClick={() => sendToInternalReview(selected)} className="gap-1.5">
+                    <Send className="w-3.5 h-3.5" /> Solicitar revisão interna
                   </Button>
+                )}
+                {canReleaseToClient(selected) && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={() => releaseToClient(selected, "client_shared")} className="gap-1.5">
+                      <Check className="w-3.5 h-3.5" /> Disponibilizar ao cliente
+                    </Button>
+                    <Button size="sm" onClick={() => releaseToClient(selected, "approval")} className="gap-1.5 bg-primary">
+                      <Send className="w-3.5 h-3.5" /> Enviar para aprovação
+                    </Button>
+                  </>
                 )}
                 {selected.__virtual && (
                   <span className="text-[11px] text-muted-foreground">De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
