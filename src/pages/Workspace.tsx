@@ -26,6 +26,12 @@ import {
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
+import {
+  releaseFileToClient,
+  requestFileAgencyReview,
+  reviewFileAgency,
+  type FileReleaseMode,
+} from "@/lib/fileApprovalActions";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
 import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
@@ -52,6 +58,7 @@ type Node = {
   __extension?: string | null;
   __approval_status?: string | null;
   __agency_approval_status?: string | null;
+  __visibility?: string | null;
   __carousel_count?: number;
 };
 
@@ -177,6 +184,7 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
     __extension: f.extension || null,
     __approval_status: f.approval_status,
     __agency_approval_status: f.agency_approval_status,
+    __visibility: f.visibility,
     __carousel_count: carouselCount,
   };
 }
@@ -195,6 +203,7 @@ export default function Workspace() {
   const { toast } = useToast();
 
   const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
+  const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
 
   // Single atomic navigation state — prevents context mixing when switching
   // scope, client, or folder. Every transition goes through `nav.*` setters
@@ -323,7 +332,7 @@ export default function Workspace() {
       // and show every slide inside the preview.
       const { data } = await (supabase as any)
         .from("staff_files_secure")
-        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, created_at, uploaded_by, parent_file_id, size_bytes")
+        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, visibility, created_at, uploaded_by, parent_file_id, size_bytes")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       return data || [];
@@ -986,7 +995,7 @@ export default function Workspace() {
     invalidate();
   }
 
-  function canSendToApproval(n: Node | null) {
+  function canRequestInternalReview(n: Node | null) {
     if (!n || n.kind !== "file" || scope !== "client" || !clientId) return false;
     if (n.__virtual) {
       return !!n.__file_id
@@ -995,49 +1004,87 @@ export default function Workspace() {
     return !!n.storage_path && !n.sent_for_approval_file_id;
   }
 
-  async function sendToApproval(n: Node) {
+  function canReleaseToClient(n: Node | null) {
+    if (!canReviewAndRelease || !n || n.kind !== "file" || scope !== "client" || !clientId) return false;
+    if (n.__virtual) {
+      if (!n.__file_id) return false;
+      if (n.__visibility && n.__visibility !== "internal") return false;
+      return !n.__agency_approval_status
+        || ["not_requested", "pending", "approved"].includes(n.__agency_approval_status);
+    }
+    return !!n.storage_path && !n.sent_for_approval_file_id;
+  }
+
+  async function ensureFileRecordForDelivery(n: Node) {
+    if (n.__virtual && n.__file_id) return n.__file_id;
+    if (!n.storage_path) throw new Error("Arquivo sem origem de armazenamento.");
+    const ext = extOf(n.name).toLowerCase() || null;
+    const fileRow = await createFileRecord({
+      file_name: n.name,
+      file_url: `workspace://${n.storage_path}`,
+      file_type: n.mime || mediaKindFromFile(n.name, undefined, n.mime),
+      mime_type: n.mime || null,
+      extension: ext,
+      storage_bucket: "workspace",
+      storage_path: n.storage_path,
+      size_bytes: n.size_bytes || 0,
+      uploaded_by: user?.id,
+      client_id: clientId,
+      approval_status: "none",
+      agency_approval_status: "not_requested",
+      requires_approval: false,
+      status: "ready",
+      visibility: "internal",
+      folder: "materiais",
+    });
+    await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: (fileRow as any).id }).eq("id", n.id);
+    return (fileRow as any).id as string;
+  }
+
+  async function sendToInternalReview(n: Node) {
     if (!user || n.kind !== "file") return;
     if (scope !== "client" || !clientId) {
       toast({ title: "Selecione um cliente", description: "Aprovação é enviada em contexto de cliente.", variant: "destructive" });
       return;
     }
     try {
-      if (n.__virtual && n.__file_id) {
-        const { error } = await (supabase as any).rpc("request_file_agency_review", {
-          p_file_id: n.__file_id,
-        });
-        if (error) throw error;
-      } else if (n.storage_path) {
-        const ext = extOf(n.name).toLowerCase() || null;
-        const fileRow = await createFileRecord({
-          file_name: n.name,
-          file_url: `workspace://${n.storage_path}`,
-          file_type: n.mime || mediaKindFromFile(n.name, undefined, n.mime),
-          mime_type: n.mime || null,
-          extension: ext,
-          storage_bucket: "workspace",
-          storage_path: n.storage_path,
-          size_bytes: n.size_bytes || 0,
-          uploaded_by: user.id,
-          client_id: clientId,
-          approval_status: "none",
-          agency_approval_status: "not_requested",
-          requires_approval: false,
-          status: "ready",
-          visibility: "internal",
-          folder: "materiais",
-        });
-        const { error: reviewError } = await (supabase as any).rpc("request_file_agency_review", {
-          p_file_id: (fileRow as any).id,
-        });
-        if (reviewError) throw reviewError;
-        await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: (fileRow as any).id }).eq("id", n.id);
-      } else {
-        throw new Error("Arquivo sem origem de armazenamento.");
-      }
+      const fileId = await ensureFileRecordForDelivery(n);
+      await requestFileAgencyReview(fileId);
       toast({ title: "Enviado para revisão interna" });
       invalidate();
       qc.invalidateQueries({ queryKey: ["files"] });
+    } catch (e: any) {
+      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    }
+  }
+
+  async function releaseToClient(n: Node, mode: FileReleaseMode) {
+    if (!user || n.kind !== "file") return;
+    if (scope !== "client" || !clientId) {
+      toast({ title: "Selecione um cliente", description: "Liberação é feita no contexto do cliente.", variant: "destructive" });
+      return;
+    }
+    try {
+      const fileId = await ensureFileRecordForDelivery(n);
+      const agencyStatus = n.__virtual ? n.__agency_approval_status : "not_requested";
+      if (!agencyStatus || agencyStatus === "not_requested") {
+        await requestFileAgencyReview(fileId);
+        await reviewFileAgency(fileId, "approved");
+      } else if (agencyStatus === "pending") {
+        await reviewFileAgency(fileId, "approved");
+      } else if (agencyStatus !== "approved") {
+        throw new Error("Arquivo não está elegível para liberação ao cliente.");
+      }
+      await releaseFileToClient(fileId, mode);
+      toast({
+        title: mode === "approval" ? "Enviado para aprovação do cliente" : "Disponibilizado ao cliente",
+        description: mode === "approval"
+          ? "O cliente pode aprovar ou pedir ajustes no painel."
+          : "O cliente pode visualizar sem aprovação final.",
+      });
+      setSelected(null);
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["notifications"] });
     } catch (e: any) {
       toast({ title: "Erro", description: e.message, variant: "destructive" });
     }
