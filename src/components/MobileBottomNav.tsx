@@ -1,6 +1,7 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, HardDrive, Bell, FolderOpen } from "lucide-react";
+import { LayoutDashboard, HardDrive, Bell, FolderOpen, CheckSquare } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Props {
   unreadCount: number;
