@@ -56,6 +56,12 @@ jobs:
             submitted_at timestamptz
           );
           ALTER TABLE public.quiz_submissions ENABLE ROW LEVEL SECURITY;
+
+          CREATE OR REPLACE FUNCTION public.email_queue_dispatch()
+          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
+
+          CREATE OR REPLACE FUNCTION public.email_queue_wake()
+          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
           SQL
 
       - name: Start Supabase local stack
