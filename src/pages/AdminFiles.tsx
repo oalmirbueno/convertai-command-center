@@ -701,10 +701,15 @@ export default function AdminFiles() {
       next.delete("revisionOf");
       setSearchParams(next, { replace: true });
     } catch (err: any) {
-      toast({ title: "Erro no upload", description: err.message, variant: "destructive" });
+      const raw = err?.message || "";
+      const friendly = /row-level security|permission denied|JWT|sessão/i.test(raw)
+        ? "Sua sessão expirou ou perdeu permissão. Saia e entre novamente para continuar."
+        : raw || "Não foi possível enviar o arquivo.";
+      toast({ title: "Erro no upload", description: friendly, variant: "destructive" });
     }
     setUploading(false);
   };
+
 
   const resetUploadForm = () => {
     setUploadMode("single");
