@@ -626,7 +626,7 @@ export default function AdminFiles() {
           storage_bucket: "files",
           storage_path: path,
           folder: uploadFolder,
-          uploaded_by: user.id,
+          uploaded_by: authUid,
           project_id: uploadProject === "none" ? null : uploadProject || null,
           approval_status: "none",
           agency_approval_status: "not_requested",
