@@ -732,9 +732,25 @@ BEGIN
 
   IF TG_OP = 'INSERT' THEN
     IF NEW.parent_file_id IS NOT NULL THEN
-      SELECT * INTO _previous
+      SELECT
+        file_row.client_id,
+        file_row.parent_file_id,
+        file_row.locked_at,
+        file_row.visibility,
+        file_row.agency_approval_status,
+        file_row.approval_status,
+        file_row.version
+      INTO
+        _previous.client_id,
+        _previous.parent_file_id,
+        _previous.locked_at,
+        _previous.visibility,
+        _previous.agency_approval_status,
+        _previous.approval_status,
+        _previous.version
       FROM public.files
-      WHERE id = NEW.parent_file_id
+      AS file_row
+      WHERE file_row.id = NEW.parent_file_id
       FOR UPDATE;
 
       IF NOT FOUND OR _previous.client_id IS DISTINCT FROM NEW.client_id THEN
@@ -755,9 +771,25 @@ BEGIN
     END IF;
 
     IF NEW.revision_of_file_id IS NOT NULL THEN
-      SELECT * INTO _previous
+      SELECT
+        file_row.client_id,
+        file_row.parent_file_id,
+        file_row.locked_at,
+        file_row.visibility,
+        file_row.agency_approval_status,
+        file_row.approval_status,
+        file_row.version
+      INTO
+        _previous.client_id,
+        _previous.parent_file_id,
+        _previous.locked_at,
+        _previous.visibility,
+        _previous.agency_approval_status,
+        _previous.approval_status,
+        _previous.version
       FROM public.files
-      WHERE id = NEW.revision_of_file_id
+      AS file_row
+      WHERE file_row.id = NEW.revision_of_file_id
       FOR UPDATE;
 
       IF NOT FOUND THEN
