@@ -21,6 +21,7 @@ type UseResolvedInput = ResolveInput & {
 
 const MCP_FILE_PREFIX = "mcp-files://";
 const WORKSPACE_FILE_PREFIX = "workspace://";
+const FILES_PREFIX = "files://";
 
 export function isMcpFileUrl(value?: string | null) {
   return !!value && value.startsWith(MCP_FILE_PREFIX);
@@ -28,6 +29,10 @@ export function isMcpFileUrl(value?: string | null) {
 
 export function isWorkspaceFileUrl(value?: string | null) {
   return !!value && value.startsWith(WORKSPACE_FILE_PREFIX);
+}
+
+export function isPrivateFilesUrl(value?: string | null) {
+  return !!value && value.startsWith(FILES_PREFIX);
 }
 
 function storageRefFromStorageUrl(value?: string | null): { bucket: string; path: string } | null {
@@ -52,10 +57,12 @@ function storageRefFromStorageUrl(value?: string | null): { bucket: string; path
 export function storageRefFromFile(input: ResolveInput): { bucket: string; path: string } | null {
   const bucket = input.storageBucket
     || (isMcpFileUrl(input.fileUrl) ? "mcp-files" : null)
-    || (isWorkspaceFileUrl(input.fileUrl) ? "workspace" : null);
+    || (isWorkspaceFileUrl(input.fileUrl) ? "workspace" : null)
+    || (isPrivateFilesUrl(input.fileUrl) ? "files" : null);
   const path = input.storagePath
     || (isMcpFileUrl(input.fileUrl) ? input.fileUrl!.slice(MCP_FILE_PREFIX.length) : null)
-    || (isWorkspaceFileUrl(input.fileUrl) ? input.fileUrl!.slice(WORKSPACE_FILE_PREFIX.length) : null);
+    || (isWorkspaceFileUrl(input.fileUrl) ? input.fileUrl!.slice(WORKSPACE_FILE_PREFIX.length) : null)
+    || (isPrivateFilesUrl(input.fileUrl) ? input.fileUrl!.slice(FILES_PREFIX.length) : null);
   if (!bucket || !path) return storageRefFromStorageUrl(input.fileUrl);
   return { bucket, path };
 }
@@ -75,7 +82,6 @@ export async function resolveFileUrl(input: UseResolvedInput): Promise<string> {
       options,
     );
     if (error || !data?.signedUrl) {
-      if (isDirectFileUrl(input.fileUrl)) return input.fileUrl!;
       throw error || new Error("URL indisponível");
     }
     return data.signedUrl;
@@ -97,6 +103,7 @@ export function useResolvedFileUrl(input: UseResolvedInput) {
     let alive = true;
     setError(null);
     setUrl("");
+    setLoading(false);
 
     const ref = storageRefFromFile(input);
     if (!ref && isDirectFileUrl(input.fileUrl)) {

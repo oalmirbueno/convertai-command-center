@@ -58,7 +58,6 @@ Deno.test('registry exposes foundation + read + memory + write + contracts tools
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
     'aceleriq_search',
-    'aceleriq_send_contract',
     'aceleriq_update_contract',
     'aceleriq_update_project',
     'aceleriq_update_task',
@@ -368,7 +367,7 @@ Deno.test('contracts read tools accept contracts:read OR aceleriq:read', () => {
 
 Deno.test('contracts write tools require contracts:write; aceleriq:write is NOT enough', () => {
   const writeOnly: AuthContext = { ...readCtx, scopes: ['aceleriq:write'] };
-  for (const name of ['aceleriq_create_contract', 'aceleriq_update_contract', 'aceleriq_send_contract', 'aceleriq_cancel_contract']) {
+  for (const name of ['aceleriq_create_contract', 'aceleriq_update_contract', 'aceleriq_cancel_contract']) {
     const t = TOOL_MAP.get(name)!;
     assert(!canInvoke(readCtx, t), `${name} must reject read-only`);
     assert(!canInvoke(writeOnly, t), `${name} must NOT accept plain aceleriq:write`);
@@ -376,6 +375,10 @@ Deno.test('contracts write tools require contracts:write; aceleriq:write is NOT 
     assert(canInvoke(adminCtx, t));
     assertEquals(t.scopes, ['contracts:write']);
   }
+});
+
+Deno.test('generic MCP contract sending is not exposed', () => {
+  assertEquals(TOOL_MAP.has('aceleriq_send_contract'), false);
 });
 
 Deno.test('create_contract requires client_id, title, file fields, idempotency_key', async () => {

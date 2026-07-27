@@ -44,7 +44,7 @@ function formatDate(d: string) {
 
 export default function ClientFinanceiro() {
   const { user, profile: authProfile } = useAuth();
-  const { clientId, profile } = useClientIdentity();
+  const { clientId, profile, isImpersonating } = useClientIdentity();
   const queryClient = useQueryClient();
 
   // ===== QUERIES =====
@@ -167,6 +167,10 @@ export default function ClientFinanceiro() {
     amount: number,
     platform: string
   ) => {
+    if (isImpersonating) {
+      toast.error("O modo de visualização do cliente é somente leitura");
+      return;
+    }
     await supabase
       .from("recharge_requests")
       .update({ status: "approved" })
@@ -181,6 +185,10 @@ export default function ClientFinanceiro() {
   };
 
   const handleRejectRecharge = async (requestId: string) => {
+    if (isImpersonating) {
+      toast.error("O modo de visualização do cliente é somente leitura");
+      return;
+    }
     await supabase
       .from("recharge_requests")
       .update({ status: "rejected" })
@@ -630,42 +638,48 @@ export default function ClientFinanceiro() {
                   </p>
 
                   {/* Actions */}
-                  <div className="space-y-2">
-                    <button
-                      onClick={() => {
-                        handleConfirmRecharge(r.id, Number(r.amount), r.platform);
-                        setRechargePopup(null);
-                      }}
-                      className="w-full py-3 rounded-xl text-[14px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none flex items-center justify-center gap-2"
-                    >
-                      <Check className="w-4 h-4" />
-                      Confirmar Pagamento
-                    </button>
-
-                    <div className="grid grid-cols-2 gap-2">
+                  {isImpersonating ? (
+                    <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-center text-xs text-sky-500">
+                      Somente leitura: nenhuma decisão pode ser registrada neste modo.
+                    </div>
+                  ) : (
+                    <div className="space-y-2">
                       <button
                         onClick={() => {
-                          openWhatsApp(
-                            `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platform}, gostaria de conversar antes de confirmar.`
-                          );
-                        }}
-                        className="py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border flex items-center justify-center gap-2"
-                      >
-                        <MessageCircle className="w-3.5 h-3.5" />
-                        Discutir
-                      </button>
-                      <button
-                        onClick={() => {
-                          handleRejectRecharge(r.id);
+                          handleConfirmRecharge(r.id, Number(r.amount), r.platform);
                           setRechargePopup(null);
                         }}
-                        className="py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30 flex items-center justify-center gap-2"
+                        className="w-full py-3 rounded-xl text-[14px] font-medium bg-success text-white hover:bg-success/90 transition-colors cursor-pointer border-none flex items-center justify-center gap-2"
                       >
-                        <X className="w-3.5 h-3.5" />
-                        Recusar
+                        <Check className="w-4 h-4" />
+                        Confirmar Pagamento
                       </button>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => {
+                            openWhatsApp(
+                              `Olá! Sobre a recarga de ${formatCurrency(Number(r.amount))} para ${platform}, gostaria de conversar antes de confirmar.`
+                            );
+                          }}
+                          className="py-2.5 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors cursor-pointer border border-border flex items-center justify-center gap-2"
+                        >
+                          <MessageCircle className="w-3.5 h-3.5" />
+                          Discutir
+                        </button>
+                        <button
+                          onClick={() => {
+                            handleRejectRecharge(r.id);
+                            setRechargePopup(null);
+                          }}
+                          className="py-2.5 rounded-xl text-[13px] text-destructive hover:bg-destructive/10 transition-colors cursor-pointer bg-transparent border border-destructive/30 flex items-center justify-center gap-2"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                          Recusar
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
               </>
             );

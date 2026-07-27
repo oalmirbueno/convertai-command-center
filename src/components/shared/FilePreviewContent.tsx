@@ -3,7 +3,7 @@ import { ExternalLink, FileText, Download, Eye, ZoomIn, ZoomOut, Loader2, Layers
 import { Button } from "@/components/ui/button";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import ExtractedFramesPreview from "@/components/shared/ExtractedFramesPreview";
-import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { mediaKindFromFile, resolveFileUrl, storageRefFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 /**
  * Prefetch images into browser cache so carousel navigation is instantaneous.
@@ -15,9 +15,16 @@ export function prefetchImages(urls: string[]) {
     if (!u) return;
     const ext = u.split("?")[0].split("#")[0].split(".").pop()?.toLowerCase() || "";
     if (!["jpg", "jpeg", "png", "gif", "webp", "avif", "svg"].includes(ext)) return;
-    const img = new Image();
-    img.decoding = "async";
-    img.src = u;
+    void resolveFileUrl({ fileUrl: u })
+      .then((resolvedUrl) => {
+        if (!resolvedUrl) return;
+        const img = new Image();
+        img.decoding = "async";
+        img.src = resolvedUrl;
+      })
+      .catch(() => {
+        // The visible preview reports authorization/load errors to the user.
+      });
   });
 }
 
@@ -185,7 +192,7 @@ export default function FilePreviewContent({ fileName, fileUrl, fileId, storageB
     ext === "pdf" ? "pdf" :
     ["docx", "doc", "odt"].includes(ext) ? "docx" : null;
   const [tab, setTab] = useState<"viewer" | "frames">("viewer");
-  const isStorageBacked = !!storagePath || fileUrl?.startsWith("mcp-files://");
+  const isStorageBacked = !!storageRefFromFile({ fileUrl, storageBucket, storagePath });
 
   useEffect(() => {
     setTab((mediaKind === "office" || isOffice(fileName, fileUrl)) && fileId ? "frames" : "viewer");

@@ -1,29 +1,50 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAllFiles, useClients } from "@/hooks/useSupabaseData";
-import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileImage, FileText, Film, RefreshCw, Zap, ChevronLeft, ChevronRight } from "lucide-react";
+import { Label } from "@/components/ui/label";
+import { FileImage, FileText, Film, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import {
+  releaseFileToClient,
+  reviewFileAgency,
+  type FileApprovalDecision,
+  type FileReleaseMode,
+} from "@/lib/fileApprovalActions";
 
-const approvalBadge: Record<string, { cls: string; label: string }> = {
+const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
   approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado pelo cliente" },
   rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Cliente pediu ajustes" },
 };
 
-const TABS = [
+const agencyApprovalBadge: Record<string, { cls: string; label: string }> = {
+  pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando revisão interna" },
+  approved: { cls: "bg-success/10 text-success border-success/20", label: "Aprovado internamente" },
+  rejected: { cls: "bg-destructive/10 text-destructive border-destructive/20", label: "Ajustes internos pedidos" },
+  not_requested: { cls: "bg-muted text-muted-foreground border-border", label: "Rascunho interno" },
+};
+
+const CLIENT_TABS = [
   { id: "all", label: "Todos" },
   { id: "pending", label: "Aguardando cliente" },
   { id: "approved", label: "Aprovados" },
   { id: "rejected", label: "Pediu ajustes" },
+];
+
+const AGENCY_TABS = [
+  { id: "all", label: "Todos" },
+  { id: "pending", label: "Aguardando revisão" },
+  { id: "approved", label: "Aprovados internamente" },
+  { id: "rejected", label: "Ajustes pedidos" },
 ];
 
 function ApprovalThumb({ file }: { file: any }) {
@@ -102,14 +123,20 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 }
 
 export default function AdminApprovals() {
+  const { profile } = useAuth();
   const { data: allFiles, isLoading } = useAllFiles();
   const { data: clients } = useClients();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const selectedClient = searchParams.get("client") || "all";
+  const [queue, setQueue] = useState<"agency" | "client">("agency");
   const [activeTab, setActiveTab] = useState("all");
   const [previewFile, setPreviewFile] = useState<any>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [reviewTarget, setReviewTarget] = useState<any>(null);
+  const [reviewFeedback, setReviewFeedback] = useState("");
+  const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
 
   // Build carousel children map
   const allFilesList = allFiles || [];
@@ -122,16 +149,23 @@ export default function AdminApprovals() {
     }
   });
 
-  // Only parent/standalone files with approval status
   const approvalFiles = allFilesList.filter((f: any) => {
-    if (f.approval_status === "none" || f.parent_file_id) return false;
+    if (f.parent_file_id) return false;
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
+    if (queue === "agency") {
+      return (f.agency_approval_status || "not_requested") !== "not_requested";
+    }
+    if (f.approval_status === "none") return false;
     return true;
   });
-  const filtered = activeTab === "all" ? approvalFiles : approvalFiles.filter((f: any) => f.approval_status === activeTab);
-  const pendingCount = approvalFiles.filter((f: any) => f.approval_status === "pending").length;
+  const statusField = queue === "agency" ? "agency_approval_status" : "approval_status";
+  const filtered = activeTab === "all"
+    ? approvalFiles
+    : approvalFiles.filter((f: any) => (f[statusField] || "not_requested") === activeTab);
+  const pendingCount = approvalFiles.filter((f: any) => f[statusField] === "pending").length;
   const selectedClientProfile = (clients || []).find((client: any) => client.id === selectedClient);
-  const activeTabLabel = TABS.find((tab) => tab.id === activeTab)?.label || "selecionado";
+  const tabs = queue === "agency" ? AGENCY_TABS : CLIENT_TABS;
+  const activeTabLabel = tabs.find((tab) => tab.id === activeTab)?.label || "selecionado";
 
   const handleClientChange = (clientId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -171,8 +205,9 @@ export default function AdminApprovals() {
   const getCorrectionUrl = (file: any) => {
     const params = new URLSearchParams({
       client: file.client_id,
-      folder: "materiais",
+      folder: file.folder || "materiais",
       novo: "1",
+      revisionOf: file.id,
     });
     return `/arquivos?${params.toString()}`;
   };
@@ -188,20 +223,62 @@ export default function AdminApprovals() {
     await downloadFile(url, file.file_name);
   };
 
-  const handleCreateAdjustTask = async (file: any) => {
+  const refreshApprovalQueues = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["all-files"] }),
+      queryClient.invalidateQueries({ queryKey: ["files"] }),
+    ]);
+  };
+
+  const handleAgencyReview = async (
+    file: any,
+    decision: FileApprovalDecision,
+    feedback?: string | null,
+  ) => {
+    if (!canReviewAndRelease) return;
+    setSubmitting(true);
     try {
-      await supabase.from("tasks").insert({
-        project_id: file.project_id,
-        title: `Ajustar: ${file.file_name}`,
-        description: `Feedback do cliente:\n${file.feedback || "Sem detalhes"}`,
-        status: "backlog",
-        priority: "high",
-        assigned_to: file.uploaded_by || null,
+      await reviewFileAgency(file.id, decision, feedback);
+      await refreshApprovalQueues();
+      setPreviewFile(null);
+      setReviewTarget(null);
+      setReviewFeedback("");
+      toast({
+        title: decision === "approved" ? "Revisão interna aprovada" : "Ajustes internos solicitados",
+        description: decision === "approved"
+          ? "Agora um admin ou manager pode liberar esta versão ao cliente."
+          : "O conteúdo continua visível somente para a equipe.",
       });
-      queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast({ title: "Tarefa criada no Kanban!" });
-    } catch {
-      toast({ title: "Erro ao criar tarefa", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível concluir a revisão",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleRelease = async (file: any, mode: FileReleaseMode) => {
+    if (!canReviewAndRelease) return;
+    setSubmitting(true);
+    try {
+      await releaseFileToClient(file.id, mode);
+      await refreshApprovalQueues();
+      setPreviewFile(null);
+      toast({
+        title: mode === "approval" ? "Enviado para aprovação do cliente" : "Disponibilizado ao cliente",
+        description: "A liberação foi registrada com segurança.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível liberar a entrega",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -217,12 +294,12 @@ export default function AdminApprovals() {
             <p className="heading-page">Aprovações</p>
             {pendingCount > 0 && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">
-                {pendingCount} aguardando cliente
+                {pendingCount} {queue === "agency" ? "aguardando revisão interna" : "aguardando cliente"}
               </span>
             )}
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            Acompanhe a decisão do cliente e os pedidos de ajuste.
+            Revise internamente antes de liberar e acompanhe a decisão do cliente em uma fila separada.
           </p>
         </div>
 
@@ -260,8 +337,35 @@ export default function AdminApprovals() {
         </div>
       )}
 
+      <div className="mt-3 inline-flex items-center rounded-xl border border-border bg-card p-1">
+        <button
+          type="button"
+          onClick={() => { setQueue("agency"); setActiveTab("all"); }}
+          className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+            queue === "agency" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Revisão interna
+        </button>
+        <button
+          type="button"
+          onClick={() => { setQueue("client"); setActiveTab("all"); }}
+          className={`rounded-lg px-3 py-2 text-xs font-medium transition-colors ${
+            queue === "client" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          Decisão do cliente
+        </button>
+      </div>
+
+      {!canReviewAndRelease && queue === "agency" && (
+        <p className="mt-2 text-[11px] text-muted-foreground">
+          Você pode acompanhar a fila. Somente admin ou manager pode revisar e liberar uma entrega.
+        </p>
+      )}
+
       <div className="mt-3 flex items-center gap-1 overflow-x-auto pb-1 scrollbar-hidden">
-        {TABS.map((t) => (
+        {tabs.map((t) => (
           <button
             key={t.id}
             onClick={() => setActiveTab(t.id)}
@@ -311,7 +415,10 @@ export default function AdminApprovals() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start stagger-children">
           {filtered.map((f: any) => {
-            const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
+            const badge = queue === "agency"
+              ? agencyApprovalBadge[f.agency_approval_status] || agencyApprovalBadge.not_requested
+              : clientApprovalBadge[f.approval_status] || clientApprovalBadge.pending;
+            const activeFeedback = queue === "agency" ? f.agency_feedback : f.feedback;
             const images = getCarouselImages(f);
             const isCarousel = images.length > 1;
             return (
@@ -338,26 +445,22 @@ export default function AdminApprovals() {
                     {badge.label}
                   </span>
 
-                  {f.approval_status === "rejected" && f.feedback && (
+                  {f[statusField] === "rejected" && activeFeedback && (
                     <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3 mt-auto">
-                      <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
-                      <p className="text-xs text-foreground line-clamp-3">{f.feedback}</p>
+                      <p className="text-[11px] text-muted-foreground mb-0.5">
+                        {queue === "agency" ? "Feedback interno:" : "Feedback do cliente:"}
+                      </p>
+                      <p className="text-xs text-foreground line-clamp-3">{activeFeedback}</p>
                     </div>
                   )}
 
-                  {f.approval_status === "rejected" && (
+                  {f[statusField] === "rejected" && (
                     <div className="flex gap-2 pt-1 flex-wrap">
                       <Button asChild size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1">
                         <Link to={getCorrectionUrl(f)} onClick={(event) => event.stopPropagation()}>
-                          <RefreshCw className="w-3 h-3" /> Criar correção
+                          <RefreshCw className="w-3 h-3" /> Criar nova versão
                         </Link>
                       </Button>
-                      {f.project_id && (
-                        <Button size="sm" variant="outline" className="text-[12px] h-7 rounded-lg gap-1 border-warning/50 text-warning hover:bg-warning/10"
-                          onClick={(e) => { e.stopPropagation(); handleCreateAdjustTask(f); }}>
-                          <Zap className="w-3 h-3" /> Criar Tarefa
-                        </Button>
-                      )}
                     </div>
                   )}
                 </div>
@@ -392,11 +495,32 @@ export default function AdminApprovals() {
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
               {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
-              <div className="flex items-center gap-2">
-                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.pending).cls}`}>
-                  {(approvalBadge[previewFile.approval_status] || approvalBadge.pending).label}
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).cls}`}>
+                  {(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).label}
                 </span>
+                {previewFile.approval_status !== "none" && (
+                  <span className={`text-[11px] px-2.5 py-1 rounded-full ${(clientApprovalBadge[previewFile.approval_status] || clientApprovalBadge.pending).cls}`}>
+                    {(clientApprovalBadge[previewFile.approval_status] || clientApprovalBadge.pending).label}
+                  </span>
+                )}
+                {previewFile.version > 1 && (
+                  <span className="text-[11px] text-muted-foreground">Versão {previewFile.version}</span>
+                )}
               </div>
+              {previewFile.locked_at && (
+                <div className="rounded-lg border border-success/20 bg-success/[0.05] p-3">
+                  <p className="text-xs text-foreground">
+                    Versão final protegida contra alterações.
+                  </p>
+                </div>
+              )}
+              {previewFile.agency_approval_status === "rejected" && previewFile.agency_feedback && (
+                <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                  <p className="mb-0.5 text-[11px] text-muted-foreground">Feedback interno:</p>
+                  <p className="text-xs text-foreground">{previewFile.agency_feedback}</p>
+                </div>
+              )}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback do cliente:</p>
@@ -406,22 +530,106 @@ export default function AdminApprovals() {
             </div>
           )}
           <DialogFooter className="flex gap-2">
-            {previewFile?.approval_status === "rejected" && (
+            {queue === "agency"
+              && previewFile?.agency_approval_status === "pending"
+              && canReviewAndRelease && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-destructive/40 text-destructive hover:bg-destructive/10"
+                    disabled={submitting}
+                    onClick={() => {
+                      setReviewTarget(previewFile);
+                      setReviewFeedback("");
+                      setPreviewFile(null);
+                    }}
+                  >
+                    Pedir ajustes internos
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={submitting}
+                    onClick={() => handleAgencyReview(previewFile, "approved")}
+                  >
+                    Aprovar internamente
+                  </Button>
+                </>
+              )}
+            {queue === "agency"
+              && previewFile?.agency_approval_status === "approved"
+              && previewFile?.visibility === "internal"
+              && canReviewAndRelease && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={submitting}
+                    onClick={() => handleRelease(previewFile, "client_shared")}
+                  >
+                    Disponibilizar ao cliente
+                  </Button>
+                  <Button
+                    size="sm"
+                    disabled={submitting}
+                    onClick={() => handleRelease(previewFile, "approval")}
+                  >
+                    Enviar para aprovação
+                  </Button>
+                </>
+              )}
+            {previewFile?.[statusField] === "rejected" && (
               <>
                 <Button asChild size="sm" variant="outline" className="gap-1">
                   <Link to={getCorrectionUrl(previewFile)} onClick={() => setPreviewFile(null)}>
-                    <RefreshCw className="w-3 h-3" /> Criar correção
+                    <RefreshCw className="w-3 h-3" /> Criar nova versão
                   </Link>
                 </Button>
-                {previewFile.project_id && (
-                  <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"
-                    onClick={() => { handleCreateAdjustTask(previewFile); setPreviewFile(null); }}>
-                    <Zap className="w-3 h-3" /> Criar Tarefa
-                  </Button>
-                )}
               </>
             )}
             <Button variant="outline" className="gap-2" onClick={() => handleDownload(previewFile)}>Baixar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!reviewTarget} onOpenChange={(open) => {
+        if (!open && !submitting) {
+          setReviewTarget(null);
+          setReviewFeedback("");
+        }
+      }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Pedir ajustes internos</DialogTitle>
+          </DialogHeader>
+          <div>
+            <Label htmlFor="agency-review-feedback" className="text-xs">
+              Explique o que precisa ser corrigido
+            </Label>
+            <textarea
+              id="agency-review-feedback"
+              value={reviewFeedback}
+              onChange={(event) => setReviewFeedback(event.target.value)}
+              rows={4}
+              className="mt-2 w-full resize-none rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-foreground focus:border-primary/50 focus:outline-none"
+              placeholder="Feedback interno para a equipe (mínimo 10 caracteres)..."
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReviewTarget(null)}
+              disabled={submitting}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={submitting || reviewFeedback.trim().length < 10}
+              onClick={() => handleAgencyReview(reviewTarget, "rejected", reviewFeedback)}
+            >
+              {submitting ? "Salvando..." : "Solicitar ajustes"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -50,6 +50,7 @@ type Node = {
   __mime_type?: string | null;
   __extension?: string | null;
   __approval_status?: string | null;
+  __agency_approval_status?: string | null;
   __carousel_count?: number;
 };
 
@@ -162,7 +163,11 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
     kind: "file", name: f.file_name,
     mime, size_bytes: f.size_bytes || null, storage_path: null,
     duration_sec: null, sort_index: 0,
-    sent_for_approval_file_id: f.approval_status && f.approval_status !== "none" ? f.id : null,
+    sent_for_approval_file_id:
+      (f.agency_approval_status && f.agency_approval_status !== "not_requested")
+        || (f.approval_status && f.approval_status !== "none")
+        ? f.id
+        : null,
     created_by: f.uploaded_by || null, created_at: f.created_at,
     __virtual: true, __external_url: f.file_url, __file_id: f.id,
     __storage_bucket: f.storage_bucket || null,
@@ -170,6 +175,7 @@ function virtFileNode(f: any, clientId: string, carouselCount = 0): Node {
     __mime_type: f.mime_type || null,
     __extension: f.extension || null,
     __approval_status: f.approval_status,
+    __agency_approval_status: f.agency_approval_status,
     __carousel_count: carouselCount,
   };
 }
@@ -315,8 +321,8 @@ export default function Workspace() {
       // Fetch all files (parents + carousel children) so we can group carousels
       // and show every slide inside the preview.
       const { data } = await (supabase as any)
-        .from("files")
-        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, created_at, uploaded_by, parent_file_id, size_bytes")
+        .from("staff_files_secure")
+        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, created_at, uploaded_by, parent_file_id, size_bytes")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
       return data || [];
@@ -981,7 +987,10 @@ export default function Workspace() {
 
   function canSendToApproval(n: Node | null) {
     if (!n || n.kind !== "file" || scope !== "client" || !clientId) return false;
-    if (n.__virtual) return !!n.__file_id && n.__approval_status !== "pending" && n.__approval_status !== "approved";
+    if (n.__virtual) {
+      return !!n.__file_id
+        && (!n.__agency_approval_status || n.__agency_approval_status === "not_requested");
+    }
     return !!n.storage_path && !n.sent_for_approval_file_id;
   }
 
@@ -993,7 +1002,9 @@ export default function Workspace() {
     }
     try {
       if (n.__virtual && n.__file_id) {
-        const { error } = await (supabase as any).from("files").update({ approval_status: "pending" }).eq("id", n.__file_id);
+        const { error } = await (supabase as any).rpc("request_file_agency_review", {
+          p_file_id: n.__file_id,
+        });
         if (error) throw error;
       } else if (n.storage_path) {
         const ext = extOf(n.name).toLowerCase() || null;
@@ -1008,21 +1019,23 @@ export default function Workspace() {
           size_bytes: n.size_bytes || 0,
           uploaded_by: user.id,
           client_id: clientId,
-          approval_status: "pending",
+          approval_status: "none",
+          agency_approval_status: "not_requested",
+          requires_approval: false,
+          status: "ready",
+          visibility: "internal",
           folder: "materiais",
         }).select("id").single();
         if (insErr) throw insErr;
+        const { error: reviewError } = await (supabase as any).rpc("request_file_agency_review", {
+          p_file_id: (fileRow as any).id,
+        });
+        if (reviewError) throw reviewError;
         await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: (fileRow as any).id }).eq("id", n.id);
       } else {
         throw new Error("Arquivo sem origem de armazenamento.");
       }
-      await supabase.from("notifications").insert({
-        user_id: clientId,
-        message: `Arquivo para aprovação: ${n.name}`,
-        notification_type: "approval",
-        link: "/aprovacoes",
-      });
-      toast({ title: "Enviado para aprovação" });
+      toast({ title: "Enviado para revisão interna" });
       invalidate();
       qc.invalidateQueries({ queryKey: ["files"] });
     } catch (e: any) {

@@ -41,7 +41,7 @@ export function isAllowedMime(m: string): boolean {
 export function isMedia(m: string): boolean { return MEDIA_MIMES.has(m); }
 
 const FOLDERS = ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] as const;
-const VISIBILITY = ['internal','client_shared','approval'] as const;
+const LEGACY_VISIBILITY = ['internal','client_shared','approval'] as const;
 const SENSITIVITY = ['normal','confidential','restricted'] as const;
 
 // Pastas cujos documentos são internos por padrão
@@ -123,13 +123,12 @@ async function assertClientAndProject(clientId: string, projectId?: string) {
   }
 }
 
-function computeDefaults(folder: string, sensitivity?: string, visibility?: string) {
+function computeDefaults(folder: string, sensitivity?: string) {
   const isInternal = INTERNAL_FOLDERS.has(folder);
   let s = sensitivity ?? 'normal';
   // Contratos e operacionais (políticas etc.) tendem a restrito por padrão
   if (!sensitivity && (folder === 'contratos' || folder === 'operacionais')) s = 'restricted';
-  const v = visibility ?? (isInternal ? 'internal' : 'internal');
-  return { visibility: v, sensitivity: s, isInternal };
+  return { visibility: 'internal', sensitivity: s, isInternal };
 }
 
 function extFromName(n: string): string {
@@ -154,7 +153,8 @@ export const prepareUploadSchema = z.object({
   sha256: z.string().regex(/^[a-f0-9]{64}$/i).optional(),
   folder: z.enum(FOLDERS),
   file_type: z.string().max(64).optional(),
-  visibility: z.enum(VISIBILITY).optional(),
+  // Deprecated compatibility fields. Accepted from cached MCP clients but ignored.
+  visibility: z.enum(LEGACY_VISIBILITY).optional(),
   sensitivity: z.enum(SENSITIVITY).optional(),
   requires_approval: z.boolean().optional(),
   description: z.string().max(2000).optional(),
@@ -176,7 +176,8 @@ export const inlineUploadSchema = z.object({
   content_base64: z.string().min(4),
   folder: z.enum(FOLDERS),
   file_type: z.string().max(64).optional(),
-  visibility: z.enum(VISIBILITY).optional(),
+  // Deprecated compatibility fields. Accepted from cached MCP clients but ignored.
+  visibility: z.enum(LEGACY_VISIBILITY).optional(),
   sensitivity: z.enum(SENSITIVITY).optional(),
   requires_approval: z.boolean().optional(),
   description: z.string().max(2000).optional(),
@@ -215,7 +216,8 @@ export const updateMetadataSchema = z.object({
   project_id: UUID.nullable().optional(),
   folder: z.enum(FOLDERS).optional(),
   file_type: z.string().max(64).optional(),
-  visibility: z.enum(VISIBILITY).optional(),
+  // Deprecated compatibility fields. Accepted from cached MCP clients but ignored.
+  visibility: z.enum(LEGACY_VISIBILITY).optional(),
   sensitivity: z.enum(SENSITIVITY).optional(),
   requires_approval: z.boolean().optional(),
   description: z.string().max(2000).optional(),
@@ -257,6 +259,11 @@ function storagePath(clientId: string, fileId: string, version: number, fileName
   return `${clientId}/${fileId}/v${version}/${safe}`;
 }
 
+async function cleanupUploadedObject(path: string): Promise<string | null> {
+  const { error } = await db().storage.from(LIMITS.bucket).remove([path]);
+  return error?.message ?? null;
+}
+
 // ─── Core: prepare (signed upload URL) ────────────────────────
 export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchema>, ctx: FileCtx) {
   ensureWriteAllowed(ctx);
@@ -266,20 +273,44 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
 
   const existing = await findByIdempotency(input.idempotency_key);
   if (existing) {
-    const { data: signed } = await db().storage.from(LIMITS.bucket)
+    const sameRequest =
+      existing.client_id === input.client_id
+      && (existing.project_id ?? null) === (input.project_id ?? null)
+      && existing.file_name === input.file_name
+      && existing.mime_type === input.mime_type
+      && Number(existing.size_bytes) === input.size_bytes;
+    if (
+      existing.status !== 'uploading'
+      || existing.locked_at
+      || existing.storage_bucket !== LIMITS.bucket
+      || !existing.storage_path
+      || !sameRequest
+    ) {
+      throw new FileError(
+        'conflict:idempotency',
+        'idempotency_key belongs to a finalized, immutable, or different upload',
+      );
+    }
+    const { data: signed, error: signedError } = await db().storage.from(LIMITS.bucket)
       .createSignedUploadUrl(existing.storage_path!);
+    if (signedError || !signed?.signedUrl) {
+      throw new FileError(
+        'validation:invalid_request',
+        `signed url: ${signedError?.message ?? 'unavailable'}`,
+      );
+    }
     return {
       file_id: existing.id, upload_id: existing.idempotency_key,
-      upload_url: signed?.signedUrl ?? null, storage_path: existing.storage_path,
-      required_headers: { 'x-upsert': 'true', 'content-type': existing.mime_type },
+      upload_url: signed.signedUrl, storage_path: existing.storage_path,
+      required_headers: { 'content-type': existing.mime_type },
       expires_at: new Date(Date.now() + LIMITS.signedUploadTtlSec * 1000).toISOString(),
-      max_size_bytes: cap, upload_status: existing.status ?? 'uploading',
+      max_size_bytes: cap, upload_status: 'uploading',
       reused: true,
     };
   }
 
   await assertClientAndProject(input.client_id, input.project_id);
-  const defs = computeDefaults(input.folder, input.sensitivity, input.visibility);
+  const defs = computeDefaults(input.folder, input.sensitivity);
   const fileId = crypto.randomUUID();
   const path = storagePath(input.client_id, fileId, 1, input.file_name);
 
@@ -292,7 +323,8 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
     file_url: '',                          // preenchido no finalize
     file_type: input.file_type ?? null,
     folder: input.folder,
-    approval_status: input.requires_approval ? 'pending' : 'approved',
+    approval_status: 'none',
+    agency_approval_status: 'not_requested',
     description: input.description ?? null,
     version: 1,
     mime_type: input.mime_type,
@@ -304,7 +336,7 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
     tags: input.tags ?? [],
     visibility: defs.visibility,
     sensitivity: defs.sensitivity,
-    requires_approval: !!input.requires_approval,
+    requires_approval: false,
     status: 'uploading',
     extraction_status: 'pending',
     source: ctx.origin ?? 'mcp',
@@ -315,12 +347,14 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = fileId;
 
   const { data: signed, error: sErr } = await db().storage.from(LIMITS.bucket).createSignedUploadUrl(path);
-  if (sErr) throw new FileError('validation:invalid_request', `signed url: ${sErr.message}`);
+  if (sErr || !signed?.signedUrl) {
+    throw new FileError('validation:invalid_request', `signed url: ${sErr?.message ?? 'unavailable'}`);
+  }
 
   return {
     file_id: fileId, upload_id: input.idempotency_key,
     upload_url: signed.signedUrl, storage_path: path,
-    required_headers: { 'x-upsert': 'true', 'content-type': input.mime_type },
+    required_headers: { 'content-type': input.mime_type },
     expires_at: new Date(Date.now() + LIMITS.signedUploadTtlSec * 1000).toISOString(),
     max_size_bytes: cap, upload_status: 'uploading',
     accepted_mime_types: [...DOC_MIMES, ...IMG_MIMES, ...MEDIA_MIMES],
@@ -330,10 +364,20 @@ export async function prepareFileUpload(input: z.infer<typeof prepareUploadSchem
 // ─── Core: finalize ───────────────────────────────────────────
 export async function finalizeFileUpload(input: z.infer<typeof finalizeUploadSchema>, ctx: FileCtx) {
   ensureWriteAllowed(ctx);
-  const { data: f } = await db().from('files').select('*').eq('id', input.file_id).maybeSingle();
+  const { data: f, error: fileError } = await db().from('files')
+    .select('*').eq('id', input.file_id).maybeSingle();
+  if (fileError) throw new FileError('validation:invalid_request', `file lookup: ${fileError.message}`);
   if (!f) throw new FileError('resource:not_found', 'file not found');
   if (f.idempotency_key !== input.idempotency_key) {
     throw new FileError('conflict:idempotency', 'idempotency_key mismatch');
+  }
+  if (
+    f.status !== 'uploading'
+    || f.locked_at
+    || f.storage_bucket !== LIMITS.bucket
+    || !f.storage_path
+  ) {
+    throw new FileError('conflict:idempotency', 'upload is not open for finalization');
   }
 
   const { data: obj, error: hErr } = await db().storage.from(LIMITS.bucket)
@@ -346,28 +390,77 @@ export async function finalizeFileUpload(input: z.infer<typeof finalizeUploadSch
   const bytes = new Uint8Array(await res.arrayBuffer());
   const actualSha = await sha256Hex(bytes);
   if (input.sha256 && input.sha256.toLowerCase() !== actualSha) {
-    await db().from('files').update({ status: 'quarantined' }).eq('id', f.id);
+    const { data: quarantined, error: quarantineError } = await db().from('files')
+      .update({ status: 'quarantined' })
+      .eq('id', f.id)
+      .eq('status', 'uploading')
+      .select('id')
+      .maybeSingle();
+    if (quarantineError || !quarantined) {
+      throw new FileError(
+        'validation:invalid_request',
+        `failed to quarantine checksum mismatch: ${quarantineError?.message ?? 'upload state changed'}`,
+      );
+    }
     throw new FileError('file:checksum_mismatch', 'sha256 does not match uploaded content');
   }
 
   // Dedupe soft: se o mesmo cliente já tem um arquivo com esse sha256 pronto, marca warning
-  let warnings: string[] = [];
+  const warnings: string[] = [];
   if (actualSha) {
-    const { data: dupes } = await db().from('files')
+    const { data: dupes, error: dedupeError } = await db().from('files')
       .select('id').eq('client_id', f.client_id).eq('sha256', actualSha).neq('id', f.id).limit(1);
+    if (dedupeError) warnings.push('dedupe_check_unavailable');
     if (dupes && dupes.length) warnings.push(`duplicate:${dupes[0].id}`);
   }
 
   // Publica URL/registro pronto e enfileira extração
   const publicUrl = `mcp-files://${f.storage_path}`;
-  await db().from('files').update({
-    file_url: publicUrl, sha256: actualSha, size_bytes: bytes.byteLength,
-    status: 'ready', extraction_status: 'pending',
-  }).eq('id', f.id);
+  const { data: finalized, error: finalizeError } = await db().from('files')
+    .update({
+      file_url: publicUrl, sha256: actualSha, size_bytes: bytes.byteLength,
+      status: 'ready', extraction_status: 'pending',
+    })
+    .eq('id', f.id)
+    .eq('status', 'uploading')
+    .is('locked_at', null)
+    .select('id')
+    .maybeSingle();
+  if (finalizeError || !finalized) {
+    throw new FileError(
+      'validation:invalid_request',
+      `failed to finalize upload: ${finalizeError?.message ?? 'upload state changed'}`,
+    );
+  }
 
-  const { data: job } = await db().from('file_processing_jobs')
+  const { data: job, error: jobError } = await db().from('file_processing_jobs')
     .insert({ file_id: f.id, job_type: 'extract', payload: { mime_type: f.mime_type } })
     .select('id').single();
+  if (jobError || !job?.id) {
+    const { data: rolledBack, error: rollbackError } = await db().from('files')
+      .update({
+        file_url: f.file_url,
+        sha256: f.sha256,
+        size_bytes: f.size_bytes,
+        status: 'uploading',
+        extraction_status: f.extraction_status ?? 'pending',
+      })
+      .eq('id', f.id)
+      .eq('status', 'ready')
+      .is('locked_at', null)
+      .select('id')
+      .maybeSingle();
+    if (rollbackError || !rolledBack) {
+      throw new FileError(
+        'validation:invalid_request',
+        `failed to enqueue extraction (${jobError?.message ?? 'job unavailable'}) and rollback finalization (${rollbackError?.message ?? 'upload state changed'})`,
+      );
+    }
+    throw new FileError(
+      'validation:invalid_request',
+      `failed to enqueue extraction: ${jobError?.message ?? 'job unavailable'}`,
+    );
+  }
   if (job?.id) kickWorker(job.id);
 
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = f.id;
@@ -383,17 +476,34 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
   ensureWriteAllowed(ctx);
   if (!isAllowedMime(input.mime_type)) throw new FileError('file:unsupported_media_type', `MIME not allowed: ${input.mime_type}`);
 
-  const existing = await findByIdempotency(input.idempotency_key);
-  if (existing) return _summarize(existing, { reused: true });
-
-  await assertClientAndProject(input.client_id, input.project_id);
-
   const bin = Uint8Array.from(atob(input.content_base64), c => c.charCodeAt(0));
   if (bin.byteLength > LIMITS.inlineMaxBytes) {
     throw new FileError('file:too_large', `inline upload capped at ${LIMITS.inlineMaxBytes} bytes; use aceleriq_prepare_file_upload`);
   }
   const sha = await sha256Hex(bin);
-  const defs = computeDefaults(input.folder, input.sensitivity, input.visibility);
+  const existing = await findByIdempotency(input.idempotency_key);
+  if (existing) {
+    const sameClientAndPayload =
+      existing.client_id === input.client_id
+      && (existing.project_id ?? null) === (input.project_id ?? null)
+      && existing.file_name === input.file_name
+      && existing.mime_type === input.mime_type
+      && existing.folder === input.folder
+      && (existing.file_type ?? null) === (input.file_type ?? null)
+      && Number(existing.size_bytes) === bin.byteLength
+      && String(existing.sha256 ?? '').toLowerCase() === sha;
+    if (!sameClientAndPayload) {
+      throw new FileError(
+        'conflict:idempotency',
+        'idempotency_key belongs to a different client or inline payload',
+      );
+    }
+    return _summarize(existing, { reused: true });
+  }
+
+  await assertClientAndProject(input.client_id, input.project_id);
+
+  const defs = computeDefaults(input.folder, input.sensitivity);
   const fileId = crypto.randomUUID();
   const path = storagePath(input.client_id, fileId, 1, input.file_name);
 
@@ -406,17 +516,26 @@ export async function uploadFileInline(input: z.infer<typeof inlineUploadSchema>
     client_id: input.client_id, project_id: input.project_id ?? null,
     uploaded_by: input.client_id, file_name: input.file_name,
     file_url: `mcp-files://${path}`, file_type: input.file_type ?? null, folder: input.folder,
-    approval_status: input.requires_approval ? 'pending' : 'approved',
+    approval_status: 'none',
+    agency_approval_status: 'not_requested',
     description: input.description ?? null, version: 1,
     mime_type: input.mime_type, extension: extFromName(input.file_name),
     size_bytes: bin.byteLength, sha256: sha,
     storage_bucket: LIMITS.bucket, storage_path: path,
     tags: input.tags ?? [], visibility: defs.visibility, sensitivity: defs.sensitivity,
-    requires_approval: !!input.requires_approval,
+    requires_approval: false,
     status: 'ready', extraction_status: 'pending',
     source: ctx.origin ?? 'mcp', idempotency_key: input.idempotency_key,
   }).select('*').single();
-  if (insErr) throw new FileError('validation:invalid_request', insErr.message);
+  if (insErr) {
+    const cleanupError = await cleanupUploadedObject(path);
+    throw new FileError(
+      'validation:invalid_request',
+      cleanupError
+        ? `${insErr.message}; storage compensation failed: ${cleanupError}`
+        : insErr.message,
+    );
+  }
 
   const { data: jobRow } = await db().from('file_processing_jobs').insert({
     file_id: fileId, job_type: 'extract', payload: { mime_type: input.mime_type },
@@ -543,7 +662,7 @@ export async function updateFileMetadata(input: z.infer<typeof updateMetadataSch
     if (input.project_id) await assertClientAndProject(f.client_id, input.project_id);
     patch.project_id = input.project_id;
   }
-  for (const k of ['folder','file_type','visibility','sensitivity','requires_approval','description','caption','tags'] as const) {
+  for (const k of ['folder','file_type','sensitivity','description','caption','tags'] as const) {
     if ((input as any)[k] !== undefined) (patch as any)[k] = (input as any)[k];
   }
   if (Object.keys(patch).length === 0) return _summarize(f);
@@ -565,7 +684,7 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
   if (!isAllowedMime(input.mime_type)) throw new FileError('file:unsupported_media_type', `MIME not allowed: ${input.mime_type}`);
 
   const existing = await findByIdempotency(input.idempotency_key);
-  if (existing) return _summarize(existing, { reused: true, parent_file_id: parent.id });
+  if (existing) return _summarize(existing, { reused: true, revision_of_file_id: parent.id });
 
   const bin = Uint8Array.from(atob(input.content_base64), c => c.charCodeAt(0));
   if (bin.byteLength > LIMITS.inlineMaxBytes) throw new FileError('file:too_large', `version upload capped at ${LIMITS.inlineMaxBytes} bytes inline`);
@@ -583,25 +702,35 @@ export async function createFileVersion(input: z.infer<typeof createVersionSchem
   const { data: inserted, error: insErr } = await db().from('files').insert({
     id: newId,
     client_id: parent.client_id, project_id: parent.project_id,
-    uploaded_by: parent.uploaded_by, parent_file_id: parent.id,
+    uploaded_by: parent.uploaded_by, parent_file_id: null,
+    revision_of_file_id: parent.id,
     file_name: fileName, file_url: `mcp-files://${path}`,
     file_type: parent.file_type, folder: parent.folder,
-    approval_status: parent.requires_approval ? 'pending' : 'approved',
+    approval_status: 'none',
+    agency_approval_status: 'not_requested',
     description: input.version_notes ?? parent.description, version: newVersion,
     mime_type: input.mime_type, extension: extFromName(fileName),
     size_bytes: bin.byteLength, sha256: sha,
     storage_bucket: LIMITS.bucket, storage_path: path,
-    tags: parent.tags, visibility: parent.visibility, sensitivity: parent.sensitivity,
-    requires_approval: parent.requires_approval,
+    tags: parent.tags, visibility: 'internal', sensitivity: parent.sensitivity,
+    requires_approval: false,
     status: 'ready', extraction_status: 'pending',
     source: ctx.origin ?? 'mcp', idempotency_key: input.idempotency_key,
   }).select('*').single();
-  if (insErr) throw new FileError('validation:invalid_request', insErr.message);
+  if (insErr) {
+    const cleanupError = await cleanupUploadedObject(path);
+    throw new FileError(
+      'validation:invalid_request',
+      cleanupError
+        ? `${insErr.message}; storage compensation failed: ${cleanupError}`
+        : insErr.message,
+    );
+  }
 
   const { data: vJob } = await db().from('file_processing_jobs').insert({ file_id: newId, job_type: 'extract', payload: { mime_type: input.mime_type } }).select('id').single();
   if (vJob?.id) kickWorker(vJob.id);
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = newId;
-  return _summarize(inserted, { parent_file_id: parent.id });
+  return _summarize(inserted, { revision_of_file_id: parent.id });
 }
 
 // ─── Write: archive/restore ───────────────────────────────────

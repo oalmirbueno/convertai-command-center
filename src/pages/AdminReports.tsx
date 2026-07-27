@@ -41,10 +41,11 @@ export default function AdminReports() {
   const { data: reports, isLoading } = useQuery({
     queryKey: ["reports"],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("reports")
-        .select("*, project:projects(name), client:profiles!reports_client_id_fkey(full_name, company_name)")
+        .select("id, project_id, client_id, title, period_start, period_end, metrics, summary, file_url, status, created_by, created_at, highlights, next_steps, chart_type, chart_data, images, project:projects(name), client:profiles!reports_client_id_fkey(full_name, company_name)")
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -52,14 +53,26 @@ export default function AdminReports() {
 
   const handleSendToClient = async (r: any) => {
     if (r.status !== "published") {
-      await supabase.from("reports").update({ status: "published" }).eq("id", r.id);
+      const { error } = await supabase
+        .from("reports")
+        .update({ status: "published" })
+        .eq("id", r.id);
+      if (error) {
+        toast.error("Não foi possível publicar o relatório");
+        return;
+      }
     }
-    await supabase.from("notifications").insert({
+    const { error: notificationError } = await supabase.from("notifications").insert({
       user_id: r.client_id,
       message: `Novo relatório disponível: ${r.title}`,
       notification_type: "report",
       link: "/relatorios",
     });
+    if (notificationError) {
+      toast.error("Relatório publicado, mas a notificação não foi enviada");
+      queryClient.invalidateQueries({ queryKey: ["reports"] });
+      return;
+    }
     queryClient.invalidateQueries({ queryKey: ["reports"] });
     toast.success("Relatório enviado ao cliente!");
   };

@@ -5,6 +5,7 @@ import { Plus, MoreHorizontal, Clock, Sparkles } from "lucide-react";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
 import ProjectDrawer from "@/components/admin/ProjectDrawer";
 import MeetingToProjectModal from "@/components/admin/MeetingToProjectModal";
+import ProjectView from "@/components/client/ProjectView";
 
 const STATUS_OPTIONS = [
   { value: "all", label: "Todos" },
@@ -38,6 +39,7 @@ export default function Projects() {
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   const [editProject, setEditProject] = useState<any>(null);
   const [drawerProject, setDrawerProject] = useState<any>(null);
+  const [clientProject, setClientProject] = useState<any>(null);
 
   const filtered = (projects || []).filter((p: any) => {
     if (isClient && p.client_id !== profile?.id) return false;
@@ -49,6 +51,10 @@ export default function Projects() {
     if (!d) return "";
     return new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" });
   };
+
+  if (isClient && clientProject) {
+    return <ProjectView project={clientProject} onBack={() => setClientProject(null)} />;
+  }
 
   return (
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
@@ -90,7 +96,16 @@ export default function Projects() {
         <div className="space-y-1 stagger-children" data-tour="projects-list">
           {filtered.map((p: any) => (
             <div key={p.id}
-              className="bg-card border border-border rounded-xl px-5 py-4 hover:border-muted-foreground/30 transition-colors relative"
+              role={isClient ? "button" : undefined}
+              tabIndex={isClient ? 0 : undefined}
+              onClick={() => isClient && setClientProject(p)}
+              onKeyDown={(event) => {
+                if (isClient && (event.key === "Enter" || event.key === " ")) {
+                  event.preventDefault();
+                  setClientProject(p);
+                }
+              }}
+              className={`bg-card border border-border rounded-xl px-5 py-4 hover:border-muted-foreground/30 transition-colors relative ${isClient ? "cursor-pointer" : ""}`}
             >
               <div className="flex items-center gap-4">
                 <div className={`w-2 h-2 rounded-full shrink-0 ${statusDotColors[p.status] || "bg-muted-foreground"}`} />

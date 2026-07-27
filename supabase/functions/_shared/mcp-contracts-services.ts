@@ -1,8 +1,7 @@
 // Aceleriq OS — Contracts service layer for MCP (Round Bloco B).
-// Read + write over public.contracts. Signed contracts (client_signed_at
-// present, or status in {signed, completed}) are IMMUTABLE via MCP.
-// Never sends emails, never uploads files: send only flips status to `sent`
-// and returns the public sign URL.
+// Read + tightly scoped draft writes over public.contracts.
+// MCP never signs, approves, sends or publishes contracts. It may only
+// create, update or cancel completely unsigned, unsent drafts.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { z } from 'https://esm.sh/zod@3.23.8';
@@ -27,13 +26,53 @@ const IDEMPOTENCY_KEY = z.string().min(8).max(128).regex(/^[A-Za-z0-9._:\-]+$/);
 
 const CONTRACT_SELECT =
   'id, client_id, project_id, title, description, original_file_url, original_file_name, ' +
-  'status, admin_signature_name, admin_signed_at, client_signature_name, client_signed_at, ' +
-  'sign_token, sent_at, file_id, created_by, created_at, updated_at';
+  'status, admin_signature_name, admin_signed_at, admin_signature_ip, client_signature_name, ' +
+  'client_signed_at, client_signature_ip, sign_token, sent_at, file_id, created_by, created_at, updated_at';
 
-const IMMUTABLE_STATUSES = new Set(['signed', 'completed', 'cancelled']);
+const SIGNED_STATUSES = new Set(['signed', 'completed']);
 
-function isSigned(row: any): boolean {
-  return Boolean(row?.client_signed_at) || IMMUTABLE_STATUSES.has(String(row?.status ?? ''));
+interface ContractState {
+  status?: unknown;
+  admin_signature_name?: unknown;
+  admin_signed_at?: unknown;
+  admin_signature_ip?: unknown;
+  client_signature_name?: unknown;
+  client_signed_at?: unknown;
+  client_signature_ip?: unknown;
+  sent_at?: unknown;
+  file_id?: unknown;
+}
+
+function isSigned(row: ContractState): boolean {
+  return Boolean(
+    row?.admin_signature_name ||
+    row?.admin_signed_at ||
+    row?.admin_signature_ip ||
+    row?.client_signature_name ||
+    row?.client_signed_at ||
+    row?.client_signature_ip
+  ) || SIGNED_STATUSES.has(String(row?.status ?? ''));
+}
+
+function isUnsignedUnsentDraft(row: ContractState): boolean {
+  return String(row?.status ?? '') === 'draft' &&
+    row?.admin_signature_name == null &&
+    row?.admin_signed_at == null &&
+    row?.admin_signature_ip == null &&
+    row?.client_signature_name == null &&
+    row?.client_signed_at == null &&
+    row?.client_signature_ip == null &&
+    row?.sent_at == null &&
+    row?.file_id == null;
+}
+
+function requireUnsignedUnsentDraft(row: ContractState): void {
+  if (!isUnsignedUnsentDraft(row)) {
+    throw new WriteError(
+      'forbidden',
+      'MCP may only modify completely unsigned, unsent draft contracts',
+    );
+  }
 }
 
 function publicSignUrl(sign_token: string): string {
@@ -45,7 +84,7 @@ function enrichContract<T extends Record<string, any>>(row: T) {
   return {
     ...row,
     is_signed: signed,
-    is_locked: signed, // MCP writes are blocked when locked
+    is_locked: !isUnsignedUnsentDraft(row),
     sign_url: row?.sign_token ? publicSignUrl(row.sign_token) : null,
   };
 }
@@ -169,7 +208,7 @@ export async function createContract(input: z.infer<typeof createContractSchema>
   return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
 
-// ─── UPDATE (only unsigned) ───────────────────────────────────
+// ─── UPDATE (only completely unsigned, unsent drafts) ─────────
 export const updateContractSchema = z.object({
   contract_id: UUID,
   title: z.string().trim().min(1).max(200).optional(),
@@ -194,9 +233,7 @@ export async function updateContract(input: z.infer<typeof updateContractSchema>
     .eq('id', input.contract_id).maybeSingle();
   if (error) throw new WriteError('validation', error.message);
   if (!existing) throw new WriteError('not_found', 'contract_id not found');
-  if (isSigned(existing)) {
-    throw new WriteError('forbidden', 'contract is signed/locked and cannot be modified via MCP');
-  }
+  requireUnsignedUnsentDraft(existing);
 
   if (input.project_id) {
     const { data: proj } = await db().from('projects').select('id, client_id')
@@ -214,45 +251,26 @@ export async function updateContract(input: z.infer<typeof updateContractSchema>
 
   const { data, error: upErr } = await db().from('contracts').update(patch)
     .eq('id', input.contract_id)
-    .is('client_signed_at', null) // race guard: never overwrite a just-signed contract
-    .in('status', ['draft', 'sent'])
-    .select(CONTRACT_SELECT).single();
-  if (upErr) throw new WriteError('conflict', upErr.message);
-  if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
-  return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
-}
-
-// ─── SEND (draft → sent). No email dispatch; returns sign_url. ─
-export const sendContractSchema = z.object({
-  contract_id: UUID,
-  idempotency_key: IDEMPOTENCY_KEY,
-}).strict();
-
-export async function sendContract(input: z.infer<typeof sendContractSchema>, ctx: WriteCtx) {
-  const replay = await replayContract('aceleriq_send_contract', ctx.keyId, input.idempotency_key);
-  if (replay) {
-    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = replay.record.id;
-    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
-  }
-
-  const { data: existing } = await db().from('contracts').select(CONTRACT_SELECT)
-    .eq('id', input.contract_id).maybeSingle();
-  if (!existing) throw new WriteError('not_found', 'contract_id not found');
-  if (isSigned(existing)) throw new WriteError('forbidden', 'contract is signed/locked');
-  if ((existing as any).status === 'cancelled') throw new WriteError('conflict', 'contract is cancelled');
-
-  const { data, error } = await db().from('contracts')
-    .update({ status: 'sent', sent_at: new Date().toISOString() })
-    .eq('id', input.contract_id)
+    .eq('status', 'draft')
+    .eq('updated_at', (existing as any).updated_at)
+    .is('admin_signature_name', null)
+    .is('admin_signed_at', null)
+    .is('admin_signature_ip', null)
+    .is('client_signature_name', null)
     .is('client_signed_at', null)
-    .in('status', ['draft', 'sent'])
-    .select(CONTRACT_SELECT).single();
-  if (error) throw new WriteError('conflict', error.message);
+    .is('client_signature_ip', null)
+    .is('sent_at', null)
+    .is('file_id', null)
+    .select(CONTRACT_SELECT).maybeSingle();
+  if (upErr) throw new WriteError('conflict', upErr.message);
+  if (!data) {
+    throw new WriteError('conflict', 'contract changed or is no longer an unsigned, unsent draft');
+  }
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
   return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }
 
-// ─── CANCEL (only unsigned). Terminal state. ──────────────────
+// ─── CANCEL (only completely unsigned, unsent drafts) ─────────
 export const cancelContractSchema = z.object({
   contract_id: UUID,
   reason: z.string().trim().max(2000).optional(),
@@ -266,11 +284,11 @@ export async function cancelContract(input: z.infer<typeof cancelContractSchema>
     return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
   }
 
-  const { data: existing } = await db().from('contracts').select(CONTRACT_SELECT)
+  const { data: existing, error: readError } = await db().from('contracts').select(CONTRACT_SELECT)
     .eq('id', input.contract_id).maybeSingle();
+  if (readError) throw new WriteError('validation', readError.message);
   if (!existing) throw new WriteError('not_found', 'contract_id not found');
-  if (isSigned(existing)) throw new WriteError('forbidden', 'contract is signed/locked');
-  if ((existing as any).status === 'cancelled') throw new WriteError('conflict', 'already cancelled');
+  requireUnsignedUnsentDraft(existing);
 
   const patch: Record<string, unknown> = { status: 'cancelled' };
   if (input.reason) {
@@ -280,10 +298,21 @@ export async function cancelContract(input: z.infer<typeof cancelContractSchema>
 
   const { data, error } = await db().from('contracts').update(patch)
     .eq('id', input.contract_id)
+    .eq('status', 'draft')
+    .eq('updated_at', (existing as any).updated_at)
+    .is('admin_signature_name', null)
+    .is('admin_signed_at', null)
+    .is('admin_signature_ip', null)
+    .is('client_signature_name', null)
     .is('client_signed_at', null)
-    .in('status', ['draft', 'sent'])
-    .select(CONTRACT_SELECT).single();
+    .is('client_signature_ip', null)
+    .is('sent_at', null)
+    .is('file_id', null)
+    .select(CONTRACT_SELECT).maybeSingle();
   if (error) throw new WriteError('conflict', error.message);
+  if (!data) {
+    throw new WriteError('conflict', 'contract changed or is no longer an unsigned, unsent draft');
+  }
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = (data as any).id;
   return { record: enrichContract(data as any), replayed: false, correlation_id: ctx.correlationId };
 }

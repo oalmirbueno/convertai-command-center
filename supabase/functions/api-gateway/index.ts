@@ -64,6 +64,15 @@ const SAFE_PROFILE_UPDATES = new Set([
   'overdue_since',
 ])
 
+const SAFE_FILE_UPDATES = new Set([
+  'folder',
+  'file_type',
+  'description',
+  'caption',
+  'tags',
+  'sensitivity',
+])
+
 // ─── Handlers ───────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -309,8 +318,13 @@ const handlers: Record<string, Handler> = {
 
   update_file: async (db, p) => {
     requireFields(p, ['file_id'])
-    const { file_id, ...updates } = p
-    delete updates.action
+    const { file_id } = p
+    const updates = Object.fromEntries(
+      Object.entries(p).filter(([key]) => SAFE_FILE_UPDATES.has(key)),
+    )
+    if (Object.keys(updates).length === 0) {
+      throw new Error('No supported file metadata fields to update')
+    }
     const { data, error } = await db.from('files').update(updates).eq('id', file_id).select().single()
     if (error) throw error
     return ok(data)

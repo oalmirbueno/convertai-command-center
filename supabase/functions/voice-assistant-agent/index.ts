@@ -135,19 +135,98 @@ function quickPdfText(bytes: Uint8Array): string {
 
 type LoadedDoc = { fileName: string; text: string; source: string };
 
-async function fetchOneAsText(url: string, name: string): Promise<string> {
+type DocumentSource = {
+  fileUrl?: string | null;
+  storageBucket?: string | null;
+  storagePath?: string | null;
+};
+
+function storageRefFromSource(
+  source: DocumentSource,
+): { bucket: string; path: string } | null {
+  if (source.storageBucket && source.storagePath) {
+    return { bucket: source.storageBucket, path: source.storagePath };
+  }
+
+  const value = source.fileUrl;
+  if (!value) return null;
+  const privatePrefixes = [
+    ["files://", "files"],
+    ["mcp-files://", "mcp-files"],
+    ["workspace://", "workspace"],
+  ] as const;
+  for (const [prefix, bucket] of privatePrefixes) {
+    if (value.startsWith(prefix)) {
+      const path = value.slice(prefix.length);
+      return path ? { bucket, path } : null;
+    }
+  }
+
+  if (!/^https?:\/\//i.test(value)) return null;
   try {
-    const resp = await fetch(url);
-    if (!resp.ok) return "";
-    const ct = resp.headers.get("content-type") || "";
-    if (ct.includes("pdf") || /\.pdf(\?|$)/i.test(url) || /\.pdf$/i.test(name)) {
-      const buf = new Uint8Array(await resp.arrayBuffer());
-      return quickPdfText(buf);
+    const url = new URL(value);
+    const marker = "/storage/v1/object/";
+    const markerIndex = url.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    const parts = url.pathname
+      .slice(markerIndex + marker.length)
+      .split("/")
+      .filter(Boolean);
+    if (["public", "sign", "authenticated"].includes(parts[0])) parts.shift();
+    const bucket = parts.shift();
+    if (!bucket || parts.length === 0) return null;
+    return {
+      bucket: decodeURIComponent(bucket),
+      path: decodeURIComponent(parts.join("/")),
+    };
+  } catch {
+    return null;
+  }
+}
+
+async function readableBodyAsText(
+  body: Blob | Response,
+  name: string,
+  sourceHint = "",
+): Promise<string> {
+  const contentType = body instanceof Response
+    ? body.headers.get("content-type") || ""
+    : body.type || "";
+  if (
+    contentType.includes("pdf")
+    || /\.pdf(\?|$)/i.test(sourceHint)
+    || /\.pdf$/i.test(name)
+  ) {
+    const buf = new Uint8Array(await body.arrayBuffer());
+    return quickPdfText(buf);
+  }
+  if (
+    contentType.startsWith("text/")
+    || contentType.includes("json")
+    || /\.(txt|md|csv|tsv|json|yaml|yml|log|xml|html?)$/i.test(name)
+  ) {
+    const text = await body.text();
+    return text.slice(0, 18000);
+  }
+  return "";
+}
+
+async function fetchOneAsText(
+  supabase: ReturnType<typeof createClient>,
+  source: DocumentSource,
+  name: string,
+): Promise<string> {
+  try {
+    const storageRef = storageRefFromSource(source);
+    if (storageRef) {
+      const { data, error } = await supabase.storage
+        .from(storageRef.bucket)
+        .download(storageRef.path);
+      if (error || !data) return "";
+      return await readableBodyAsText(data, name, storageRef.path);
     }
-    if (ct.startsWith("text/") || /\.(txt|md|csv|tsv|json|yaml|yml|log|xml|html?)$/i.test(name)) {
-      const text = await resp.text();
-      return text.slice(0, 18000);
-    }
+    // Never fetch arbitrary external URLs from a service-role function.
+    // Contract/file documents must resolve to a known Supabase Storage object.
     return "";
   } catch { return ""; }
 }
@@ -177,7 +256,11 @@ async function loadAllClientDocs(
       const inline = ((c.description || "") as string).slice(0, 18000);
       let text = inline;
       if ((!text || text.length < 200) && c.original_file_url) {
-        const fetched = await fetchOneAsText(c.original_file_url as string, name);
+        const fetched = await fetchOneAsText(
+          supabase,
+          { fileUrl: c.original_file_url as string },
+          name,
+        );
         if (fetched) text = fetched;
       }
       if (text) docs.push({ fileName: name, text: text.slice(0, 18000), source: "contrato" });
@@ -188,7 +271,7 @@ async function loadAllClientDocs(
     // 2) Arquivos da pasta "contratos" (uploads avulsos)
     const { data: files } = await supabase
       .from("files")
-      .select("file_url, file_name, folder, file_type, created_at")
+      .select("file_url, file_name, folder, file_type, storage_bucket, storage_path, created_at")
       .eq("client_id", clientId)
       .in("folder", ["contratos", "documentos", "operacionais"])
       .order("created_at", { ascending: false })
@@ -197,9 +280,16 @@ async function loadAllClientDocs(
       if (docs.length >= MAX_DOCS) break;
       // evita duplicar pelo nome
       if (docs.some((d) => d.fileName === f.file_name)) continue;
-      const url = f.file_url as string;
-      if (!url) continue;
-      const text = await fetchOneAsText(url, (f.file_name || "doc") as string);
+      if (!f.file_url && !(f.storage_bucket && f.storage_path)) continue;
+      const text = await fetchOneAsText(
+        supabase,
+        {
+          fileUrl: f.file_url as string | null,
+          storageBucket: f.storage_bucket as string | null,
+          storagePath: f.storage_path as string | null,
+        },
+        (f.file_name || "doc") as string,
+      );
       if (text) docs.push({ fileName: (f.file_name || "doc") as string, text: text.slice(0, 18000), source: f.folder as string });
     }
   } catch {}
@@ -281,12 +371,28 @@ Deno.serve(async (req) => {
         status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const caller = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
 
 
     let body: RequestBody;
     try { body = (await req.json()) as RequestBody; }
     catch { body = { text: "" } as RequestBody; }
     if (typeof body?.text !== "string") body.text = "";
+    if (body.clientId) {
+      const { data: canAccess, error: accessError } = await caller.rpc(
+        "can_access_client",
+        { _client_id: body.clientId },
+      );
+      if (accessError || canAccess !== true) {
+        return new Response(JSON.stringify({ error: "Forbidden" }), {
+          status: 403,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+    }
     const incomingAttachments = [
       ...(body.attachment?.text ? [body.attachment] : []),
       ...((body.attachments || []).filter((a) => a?.text)),

@@ -35,7 +35,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
   const load = useCallback(async () => {
     setLoading(true);
     const [{ data: file }, { data }] = await Promise.all([
-      supabase.from("files").select("extraction_status, extraction_error").eq("id", fileId).maybeSingle(),
+      (supabase as any).from("staff_files_secure").select("extraction_status, extraction_error").eq("id", fileId).maybeSingle(),
       supabase
         .from("file_content_chunks")
         .select("id, chunk_index, content_type, page_number, sheet_name, slide_number, text")

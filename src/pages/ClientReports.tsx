@@ -39,12 +39,13 @@ export default function ClientReports() {
   const { data: reports, isLoading } = useQuery({
     queryKey: ["reports-client", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("reports")
-        .select("*, project:projects(name)")
+        .select("id, project_id, client_id, title, period_start, period_end, metrics, summary, file_url, status, created_by, created_at, highlights, next_steps, chart_type, chart_data, images, project:projects(name)")
         .eq("client_id", clientId!)
         .eq("status", "published")
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user,
@@ -247,4 +248,3 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
     </div>
   );
 }
-

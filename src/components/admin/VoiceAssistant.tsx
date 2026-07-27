@@ -957,10 +957,11 @@ export default function VoiceAssistant() {
     const path = `${client.id}/${Date.now()}-${f.name}`;
     const { error: upErr } = await supabase.storage.from("files").upload(path, f);
     if (upErr) throw upErr;
-    const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
     const { error } = await supabase.from("files").insert({
-      client_id: client.id, file_name: f.name, file_url: pub.publicUrl,
+      client_id: client.id, file_name: f.name, file_url: `files://${path}`,
       file_type: f.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
+      storage_bucket: "files", storage_path: path, visibility: "internal",
+      approval_status: "none",
     } as any);
     if (error) throw error;
     appendLog({ kind: "ok", text: `Arquivo "${f.name}" enviado` });

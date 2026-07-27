@@ -22,36 +22,56 @@ Deno.serve(async (req) => {
     if (!authHeader?.startsWith("Bearer ")) return json({ error: "unauthorized" }, 401);
     const bearer = authHeader.slice(7).trim();
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const trustedService = bearer === serviceKey;
+    let caller: ReturnType<typeof createClient> | null = null;
 
-    if (bearer !== serviceKey) {
-      const supabaseAuth = createClient(
-        Deno.env.get("SUPABASE_URL")!,
-        Deno.env.get("SUPABASE_ANON_KEY")!,
-        { global: { headers: { Authorization: authHeader } } },
+    if (!trustedService) {
+      caller = createClient(
+        supabaseUrl,
+        serviceKey,
+        {
+          auth: { persistSession: false, autoRefreshToken: false },
+          global: { headers: { Authorization: authHeader } },
+        },
       );
-      const { data: userData, error: userErr } = await supabaseAuth.auth.getUser();
+      const { data: userData, error: userErr } = await caller.auth.getUser();
       if (userErr || !userData?.user) return json({ error: "unauthorized" }, 401);
-      const { data: isStaff } = await supabaseAuth.rpc("is_staff", { _user_id: userData.user.id });
-      if (!isStaff) return json({ error: "forbidden" }, 403);
     }
 
 
     const supabase = createClient(
-      Deno.env.get("SUPABASE_URL")!,
-      Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+      supabaseUrl,
+      serviceKey,
     );
 
-    const { contract_id, override_email } = await req.json();
+    const { contract_id } = await req.json();
     if (!contract_id) return json({ error: "missing contract_id" }, 400);
 
     const { data: contract } = await supabase
       .from("contracts").select("*").eq("id", contract_id).maybeSingle();
     if (!contract) return json({ error: "contract not found" }, 404);
+    if (!trustedService) {
+      const { data: canManage, error: manageError } = await caller!.rpc(
+        "can_manage_client",
+        { _client_id: contract.client_id },
+      );
+      if (manageError || canManage !== true) {
+        return json({ error: "forbidden" }, 403);
+      }
+    }
     if (!contract.admin_signed_at) return json({ error: "admin must sign first" }, 400);
+    if (
+      contract.client_signed_at
+      || contract.file_id
+      || !["draft", "sent"].includes(contract.status)
+    ) {
+      return json({ error: "contract is no longer available for sending" }, 409);
+    }
 
     const { data: client } = await supabase
       .from("profiles").select("full_name, email, company_name").eq("id", contract.client_id).maybeSingle();
-    const recipient = (override_email as string | undefined)?.trim() || client?.email;
+    const recipient = client?.email?.trim();
     if (!recipient) return json({ error: "client without email" }, 400);
 
     const signUrl = `${PORTAL_URL}/contrato/${contract.sign_token}`;
@@ -143,10 +163,13 @@ Deno.serve(async (req) => {
       return json({ error: result?.message || "email send failed", details: result }, 500);
     }
 
-    await supabase.from("contracts").update({
+    const { error: statusError } = await supabase.from("contracts").update({
       status: "sent",
       sent_at: new Date().toISOString(),
     }).eq("id", contract_id);
+    if (statusError) {
+      return json({ error: "email sent but contract status was not recorded" }, 500);
+    }
 
     return json({ ok: true, signUrl });
   } catch (e: any) {

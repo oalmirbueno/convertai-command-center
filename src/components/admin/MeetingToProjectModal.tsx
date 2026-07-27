@@ -60,14 +60,20 @@ export default function MeetingToProjectModal({ open, onClose }: Props) {
   const uploadFiles = async (): Promise<string[]> => {
     const urls: string[] = [];
     for (const file of files) {
-      const path = `estrategicos/${Date.now()}_${file.name}`;
+      const path = `${clientId}/estrategicos/${Date.now()}_${file.name}`;
       const { error } = await supabase.storage.from("files").upload(path, file);
       if (error) {
         console.error("Upload error:", error);
         continue;
       }
-      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
-      urls.push(urlData.publicUrl);
+      const { data: urlData, error: signError } = await supabase.storage
+        .from("files")
+        .createSignedUrl(path, 15 * 60);
+      if (signError || !urlData?.signedUrl) {
+        console.error("Signed URL error:", signError);
+        continue;
+      }
+      urls.push(urlData.signedUrl);
     }
     return urls;
   };

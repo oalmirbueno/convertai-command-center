@@ -167,15 +167,18 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
           const path = `${clientId}/estrategicos/${data.project_id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
           const { error: uploadErr } = await supabase.storage.from("files").upload(path, file);
           if (!uploadErr) {
-            const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
             await supabase.from("files").insert({
               file_name: file.name,
-              file_url: urlData.publicUrl,
+              file_url: `files://${path}`,
               file_type: "strategic",
               folder: "estrategicos",
               client_id: clientId,
               project_id: data.project_id,
               uploaded_by: user!.id,
+              storage_bucket: "files",
+              storage_path: path,
+              visibility: "internal",
+              approval_status: "none",
             });
           }
         }

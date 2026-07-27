@@ -52,6 +52,7 @@ export default function AdminRequests() {
         const label = statusOptions.find(s => s.value === status)?.label || status;
         const { data: upd } = await supabase.from("updates").insert({
           project_id: selected.project_id, author_id: authUser.id,
+          client_visible: true,
           message: `Pedido "${selected.title}": status alterado para ${label}`, update_type: "request",
         }).select().single();
         notifyOpsUpdate(upd);
@@ -104,6 +105,7 @@ export default function AdminRequests() {
       if (authUser) {
         const { data: upd } = await supabase.from("updates").insert({
           project_id: selected.project_id, author_id: authUser.id,
+          client_visible: true,
           message: `Pedido "${selected.title}" concluído`, update_type: "request",
         }).select().single();
         notifyOpsUpdate(upd);
