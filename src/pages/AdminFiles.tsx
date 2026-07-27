@@ -1221,12 +1221,59 @@ export default function AdminFiles() {
           )}
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
             {isEditableFile(previewFile) && (
+              <>
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => handleRequestAgencyReview(previewFile)}
                 >
                   Solicitar revisão interna
                 </Button>
+                {canReviewAndRelease && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDirectReleaseToClient(previewFile, "client_shared")}
+                    >
+                      Disponibilizar ao cliente
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleDirectReleaseToClient(previewFile, "approval")}
+                    >
+                      Enviar para aprovação
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+            {previewFile?.agency_approval_status === "pending" && canReviewAndRelease && (
+              <Button
+                size="sm"
+                onClick={() => handleAgencyApproval(previewFile)}
+              >
+                Aprovar internamente
+              </Button>
+            )}
+            {previewFile?.agency_approval_status === "approved"
+              && previewFile?.visibility === "internal"
+              && canReviewAndRelease && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleReleaseToClient(previewFile, "client_shared")}
+                  >
+                    Disponibilizar ao cliente
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleReleaseToClient(previewFile, "approval")}
+                  >
+                    Enviar para aprovação
+                  </Button>
+                </>
               )}
             <Button
               variant="outline"
@@ -1432,14 +1479,14 @@ export default function AdminFiles() {
               <div>
                 <Label className="label-sm mb-1.5 block">O que fazer depois de salvar?</Label>
                 <RadioGroup
-                  value={uploadRequestReview ? "review" : "draft"}
-                  onValueChange={(value) => setUploadRequestReview(value === "review")}
+                  value={uploadPostSaveAction}
+                  onValueChange={(value) => setUploadPostSaveAction(value as UploadPostSaveAction)}
                   className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
                   <Label
                     htmlFor="save-internal-draft"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      !uploadRequestReview
+                      uploadPostSaveAction === "draft"
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
@@ -1453,20 +1500,52 @@ export default function AdminFiles() {
                   <Label
                     htmlFor="request-agency-review"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      uploadRequestReview
+                      uploadPostSaveAction === "internal_review"
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <RadioGroupItem id="request-agency-review" value="review" className="mt-0.5 shrink-0" />
+                    <RadioGroupItem id="request-agency-review" value="internal_review" className="mt-0.5 shrink-0" />
                     <span>
                       <span className="block font-medium">Solicitar revisão interna</span>
                       <span className="mt-0.5 block text-[10px] opacity-75">Admin ou manager revisa antes do cliente receber.</span>
                     </span>
                   </Label>
+                  {canReviewAndRelease && (
+                    <>
+                      <Label
+                        htmlFor="release-client-shared"
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                          uploadPostSaveAction === "client_shared"
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <RadioGroupItem id="release-client-shared" value="client_shared" className="mt-0.5 shrink-0" />
+                        <span>
+                          <span className="block font-medium">Disponibilizar ao cliente</span>
+                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova internamente e o cliente só visualiza.</span>
+                        </span>
+                      </Label>
+                      <Label
+                        htmlFor="release-for-approval"
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                          uploadPostSaveAction === "approval"
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <RadioGroupItem id="release-for-approval" value="approval" className="mt-0.5 shrink-0" />
+                        <span>
+                          <span className="block font-medium">Enviar para aprovação</span>
+                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova e o cliente decide no painel.</span>
+                        </span>
+                      </Label>
+                    </>
+                  )}
                 </RadioGroup>
                 <p className="mt-2 text-[10px] text-muted-foreground">
-                  O cliente não recebe nem acessa o conteúdo nesta etapa.
+                  Para enviar ao cliente, escolha se precisa de aprovação final ou se será apenas disponibilizado.
                 </p>
               </div>
             </div>
@@ -1478,9 +1557,13 @@ export default function AdminFiles() {
             <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
               {uploading
                 ? "Salvando..."
-                : uploadRequestReview
-                  ? "Salvar e solicitar revisão"
-                  : "Salvar internamente"}
+                : uploadPostSaveAction === "approval"
+                  ? "Salvar e enviar para aprovação"
+                  : uploadPostSaveAction === "client_shared"
+                    ? "Salvar e disponibilizar"
+                    : uploadPostSaveAction === "internal_review"
+                      ? "Salvar e solicitar revisão"
+                      : "Salvar internamente"}
             </Button>
           </DialogFooter>
         </DialogContent>
