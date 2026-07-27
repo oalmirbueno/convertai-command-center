@@ -25,6 +25,7 @@ import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePrev
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
+import { createFileRecord } from "@/lib/fileRecordActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 
@@ -558,7 +559,7 @@ export default function AdminFiles() {
           } catch { return "Vídeo externo"; }
         })();
         const fileId = crypto.randomUUID();
-        const { data: inserted, error: fileError } = await (supabase as any).from("files").insert({
+        const inserted = await createFileRecord({
           id: fileId,
           client_id: selectedClient,
           file_name: displayName,
@@ -576,8 +577,7 @@ export default function AdminFiles() {
           revision_of_file_id: revisionOfFileId,
           caption: uploadCaption.trim() || null,
           description: uploadDescription.trim() || null,
-        }).select("id").single();
-        if (fileError) throw fileError;
+        });
         rootFileId = inserted?.id || fileId;
         const reviewSubmitted = await requestReviewAfterSave(rootFileId);
         setUploadProgress(100);
@@ -615,32 +615,34 @@ export default function AdminFiles() {
           ? (uploadName || file.name)
           : (isCarousel ? `${uploadName || uploadFiles[0].name} (${i + 1}/${totalFiles})` : file.name);
 
-        const { data: inserted, error: insertError } = await (supabase as any).from("files").insert({
-          id: fileId,
-          client_id: selectedClient,
-          file_name: fileName,
-          file_url: `files://${path}`,
-          file_type: isCarousel ? "creative" : uploadType,
-          mime_type: file.type || null,
-          extension: ext || null,
-          storage_bucket: "files",
-          storage_path: path,
-          folder: uploadFolder,
-          uploaded_by: authUid,
-          project_id: uploadProject === "none" ? null : uploadProject || null,
-          approval_status: "none",
-          agency_approval_status: "not_requested",
-          visibility: "internal",
-          requires_approval: false,
-          status: "ready",
-          version: nextVersion,
-          revision_of_file_id: i === 0 ? revisionOfFileId : null,
-          caption: i === 0 ? (uploadCaption.trim() || null) : null,
-          carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
-          description: i === 0 ? (uploadDescription.trim() || null) : null,
-          parent_file_id: isCarousel && i > 0 ? parentFileId : null,
-        }).select("id").single();
-        if (insertError) {
+        let inserted;
+        try {
+          inserted = await createFileRecord({
+            id: fileId,
+            client_id: selectedClient,
+            file_name: fileName,
+            file_url: `files://${path}`,
+            file_type: isCarousel ? "creative" : uploadType,
+            mime_type: file.type || null,
+            extension: ext || null,
+            storage_bucket: "files",
+            storage_path: path,
+            folder: uploadFolder,
+            uploaded_by: authUid,
+            project_id: uploadProject === "none" ? null : uploadProject || null,
+            approval_status: "none",
+            agency_approval_status: "not_requested",
+            visibility: "internal",
+            requires_approval: false,
+            status: "ready",
+            version: nextVersion,
+            revision_of_file_id: i === 0 ? revisionOfFileId : null,
+            caption: i === 0 ? (uploadCaption.trim() || null) : null,
+            carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
+            description: i === 0 ? (uploadDescription.trim() || null) : null,
+            parent_file_id: isCarousel && i > 0 ? parentFileId : null,
+          });
+        } catch (insertError: any) {
           const { error: cleanupError } = await supabase.storage.from("files").remove([path]);
           if (cleanupError) {
             throw new Error(`${insertError.message}. O arquivo temporário também não pôde ser removido.`);
@@ -702,8 +704,10 @@ export default function AdminFiles() {
       setSearchParams(next, { replace: true });
     } catch (err: any) {
       const raw = err?.message || "";
-      const friendly = /row-level security|permission denied|JWT|sessão/i.test(raw)
-        ? "Sua sessão expirou ou perdeu permissão. Saia e entre novamente para continuar."
+      const friendly = /row-level security|permission denied/i.test(raw)
+        ? "O registro do arquivo foi bloqueado pela permissão do banco. Tente novamente; se persistir, chame o suporte técnico."
+        : /JWT|sessão/i.test(raw)
+          ? "A sessão precisa ser renovada. Saia e entre novamente para continuar."
         : raw || "Não foi possível enviar o arquivo.";
       toast({ title: "Erro no upload", description: friendly, variant: "destructive" });
     }

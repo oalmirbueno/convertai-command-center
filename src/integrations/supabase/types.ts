@@ -2900,6 +2900,63 @@ export type Database = {
         }
         Returns: string
       }
+      create_file_record: {
+        Args: { p_file: Json }
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       decide_file_approval: {
         Args: {
           p_decision: string

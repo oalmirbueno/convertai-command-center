@@ -1,6 +1,7 @@
 import { useState, useRef } from "react";
 import { X, Loader2, CalendarIcon, Upload, FileText, Trash2, Sparkles, CheckCircle2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createFileRecord } from "@/lib/fileRecordActions";
 import { useQueryClient } from "@tanstack/react-query";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -167,7 +168,7 @@ export default function MeetingNotesModal({ open, onClose }: Props) {
           const path = `${clientId}/estrategicos/${data.project_id}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}.${ext}`;
           const { error: uploadErr } = await supabase.storage.from("files").upload(path, file);
           if (!uploadErr) {
-            await supabase.from("files").insert({
+            await createFileRecord({
               file_name: file.name,
               file_url: `files://${path}`,
               file_type: "strategic",

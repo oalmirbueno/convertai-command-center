@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback, useMemo } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Mic, MicOff, Sparkles, X, Send, Paperclip, Loader2, CheckCircle2, AlertCircle, FileText, ArrowRight, Edit3, Undo2, ShieldAlert, Brain } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { createFileRecord } from "@/lib/fileRecordActions";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { parseCommand, summarizeIntent, ParsedIntent } from "@/lib/voiceCommands";
@@ -957,13 +958,12 @@ export default function VoiceAssistant() {
     const path = `${client.id}/${Date.now()}-${f.name}`;
     const { error: upErr } = await supabase.storage.from("files").upload(path, f);
     if (upErr) throw upErr;
-    const { error } = await supabase.from("files").insert({
+    await createFileRecord({
       client_id: client.id, file_name: f.name, file_url: `files://${path}`,
       file_type: f.type, folder: p.folder || "operacionais", uploaded_by: user!.id,
       storage_bucket: "files", storage_path: path, visibility: "internal",
       approval_status: "none",
     } as any);
-    if (error) throw error;
     appendLog({ kind: "ok", text: `Arquivo "${f.name}" enviado` });
   }
 
