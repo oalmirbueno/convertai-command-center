@@ -2935,6 +2935,7 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.task_checklist_items TO authentic
 GRANT SELECT ON public.file_content_chunks TO authenticated;
 GRANT SELECT ON public.file_processing_jobs TO authenticated;
 GRANT SELECT ON public.projects TO authenticated;
+GRANT SELECT ON public.projects TO service_role;
 GRANT SELECT, INSERT, DELETE ON public.updates TO authenticated;
 
 CREATE POLICY tasks_staff_select
