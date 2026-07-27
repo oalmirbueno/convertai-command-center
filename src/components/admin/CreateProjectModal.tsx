@@ -81,6 +81,21 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setDeadline(editProject.deadline ? new Date(editProject.deadline) : undefined);
       setScope(editProject.scope || "");
       setObjectives(editProject.objectives || "");
+      // Detecta modo financeiro atual pelo plano existente
+      (async () => {
+        const { data: existing } = await supabase
+          .from("project_payments")
+          .select("id, entry_percentage, installments_count")
+          .eq("project_id", editProject.id)
+          .maybeSingle();
+        if (existing) {
+          setFinancialMode("create");
+          setEntryPct(String(existing.entry_percentage ?? "50"));
+          setInstallmentsCount(String(existing.installments_count ?? "1"));
+        } else {
+          setFinancialMode(editProject.total_value ? "already" : "none");
+        }
+      })();
     } else {
       setClientId("");
       setName("");
@@ -98,6 +113,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setObjectives("");
     }
   }, [editProject]);
+
 
   if (!open) return null;
 
