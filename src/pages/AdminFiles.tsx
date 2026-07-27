@@ -27,7 +27,12 @@ import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
 import { createFileRecord } from "@/lib/fileRecordActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
-import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
+import {
+  releaseFileToClient,
+  requestFileAgencyReview,
+  reviewFileAgency,
+  type FileReleaseMode,
+} from "@/lib/fileApprovalActions";
 
 const FOLDERS = [
   { id: "estrategicos", label: "Estratégicos" },
@@ -81,6 +86,8 @@ type EditableFileState = {
   locked_at?: string | null;
   visibility?: string | null;
 };
+
+type UploadPostSaveAction = "draft" | "internal_review" | "client_shared" | "approval";
 
 const isEditableFile = (file?: EditableFileState | null) =>
   !!file
@@ -207,6 +214,7 @@ export default function AdminFiles() {
   const { user, profile, loading: loadingAuth } = useAuth();
   const isStaff = profile?.role === "admin"
     || ["design", "traffic", "manager"].includes(profile?.role || "");
+  const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
   const { data: allFiles, isLoading: loadingFiles } = useAllFiles();
@@ -239,7 +247,7 @@ export default function AdminFiles() {
   const [uploadFolder, setUploadFolder] = useState(initialFolder);
   const [uploadProject, setUploadProject] = useState("");
   const [uploadType, setUploadType] = useState("criativo");
-  const [uploadRequestReview, setUploadRequestReview] = useState(false);
+  const [uploadPostSaveAction, setUploadPostSaveAction] = useState<UploadPostSaveAction>("draft");
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
@@ -490,19 +498,122 @@ export default function AdminFiles() {
     }
   };
 
-  const requestReviewAfterSave = async (fileId: string) => {
-    if (!uploadRequestReview) return false;
+  const handleAgencyApproval = async (file: any) => {
+    if (!canReviewAndRelease || !file?.id) return;
     try {
-      await requestFileAgencyReview(fileId);
-      return true;
+      await reviewFileAgency(file.id, "approved");
+      await queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      setPreviewFile((current: any) => current?.id === file.id
+        ? {
+          ...current,
+          agency_approval_status: "approved",
+          agency_feedback: null,
+          agency_reviewed_by: user?.id || current.agency_reviewed_by,
+          agency_reviewed_at: new Date().toISOString(),
+        }
+        : current);
+      toast({ title: "Revisão interna aprovada" });
     } catch (error: any) {
       toast({
-        title: "Conteúdo salvo, mas a revisão não foi solicitada",
-        description: error?.message || "Abra o conteúdo e solicite a revisão interna novamente.",
+        title: "Não foi possível aprovar internamente",
+        description: error?.message || "Tente novamente.",
         variant: "destructive",
       });
-      return false;
     }
+  };
+
+  const handleReleaseToClient = async (file: any, mode: FileReleaseMode) => {
+    if (!canReviewAndRelease || !file?.id) return;
+    try {
+      await releaseFileToClient(file.id, mode);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["all-files"] }),
+        queryClient.invalidateQueries({ queryKey: ["files"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+      ]);
+      setPreviewFile(null);
+      toast({
+        title: mode === "approval" ? "Enviado para aprovação do cliente" : "Disponibilizado ao cliente",
+        description: mode === "approval"
+          ? "O cliente recebeu a entrega para decidir no painel."
+          : "O cliente recebeu a entrega sem etapa de aprovação final.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível liberar ao cliente",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDirectReleaseToClient = async (file: any, mode: FileReleaseMode) => {
+    if (!canReviewAndRelease || !file?.id) return;
+    if (!isEditableFile(file)) {
+      toast({
+        title: "Liberação indisponível",
+        description: "Use a fila de aprovações para versões que já entraram em revisão.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await requestFileAgencyReview(file.id);
+      await reviewFileAgency(file.id, "approved");
+      await releaseFileToClient(file.id, mode);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["all-files"] }),
+        queryClient.invalidateQueries({ queryKey: ["files"] }),
+        queryClient.invalidateQueries({ queryKey: ["notifications"] }),
+      ]);
+      setPreviewFile(null);
+      toast({
+        title: mode === "approval" ? "Enviado para aprovação do cliente" : "Disponibilizado ao cliente",
+        description: "A revisão interna foi registrada pelo admin antes da liberação.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível concluir a liberação",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const applyPostSaveAction = async (fileId: string): Promise<UploadPostSaveAction> => {
+    if (uploadPostSaveAction === "draft") return "draft";
+    try {
+      await requestFileAgencyReview(fileId);
+      if (uploadPostSaveAction === "internal_review") return "internal_review";
+      if (!canReviewAndRelease) {
+        throw new Error("Somente admin ou manager pode liberar conteúdo ao cliente.");
+      }
+      await reviewFileAgency(fileId, "approved");
+      await releaseFileToClient(fileId, uploadPostSaveAction);
+      return uploadPostSaveAction;
+    } catch (error: any) {
+      toast({
+        title: "Conteúdo salvo, mas a etapa final falhou",
+        description: error?.message || "Abra o conteúdo e conclua a liberação manualmente.",
+        variant: "destructive",
+      });
+      return "draft";
+    }
+  };
+
+  const postSaveTitle = (action: UploadPostSaveAction, isCarousel?: boolean, totalFiles?: number) => {
+    if (action === "approval") return "Conteúdo enviado para aprovação do cliente";
+    if (action === "client_shared") return "Conteúdo disponibilizado ao cliente";
+    if (action === "internal_review") return "Conteúdo enviado para revisão interna";
+    if (isCarousel) return `Carrossel salvo internamente (${totalFiles || 0} arquivos)`;
+    return "Conteúdo salvo internamente";
+  };
+
+  const postSaveDescription = (action: UploadPostSaveAction) => {
+    if (action === "approval") return "O cliente já pode aprovar ou pedir ajustes no painel.";
+    if (action === "client_shared") return "O cliente já pode visualizar a entrega, sem aprovação final.";
+    if (action === "internal_review") return "A entrega entrou na fila interna antes de ir ao cliente.";
+    return "O cliente ainda não recebeu esta versão.";
   };
 
   const handleUpload = async () => {
@@ -579,12 +690,14 @@ export default function AdminFiles() {
           description: uploadDescription.trim() || null,
         });
         rootFileId = inserted?.id || fileId;
-        const reviewSubmitted = await requestReviewAfterSave(rootFileId);
+        const completedAction = await applyPostSaveAction(rootFileId);
         setUploadProgress(100);
         queryClient.invalidateQueries({ queryKey: ["all-files"] });
+        queryClient.invalidateQueries({ queryKey: ["files"] });
+        queryClient.invalidateQueries({ queryKey: ["notifications"] });
         toast({
-          title: reviewSubmitted ? "Vídeo enviado para revisão interna" : "Vídeo salvo internamente",
-          description: "O cliente ainda não recebeu este conteúdo.",
+          title: postSaveTitle(completedAction),
+          description: postSaveDescription(completedAction),
         });
         setUploadOpen(false);
         resetUploadForm();
@@ -659,7 +772,7 @@ export default function AdminFiles() {
       }
 
       if (!rootFileId) throw new Error("Não foi possível identificar a entrega criada.");
-      const reviewSubmitted = await requestReviewAfterSave(rootFileId);
+      const completedAction = await applyPostSaveAction(rootFileId);
 
       // Notificação estritamente interna. O cliente só é avisado pelo RPC de liberação.
       const { data: adminId, error: adminIdError } = await supabase.rpc("get_admin_user_id");
@@ -669,14 +782,14 @@ export default function AdminFiles() {
           description: adminIdError.message,
           variant: "destructive",
         });
-      } else if (adminId && adminId !== user.id) {
+      } else if (adminId && completedAction === "internal_review") {
         const clientProfile = (clients || []).find((c: any) => c.id === selectedClient);
         const clientName = clientProfile?.company_name || clientProfile?.full_name || "cliente";
         const { error: notificationError } = await supabase.from("notifications").insert({
           user_id: adminId,
           message: `${user.email} salvou ${isCarousel ? `carrossel (${totalFiles})` : "conteúdo"} interno: ${uploadName} para ${clientName}`,
           notification_type: "system",
-          link: reviewSubmitted ? "/aprovacoes" : "/arquivos",
+          link: "/aprovacoes",
         });
         if (notificationError) {
           toast({
@@ -689,13 +802,11 @@ export default function AdminFiles() {
 
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      queryClient.invalidateQueries({ queryKey: ["files"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast({
-        title: reviewSubmitted
-          ? "Conteúdo enviado para revisão interna"
-          : isCarousel
-            ? `Carrossel salvo internamente (${totalFiles} arquivos)`
-            : "Conteúdo salvo internamente",
-        description: "O cliente ainda não recebeu esta versão.",
+        title: postSaveTitle(completedAction, isCarousel, totalFiles),
+        description: postSaveDescription(completedAction),
       });
       setUploadOpen(false);
       resetUploadForm();
@@ -721,7 +832,7 @@ export default function AdminFiles() {
     setUploadName("");
     setUploadProject("");
     setUploadType("criativo");
-    setUploadRequestReview(false);
+    setUploadPostSaveAction("draft");
     setUploadProgress(0);
     setUploadCaption("");
     setUploadCarousel("");
@@ -1110,12 +1221,59 @@ export default function AdminFiles() {
           )}
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
             {isEditableFile(previewFile) && (
+              <>
                 <Button
                   size="sm"
+                  variant="outline"
                   onClick={() => handleRequestAgencyReview(previewFile)}
                 >
                   Solicitar revisão interna
                 </Button>
+                {canReviewAndRelease && (
+                  <>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleDirectReleaseToClient(previewFile, "client_shared")}
+                    >
+                      Disponibilizar ao cliente
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => handleDirectReleaseToClient(previewFile, "approval")}
+                    >
+                      Enviar para aprovação
+                    </Button>
+                  </>
+                )}
+              </>
+            )}
+            {previewFile?.agency_approval_status === "pending" && canReviewAndRelease && (
+              <Button
+                size="sm"
+                onClick={() => handleAgencyApproval(previewFile)}
+              >
+                Aprovar internamente
+              </Button>
+            )}
+            {previewFile?.agency_approval_status === "approved"
+              && previewFile?.visibility === "internal"
+              && canReviewAndRelease && (
+                <>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleReleaseToClient(previewFile, "client_shared")}
+                  >
+                    Disponibilizar ao cliente
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={() => handleReleaseToClient(previewFile, "approval")}
+                  >
+                    Enviar para aprovação
+                  </Button>
+                </>
               )}
             <Button
               variant="outline"
@@ -1321,14 +1479,14 @@ export default function AdminFiles() {
               <div>
                 <Label className="label-sm mb-1.5 block">O que fazer depois de salvar?</Label>
                 <RadioGroup
-                  value={uploadRequestReview ? "review" : "draft"}
-                  onValueChange={(value) => setUploadRequestReview(value === "review")}
+                  value={uploadPostSaveAction}
+                  onValueChange={(value) => setUploadPostSaveAction(value as UploadPostSaveAction)}
                   className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
                   <Label
                     htmlFor="save-internal-draft"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      !uploadRequestReview
+                      uploadPostSaveAction === "draft"
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
@@ -1342,20 +1500,52 @@ export default function AdminFiles() {
                   <Label
                     htmlFor="request-agency-review"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      uploadRequestReview
+                      uploadPostSaveAction === "internal_review"
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <RadioGroupItem id="request-agency-review" value="review" className="mt-0.5 shrink-0" />
+                    <RadioGroupItem id="request-agency-review" value="internal_review" className="mt-0.5 shrink-0" />
                     <span>
                       <span className="block font-medium">Solicitar revisão interna</span>
                       <span className="mt-0.5 block text-[10px] opacity-75">Admin ou manager revisa antes do cliente receber.</span>
                     </span>
                   </Label>
+                  {canReviewAndRelease && (
+                    <>
+                      <Label
+                        htmlFor="release-client-shared"
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                          uploadPostSaveAction === "client_shared"
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <RadioGroupItem id="release-client-shared" value="client_shared" className="mt-0.5 shrink-0" />
+                        <span>
+                          <span className="block font-medium">Disponibilizar ao cliente</span>
+                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova internamente e o cliente só visualiza.</span>
+                        </span>
+                      </Label>
+                      <Label
+                        htmlFor="release-for-approval"
+                        className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
+                          uploadPostSaveAction === "approval"
+                            ? "border-primary bg-primary/10 text-foreground"
+                            : "border-border bg-secondary text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <RadioGroupItem id="release-for-approval" value="approval" className="mt-0.5 shrink-0" />
+                        <span>
+                          <span className="block font-medium">Enviar para aprovação</span>
+                          <span className="mt-0.5 block text-[10px] opacity-75">Admin aprova e o cliente decide no painel.</span>
+                        </span>
+                      </Label>
+                    </>
+                  )}
                 </RadioGroup>
                 <p className="mt-2 text-[10px] text-muted-foreground">
-                  O cliente não recebe nem acessa o conteúdo nesta etapa.
+                  Para enviar ao cliente, escolha se precisa de aprovação final ou se será apenas disponibilizado.
                 </p>
               </div>
             </div>
@@ -1367,9 +1557,13 @@ export default function AdminFiles() {
             <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
               {uploading
                 ? "Salvando..."
-                : uploadRequestReview
-                  ? "Salvar e solicitar revisão"
-                  : "Salvar internamente"}
+                : uploadPostSaveAction === "approval"
+                  ? "Salvar e enviar para aprovação"
+                  : uploadPostSaveAction === "client_shared"
+                    ? "Salvar e disponibilizar"
+                    : uploadPostSaveAction === "internal_review"
+                      ? "Salvar e solicitar revisão"
+                      : "Salvar internamente"}
             </Button>
           </DialogFooter>
         </DialogContent>
