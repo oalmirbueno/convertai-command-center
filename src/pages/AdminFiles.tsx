@@ -536,9 +536,17 @@ export default function AdminFiles() {
     setUploadProgress(5);
 
     try {
+      // Garante que a sessão está fresca antes de inserir — evita RLS por JWT expirado.
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      if (authErr || !authData?.user?.id) {
+        throw new Error("Sua sessão expirou. Faça login novamente para enviar arquivos.");
+      }
+      const authUid = authData.user.id;
+
       let rootFileId: string | null = null;
       const revisionOfFileId = revisionSource?.client_id === selectedClient ? revisionSource.id : null;
       const nextVersion = revisionOfFileId ? revisionVersion : 1;
+
 
       // Links externos também nascem internos e só ficam visíveis após os gates.
       if (uploadMode === "video_link") {
