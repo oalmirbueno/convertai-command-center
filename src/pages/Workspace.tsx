@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { createFileRecord } from "@/lib/fileRecordActions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -1008,7 +1009,7 @@ export default function Workspace() {
         if (error) throw error;
       } else if (n.storage_path) {
         const ext = extOf(n.name).toLowerCase() || null;
-        const { data: fileRow, error: insErr } = await supabase.from("files").insert({
+        const fileRow = await createFileRecord({
           file_name: n.name,
           file_url: `workspace://${n.storage_path}`,
           file_type: n.mime || mediaKindFromFile(n.name, undefined, n.mime),
@@ -1025,8 +1026,7 @@ export default function Workspace() {
           status: "ready",
           visibility: "internal",
           folder: "materiais",
-        }).select("id").single();
-        if (insErr) throw insErr;
+        });
         const { error: reviewError } = await (supabase as any).rpc("request_file_agency_review", {
           p_file_id: (fileRow as any).id,
         });
