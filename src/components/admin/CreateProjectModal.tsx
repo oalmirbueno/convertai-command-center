@@ -47,6 +47,8 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
   const [totalValue, setTotalValue] = useState("");
   const [entryPct, setEntryPct] = useState("50");
   const [installmentsCount, setInstallmentsCount] = useState("1");
+  // "create" = gerar plano agora | "already" = já cobrado/lançado fora | "none" = sem cobrança neste projeto
+  const [financialMode, setFinancialMode] = useState<"create" | "already" | "none">("create");
   const [startDate, setStartDate] = useState<Date | undefined>(new Date());
   const [deadline, setDeadline] = useState<Date | undefined>(undefined);
   const [scope, setScope] = useState("");
@@ -89,6 +91,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       setTotalValue("");
       setEntryPct("50");
       setInstallmentsCount("1");
+      setFinancialMode("create");
       setStartDate(new Date());
       setDeadline(undefined);
       setScope("");
@@ -110,7 +113,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       return;
     }
 
-    if (billingMode === "one_off") {
+    if (billingMode === "one_off" && financialMode !== "none") {
       const total = parseFloat(totalValue);
       if (!total || total <= 0) {
         toast.error("Informe o valor total do projeto avulso");
@@ -127,7 +130,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         project_type: projectType,
         billing_mode: billingMode,
         brand: brand || null,
-        total_value: billingMode === "one_off" ? parseFloat(totalValue) : null,
+        total_value: billingMode === "one_off" && financialMode !== "none" ? parseFloat(totalValue) : null,
         start_date: format(startDate, "yyyy-MM-dd"),
         deadline: format(deadline, "yyyy-MM-dd"),
         scope: scope.trim() || null,
@@ -150,7 +153,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
         if (error) throw error;
 
         // ── Auto-create payment plan for one_off projects ──
-        if (billingMode === "one_off" && newProject) {
+        if (billingMode === "one_off" && financialMode === "create" && newProject) {
           try {
             const total = parseFloat(totalValue);
             const ePct = parseFloat(entryPct) || 0;
@@ -371,33 +374,70 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
           {/* Financeiro do projeto avulso */}
           {billingMode === "one_off" && (
             <div className="rounded-[12px] border border-primary/30 bg-primary/5 p-3.5 space-y-3">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between gap-2">
                 <p className="text-[11px] uppercase tracking-wider text-primary font-semibold">Financeiro do Projeto</p>
-                <span className="text-[10px] text-muted-foreground">Cria entrada + parcelas automaticamente</span>
+                <span className="text-[10px] text-muted-foreground">Evita duplicar lançamento</span>
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
-                  <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00"
-                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada %</label>
-                  <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100"
-                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas</label>
-                  <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1"
-                    className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
-                </div>
+
+              {/* Seletor de modo financeiro — evita duplicidade quando já cobrado no cadastro do cliente */}
+              <div className="grid grid-cols-3 gap-1.5">
+                {[
+                  { v: "create", label: "Gerar plano", hint: "Entrada + parcelas" },
+                  { v: "already", label: "Já cobrado", hint: "Sem faturas novas" },
+                  { v: "none", label: "Sem cobrança", hint: "Cortesia/interno" },
+                ].map((opt) => (
+                  <button
+                    key={opt.v}
+                    type="button"
+                    onClick={() => setFinancialMode(opt.v as any)}
+                    className={`px-2 py-2 rounded-[10px] text-[11px] border transition-all cursor-pointer text-left ${
+                      financialMode === opt.v
+                        ? "border-primary bg-primary/10 text-foreground font-semibold"
+                        : "border-border bg-secondary text-muted-foreground hover:border-muted-foreground/40"
+                    }`}
+                  >
+                    <div>{opt.label}</div>
+                    <div className="text-[9px] opacity-70 font-normal">{opt.hint}</div>
+                  </button>
+                ))}
               </div>
-              {totalValue && parseFloat(totalValue) > 0 && (
+
+              {financialMode !== "none" && (
+                <div className="grid grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor total *</label>
+                    <input value={totalValue} onChange={(e) => setTotalValue(e.target.value)} type="number" step="0.01" placeholder="0,00"
+                      className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                  </div>
+                  {financialMode === "create" && (
+                    <>
+                      <div>
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Entrada %</label>
+                        <input value={entryPct} onChange={(e) => setEntryPct(e.target.value)} type="number" step="1" min="0" max="100"
+                          className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Parcelas</label>
+                        <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="1"
+                          className="mt-1 w-full bg-secondary border border-border rounded-[10px] px-2.5 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50" />
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {financialMode === "create" && totalValue && parseFloat(totalValue) > 0 && (
                 <p className="text-[11px] text-muted-foreground">
                   Entrada: <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * parseFloat(entryPct || "0")) / 100).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                   {" · "}
                   {installmentsCount}× de <span className="text-foreground font-mono">R$ {((parseFloat(totalValue) * (100 - parseFloat(entryPct || "0"))) / 100 / Math.max(parseInt(installmentsCount) || 1, 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}</span>
                 </p>
+              )}
+              {financialMode === "already" && (
+                <p className="text-[11px] text-muted-foreground">Valor apenas para referência do projeto. Nenhuma fatura será criada aqui — use quando a cobrança já foi lançada no cadastro do cliente ou fora do sistema.</p>
+              )}
+              {financialMode === "none" && (
+                <p className="text-[11px] text-muted-foreground">Projeto sem cobrança associada (cortesia, bônus ou trabalho interno).</p>
               )}
             </div>
           )}
