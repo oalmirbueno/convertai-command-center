@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { Plus } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { notifyAdmin } from "@/lib/notifyHelpers";
@@ -25,6 +25,7 @@ const priorities = [
 
 export default function RequestButton({ projectId, projectName }: { projectId: string; projectName: string }) {
   const { user, profile } = useAuth();
+  const { isImpersonating } = useClientIdentity();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
@@ -34,6 +35,7 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (isImpersonating) return;
     if (!title.trim() || !description.trim() || !user) return;
     setSubmitting(true);
     try {
@@ -47,15 +49,6 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
 
       // Notify admin
       await notifyAdmin(`Novo pedido de ${profile?.company_name || profile?.full_name}: ${title}`, "request", "/pedidos");
-
-      // Create update in feed
-      const { data: upd } = await supabase.from("updates").insert({
-        project_id: projectId,
-        author_id: user.id,
-        message: `Novo pedido: ${title}`,
-        update_type: "system",
-      }).select().single();
-      notifyOpsUpdate(upd);
 
       queryClient.invalidateQueries({ queryKey: ["client-requests"] });
       queryClient.invalidateQueries({ queryKey: ["project-updates"] });
@@ -81,6 +74,8 @@ export default function RequestButton({ projectId, projectName }: { projectId: s
     }
     setSubmitting(false);
   };
+
+  if (isImpersonating) return null;
 
   return (
     <>

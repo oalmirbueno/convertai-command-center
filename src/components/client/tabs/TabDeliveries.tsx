@@ -1,10 +1,6 @@
 import { useState, useMemo, useRef, useCallback } from "react";
 import { useFiles } from "@/hooks/useSupabaseData";
-import { useAuth } from "@/contexts/AuthContext";
-import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
-import { notifyAdmin } from "@/lib/notifyHelpers";
-import { useQueryClient } from "@tanstack/react-query";
+import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,7 +22,8 @@ function useSwipe(onLeft: () => void, onRight: () => void, threshold = 50) {
     const dx = e.changedTouches[0].clientX - start.current.x;
     const dy = e.changedTouches[0].clientY - start.current.y;
     if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > threshold) {
-      dx < 0 ? onLeft() : onRight();
+      if (dx < 0) onLeft();
+      else onRight();
     }
     start.current = null;
   }, [onLeft, onRight, threshold]);
@@ -138,75 +135,66 @@ function DeliveryThumb({ file }: { file: any }) {
 }
 
 export default function TabDeliveries({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
   const { data: files, isLoading } = useFiles(projectId);
-  const queryClient = useQueryClient();
+  const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [previewGroup, setPreviewGroup] = useState<DeliveryGroup | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
 
-  const groups = useMemo(() => groupFiles(files || []), [files]);
+  const groups = useMemo(() => groupFiles((files || []).filter((file: any) =>
+    ["client_shared", "approval"].includes(file.visibility)
+    && file.status === "ready"
+    && !file.archived_at
+  )), [files]);
 
   const formatDate = (d: string) => new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
 
   const currentPreviewFile = previewGroup?.children[previewIndex] || null;
 
   const handleApprove = async () => {
-    if (!confirmApprove || !user) return;
-    setSubmitting(true);
+    if (!confirmApprove) return;
+    const parentFile = groups.find((group) => group.parent.id === confirmApprove)?.parent;
+    if (!parentFile) return;
     try {
-      // Approve the parent file (controls the group status)
-      const parentFile = previewGroup?.parent;
-      await supabase.from("files").update({ approval_status: "approved" }).eq("id", confirmApprove);
-      await notifyAdmin(`Cliente aprovou: ${parentFile?.file_name || "arquivo"}`, "approval", "/aprovacoes");
-      const { data: updA } = await supabase.from("updates").insert({
-        project_id: projectId, author_id: user.id,
-        message: `Cliente aprovou: ${parentFile?.file_name || "arquivo"}`, update_type: "creative",
-      }).select().single();
-      notifyOpsUpdate(updA);
-      queryClient.invalidateQueries({ queryKey: ["files"] });
+      await decide({
+        fileId: parentFile.id,
+        expectedVersion: parentFile.version,
+        decision: "approved",
+      });
       toast({ title: "Aprovado!", description: "A entrega foi aprovada com sucesso." });
-    } catch {
-      toast({ title: "Erro", description: "Falha ao aprovar.", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Atualize a página e tente novamente.",
+        variant: "destructive",
+      });
     }
-    setSubmitting(false);
     setConfirmApprove(null);
     setPreviewGroup(null);
   };
 
   const handleReject = async () => {
-    if (!feedbackFileId || !user || feedbackText.trim().length < 10) return;
-    setSubmitting(true);
+    if (!feedbackFileId || feedbackText.trim().length < 10) return;
+    const parentFile = groups.find((group) => group.parent.id === feedbackFileId)?.parent;
+    if (!parentFile) return;
     try {
-      const parentFile = files?.find((f: any) => f.id === feedbackFileId);
-      await supabase.from("files").update({ approval_status: "rejected", feedback: feedbackText }).eq("id", feedbackFileId);
-      await notifyAdmin(`Cliente solicitou ajustes em: ${parentFile?.file_name}`, "approval", "/aprovacoes");
-      const { data: updR } = await supabase.from("updates").insert({
-        project_id: projectId, author_id: user.id,
-        message: `Cliente solicitou ajustes em: ${parentFile?.file_name}`, update_type: "alert",
-      }).select().single();
-      notifyOpsUpdate(updR);
-      const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
-      if (fileData?.project_id) {
-        await supabase.from("tasks").insert({
-          project_id: fileData.project_id,
-          title: `Ajustar: ${fileData.file_name}`,
-          description: `Feedback do cliente:\n${feedbackText}`,
-          status: "backlog", priority: "high",
-          assigned_to: fileData.uploaded_by || null,
-        });
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      }
-      queryClient.invalidateQueries({ queryKey: ["files"] });
+      await decide({
+        fileId: parentFile.id,
+        expectedVersion: parentFile.version,
+        decision: "rejected",
+        feedback: feedbackText,
+      });
       toast({ title: "Feedback enviado", description: "Sua solicitação de ajuste foi registrada." });
-    } catch {
-      toast({ title: "Erro", description: "Falha ao enviar feedback.", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Erro",
+        description: error?.message || "Atualize a página e tente novamente.",
+        variant: "destructive",
+      });
     }
-    setSubmitting(false);
     setFeedbackFileId(null);
     setFeedbackText("");
     setPreviewGroup(null);
@@ -221,6 +209,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
 
   return (
     <div className="space-y-3">
+      {isReadOnly && (
+        <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
+          Modo somente leitura: decisões do cliente estão bloqueadas.
+        </div>
+      )}
       {groups.map((group) => {
         const f = group.parent;
         const Icon = group.type === "carousel" ? Images : (fileIcons[f.file_type] || FileText);
@@ -368,11 +361,13 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
           {previewGroup?.parent.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
-                onClick={() => { setFeedbackFileId(previewGroup.parent.id); setFeedbackText(""); setPreviewGroup(null); }}>
+                disabled={isReadOnly}
+                onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewGroup.parent.id); setFeedbackText(""); setPreviewGroup(null); } }}>
                 Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
-                onClick={() => { setConfirmApprove(previewGroup.parent.id); setPreviewGroup(null); }}>
+                disabled={isReadOnly}
+                onClick={() => { if (!isReadOnly) { setConfirmApprove(previewGroup.parent.id); setPreviewGroup(null); } }}>
                 Aprovar
               </Button>
             </DialogFooter>
@@ -387,7 +382,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
           <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting}>
+            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>
               {submitting ? "Aprovando..." : "Confirmar"}
             </Button>
           </DialogFooter>
@@ -401,7 +396,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
           <Textarea placeholder="Descreva as mudanças necessárias... (mínimo 10 caracteres)" value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setFeedbackFileId(null)}>Cancelar</Button>
-            <Button onClick={handleReject} disabled={submitting || feedbackText.trim().length < 10}>
+            <Button onClick={handleReject} disabled={submitting || isReadOnly || feedbackText.trim().length < 10}>
               {submitting ? "Enviando..." : "Enviar Feedback"}
             </Button>
           </DialogFooter>

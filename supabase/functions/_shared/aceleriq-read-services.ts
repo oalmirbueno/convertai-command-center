@@ -22,25 +22,23 @@ export const READ_LIMITS = {
   queryTimeoutMs: 8000,
 } as const;
 
-// Folders whose files pass through the client approval workflow.
-const APPROVAL_FOLDERS = new Set(['criativos', 'entregas']);
-
 function enrichFile<T extends Record<string, any>>(f: T): T & {
   approval_state: 'approved' | 'pending' | 'rejected' | 'not_required';
   requires_approval: boolean;
   is_internal_document: boolean;
 } {
-  const folder = (f?.folder ?? '') as string;
-  const requires = APPROVAL_FOLDERS.has(folder);
+  const visibility = String(f?.visibility ?? 'internal');
+  const requires = visibility === 'approval' && f?.requires_approval === true;
   const raw = String(f?.approval_status ?? 'none');
-  let state: 'approved' | 'pending' | 'rejected' | 'not_required';
-  if (raw === 'approved' || raw === 'pending' || raw === 'rejected') state = raw as any;
-  else state = requires ? 'pending' : 'not_required';
+  const state: 'approved' | 'pending' | 'rejected' | 'not_required' =
+    requires && (raw === 'approved' || raw === 'pending' || raw === 'rejected')
+      ? raw
+      : 'not_required';
   return {
     ...f,
     approval_state: state,
     requires_approval: requires,
-    is_internal_document: !requires,
+    is_internal_document: visibility === 'internal',
   };
 }
 
@@ -137,9 +135,9 @@ const F = {
   workspaceNode:
     'id, parent_id, scope, client_id, kind, name, mime, size_bytes, duration_sec, storage_path, thumb_path, sort_index, created_at, updated_at',
   file:
-    'id, project_id, client_id, file_name, file_type, folder, approval_status, feedback, version, parent_file_id, caption, description, created_at',
+    'id, project_id, client_id, file_name, file_type, folder, approval_status, agency_approval_status, visibility, requires_approval, status, archived_at, approval_requested_at, feedback, version, parent_file_id, revision_of_file_id, locked_at, caption, description, created_at',
   fileLite:
-    'id, project_id, client_id, file_name, file_type, folder, approval_status, created_at',
+    'id, project_id, client_id, file_name, file_type, folder, approval_status, agency_approval_status, visibility, requires_approval, status, archived_at, created_at',
   request:
     'id, client_id, project_id, title, description, priority, status, created_at, updated_at',
   milestone:
@@ -490,9 +488,9 @@ export async function getFile(opts: { file_id: string }) {
   );
   if (error) throw new Error(`files: ${error.message}`);
   if (!data) throw new Error('File not found');
-  // Fetch child versions (parent_file_id = this id) for approval history.
+  // Revisions are separate from carousel children.
   const { data: versions } = await withTimeout(
-    db().from('files').select(F.file).eq('parent_file_id', opts.file_id)
+    db().from('files').select(F.file).eq('revision_of_file_id', opts.file_id)
       .order('created_at', { ascending: false }).limit(50),
   );
   return {

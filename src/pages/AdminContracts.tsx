@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/select";
 import { FileSignature, Upload, Send, CheckCircle2, Clock, FileText, ExternalLink, Copy, Mail, Trash2 } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import {
+  resolveFileUrl,
+  storageRefFromFile,
+  useResolvedFileUrl,
+} from "@/lib/fileUrls";
 
 type Contract = {
   id: string;
@@ -49,6 +54,9 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   const { toast } = useToast();
   const { data: clients = [] } = useClients();
   const isAdminOrStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
+  const canManageContracts =
+    profile?.role === "admin" || profile?.role === "manager";
+  const canDeleteContracts = profile?.role === "admin";
 
   const [uploadOpen, setUploadOpen] = useState(false);
   const [signOpen, setSignOpen] = useState<Contract | null>(null);
@@ -72,9 +80,43 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
 
   const handleDelete = async () => {
     if (!confirmDelete) return;
+    if (
+      !canDeleteContracts
+      || confirmDelete.status !== "draft"
+      || confirmDelete.admin_signed_at
+      || confirmDelete.sent_at
+      || confirmDelete.client_signed_at
+    ) {
+      toast({
+        title: "Contrato protegido",
+        description: "Somente rascunhos ainda não assinados podem ser excluídos.",
+        variant: "destructive",
+      });
+      setConfirmDelete(null);
+      return;
+    }
+    const storageRef = storageRefFromFile({
+      fileUrl: confirmDelete.original_file_url,
+    });
     const { error } = await supabase.from("contracts").delete().eq("id", confirmDelete.id);
     if (error) toast({ title: "Erro ao excluir", description: error.message, variant: "destructive" });
-    else { toast({ title: "Contrato removido" }); qc.invalidateQueries({ queryKey: ["contracts"] }); }
+    else {
+      let storageError: string | null = null;
+      if (storageRef) {
+        const { error: removeError } = await supabase.storage
+          .from(storageRef.bucket)
+          .remove([storageRef.path]);
+        storageError = removeError?.message || null;
+      }
+      toast({
+        title: storageError
+          ? "Contrato removido; arquivo pendente de limpeza"
+          : "Contrato removido",
+        description: storageError || undefined,
+        variant: storageError ? "destructive" : "default",
+      });
+      qc.invalidateQueries({ queryKey: ["contracts"] });
+    }
     setConfirmDelete(null);
   };
 
@@ -99,9 +141,11 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
             Suba um contrato, assine e envie para o cliente assinar no portal.
           </p>
         </div>
-        <Button onClick={() => setUploadOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
-          <Upload className="w-4 h-4 mr-2" /> Novo contrato
-        </Button>
+        {canManageContracts && (
+          <Button onClick={() => setUploadOpen(true)} className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Upload className="w-4 h-4 mr-2" /> Novo contrato
+          </Button>
+        )}
       </div>
 
       {isLoading ? (
@@ -161,17 +205,30 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 shrink-0">
-                    <Button asChild variant="outline" size="sm">
-                      <a href={c.original_file_url} target="_blank" rel="noreferrer">
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Abrir
-                      </a>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={async () => {
+                        try {
+                          const url = await resolveFileUrl({ fileUrl: c.original_file_url });
+                          window.open(url, "_blank", "noopener,noreferrer");
+                        } catch (error: any) {
+                          toast({
+                            title: "Não foi possível abrir o contrato",
+                            description: error?.message,
+                            variant: "destructive",
+                          });
+                        }
+                      }}
+                    >
+                      <ExternalLink className="w-3.5 h-3.5 mr-1.5" /> Abrir
                     </Button>
-                    {!c.admin_signed_at && (
+                    {canManageContracts && !c.admin_signed_at && (
                       <Button size="sm" onClick={() => setSignOpen(c)} className="bg-primary text-primary-foreground hover:bg-primary/90">
                         Assinar
                       </Button>
                     )}
-                    {c.admin_signed_at && !c.client_signed_at && (
+                    {canManageContracts && c.admin_signed_at && !c.client_signed_at && (
                       <Button size="sm" variant="outline" onClick={async () => {
                         const { data, error } = await supabase.functions.invoke("send-contract-email", {
                           body: { contract_id: c.id },
@@ -187,9 +244,15 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                         <Send className="w-3.5 h-3.5 mr-1.5" /> {c.sent_at ? "Reenviar" : "Enviar"}
                       </Button>
                     )}
-                    <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(c)} className="text-muted-foreground hover:text-destructive">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </Button>
+                    {canDeleteContracts
+                      && c.status === "draft"
+                      && !c.admin_signed_at
+                      && !c.sent_at
+                      && !c.client_signed_at && (
+                        <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(c)} className="text-muted-foreground hover:text-destructive">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
+                      )}
                   </div>
                 </div>
               </motion.div>
@@ -273,18 +336,26 @@ function UploadContractDialog({ open, onOpenChange, clients, onCreated, lockedCl
         cacheControl: "3600", upsert: false,
       });
       if (upErr) throw upErr;
-      const { data: pub } = supabase.storage.from("files").getPublicUrl(path);
-
       const { error: insErr } = await supabase.from("contracts").insert({
         client_id: clientId,
         title,
         description: description || null,
-        original_file_url: pub.publicUrl,
+        original_file_url: `files://${path}`,
         original_file_name: file.name,
         status: "draft",
         created_by: user?.id,
       });
-      if (insErr) throw insErr;
+      if (insErr) {
+        const { error: cleanupError } = await supabase.storage
+          .from("files")
+          .remove([path]);
+        if (cleanupError) {
+          throw new Error(
+            `${insErr.message}. O arquivo enviado também ficou pendente de limpeza: ${cleanupError.message}`,
+          );
+        }
+        throw insErr;
+      }
 
       toast({ title: "Contrato criado", description: "Agora assine para liberar o envio ao cliente." });
       reset();
@@ -384,11 +455,7 @@ function AdminSignDialog({ contract, onClose, onSigned, adminName }: any) {
           <DialogDescription>Revise o documento abaixo e assine digitalmente.</DialogDescription>
         </DialogHeader>
         <div className="space-y-4">
-          <iframe
-            src={`${contract.original_file_url}#toolbar=1&view=FitH`}
-            className="w-full h-[400px] rounded-lg border border-border bg-white"
-            title={contract.title}
-          />
+          <PrivateContractFrame contract={contract} />
           <div className="space-y-3 border-t border-border pt-4">
             <div className="space-y-1.5">
               <Label>Seu nome completo</Label>
@@ -411,5 +478,36 @@ function AdminSignDialog({ contract, onClose, onSigned, adminName }: any) {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function PrivateContractFrame({ contract }: { contract: Contract }) {
+  const { url, loading, error } = useResolvedFileUrl({
+    fileUrl: contract.original_file_url,
+    expiresIn: 15 * 60,
+  });
+
+  if (loading) {
+    return (
+      <div className="w-full h-[400px] rounded-lg border border-border bg-secondary/30 grid place-items-center text-sm text-muted-foreground">
+        Carregando contrato...
+      </div>
+    );
+  }
+
+  if (error || !url) {
+    return (
+      <div className="w-full h-[180px] rounded-lg border border-destructive/30 bg-destructive/5 grid place-items-center text-sm text-destructive">
+        Não foi possível carregar o contrato.
+      </div>
+    );
+  }
+
+  return (
+    <iframe
+      src={`${url}#toolbar=1&view=FitH`}
+      className="w-full h-[400px] rounded-lg border border-border bg-white"
+      title={contract.title}
+    />
   );
 }

@@ -18,7 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Zap, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
@@ -26,6 +26,7 @@ import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 
 const FOLDERS = [
   { id: "estrategicos", label: "Estratégicos" },
@@ -39,6 +40,14 @@ const FOLDER_IDS = new Set(FOLDERS.map((folder) => folder.id));
 const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
 const ACCEPTED = "*/*";
 const MAX_SIZE = 100 * 1024 * 1024; // Mesmo limite configurado no bucket.
+
+const storageSafeName = (name: string) =>
+  name
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^a-zA-Z0-9._-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 120) || "arquivo";
 
 const fileIcon = (name: string) => {
   const ext = name?.split(".").pop()?.toLowerCase() || "";
@@ -54,6 +63,27 @@ const approvalBadge: Record<string, { cls: string; label: string }> = {
   rejected: { cls: "bg-destructive/10 text-destructive", label: "Rejeitado" },
   none: { cls: "bg-muted text-muted-foreground", label: "Sem status" },
 };
+
+const agencyBadge: Record<string, { cls: string; label: string }> = {
+  not_requested: { cls: "bg-muted text-muted-foreground", label: "Rascunho interno" },
+  pending: { cls: "bg-warning/10 text-warning", label: "Em revisão interna" },
+  approved: { cls: "bg-success/10 text-success", label: "Revisão interna aprovada" },
+  rejected: { cls: "bg-destructive/10 text-destructive", label: "Ajustes internos pedidos" },
+};
+
+type EditableFileState = {
+  agency_approval_status?: string | null;
+  approval_status?: string | null;
+  locked_at?: string | null;
+  visibility?: string | null;
+};
+
+const isEditableFile = (file?: EditableFileState | null) =>
+  !!file
+  && !file.locked_at
+  && file.visibility === "internal"
+  && (file.agency_approval_status || "not_requested") === "not_requested"
+  && (file.approval_status || "none") === "none";
 
 function FileThumb({ file, className = "w-20 h-20" }: { file: any; className?: string }) {
   const kind = mediaKindFromFile(file.file_name, file.file_url, file.mime_type || file.file_type, file.extension);
@@ -181,6 +211,7 @@ export default function AdminFiles() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedClientId = searchParams.get("client");
   const requestedFolderId = searchParams.get("folder");
+  const requestedRevisionId = searchParams.get("revisionOf");
   const shouldOpenNewContent = searchParams.get("novo") === "1";
   const initialFolder = requestedFolderId && FOLDER_IDS.has(requestedFolderId)
     ? requestedFolderId
@@ -204,7 +235,7 @@ export default function AdminFiles() {
   const [uploadFolder, setUploadFolder] = useState(initialFolder);
   const [uploadProject, setUploadProject] = useState("");
   const [uploadType, setUploadType] = useState("criativo");
-  const [uploadApproval, setUploadApproval] = useState(false);
+  const [uploadRequestReview, setUploadRequestReview] = useState(false);
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
   const [uploadDescription, setUploadDescription] = useState("");
@@ -212,6 +243,10 @@ export default function AdminFiles() {
   const [previewFile, setPreviewFile] = useState<any>(null);
   const [editingName, setEditingName] = useState(false);
   const [editNameValue, setEditNameValue] = useState("");
+  const revisionSource = requestedRevisionId
+    ? (allFiles || []).find((file: any) => file.id === requestedRevisionId) || null
+    : null;
+  const revisionVersion = revisionSource ? Number(revisionSource.version || 1) + 1 : 1;
 
   useEffect(() => {
     if (!isStaff || !clients) return;
@@ -232,12 +267,40 @@ export default function AdminFiles() {
       }
     }
 
+    if (requestedRevisionId && loadingFiles) return;
+
+    if (requestedRevisionId && !loadingFiles) {
+      const source = (allFiles || []).find((file: any) => file.id === requestedRevisionId);
+      if (!source || source.client_id !== requestedClientId) {
+        const next = new URLSearchParams(searchParams);
+        next.delete("revisionOf");
+        setSearchParams(next, { replace: true });
+        toast({
+          title: "Versão anterior não encontrada",
+          description: "O novo conteúdo será salvo sem vínculo de correção.",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     if (requestedFolderId && FOLDER_IDS.has(requestedFolderId)) {
       setUploadFolder(requestedFolderId);
     }
 
     if (shouldOpenNewContent && requestedClientId) {
       setUploadFolder(activeFolder);
+      if (revisionSource) {
+        const sourceChildren = (allFiles || []).filter((file: any) => file.parent_file_id === revisionSource.id);
+        setUploadMode(isCarouselAssetGroup(revisionSource, sourceChildren) ? "carousel" : "single");
+        setUploadName(revisionSource.file_name || "");
+        setUploadFolder(revisionSource.folder || activeFolder);
+        setUploadProject(revisionSource.project_id || "none");
+        setUploadType(revisionSource.file_type || "criativo");
+        setUploadCaption(revisionSource.caption || "");
+        setUploadCarousel(revisionSource.carousel_text || "");
+        setUploadDescription(revisionSource.description || "");
+      }
       setUploadOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete("novo");
@@ -245,8 +308,12 @@ export default function AdminFiles() {
     }
   }, [
     clients,
+    allFiles,
+    loadingFiles,
     requestedClientId,
     requestedFolderId,
+    requestedRevisionId,
+    revisionSource,
     searchParams,
     setSearchParams,
     shouldOpenNewContent,
@@ -274,8 +341,23 @@ export default function AdminFiles() {
 
   const handleRename = async () => {
     if (!previewFile || !editNameValue.trim()) return;
+    if (!isEditableFile(previewFile)) {
+      toast({
+        title: "Edição indisponível",
+        description: "O arquivo só pode ser renomeado antes de entrar em revisão.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      await supabase.from("files").update({ file_name: editNameValue.trim() }).eq("id", previewFile.id);
+      const { data, error } = await supabase
+        .from("files")
+        .update({ file_name: editNameValue.trim() })
+        .eq("id", previewFile.id)
+        .select("id")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("O arquivo não foi alterado.");
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       setPreviewFile({ ...previewFile, file_name: editNameValue.trim() });
       setEditingName(false);
@@ -286,11 +368,23 @@ export default function AdminFiles() {
   };
 
   const handleMoveFolder = async (fileId: string, newFolder: string) => {
+    const target = (allFiles || []).find((file: any) => file.id === fileId);
+    if (!isEditableFile(target)) {
+      toast({
+        title: "Edição indisponível",
+        description: "O arquivo só pode ser movido antes de entrar em revisão.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
-      await supabase
+      const { data, error } = await supabase
         .from("files")
         .update({ folder: newFolder })
-        .or(`id.eq.${fileId},parent_file_id.eq.${fileId}`);
+        .or(`id.eq.${fileId},parent_file_id.eq.${fileId}`)
+        .select("id");
+      if (error) throw error;
+      if (!data?.length) throw new Error("Nenhum arquivo foi alterado.");
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
       if (previewFile?.id === fileId) {
         setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);
@@ -364,6 +458,49 @@ export default function AdminFiles() {
     if (files.length > 0) handleFilesSelect(files);
   };
 
+  const handleRequestAgencyReview = async (file: any) => {
+    if (!isEditableFile(file)) {
+      toast({
+        title: "Revisão indisponível",
+        description: "Esta versão já entrou em revisão ou foi finalizada.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await requestFileAgencyReview(file.id);
+      await queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      setPreviewFile((current: any) => current?.id === file.id
+        ? { ...current, agency_approval_status: "pending" }
+        : current);
+      toast({
+        title: "Enviado para revisão interna",
+        description: "O cliente continua sem acesso até a liberação.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível solicitar a revisão",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const requestReviewAfterSave = async (fileId: string) => {
+    if (!uploadRequestReview) return false;
+    try {
+      await requestFileAgencyReview(fileId);
+      return true;
+    } catch (error: any) {
+      toast({
+        title: "Conteúdo salvo, mas a revisão não foi solicitada",
+        description: error?.message || "Abra o conteúdo e solicite a revisão interna novamente.",
+        variant: "destructive",
+      });
+      return false;
+    }
+  };
+
   const handleUpload = async () => {
     if (!isStaff) {
       toast({
@@ -396,7 +533,11 @@ export default function AdminFiles() {
     setUploadProgress(5);
 
     try {
-      // Video link branch — no storage upload, just save the URL as a file record
+      let rootFileId: string | null = null;
+      const revisionOfFileId = revisionSource?.client_id === selectedClient ? revisionSource.id : null;
+      const nextVersion = revisionOfFileId ? revisionVersion : 1;
+
+      // Links externos também nascem internos e só ficam visíveis após os gates.
       if (uploadMode === "video_link") {
         const url = uploadVideoUrl.trim();
         const displayName = uploadName.trim() || (() => {
@@ -405,7 +546,9 @@ export default function AdminFiles() {
             return `Vídeo • ${u.hostname.replace(/^www\./, "")}`;
           } catch { return "Vídeo externo"; }
         })();
-        const { error: fileError } = await supabase.from("files").insert({
+        const fileId = crypto.randomUUID();
+        const { data: inserted, error: fileError } = await (supabase as any).from("files").insert({
+          id: fileId,
           client_id: selectedClient,
           file_name: displayName,
           file_url: url,
@@ -413,22 +556,30 @@ export default function AdminFiles() {
           folder: uploadFolder,
           uploaded_by: user.id,
           project_id: uploadProject === "none" ? null : uploadProject || null,
-          approval_status: uploadApproval ? "pending" : "none",
+          approval_status: "none",
+          agency_approval_status: "not_requested",
+          visibility: "internal",
+          requires_approval: false,
+          status: "ready",
+          version: nextVersion,
+          revision_of_file_id: revisionOfFileId,
           caption: uploadCaption.trim() || null,
           description: uploadDescription.trim() || null,
-        });
+        }).select("id").single();
         if (fileError) throw fileError;
+        rootFileId = inserted?.id || fileId;
+        const reviewSubmitted = await requestReviewAfterSave(rootFileId);
         setUploadProgress(100);
-        await supabase.from("notifications").insert({
-          user_id: selectedClient,
-          message: uploadApproval ? `Vídeo para aprovação: ${displayName}` : `Novo vídeo: ${displayName}`,
-          notification_type: uploadApproval ? "approval" : "delivery",
-          link: uploadApproval ? "/aprovacoes" : "/documentos",
-        });
         queryClient.invalidateQueries({ queryKey: ["all-files"] });
-        toast({ title: "Vídeo adicionado" });
+        toast({
+          title: reviewSubmitted ? "Vídeo enviado para revisão interna" : "Vídeo salvo internamente",
+          description: "O cliente ainda não recebeu este conteúdo.",
+        });
         setUploadOpen(false);
         resetUploadForm();
+        const next = new URLSearchParams(searchParams);
+        next.delete("revisionOf");
+        setSearchParams(next, { replace: true });
         setUploading(false);
         return;
       }
@@ -442,21 +593,22 @@ export default function AdminFiles() {
       for (let i = 0; i < totalFiles; i++) {
         const file = uploadFiles[i];
         const ext = file.name.split(".").pop();
-        const path = `${selectedClient}/${Date.now()}_${i}.${ext}`;
+        const fileId = crypto.randomUUID();
+        const groupId = parentFileId || fileId;
+        const path = `${selectedClient}/${groupId}/v${nextVersion}/${i + 1}-${storageSafeName(file.name)}`;
 
         const { error: storageError } = await supabase.storage.from("files").upload(path, file);
         if (storageError) throw storageError;
-
-        const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
 
         const fileName = i === 0
           ? (uploadName || file.name)
           : (isCarousel ? `${uploadName || uploadFiles[0].name} (${i + 1}/${totalFiles})` : file.name);
 
-        const { data: inserted, error: insertError } = await supabase.from("files").insert({
+        const { data: inserted, error: insertError } = await (supabase as any).from("files").insert({
+          id: fileId,
           client_id: selectedClient,
           file_name: fileName,
-          file_url: urlData.publicUrl,
+          file_url: `files://${path}`,
           file_type: isCarousel ? "creative" : uploadType,
           mime_type: file.type || null,
           extension: ext || null,
@@ -465,62 +617,78 @@ export default function AdminFiles() {
           folder: uploadFolder,
           uploaded_by: user.id,
           project_id: uploadProject === "none" ? null : uploadProject || null,
-          approval_status: uploadApproval ? "pending" : "none",
+          approval_status: "none",
+          agency_approval_status: "not_requested",
+          visibility: "internal",
+          requires_approval: false,
+          status: "ready",
+          version: nextVersion,
+          revision_of_file_id: i === 0 ? revisionOfFileId : null,
           caption: i === 0 ? (uploadCaption.trim() || null) : null,
           carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
           description: i === 0 ? (uploadDescription.trim() || null) : null,
           parent_file_id: isCarousel && i > 0 ? parentFileId : null,
         }).select("id").single();
         if (insertError) {
-          await supabase.storage.from("files").remove([path]);
+          const { error: cleanupError } = await supabase.storage.from("files").remove([path]);
+          if (cleanupError) {
+            throw new Error(`${insertError.message}. O arquivo temporário também não pôde ser removido.`);
+          }
           throw insertError;
         }
 
         if (i === 0 && inserted) {
           parentFileId = inserted.id;
+          rootFileId = inserted.id;
         }
 
         setUploadProgress(Math.round(((i + 1) / totalFiles) * 85) + 10);
       }
 
-      // Always notify client about new upload
-      const fileLabel = isCarousel ? `Carrossel enviado: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo enviado: ${uploadName}`;
-      const approvalLabel = isCarousel ? `Carrossel para aprovação: ${uploadName} (${totalFiles} arquivos)` : `Novo arquivo para aprovação: ${uploadName}`;
+      if (!rootFileId) throw new Error("Não foi possível identificar a entrega criada.");
+      const reviewSubmitted = await requestReviewAfterSave(rootFileId);
 
-      await supabase.from("notifications").insert({
-        user_id: selectedClient,
-        message: uploadApproval ? approvalLabel : fileLabel,
-        notification_type: uploadApproval ? "approval" : "delivery",
-        link: uploadApproval ? "/aprovacoes" : "/documentos",
-      });
-
-      // Notify admin (if uploader is not admin)
-      const { data: adminId } = await supabase.rpc("get_admin_user_id");
-      if (adminId && adminId !== user.id) {
+      // Notificação estritamente interna. O cliente só é avisado pelo RPC de liberação.
+      const { data: adminId, error: adminIdError } = await supabase.rpc("get_admin_user_id");
+      if (adminIdError) {
+        toast({
+          title: "Conteúdo salvo, mas o aviso interno falhou",
+          description: adminIdError.message,
+          variant: "destructive",
+        });
+      } else if (adminId && adminId !== user.id) {
         const clientProfile = (clients || []).find((c: any) => c.id === selectedClient);
         const clientName = clientProfile?.company_name || clientProfile?.full_name || "cliente";
-        await supabase.from("notifications").insert({
+        const { error: notificationError } = await supabase.from("notifications").insert({
           user_id: adminId,
-          message: `${user.email} enviou ${isCarousel ? `carrossel (${totalFiles})` : "arquivo"}: ${uploadName} para ${clientName}`,
-          notification_type: "delivery",
-          link: "/arquivos",
+          message: `${user.email} salvou ${isCarousel ? `carrossel (${totalFiles})` : "conteúdo"} interno: ${uploadName} para ${clientName}`,
+          notification_type: "system",
+          link: reviewSubmitted ? "/aprovacoes" : "/arquivos",
         });
-      }
-
-      if (uploadProject && uploadProject !== "none") {
-        await supabase.from("updates").insert({
-          project_id: uploadProject,
-          author_id: user.id,
-          message: fileLabel,
-          update_type: "creative",
-        });
+        if (notificationError) {
+          toast({
+            title: "Conteúdo salvo, mas o aviso interno falhou",
+            description: notificationError.message,
+            variant: "destructive",
+          });
+        }
       }
 
       setUploadProgress(100);
       queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      toast({ title: isCarousel ? `Carrossel enviado (${totalFiles} arquivos)` : "Arquivo enviado com sucesso" });
+      toast({
+        title: reviewSubmitted
+          ? "Conteúdo enviado para revisão interna"
+          : isCarousel
+            ? `Carrossel salvo internamente (${totalFiles} arquivos)`
+            : "Conteúdo salvo internamente",
+        description: "O cliente ainda não recebeu esta versão.",
+      });
       setUploadOpen(false);
       resetUploadForm();
+      const next = new URLSearchParams(searchParams);
+      next.delete("revisionOf");
+      setSearchParams(next, { replace: true });
     } catch (err: any) {
       toast({ title: "Erro no upload", description: err.message, variant: "destructive" });
     }
@@ -533,7 +701,7 @@ export default function AdminFiles() {
     setUploadName("");
     setUploadProject("");
     setUploadType("criativo");
-    setUploadApproval(false);
+    setUploadRequestReview(false);
     setUploadProgress(0);
     setUploadCaption("");
     setUploadCarousel("");
@@ -546,6 +714,16 @@ export default function AdminFiles() {
 
   const handleDelete = async () => {
     if (!confirmDeleteFile || deletingFile) return;
+    const target = (allFiles || []).find((file: any) => file.id === confirmDeleteFile.id);
+    if (!isEditableFile(target)) {
+      toast({
+        title: "Exclusão indisponível",
+        description: "O arquivo só pode ser excluído antes de entrar em revisão.",
+        variant: "destructive",
+      });
+      setConfirmDeleteFile(null);
+      return;
+    }
     setDeletingFile(true);
     try {
       const { data, error } = await supabase.functions.invoke("delete-file-assets", {
@@ -694,9 +872,10 @@ export default function AdminFiles() {
           ) : viewMode === "grid" ? (
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
               {filteredFiles.map((f: any) => {
-                const badge = approvalBadge[f.approval_status] || approvalBadge.none;
+                const reviewBadge = agencyBadge[f.agency_approval_status] || agencyBadge.not_requested;
                 const carouselChildren = childrenMap.get(f.id) || [];
                 const isCarousel = isCarouselAssetGroup(f, carouselChildren);
+                const isEditable = isEditableFile(f);
                 return (
                   <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
@@ -711,12 +890,14 @@ export default function AdminFiles() {
                       </div>
                       <p className="text-[11px] text-muted-foreground truncate">{f.project?.name || "—"} • {formatDate(f.created_at)}</p>
                       <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
                         <div className="flex items-center gap-2">
-                          <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
-                            className="text-muted-foreground hover:text-destructive transition-colors">
-                            <Trash2 className="w-4 h-4" />
-                          </button>
+                          {isEditable && (
+                            <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
+                              className="text-muted-foreground hover:text-destructive transition-colors">
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -727,10 +908,10 @@ export default function AdminFiles() {
           ) : (
             <div className="space-y-2 stagger-children">
               {filteredFiles.map((f: any) => {
-                const Icon = fileIcon(f.file_name);
-                const badge = approvalBadge[f.approval_status] || approvalBadge.none;
+                const reviewBadge = agencyBadge[f.agency_approval_status] || agencyBadge.not_requested;
                 const carouselChildren = childrenMap.get(f.id) || [];
                 const isCarousel = isCarouselAssetGroup(f, carouselChildren);
+                const isEditable = isEditableFile(f);
                 return (
                   <div key={f.id} className="bg-card border border-border rounded-xl px-3 py-3 cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
@@ -760,8 +941,8 @@ export default function AdminFiles() {
                         </Avatar>
                         <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
                       </div>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${badge.cls}`}>{badge.label}</span>
-                      <DropdownMenu>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${reviewBadge.cls}`}>{reviewBadge.label}</span>
+                      {isEditable && <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">
                             <FolderInput className="w-4 h-4" />
@@ -774,7 +955,7 @@ export default function AdminFiles() {
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuContent>
-                      </DropdownMenu>
+                      </DropdownMenu>}
                       <button type="button"
                         className="text-muted-foreground hover:text-foreground transition-colors"
                         onClick={async (e) => {
@@ -784,13 +965,15 @@ export default function AdminFiles() {
                         }}>
                         <Download className="w-4 h-4" />
                       </button>
-                      <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
-                        className="text-muted-foreground hover:text-destructive transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {isEditable && (
+                        <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
+                          className="text-muted-foreground hover:text-destructive transition-colors">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                     <div className="sm:hidden mt-2 ml-[92px]">
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
                     </div>
                   </div>
                 );
@@ -819,13 +1002,15 @@ export default function AdminFiles() {
             ) : (
               <div className="flex items-center gap-2 pr-6">
                 <DialogTitle className="truncate text-base">{previewFile?.file_name}</DialogTitle>
-                <button
-                  onClick={() => { setEditNameValue(previewFile?.file_name || ""); setEditingName(true); }}
-                  className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                  title="Renomear"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
+                {isEditableFile(previewFile) && (
+                  <button
+                    onClick={() => { setEditNameValue(previewFile?.file_name || ""); setEditingName(true); }}
+                    className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
+                    title="Renomear"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
           </DialogHeader>
@@ -845,8 +1030,11 @@ export default function AdminFiles() {
                 />
               )}
               <div className="flex items-center gap-2 flex-wrap">
+                <span className={`text-[11px] px-2.5 py-1 rounded-full ${(agencyBadge[previewFile.agency_approval_status] || agencyBadge.not_requested).cls}`}>
+                  {(agencyBadge[previewFile.agency_approval_status] || agencyBadge.not_requested).label}
+                </span>
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(approvalBadge[previewFile.approval_status] || approvalBadge.none).cls}`}>
-                  {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
+                  Cliente: {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
                 </span>
                 <span className="text-xs text-muted-foreground">
                   Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
@@ -876,10 +1064,20 @@ export default function AdminFiles() {
                   <p className="text-xs text-foreground">{previewFile.feedback}</p>
                 </div>
               )}
+              {previewFile.agency_feedback && (
+                <div className="rounded-lg border border-warning/20 bg-warning/5 p-3">
+                  <p className="mb-0.5 text-[11px] text-muted-foreground">Feedback da revisão interna:</p>
+                  <p className="text-xs text-foreground">{previewFile.agency_feedback}</p>
+                </div>
+              )}
               {/* Move folder */}
               <div className="flex items-center gap-2">
                 <FolderInput className="w-4 h-4 text-muted-foreground shrink-0" />
-                <Select value={previewFile.folder || "estrategicos"} onValueChange={(v) => handleMoveFolder(previewFile.id, v)}>
+                <Select
+                  value={previewFile.folder || "estrategicos"}
+                  onValueChange={(v) => handleMoveFolder(previewFile.id, v)}
+                  disabled={!isEditableFile(previewFile)}
+                >
                   <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
@@ -891,22 +1089,14 @@ export default function AdminFiles() {
             </div>
           )}
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0 flex gap-2">
-            {previewFile?.approval_status === "rejected" && previewFile?.project_id && (
-              <Button size="sm" variant="outline" className="gap-1 border-warning/50 text-warning hover:bg-warning/10"
-                onClick={async () => {
-                  await supabase.from("tasks").insert({
-                    project_id: previewFile.project_id,
-                    title: `Ajustar: ${previewFile.file_name}`,
-                    description: `Feedback do cliente:\n${previewFile.feedback || "Sem detalhes"}`,
-                    status: "backlog", priority: "high",
-                    assigned_to: previewFile.uploaded_by || null,
-                  });
-                  queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                  toast({ title: "Tarefa criada no Kanban!" });
-                }}>
-                <Zap className="w-3 h-3" /> Criar Tarefa
-              </Button>
-            )}
+            {isEditableFile(previewFile) && (
+                <Button
+                  size="sm"
+                  onClick={() => handleRequestAgencyReview(previewFile)}
+                >
+                  Solicitar revisão interna
+                </Button>
+              )}
             <Button
               variant="outline"
               size="sm"
@@ -935,6 +1125,17 @@ export default function AdminFiles() {
             )}
           </DialogHeader>
           <div className="space-y-4 overflow-y-auto flex-1 px-6 py-4">
+            {revisionSource && (
+              <div className="rounded-xl border border-warning/25 bg-warning/[0.06] px-3 py-2.5">
+                <p className="text-xs font-medium text-foreground">
+                  Nova correção · versão {revisionVersion}
+                </p>
+                <p className="mt-0.5 text-[11px] text-muted-foreground">
+                  A versão {revisionSource.version || 1} de “{revisionSource.file_name}” e o feedback anterior serão preservados.
+                </p>
+              </div>
+            )}
+
             {/* Mode selector */}
             <div>
               <Label className="label-sm mb-1.5 block">Modo de envio</Label>
@@ -1093,46 +1294,49 @@ export default function AdminFiles() {
                 </div>
               )}
               <div>
-                <Label className="label-sm">Observação para o cliente (opcional)</Label>
+                <Label className="label-sm">Descrição da entrega (opcional)</Label>
                 <textarea value={uploadDescription} onChange={(e) => setUploadDescription(e.target.value)} rows={2} placeholder="Contexto ou orientação que o cliente poderá ler..."
                   className="mt-1 w-full bg-secondary border border-border rounded-xl px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
               </div>
               <div>
                 <Label className="label-sm mb-1.5 block">O que fazer depois de salvar?</Label>
                 <RadioGroup
-                  value={uploadApproval ? "approval" : "delivery"}
-                  onValueChange={(value) => setUploadApproval(value === "approval")}
+                  value={uploadRequestReview ? "review" : "draft"}
+                  onValueChange={(value) => setUploadRequestReview(value === "review")}
                   className="grid grid-cols-1 gap-2 sm:grid-cols-2"
                 >
                   <Label
-                    htmlFor="delivery-without-approval"
+                    htmlFor="save-internal-draft"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      !uploadApproval
+                      !uploadRequestReview
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <RadioGroupItem id="delivery-without-approval" value="delivery" className="mt-0.5 shrink-0" />
+                    <RadioGroupItem id="save-internal-draft" value="draft" className="mt-0.5 shrink-0" />
                     <span>
-                      <span className="block font-medium">Disponibilizar ao cliente</span>
-                      <span className="mt-0.5 block text-[10px] opacity-75">Entrega sem exigir resposta.</span>
+                      <span className="block font-medium">Salvar internamente</span>
+                      <span className="mt-0.5 block text-[10px] opacity-75">Só a equipe vê e pode continuar editando.</span>
                     </span>
                   </Label>
                   <Label
-                    htmlFor="delivery-for-approval"
+                    htmlFor="request-agency-review"
                     className={`flex cursor-pointer items-start gap-2 rounded-xl border px-3 py-2.5 text-left text-xs transition-colors ${
-                      uploadApproval
+                      uploadRequestReview
                         ? "border-primary bg-primary/10 text-foreground"
                         : "border-border bg-secondary text-muted-foreground hover:text-foreground"
                     }`}
                   >
-                    <RadioGroupItem id="delivery-for-approval" value="approval" className="mt-0.5 shrink-0" />
+                    <RadioGroupItem id="request-agency-review" value="review" className="mt-0.5 shrink-0" />
                     <span>
-                      <span className="block font-medium">Enviar para aprovação</span>
-                      <span className="mt-0.5 block text-[10px] opacity-75">O cliente aprova ou pede ajuste.</span>
+                      <span className="block font-medium">Solicitar revisão interna</span>
+                      <span className="mt-0.5 block text-[10px] opacity-75">Admin ou manager revisa antes do cliente receber.</span>
                     </span>
                   </Label>
                 </RadioGroup>
+                <p className="mt-2 text-[10px] text-muted-foreground">
+                  O cliente não recebe nem acessa o conteúdo nesta etapa.
+                </p>
               </div>
             </div>
 
@@ -1143,9 +1347,9 @@ export default function AdminFiles() {
             <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
               {uploading
                 ? "Salvando..."
-                : uploadApproval
-                  ? "Enviar para aprovação"
-                  : "Disponibilizar ao cliente"}
+                : uploadRequestReview
+                  ? "Salvar e solicitar revisão"
+                  : "Salvar internamente"}
             </Button>
           </DialogFooter>
         </DialogContent>

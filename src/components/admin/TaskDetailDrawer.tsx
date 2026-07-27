@@ -17,6 +17,7 @@ import {
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import TaskChecklistTemplatePicker from "@/components/admin/TaskChecklistTemplatePicker";
+import { resolveFileUrl } from "@/lib/fileUrls";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -82,7 +83,16 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         .select("*, uploader:profiles!task_attachments_uploaded_by_fkey(full_name)")
         .eq("task_id", task.id)
         .order("created_at", { ascending: false });
-      return data || [];
+      return Promise.all((data || []).map(async (attachment: any) => {
+        try {
+          return {
+            ...attachment,
+            resolved_url: await resolveFileUrl({ fileUrl: attachment.file_url }),
+          };
+        } catch {
+          return { ...attachment, resolved_url: "" };
+        }
+      }));
     },
   });
 
@@ -333,9 +343,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         const path = `task-attachments/${task.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
         const { error: uploadError } = await supabase.storage.from("files").upload(path, file);
         if (uploadError) { toast.error(`Erro ao enviar ${file.name}`); continue; }
-        const { data: { publicUrl } } = supabase.storage.from("files").getPublicUrl(path);
         await supabase.from("task_attachments").insert({
-          task_id: task.id, file_name: file.name, file_url: publicUrl,
+          task_id: task.id, file_name: file.name, file_url: `files://${path}`,
           file_type: file.type, file_size: file.size, uploaded_by: user.id,
         });
       }
@@ -388,7 +397,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       const folder = zip.folder(task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
       for (let i = 0; i < imageAttachments.length; i++) {
         const a = imageAttachments[i];
-        const resp = await fetch(a.file_url);
+        const url = a.resolved_url || await resolveFileUrl({ fileUrl: a.file_url });
+        const resp = await fetch(url);
         const blob = await resp.blob();
         const ext = a.file_name.split(".").pop() || "png";
         folder!.file(`${String(i + 1).padStart(2, "0")}_${a.file_name}`, blob);
@@ -408,9 +418,10 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     }
   };
 
-  const handleDownloadSingle = (url: string, name: string) => {
+  const handleDownloadSingle = async (url: string, name: string) => {
+    const resolvedUrl = await resolveFileUrl({ fileUrl: url });
     const link = document.createElement("a");
-    link.href = url;
+    link.href = resolvedUrl;
     link.download = name;
     link.target = "_blank";
     link.click();
@@ -675,8 +686,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                       <div className="grid grid-cols-3 gap-2">
                         {imageAttachments.map((a: any) => (
                           <div key={a.id} className="relative group rounded-lg overflow-hidden border border-border aspect-square">
-                            <a href={a.file_url} target="_blank" rel="noopener noreferrer">
-                              <img src={a.file_url} alt={a.file_name} className="w-full h-full object-cover" />
+                            <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer">
+                              <img src={a.resolved_url || undefined} alt={a.file_name} className="w-full h-full object-cover" />
                             </a>
                             <div className="absolute bottom-0 inset-x-0 flex items-center justify-end gap-0.5 p-1 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
                               {!isCarousel && (
@@ -701,7 +712,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                       <div key={a.id} className="flex items-center gap-3 px-3 py-2.5 rounded-xl bg-secondary/30 hover:bg-secondary/50 transition-colors group">
                         {a.file_type?.startsWith("video/") ? (
                           <div className="w-16 h-10 rounded-lg overflow-hidden bg-secondary shrink-0">
-                            <video src={a.file_url} className="w-full h-full object-cover" muted />
+                            <video src={a.resolved_url || undefined} className="w-full h-full object-cover" muted />
                           </div>
                         ) : getFileIcon(a.file_type)}
                         <div className="flex-1 min-w-0">
@@ -711,7 +722,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                           </p>
                         </div>
                         <div className="flex items-center gap-1 shrink-0">
-                          <a href={a.file_url} target="_blank" rel="noopener noreferrer"
+                          <a href={a.resolved_url || undefined} target="_blank" rel="noopener noreferrer"
                             className="p-1 rounded-lg hover:bg-secondary text-muted-foreground hover:text-foreground transition-colors">
                             <Download className="w-3.5 h-3.5" />
                           </a>

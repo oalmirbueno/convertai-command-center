@@ -31,6 +31,10 @@ export default function ClientVaultPage() {
   const qc = useQueryClient();
 
   const clearClientVault = async (cid: string) => {
+    if (impersonatedId) {
+      toast.error("O modo de visualização do cliente é somente leitura");
+      return;
+    }
     setClearing(true);
     const { error } = await supabase.from("client_vault").delete().eq("client_id", cid);
     setClearing(false);
@@ -253,7 +257,7 @@ export default function ClientVaultPage() {
           )}
 
           {effectiveClientId ? (
-            <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam} />
+            <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} />
           ) : (
             <div className="text-center py-16 bg-card border border-border rounded-2xl">
               <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />

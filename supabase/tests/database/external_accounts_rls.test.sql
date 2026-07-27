@@ -1,5 +1,5 @@
 -- ============================================================================
--- ACQ-OPS-001C — RLS test suite for external_accounts / project_external_accounts
+-- Aceleriq OS — RLS test suite for external_accounts / project_external_accounts
 -- pgTAP suite. Runs inside BEGIN/ROLLBACK. Never touches production data.
 -- ============================================================================
 
@@ -15,6 +15,7 @@ SELECT * FROM no_plan();
 ALTER TABLE public.projects  DISABLE TRIGGER USER;
 ALTER TABLE public.milestones DISABLE TRIGGER USER;
 ALTER TABLE public.tasks     DISABLE TRIGGER USER;
+ALTER TABLE public.profiles  DISABLE TRIGGER USER;
 
 -- ---------------------------------------------------------------------------
 -- 1. Structural assertions (RLS, grants, function EXECUTE, constraints, FKs).
@@ -48,11 +49,63 @@ SELECT is(
   false, 'anon cannot EXECUTE can_access_client'
 );
 SELECT is(
-  (SELECT has_function_privilege('public', 'public.external_accounts_guard()', 'EXECUTE')),
+  (SELECT has_function_privilege('anon', 'public.external_accounts_guard()', 'EXECUTE')),
+  false, 'anon cannot EXECUTE external_accounts_guard'
+);
+SELECT is(
+  (SELECT has_function_privilege('anon', 'public.project_external_accounts_guard()', 'EXECUTE')),
+  false, 'anon cannot EXECUTE project_external_accounts_guard'
+);
+SELECT is(
+  EXISTS (
+    SELECT 1
+    FROM pg_proc AS p
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(p.proacl, acldefault('f', p.proowner))
+    ) AS acl
+    WHERE p.oid = 'public.can_manage_client(uuid)'::regprocedure
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ),
+  false, 'PUBLIC cannot EXECUTE can_manage_client'
+);
+SELECT is(
+  EXISTS (
+    SELECT 1
+    FROM pg_proc AS p
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(p.proacl, acldefault('f', p.proowner))
+    ) AS acl
+    WHERE p.oid = 'public.can_access_client(uuid)'::regprocedure
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ),
+  false, 'PUBLIC cannot EXECUTE can_access_client'
+);
+SELECT is(
+  EXISTS (
+    SELECT 1
+    FROM pg_proc AS p
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(p.proacl, acldefault('f', p.proowner))
+    ) AS acl
+    WHERE p.oid = 'public.external_accounts_guard()'::regprocedure
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ),
   false, 'PUBLIC cannot EXECUTE external_accounts_guard'
 );
 SELECT is(
-  (SELECT has_function_privilege('public', 'public.project_external_accounts_guard()', 'EXECUTE')),
+  EXISTS (
+    SELECT 1
+    FROM pg_proc AS p
+    CROSS JOIN LATERAL aclexplode(
+      COALESCE(p.proacl, acldefault('f', p.proowner))
+    ) AS acl
+    WHERE p.oid = 'public.project_external_accounts_guard()'::regprocedure
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'EXECUTE'
+  ),
   false, 'PUBLIC cannot EXECUTE project_external_accounts_guard'
 );
 
@@ -108,23 +161,49 @@ SELECT ok(
 --   account A1         c0000000-0000-0000-0000-00000000000A
 --   account B1         c0000000-0000-0000-0000-00000000000B
 
-INSERT INTO public.profiles (id, full_name, email, plan_status, onboarding_done, sync_status, client_type)
+INSERT INTO auth.users (id, email)
 VALUES
-  ('a0000000-0000-0000-0000-000000000001','Admin Fixture','admin@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-000000000002','Manager A','manager-a@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-000000000003','Design A','design-a@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-000000000004','Traffic A','traffic-a@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-00000000000a','Client A','client-a@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-00000000000b','Client B','client-b@test.local','active',true,'ok','recurring'),
-  ('a0000000-0000-0000-0000-00000000000e','Manager Unassigned','manager-u@test.local','active',true,'ok','recurring');
+  ('a0000000-0000-0000-0000-000000000001','admin@test.local'),
+  ('a0000000-0000-0000-0000-000000000002','manager-a@test.local'),
+  ('a0000000-0000-0000-0000-000000000003','design-a@test.local'),
+  ('a0000000-0000-0000-0000-000000000004','traffic-a@test.local'),
+  ('a0000000-0000-0000-0000-00000000000a','client-a@test.local'),
+  ('a0000000-0000-0000-0000-00000000000b','client-b@test.local'),
+  ('a0000000-0000-0000-0000-00000000000e','manager-u@test.local');
+
+UPDATE public.profiles AS p
+SET full_name = fixture.full_name,
+    plan_status = 'active',
+    onboarding_done = true,
+    sync_status = 'synced',
+    client_type = 'recurring'
+FROM (
+  VALUES
+    ('a0000000-0000-0000-0000-000000000001'::uuid, 'Admin Fixture'),
+    ('a0000000-0000-0000-0000-000000000002'::uuid, 'Manager A'),
+    ('a0000000-0000-0000-0000-000000000003'::uuid, 'Design A'),
+    ('a0000000-0000-0000-0000-000000000004'::uuid, 'Traffic A'),
+    ('a0000000-0000-0000-0000-00000000000a'::uuid, 'Client A'),
+    ('a0000000-0000-0000-0000-00000000000b'::uuid, 'Client B'),
+    ('a0000000-0000-0000-0000-00000000000e'::uuid, 'Manager Unassigned')
+) AS fixture(id, full_name)
+WHERE p.id = fixture.id;
+
+-- handle_new_user creates exactly one client role. Replace it only for staff.
+DELETE FROM public.user_roles
+WHERE user_id IN (
+  'a0000000-0000-0000-0000-000000000001',
+  'a0000000-0000-0000-0000-000000000002',
+  'a0000000-0000-0000-0000-000000000003',
+  'a0000000-0000-0000-0000-000000000004',
+  'a0000000-0000-0000-0000-00000000000e'
+);
 
 INSERT INTO public.user_roles (user_id, role) VALUES
   ('a0000000-0000-0000-0000-000000000001','admin'),
   ('a0000000-0000-0000-0000-000000000002','manager'),
   ('a0000000-0000-0000-0000-000000000003','design'),
   ('a0000000-0000-0000-0000-000000000004','traffic'),
-  ('a0000000-0000-0000-0000-00000000000a','client'),
-  ('a0000000-0000-0000-0000-00000000000b','client'),
   ('a0000000-0000-0000-0000-00000000000e','manager');
 
 -- Assign staff only to Client A.

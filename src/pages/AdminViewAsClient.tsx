@@ -211,7 +211,7 @@ export default function AdminViewAsClient() {
             <div className="flex items-center gap-2">
               <Eye className="w-4 h-4 text-sky-500" />
               <span className="text-xs text-sky-500 font-medium">
-                Visualizando como: {selectedClient?.company_name || selectedClient?.full_name}
+                Somente leitura · visualizando como: {selectedClient?.company_name || selectedClient?.full_name}
               </span>
             </div>
           </div>

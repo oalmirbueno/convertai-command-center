@@ -47,7 +47,6 @@ Deno.serve(async (req) => {
       new_email,
       new_full_name,
       send_contract_id,
-      contract_recipient_email,
     } = await req.json();
     if (!profile_id || !new_email) throw new Error("profile_id e new_email obrigatórios");
 
@@ -99,7 +98,6 @@ Deno.serve(async (req) => {
       const { data, error } = await admin.functions.invoke("send-contract-email", {
         body: {
           contract_id: send_contract_id,
-          override_email: contract_recipient_email || new_email,
         },
       });
       if (error) contractResult = { error: error.message };

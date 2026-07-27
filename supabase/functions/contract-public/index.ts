@@ -12,6 +12,27 @@ const json = (data: any, status = 200) =>
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
+function storagePathFromFilesReference(value?: string | null) {
+  if (!value) return null;
+  if (value.startsWith("files://")) return value.slice("files://".length);
+  try {
+    const parsed = new URL(value);
+    const marker = "/storage/v1/object/";
+    const markerIndex = parsed.pathname.indexOf(marker);
+    if (markerIndex < 0) return null;
+    const parts = parsed.pathname
+      .slice(markerIndex + marker.length)
+      .split("/")
+      .filter(Boolean);
+    if (["public", "sign", "authenticated"].includes(parts[0])) parts.shift();
+    const bucket = parts.shift();
+    if (bucket !== "files" || parts.length === 0) return null;
+    return decodeURIComponent(parts.join("/"));
+  } catch {
+    return null;
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
@@ -32,83 +53,66 @@ Deno.serve(async (req) => {
         .from("contracts")
         .select("id, title, description, original_file_url, original_file_name, status, admin_signature_name, admin_signed_at, client_signature_name, client_signed_at, client_id")
         .eq("sign_token", token)
+        .in("status", ["sent", "signed", "completed"])
         .maybeSingle();
 
       if (error || !contract) return json({ error: "invalid token" }, 404);
 
       // attach client basic info for display
-      const { data: client } = await supabase
+      const { data: client, error: clientError } = await supabase
         .from("profiles")
-        .select("full_name, company_name, email")
+        .select("full_name, company_name")
         .eq("id", contract.client_id)
         .maybeSingle();
+      if (clientError) return json({ error: "client unavailable" }, 503);
 
-      return json({ contract: { ...contract, client_id: undefined }, client });
+      const contractPath = storagePathFromFilesReference(contract.original_file_url);
+      let signedFileUrl = contract.original_file_url;
+      if (contractPath) {
+        const { data: signed, error: signedError } = await supabase.storage
+          .from("files")
+          .createSignedUrl(contractPath, 60 * 60);
+        if (signedError || !signed?.signedUrl) {
+          return json({ error: "contract file unavailable" }, 503);
+        }
+        signedFileUrl = signed.signedUrl;
+      }
+
+      return json({
+        contract: {
+          ...contract,
+          client_id: undefined,
+          original_file_url: signedFileUrl,
+        },
+        client,
+      });
     }
 
     // POST -> sign action
     if (req.method === "POST") {
       const body = await req.json();
       const { token, signature_name, accept } = body || {};
-      if (!token || !signature_name || !accept) return json({ error: "missing fields" }, 400);
-
-      const { data: contract, error: fetchErr } = await supabase
-        .from("contracts")
-        .select("*")
-        .eq("sign_token", token)
-        .maybeSingle();
-      if (fetchErr || !contract) return json({ error: "invalid token" }, 404);
-      if (contract.client_signed_at) return json({ error: "already signed" }, 400);
-      if (contract.status !== "sent" && contract.status !== "signed") {
-        return json({ error: "contract not available for signing" }, 400);
+      const normalizedToken = typeof token === "string" ? token.trim() : "";
+      const normalizedName = typeof signature_name === "string"
+        ? signature_name.trim()
+        : "";
+      if (!normalizedToken || !normalizedName || normalizedName.length > 200 || accept !== true) {
+        return json({ error: "missing or invalid fields" }, 400);
       }
 
       const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
-      const now = new Date().toISOString();
-
-      // Update contract as signed by client
-      const { error: updateErr } = await supabase
-        .from("contracts")
-        .update({
-          client_signature_name: signature_name,
-          client_signed_at: now,
-          client_signature_ip: ip,
-          status: "completed",
-        })
-        .eq("id", contract.id);
-      if (updateErr) return json({ error: updateErr.message }, 500);
-
-      // Insert into files table under "Contratos" folder
-      const { data: fileRow, error: fileErr } = await supabase
-        .from("files")
-        .insert({
-          client_id: contract.client_id,
-          project_id: contract.project_id,
-          uploaded_by: contract.created_by || contract.client_id,
-          file_name: contract.original_file_name,
-          file_url: contract.original_file_url,
-          file_type: "application/pdf",
-          folder: "contratos",
-          description: `Contrato assinado por ${signature_name} em ${new Date(now).toLocaleString("pt-BR")}`,
-          approval_status: "approved",
-        })
-        .select("id")
-        .single();
-
-      if (!fileErr && fileRow) {
-        await supabase.from("contracts").update({ file_id: fileRow.id }).eq("id", contract.id);
+      const { error: completionError } = await supabase.rpc(
+        "complete_contract_signature",
+        {
+          p_token: normalizedToken,
+          p_signature_name: normalizedName,
+          p_signature_ip: ip,
+        },
+      );
+      if (completionError) {
+        const status = completionError.message === "contract not found" ? 404 : 400;
+        return json({ error: completionError.message }, status);
       }
-
-      // Notify admins
-      const { data: admins } = await supabase
-        .from("user_roles").select("user_id").eq("role", "admin");
-      const inserts = (admins || []).map((a: any) => ({
-        user_id: a.user_id,
-        message: `✍️ Contrato "${contract.title}" assinado pelo cliente`,
-        notification_type: "update",
-        link: "/contratos",
-      }));
-      if (inserts.length) await supabase.from("notifications").insert(inserts);
 
       return json({ ok: true });
     }

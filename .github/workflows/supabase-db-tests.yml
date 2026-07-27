@@ -36,13 +36,36 @@ jobs:
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 1.226.4
+          version: 2.109.1
 
       - name: Install NPM dependencies
         run: npm ci
 
+      - name: Log Supabase CLI capabilities
+        run: |
+          supabase --version
+          supabase start --help
+          supabase db reset --help
+          supabase test db --help
+
+      - name: Restore production-only legacy quiz table in CI
+        run: |
+          cat > supabase/migrations/20260528163000_ci_quiz_submissions_compat.sql <<'SQL'
+          CREATE TABLE IF NOT EXISTS public.quiz_submissions (
+            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+            submitted_at timestamptz
+          );
+          ALTER TABLE public.quiz_submissions ENABLE ROW LEVEL SECURITY;
+
+          CREATE OR REPLACE FUNCTION public.email_queue_dispatch()
+          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
+
+          CREATE OR REPLACE FUNCTION public.email_queue_wake()
+          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
+          SQL
+
       - name: Start Supabase local stack
-        run: supabase start --exclude realtime,storage-api,imgproxy,edge-runtime,logflare,vector,pgadmin-schema-diff,studio,mailpit,inbucket
+        run: supabase start
 
       - name: Apply migrations
         run: supabase db reset --local --no-seed
@@ -53,8 +76,14 @@ jobs:
       - name: Run unit tests
         run: npm test -- --run
 
+      - name: Check TypeScript
+        run: npx tsc --noEmit
+
       - name: Build application
         run: npm run build
+
+      - name: Validate Lovable manifest
+        run: npx lovable-mcp-extract-manifest
 
       - name: Stop Supabase local stack
         if: always()

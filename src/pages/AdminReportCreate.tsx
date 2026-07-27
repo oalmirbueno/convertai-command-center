@@ -164,14 +164,18 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    if (!clientId) {
+      toast.error("Selecione o cliente antes de enviar o arquivo.");
+      e.target.value = "";
+      return;
+    }
     setUploading(true);
     try {
       const ext = file.name.split(".").pop();
-      const path = `reports/${Date.now()}.${ext}`;
+      const path = `reports/${clientId}/${Date.now()}.${ext}`;
       const { error } = await supabase.storage.from("files").upload(path, file);
       if (error) throw error;
-      const { data: urlData } = supabase.storage.from("files").getPublicUrl(path);
-      setFileUrl(urlData.publicUrl);
+      setFileUrl(`files://${path}`);
       setFileName(file.name);
       toast.success("Arquivo enviado!");
     } catch (err: any) {
@@ -229,6 +233,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         const { data: upd } = await supabase.from("updates").insert({
           project_id: projectId,
           author_id: user!.id,
+          client_visible: true,
           message: `Relatório publicado: ${title}`,
           update_type: "milestone",
         }).select().single();

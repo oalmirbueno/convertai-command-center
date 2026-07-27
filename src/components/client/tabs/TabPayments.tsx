@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useProjectPayments, usePaymentInstallments } from "@/hooks/usePayments";
 import { supabase } from "@/integrations/supabase/client";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
@@ -33,7 +34,8 @@ interface TabPaymentsProps {
 
 export default function TabPayments({ projectId, clientId, projectName }: TabPaymentsProps) {
   const { profile } = useAuth();
-  const isAdmin = profile?.role === "admin";
+  const { isImpersonating } = useClientIdentity();
+  const isAdmin = profile?.role === "admin" && !isImpersonating;
   const { data: payment, isLoading: loadingPayment } = useProjectPayments(projectId);
   const { data: installments, isLoading: loadingInstallments } = usePaymentInstallments(payment?.id);
   const queryClient = useQueryClient();
@@ -69,6 +71,10 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   };
 
   const handleCreate = async () => {
+    if (!isAdmin) {
+      toast({ title: "Somente leitura", description: "Nenhuma alteração pode ser feita neste modo.", variant: "destructive" });
+      return;
+    }
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
@@ -139,6 +145,10 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   };
 
   const handleEdit = async () => {
+    if (!isAdmin) {
+      toast({ title: "Somente leitura", description: "Nenhuma alteração pode ser feita neste modo.", variant: "destructive" });
+      return;
+    }
     const total = parseFloat(totalValue);
     const entryPct = parseFloat(entryPercentage);
     const count = parseInt(installmentsCount);
@@ -215,6 +225,10 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   };
 
   const handleEditInstallment = async () => {
+    if (!isAdmin) {
+      toast({ title: "Somente leitura", description: "Nenhuma alteração pode ser feita neste modo.", variant: "destructive" });
+      return;
+    }
     if (!editingInst) return;
     setSubmitting(true);
     try {
@@ -260,6 +274,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
   };
 
   const openEditDialog = () => {
+    if (!isAdmin) return;
     if (payment) {
       setTotalValue(String(payment.total_value));
       setEntryPercentage(String(payment.entry_percentage));
@@ -389,7 +404,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
       </div>
 
       {/* Edit installment dialog */}
-      <Dialog open={editInstOpen} onOpenChange={setEditInstOpen}>
+      <Dialog open={isAdmin && editInstOpen} onOpenChange={setEditInstOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader><DialogTitle>Editar Parcela</DialogTitle></DialogHeader>
           {editingInst && (
@@ -458,7 +473,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const perInstallment = count > 0 ? remaining / count : 0;
 
     return (
-      <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+      <Dialog open={isAdmin && createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Criar Plano de Pagamento</DialogTitle></DialogHeader>
           <div className="space-y-4">
@@ -505,7 +520,7 @@ export default function TabPayments({ projectId, clientId, projectName }: TabPay
     const perInstallment = count > 0 ? remaining / count : 0;
 
     return (
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+      <Dialog open={isAdmin && editOpen} onOpenChange={setEditOpen}>
         <DialogContent className="max-w-md" onPointerDownOutside={(e) => e.preventDefault()}>
           <DialogHeader><DialogTitle>Editar Plano de Pagamento</DialogTitle></DialogHeader>
           <p className="text-xs text-muted-foreground">⚠️ Ao salvar, as parcelas serão recriadas e o status de pagamento anterior será resetado.</p>

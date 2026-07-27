@@ -58,8 +58,6 @@ import {
   getContractSchema,
   listContracts,
   listContractsSchema,
-  sendContract,
-  sendContractSchema,
   updateContract,
   updateContractSchema,
 } from './mcp-contracts-services.ts';
@@ -132,7 +130,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'files:archive': { title: 'Arquivos — arquivar/restaurar', description: 'Arquivar e restaurar arquivos, mantendo o histórico.', sensitive: true },
   'workspace:read': { title: 'Workspace — leitura', description: 'Navegar pastas e nós do Workspace interno.' },
   'contracts:read': { title: 'Contratos — leitura', description: 'Listar e detalhar contratos e status de assinatura.' },
-  'contracts:write': { title: 'Contratos — escrita', description: 'Criar, atualizar, enviar e cancelar contratos não assinados.', sensitive: true },
+  'contracts:write': { title: 'Contratos — rascunhos', description: 'Criar, atualizar e cancelar somente rascunhos completamente não assinados e nunca enviados. Não permite assinar, aprovar, enviar ou publicar contratos.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro — leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
   'memory:propose': { title: 'Segundo Cérebro — propor', description: 'Criar propostas .md no inbox do OpenClaw (nunca sobrescreve arquivos).', sensitive: true },
   'admin': { title: 'Administrador', description: 'Bypass total de escopo. Concede acesso a todas as ferramentas.', sensitive: true },
@@ -201,7 +199,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.7.0',
+  version: '1.7.1',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -524,7 +522,7 @@ const getWorkspaceNodeTool = makeRead(
 const listFilesTool = makeRead(
   'aceleriq_list_files',
   'Listar arquivos',
-  'Lista arquivos de entregas/aprovação com filtros por cliente, projeto, pasta e status de aprovação. Cada item vem enriquecido com approval_state (approved|pending|rejected|not_required), requires_approval e is_internal_document — arquivos internos (estrategicos/materiais/operacionais/contratos/relatorios) NÃO passam pelo fluxo de aprovação do cliente.',
+  'Lista arquivos com filtros por cliente, projeto, pasta e status. O gate usa os campos persistidos: visibility=internal fica restrito à equipe; visibility=client_shared foi liberado sem decisão; visibility=approval com requires_approval=true segue o status do cliente. Agentes apenas consultam e não aprovam nem publicam.',
   z.object({
     client_id: UUID.optional(),
     project_id: UUID.optional(),
@@ -551,7 +549,7 @@ const listFilesTool = makeRead(
 const getFileTool = makeRead(
   'aceleriq_get_file',
   'Detalhes de arquivo',
-  'Retorna um arquivo pelo ID com metadados completos, versões filhas (parent_file_id) e semântica de aprovação enriquecida (approval_state, requires_approval, is_internal_document).',
+  'Retorna um arquivo pelo ID com metadados completos e semântica de aprovação enriquecida (approval_state, requires_approval, is_internal_document).',
   z.object({ file_id: UUID }).strict(),
   {
     type: 'object',
@@ -982,10 +980,9 @@ const updateProjectTool: ToolDefinition = {
 };
 
 // ─── Contracts (Bloco B) ──────────────────────────────────────
-// Contratos ASSINADOS (client_signed_at != null OR status IN
-// {signed, completed, cancelled}) são imutáveis via MCP — update/send/cancel
-// retornam write:forbidden. Nenhuma tool aqui envia email nem faz upload de
-// arquivo: send apenas move para status=sent e retorna a sign_url pública.
+// Agentes podem criar, editar ou cancelar apenas rascunhos completamente
+// não assinados e nunca enviados. Nenhuma tool MCP assina, aprova, envia,
+// publica ou faz upload do arquivo original do contrato.
 const CONTRACTS_READ: readonly ToolScope[] = ['contracts:read', 'aceleriq:read'];
 const CONTRACTS_WRITE: readonly ToolScope[] = ['contracts:write'];
 
@@ -1036,7 +1033,7 @@ const getContractTool: ToolDefinition = {
 const createContractTool: ToolDefinition = {
   name: 'aceleriq_create_contract',
   title: 'Criar contrato (rascunho)',
-  description: 'Cria um contrato em RASCUNHO. Exige client_id existente; project_id opcional deve pertencer ao mesmo cliente. Gera sign_token automaticamente; nunca envia email nem faz upload — original_file_url deve apontar para um arquivo já hospedado.',
+  description: 'Cria somente um rascunho completamente não assinado e não enviado. Exige client_id existente; project_id opcional deve pertencer ao mesmo cliente. Nunca assina, aprova, envia email, publica ou faz upload — original_file_url deve apontar para um arquivo já hospedado.',
   scopes: CONTRACTS_WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -1063,8 +1060,8 @@ const createContractTool: ToolDefinition = {
 
 const updateContractTool: ToolDefinition = {
   name: 'aceleriq_update_contract',
-  title: 'Atualizar contrato',
-  description: 'Atualiza title, description, project_id ou arquivo do contrato. BLOQUEADO se o contrato estiver assinado (client_signed_at != null) ou em status signed/completed/cancelled — retorna write:forbidden. Nunca altera client_id, sign_token, admin_signed_at ou created_by.',
+  title: 'Atualizar rascunho de contrato',
+  description: 'Atualiza title, description, project_id ou arquivo somente enquanto o contrato permanece em draft, sem assinatura administrativa ou do cliente, sem sent_at e sem arquivo final. Nunca altera client_id, sign_token, assinaturas ou created_by.',
   scopes: CONTRACTS_WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -1089,33 +1086,10 @@ const updateContractTool: ToolDefinition = {
   },
 };
 
-const sendContractTool: ToolDefinition = {
-  name: 'aceleriq_send_contract',
-  title: 'Marcar contrato como enviado',
-  description: 'Move o contrato para status=sent e registra sent_at. Retorna sign_url pública. NÃO envia email. Bloqueado para contratos assinados/cancelados.',
-  scopes: CONTRACTS_WRITE,
-  annotations: WRITE_ANNOTATIONS,
-  inputSchema: {
-    type: 'object',
-    properties: {
-      contract_id: { type: 'string', format: 'uuid' },
-      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
-    },
-    required: ['contract_id', 'idempotency_key'],
-    additionalProperties: false,
-  },
-  handler: async (input, ctx) => {
-    const parsed = sendContractSchema.safeParse(input ?? {});
-    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
-    try { return await sendContract(parsed.data, ensureWriteCtx(ctx)); }
-    catch (e) { throw writeError(e); }
-  },
-};
-
 const cancelContractTool: ToolDefinition = {
   name: 'aceleriq_cancel_contract',
-  title: 'Cancelar contrato',
-  description: 'Cancela um contrato em draft ou sent (status → cancelled). Bloqueado se assinado. Aceita reason opcional que é anexada à description.',
+  title: 'Cancelar rascunho de contrato',
+  description: 'Cancela somente um contrato em draft completamente não assinado e nunca enviado (status → cancelled). Aceita reason opcional, anexada à description. Não cancela contratos assinados, aprovados, enviados ou publicados.',
   scopes: CONTRACTS_WRITE,
   annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true },
   inputSchema: {
@@ -1264,7 +1238,7 @@ function makeFileTool(
 
 const prepareUploadTool = makeFileTool(
   'aceleriq_prepare_file_upload', 'Preparar upload de arquivo',
-  'Cria registro provisório e devolve URL assinada de upload para o bucket privado mcp-files. Exige files:write. Valida cliente, projeto e MIME. project_id (se informado) precisa pertencer ao client_id.',
+  'Cria um rascunho interno e devolve URL assinada de upload para o bucket privado mcp-files. Agentes não publicam nem aprovam arquivos. Exige files:write e valida cliente, projeto e MIME.',
   FILES_WRITE, prepareUploadSchema,
   { type: 'object', additionalProperties: false, required: ['client_id','file_name','mime_type','size_bytes','folder','idempotency_key'], properties: {
     client_id: { type: 'string', format: 'uuid' }, project_id: { type: 'string', format: 'uuid' },
@@ -1272,9 +1246,8 @@ const prepareUploadTool = makeFileTool(
     size_bytes: { type: 'integer', minimum: 1 }, sha256: { type: 'string', pattern: '^[a-fA-F0-9]{64}$' },
     folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
     file_type: { type: 'string' },
-    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
     sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
-    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    description: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
     idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
   }},
@@ -1303,9 +1276,8 @@ const inlineUploadTool = makeFileTool(
     content_base64: { type: 'string', description: 'Base64 do conteúdo (≤10MB decodificado).' },
     folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
     file_type: { type: 'string' },
-    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
     sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
-    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    description: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
     idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
   }},
@@ -1324,9 +1296,8 @@ const uploadFileTool = makeFileTool(
     content_base64: { type: 'string' },
     folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
     file_type: { type: 'string' },
-    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
     sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
-    requires_approval: { type: 'boolean' }, description: { type: 'string' },
+    description: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
     idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
   }},
@@ -1367,15 +1338,14 @@ const searchContentTool = makeFileTool(
 
 const updateMetadataTool = makeFileTool(
   'aceleriq_update_file_metadata', 'Atualizar metadados',
-  'Atualiza somente campos permitidos (folder, visibility, sensitivity, tags, descrição etc.). Nunca troca client_id, uploaded_by, sha256 ou storage_path. Não substitui o arquivo físico.',
+  'Atualiza somente metadados internos permitidos (pasta, sensibilidade, tags e descrição). Nunca publica, aprova, troca client_id, uploaded_by, sha256 ou storage_path.',
   FILES_WRITE, updateMetadataSchema,
   { type: 'object', additionalProperties: false, required: ['file_id','idempotency_key'], properties: {
     file_id: { type: 'string', format: 'uuid' }, project_id: { type: ['string','null'], format: 'uuid' },
     folder: { type: 'string', enum: ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] },
     file_type: { type: 'string' },
-    visibility: { type: 'string', enum: ['internal','client_shared','approval'] },
     sensitivity: { type: 'string', enum: ['normal','confidential','restricted'] },
-    requires_approval: { type: 'boolean' }, description: { type: 'string' }, caption: { type: 'string' },
+    description: { type: 'string' }, caption: { type: 'string' },
     tags: { type: 'array', items: { type: 'string' } },
     idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
   }},
@@ -1384,7 +1354,7 @@ const updateMetadataTool = makeFileTool(
 
 const createVersionTool = makeFileTool(
   'aceleriq_create_file_version', 'Criar nova versão',
-  'Cria nova versão herdando client_id, project_id, pasta, visibilidade e sensibilidade. Versão anterior permanece disponível. Contratos restritos são imutáveis.',
+  'Cria uma correção interna ligada por revision_of_file_id. A versão anterior permanece imutável e a nova precisa passar novamente pelas duas aprovações humanas.',
   FILES_WRITE, createVersionSchema,
   { type: 'object', additionalProperties: false, required: ['parent_file_id','content_base64','mime_type','idempotency_key'], properties: {
     parent_file_id: { type: 'string', format: 'uuid' },
@@ -1466,7 +1436,6 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getContractTool,
   createContractTool,
   updateContractTool,
-  sendContractTool,
   cancelContractTool,
   // Persistent per-client/project memory (Studio + external agents)
   getProjectMemoryTool,

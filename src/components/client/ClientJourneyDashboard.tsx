@@ -1,76 +1,67 @@
-import CircularProgress from "./CircularProgress";
-import { Skeleton } from "@/components/ui/skeleton";
-import AutoSummaryCard from "./AutoSummaryCard";
-import AdsEducationCard from "./AdsEducationCard";
-import { StaggerContainer, FadeUp, FadeScale } from "./motion";
 import {
-  CheckCircle2, Clock, AlertCircle, FileCheck, TrendingUp,
-  Zap, Target, CalendarDays, MessageSquare,
-  ArrowUpRight, Layers, Activity, Award, BarChart3,
-  PackageCheck, ListChecks, Sparkles, Timer, Briefcase,
-  CircleCheck, CircleDot, Circle, FileImage, BookOpen,
-  ClipboardList, Eye, FolderOpen, User, Calendar,
-  Hourglass, Play, RotateCcw, ShieldCheck,
+  ArrowUpRight,
+  Briefcase,
+  CalendarDays,
+  CheckCircle2,
+  FileCheck,
+  PackageCheck,
+  Target,
 } from "lucide-react";
-import { useClientDashboardData, typeLabels, relativeTime, daysUntil, formatDate, formatDateShort, type DashboardData } from "./dashboardHelpers";
-
-const updateIcons: Record<string, typeof Activity> = {
-  creative: FileImage, task: CheckCircle2, alert: AlertCircle,
-  milestone: Target, system: Zap, report: TrendingUp,
-};
-
-const priorityLabels: Record<string, { label: string; color: string }> = {
-  urgent: { label: "Urgente", color: "text-destructive" },
-  high: { label: "Alta", color: "text-amber-400" },
-  medium: { label: "Média", color: "text-muted-foreground" },
-  low: { label: "Baixa", color: "text-muted-foreground/60" },
-};
+import { Skeleton } from "@/components/ui/skeleton";
+import CircularProgress from "./CircularProgress";
+import { FadeUp, StaggerContainer } from "./motion";
+import {
+  daysUntil,
+  formatDateShort,
+  typeLabels,
+  useClientDashboardData,
+} from "./dashboardHelpers";
 
 interface Props {
   clientId: string;
   clientName: string;
-  onSelectProject: (p: any) => void;
+  onSelectProject: (project: any) => void;
   isImpersonation?: boolean;
 }
 
-export default function ClientJourneyDashboard({ clientId, clientName, onSelectProject, isImpersonation }: Props) {
+const projectStatusLabel: Record<string, string> = {
+  active: "Em andamento",
+  review: "Em revisão",
+  planning: "Planejamento",
+  done: "Concluído",
+  paused: "Pausado",
+};
+
+export default function ClientJourneyDashboard({
+  clientId,
+  clientName,
+  onSelectProject,
+  isImpersonation,
+}: Props) {
   const { loadingProjects, data } = useClientDashboardData(clientId);
-
   const {
-    projects: allProjects, activeProjects, doneProjects, avgProgress,
-    tasks, doingTasks, reviewTasks, doneTasks, totalTasks,
-    milestones, completedMilestonesCount, totalMilestones,
-    pendingFiles, deliveredFiles, approvedFiles, totalFiles,
-    recentUpdates,
+    activeProjects,
+    doneProjects,
+    avgProgress,
+    milestones,
+    completedMilestonesCount,
+    totalMilestones,
+    pendingFiles,
+    deliveredFiles,
+    approvedFiles,
+    totalFiles,
   } = data;
-
-  const backlogTasks = tasks.filter((t: any) => t.status === "backlog" || t.status === "todo");
-  const approvedTasks = tasks.filter((t: any) => t.status === "approved");
-  const recentlyDoneTasks = doneTasks.slice(0, 10);
-  const firstName = clientName.split(" ")[0];
-
-  // Tasks with upcoming deadlines (next 7 days)
-  const upcomingDeadlineTasks = tasks
-    .filter((t: any) => t.due_date && t.status !== "done" && daysUntil(t.due_date) >= 0 && daysUntil(t.due_date) <= 7)
-    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-
-  // Overdue tasks
-  const overdueTasks = tasks
-    .filter((t: any) => t.due_date && t.status !== "done" && daysUntil(t.due_date) < 0)
-    .sort((a: any, b: any) => new Date(a.due_date).getTime() - new Date(b.due_date).getTime());
-
-  // Detect traffic projects with active tasks (doing/review)
-  const trafficProjects = allProjects.filter((p: any) => p.project_type === "traffic" && p.status !== "done");
-  const activeTrafficProjectNames = trafficProjects
-    .filter((p: any) => tasks.some((t: any) => t.project_id === p.id && (t.status === "doing" || t.status === "review")))
-    .map((p: any) => p.name);
+  const firstName = clientName.split(" ")[0] || "cliente";
+  const dashboardProjects = [...activeProjects, ...doneProjects];
 
   if (loadingProjects) {
     return (
       <div className="space-y-6 animate-fade-in">
         <Skeleton className="h-36 w-full rounded-2xl" />
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-28 rounded-xl" />)}
+        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+          {[1, 2, 3, 4].map((item) => (
+            <Skeleton key={item} className="h-28 rounded-xl" />
+          ))}
         </div>
         <Skeleton className="h-64 w-full rounded-2xl" />
       </div>
@@ -79,683 +70,178 @@ export default function ClientJourneyDashboard({ clientId, clientName, onSelectP
 
   return (
     <StaggerContainer className="space-y-8">
-
-      {/* ══════════ HERO ══════════ */}
       <FadeUp>
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
-        <div className="absolute top-0 right-0 w-96 h-96 bg-primary/[0.04] rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-0 w-48 h-48 bg-primary/[0.03] rounded-full blur-2xl translate-y-1/2 -translate-x-1/4" />
-
-        <div className="relative z-10 flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <p className="text-muted-foreground text-xs uppercase tracking-widest mb-2 flex items-center gap-2">
-              <CalendarDays className="w-3 h-3" />
-              {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}
-            </p>
-            <h1 className="text-2xl sm:text-3xl font-bold text-foreground mb-3">
-              Bem-vindo de volta, {firstName}
-            </h1>
-
-            <p className="text-muted-foreground text-sm max-w-lg leading-relaxed">
-              {activeProjects.length === 0 && doneProjects.length === 0
-                ? "Seu painel está limpo. Novos projetos aparecerão aqui assim que forem criados."
-                : <>
-                    {activeProjects.length > 0 && (
-                      <>{activeProjects.length === 1 ? "1 projeto ativo" : `${activeProjects.length} projetos ativos`} com {avgProgress}% de progresso. </>
-                    )}
-                    {doingTasks.length > 0 && <>{doingTasks.length} {doingTasks.length === 1 ? "tarefa sendo executada" : "tarefas sendo executadas"} agora. </>}
-                    {reviewTasks.length > 0 && <>{reviewTasks.length} em revisão. </>}
-                    {pendingFiles.length > 0 && <>{pendingFiles.length} {pendingFiles.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua aprovação.</>}
-                  </>
-              }
-            </p>
-
-            {totalTasks > 0 && (
-              <div className="flex flex-wrap gap-2 mt-4">
-                {doneTasks.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-emerald-500/10 text-emerald-400 px-2.5 py-1 rounded-full">
-                    <CheckCircle2 className="w-3 h-3" />
-                    {doneTasks.length} tarefas concluídas
-                  </span>
-                )}
-                {totalFiles > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-primary/10 text-primary px-2.5 py-1 rounded-full">
-                    <PackageCheck className="w-3 h-3" />
-                    {totalFiles} {totalFiles === 1 ? "arquivo entregue" : "arquivos entregues"}
-                  </span>
-                )}
-                {completedMilestonesCount > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-sky-500/10 text-sky-400 px-2.5 py-1 rounded-full">
-                    <Target className="w-3 h-3" />
-                    {completedMilestonesCount}/{totalMilestones} etapas concluídas
-                  </span>
-                )}
-                {overdueTasks.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 text-[11px] font-medium bg-destructive/10 text-destructive px-2.5 py-1 rounded-full">
-                    <AlertCircle className="w-3 h-3" />
-                    {overdueTasks.length} {overdueTasks.length === 1 ? "tarefa atrasada" : "tarefas atrasadas"}
-                  </span>
-                )}
+        <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
+          <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
+          <div className="relative z-10 flex items-start justify-between gap-4">
+            <div>
+              <p className="mb-2 flex items-center gap-2 text-xs uppercase tracking-widest text-muted-foreground">
+                <CalendarDays className="h-3 w-3" />
+                {new Date().toLocaleDateString("pt-BR", {
+                  weekday: "long",
+                  day: "numeric",
+                  month: "long",
+                })}
+              </p>
+              <h1 className="text-2xl font-bold text-foreground sm:text-3xl">
+                Bem-vindo de volta, {firstName}
+              </h1>
+              <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
+                Acompanhe seus projetos, etapas e entregas liberadas pela Aceleriq.
+                {pendingFiles.length > 0
+                  ? ` ${pendingFiles.length} ${pendingFiles.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua decisão.`
+                  : ""}
+              </p>
+              {isImpersonation && (
+                <p className="mt-3 text-xs text-sky-600">
+                  Visualização administrativa em modo somente leitura.
+                </p>
+              )}
+            </div>
+            {activeProjects.length > 0 && (
+              <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
+                <CircularProgress progress={avgProgress} size={80} strokeWidth={5} />
+                <span className="text-[10px] text-muted-foreground">Progresso geral</span>
               </div>
             )}
           </div>
-
-          {activeProjects.length > 0 && (
-            <div className="hidden sm:flex flex-col items-center gap-1.5 shrink-0">
-              <CircularProgress progress={avgProgress} size={80} strokeWidth={5} />
-              <span className="text-[10px] text-muted-foreground">Progresso geral</span>
-            </div>
-          )}
         </div>
-      </div>
       </FadeUp>
 
-      {/* ══════════ METRICS ══════════ */}
       <FadeUp>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {[
-          { label: "Projetos Ativos", value: activeProjects.length, sub: doneProjects.length > 0 ? `+${doneProjects.length} concluídos` : "", icon: Briefcase, color: "text-primary", bg: "bg-primary/10" },
-          { label: "Tarefas em Execução", value: doingTasks.length + reviewTasks.length, sub: `${doneTasks.length} concluídas de ${totalTasks}`, icon: ListChecks, color: "text-sky-400", bg: "bg-sky-500/10" },
-          { label: "Entregas Realizadas", value: totalFiles, sub: approvedFiles > 0 ? `${approvedFiles} aprovadas` : "", icon: PackageCheck, color: "text-emerald-400", bg: "bg-emerald-500/10" },
-          { label: "Aprovações Pendentes", value: pendingFiles.length, sub: pendingFiles.length > 0 ? "Ação necessária" : "Nenhuma pendência", icon: FileCheck, color: "text-amber-400", bg: "bg-amber-500/10" },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-card border border-border rounded-xl p-4 sm:p-5 hover:border-border/80 transition-colors group">
-            <div className="flex items-center justify-between mb-2">
-              <div className={`w-9 h-9 rounded-lg ${stat.bg} flex items-center justify-center transition-transform group-hover:scale-105`}>
-                <stat.icon className={`w-4.5 h-4.5 ${stat.color}`} />
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          {[
+            {
+              label: "Projetos ativos",
+              value: activeProjects.length,
+              detail: doneProjects.length ? `${doneProjects.length} concluído(s)` : "Nenhum concluído",
+              icon: Briefcase,
+              color: "text-primary",
+              bg: "bg-primary/10",
+            },
+            {
+              label: "Etapas concluídas",
+              value: completedMilestonesCount,
+              detail: `${totalMilestones} etapa(s) no total`,
+              icon: Target,
+              color: "text-sky-500",
+              bg: "bg-sky-500/10",
+            },
+            {
+              label: "Entregas liberadas",
+              value: totalFiles,
+              detail: approvedFiles ? `${approvedFiles} aprovada(s)` : "Aguardando decisões",
+              icon: PackageCheck,
+              color: "text-emerald-500",
+              bg: "bg-emerald-500/10",
+            },
+            {
+              label: "Aprovações pendentes",
+              value: pendingFiles.length,
+              detail: pendingFiles.length ? "Ação necessária" : "Nenhuma pendência",
+              icon: FileCheck,
+              color: "text-amber-500",
+              bg: "bg-amber-500/10",
+            },
+          ].map((metric) => (
+            <div key={metric.label} className="rounded-xl border border-border bg-card p-4 sm:p-5">
+              <div className="mb-2 flex items-center justify-between">
+                <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${metric.bg}`}>
+                  <metric.icon className={`h-4 w-4 ${metric.color}`} />
+                </div>
+                <span className="text-2xl font-bold tabular-nums text-foreground">{metric.value}</span>
               </div>
-              <span className="text-2xl font-bold text-foreground tabular-nums">{stat.value}</span>
+              <p className="text-xs text-muted-foreground">{metric.label}</p>
+              <p className="mt-0.5 text-[10px] text-muted-foreground/70">{metric.detail}</p>
             </div>
-            <p className="text-[11px] sm:text-xs text-muted-foreground">{stat.label}</p>
-            {stat.sub && <p className="text-[10px] text-muted-foreground/60 mt-0.5">{stat.sub}</p>}
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
       </FadeUp>
 
-      {/* ══════════ AUTO SUMMARY ══════════ */}
-      <FadeUp><AutoSummaryCard data={data} firstName={firstName} /></FadeUp>
-
-      {/* ══════════ ADS EDUCATION ══════════ */}
-      <FadeUp><AdsEducationCard activeTrafficProjects={activeTrafficProjectNames} /></FadeUp>
-
-      {/* ══════════ MAIN GRID ══════════ */}
-      <FadeUp>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* LEFT COLUMN */}
-        <div className="lg:col-span-2 space-y-6">
-
-          {/* Active Projects */}
-          {activeProjects.length > 0 && (
-            <section>
-              <SectionHeader icon={Activity} color="text-primary" title="Projetos em Andamento" count={activeProjects.length} />
-              <div className="space-y-3">
-                {activeProjects.map((p: any) => {
-                  const projectTasks = tasks.filter((t: any) => t.project_id === p.id);
-                  const projectDoing = projectTasks.filter((t: any) => t.status === "doing" || t.status === "review");
-                  const projectDone = projectTasks.filter((t: any) => t.status === "done");
-                  const projectBacklog = projectTasks.filter((t: any) => t.status === "backlog" || t.status === "todo");
-                  const projectTotal = projectTasks.length;
-                  const dl = daysUntil(p.deadline);
-                  const projectMilestones = milestones.filter((m: any) => m.project_id === p.id);
-                  const projectMilestonesDone = projectMilestones.filter((m: any) => m.status === "completed").length;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => onSelectProject(p)}
-                      className="group bg-card border border-border rounded-xl p-5 cursor-pointer hover:border-primary/30 hover:shadow-lg hover:shadow-primary/5 transition-all duration-200"
-                    >
-                      <div className="flex items-start gap-4">
-                        <div className="shrink-0 mt-0.5">
-                          <CircularProgress progress={p.progress} size={56} strokeWidth={4} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 mb-0.5">
-                            <StatusDot status={p.status} />
-                            <span className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                              {typeLabels[p.project_type] || p.project_type}
-                            </span>
-                          </div>
-                          <p className="text-sm font-semibold text-foreground truncate">{p.name}</p>
-
-                          {p.description && (
-                            <p className="text-[11px] text-muted-foreground/70 mt-1 line-clamp-2 leading-relaxed">{p.description}</p>
-                          )}
-
-                          {/* Task stats */}
-                          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5 text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <Zap className="w-3 h-3 text-sky-400" />
-                              {projectDoing.length} em execução
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                              {projectDone.length}/{projectTotal} concluídas
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Hourglass className="w-3 h-3 text-muted-foreground/50" />
-                              {projectBacklog.length} planejadas
-                            </span>
-                            <span className={`flex items-center gap-1 ${dl <= 7 && dl >= 0 ? "text-amber-400" : dl < 0 ? "text-destructive" : ""}`}>
-                              <Timer className="w-3 h-3" />
-                              {dl < 0 ? `${Math.abs(dl)}d atrasado` : dl === 0 ? "Prazo hoje" : `${dl}d restantes`}
-                            </span>
-                          </div>
-
-                          {/* Milestones mini */}
-                          {projectMilestones.length > 0 && (
-                            <div className="flex items-center gap-2 mt-2 text-[11px] text-muted-foreground">
-                              <Target className="w-3 h-3 text-primary/60" />
-                              {projectMilestonesDone}/{projectMilestones.length} etapas concluídas
-                            </div>
-                          )}
-
-                          {/* Progress bar */}
-                          <div className="h-1.5 w-full rounded-full bg-secondary mt-3 overflow-hidden">
-                            <div
-                              className="h-full rounded-full bg-gradient-to-r from-primary to-primary/70 transition-all duration-700 ease-out"
-                              style={{ width: `${p.progress}%` }}
-                            />
-                          </div>
-
-                          {/* Currently doing */}
-                          {projectDoing.length > 0 && (
-                            <div className="mt-2.5 flex flex-col gap-1">
-                              {projectDoing.slice(0, 3).map((t: any) => (
-                                <span key={t.id} className="text-[11px] text-primary/80 flex items-center gap-1.5 truncate">
-                                  <Sparkles className="w-3 h-3 shrink-0" />
-                                  {t.title}
-                                  {t.assignee?.full_name && <span className="text-muted-foreground/50 ml-1">por {t.assignee.full_name}</span>}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-
-                          {/* Dates */}
-                          <div className="mt-3 pt-2.5 border-t border-border/50 flex flex-wrap gap-x-4 gap-y-1 text-[10px] text-muted-foreground/60">
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              Início: {formatDate(p.start_date)}
-                            </span>
-                            <span className="flex items-center gap-1">
-                              <Calendar className="w-3 h-3" />
-                              Prazo: {formatDate(p.deadline)}
-                            </span>
-                          </div>
-
-                          {p.objectives && (
-                            <div className="mt-2">
-                              <p className="text-[10px] uppercase tracking-wider text-muted-foreground/60 mb-0.5">Objetivo</p>
-                              <p className="text-[11px] text-foreground/60 line-clamp-2 leading-relaxed">{p.objectives}</p>
-                            </div>
-                          )}
-                        </div>
-                        <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity shrink-0 mt-2" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Journey Timeline */}
-          {milestones.length > 0 && (
-            <section>
-              <SectionHeader icon={Target} color="text-sky-400" title="Jornada do Projeto" count={totalMilestones} />
-              <div className="bg-card border border-border rounded-xl p-5">
-                <div className="relative">
-                  <div className="absolute left-[15px] top-2 bottom-2 w-[2px] bg-gradient-to-b from-primary/40 via-border to-border" />
-                  <div className="space-y-1">
-                    {milestones.map((m: any, i: number) => {
-                      const isDone = m.status === "completed";
-                      const isActive = m.status === "in_progress" || (!isDone && i === 0);
-                      return (
-                        <div key={m.id} className="flex gap-4 py-2.5 relative">
-                          <div className={`w-[32px] h-[32px] rounded-full flex items-center justify-center shrink-0 z-10 transition-all ${
-                            isDone ? "bg-emerald-500/15 border-2 border-emerald-500"
-                              : isActive ? "bg-primary/15 border-2 border-primary animate-pulse"
-                              : "bg-card border-2 border-border"
-                          }`}>
-                            {isDone ? <CircleCheck className="w-3.5 h-3.5 text-emerald-400" />
-                              : isActive ? <CircleDot className="w-3.5 h-3.5 text-primary" />
-                              : <Circle className="w-3.5 h-3.5 text-muted-foreground/40" />}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className={`text-[13px] font-medium ${isDone ? "text-emerald-400 line-through decoration-emerald-500/30" : isActive ? "text-foreground" : "text-foreground/50"}`}>
-                              {m.title}
-                            </p>
-                            <p className="text-[11px] text-muted-foreground mt-0.5">
-                              {(m as any).project?.name} · {formatDateShort(m.target_date)}
-                              {isDone && " · Concluído"}
-                            </p>
-                            {m.description && !isDone && (
-                              <p className="text-[11px] text-muted-foreground/60 mt-1 line-clamp-1">{m.description}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-                {totalMilestones > 0 && (
-                  <div className="mt-4 pt-3 border-t border-border flex items-center gap-2">
-                    <div className="flex-1 h-1.5 rounded-full bg-secondary overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-emerald-500 to-emerald-400 transition-all duration-700"
-                        style={{ width: `${(completedMilestonesCount / totalMilestones) * 100}%` }}
-                      />
-                    </div>
-                    <span className="text-[11px] text-muted-foreground shrink-0 tabular-nums">
-                      {completedMilestonesCount}/{totalMilestones} etapas
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Overdue Tasks */}
-          {overdueTasks.length > 0 && (
-            <section>
-              <SectionHeader icon={AlertCircle} color="text-destructive" title="Tarefas Atrasadas" count={overdueTasks.length} />
-              <div className="bg-destructive/[0.04] border border-destructive/15 rounded-xl divide-y divide-destructive/10">
-                {overdueTasks.map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
-                    <AlertCircle className="w-4 h-4 text-destructive shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
-                        {t.due_date && ` · Prazo era ${formatDate(t.due_date)}`}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-medium text-destructive shrink-0">
-                      {Math.abs(daysUntil(t.due_date))}d atraso
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Tasks in Review */}
-          {reviewTasks.length > 0 && (
-            <section>
-              <SectionHeader icon={Eye} color="text-amber-400" title="Tarefas em Revisão" count={reviewTasks.length} />
-              <div className="bg-card border border-border rounded-xl divide-y divide-border">
-                {reviewTasks.map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
-                    <Eye className="w-4 h-4 text-amber-400 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
-                        {t.due_date && ` · Prazo: ${formatDate(t.due_date)}`}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-medium text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded shrink-0">
-                      Em revisão
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Approved tasks */}
-          {approvedTasks.length > 0 && (
-            <section>
-              <SectionHeader icon={ShieldCheck} color="text-primary" title="Tarefas Aprovadas" count={approvedTasks.length} />
-              <div className="bg-card border border-border rounded-xl divide-y divide-border">
-                {approvedTasks.map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
-                    <ShieldCheck className="w-4 h-4 text-primary shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
-                      </p>
-                    </div>
-                    <span className="text-[10px] font-medium text-primary bg-primary/10 px-2 py-0.5 rounded shrink-0">
-                      Aprovada
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Completed tasks */}
-          {recentlyDoneTasks.length > 0 && (
-            <section>
-              <SectionHeader icon={CheckCircle2} color="text-emerald-400" title="Tarefas Concluídas" count={doneTasks.length} />
-              <div className="bg-card border border-border rounded-xl divide-y divide-border">
-                {recentlyDoneTasks.map((t: any) => (
-                  <div key={t.id} className="flex items-center gap-3 px-4 py-3">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
-                        {` · Concluída ${relativeTime(t.updated_at)}`}
-                      </p>
-                    </div>
-                    {t.priority && priorityLabels[t.priority] && t.priority !== "medium" && (
-                      <span className={`text-[10px] ${priorityLabels[t.priority].color} shrink-0`}>
-                        {priorityLabels[t.priority].label}
-                      </span>
-                    )}
-                  </div>
-                ))}
-                {doneTasks.length > 10 && (
-                  <div className="px-4 py-2.5 text-center">
-                    <span className="text-[11px] text-muted-foreground">
-                      e mais {doneTasks.length - 10} tarefas concluídas
-                    </span>
-                  </div>
-                )}
-              </div>
-            </section>
-          )}
-
-          {/* Completed Projects */}
-          {doneProjects.length > 0 && (
-            <section>
-              <SectionHeader icon={Award} color="text-emerald-400" title="Projetos Concluídos" count={doneProjects.length} />
-              <div className="space-y-2">
-                {doneProjects.map((p: any) => {
-                  const projectTasks = tasks.filter((t: any) => t.project_id === p.id);
-                  const projectDone = projectTasks.filter((t: any) => t.status === "done").length;
-                  return (
-                    <div
-                      key={p.id}
-                      onClick={() => onSelectProject(p)}
-                      className="group bg-card border border-border rounded-xl p-4 cursor-pointer hover:border-emerald-500/20 hover:shadow-md transition-all duration-200"
-                    >
-                      <div className="flex items-center gap-4">
-                        <div className="w-10 h-10 rounded-lg bg-emerald-500/10 flex items-center justify-center shrink-0">
-                          <Award className="w-5 h-5 text-emerald-400" />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-foreground truncate">{p.name}</p>
-                          <p className="text-[11px] text-muted-foreground mt-0.5">
-                            {typeLabels[p.project_type] || p.project_type} · Finalizado em {formatDate(p.deadline)}
-                            {projectDone > 0 && ` · ${projectDone} tarefas realizadas`}
-                          </p>
-                        </div>
-                        <span className="text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-2.5 py-1 rounded-md shrink-0">
-                          Entregue
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {allProjects.length === 0 && (
-            <div className="bg-card border border-border rounded-xl p-10 text-center">
-              <Layers className="w-8 h-8 text-muted-foreground/30 mx-auto mb-3" />
-              <p className="text-sm text-muted-foreground">Nenhum projeto encontrado ainda.</p>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <FadeUp className="lg:col-span-2">
+          <section className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold text-foreground">Projetos</h2>
+              <span className="text-xs text-muted-foreground">
+                {activeProjects.length} ativo(s)
+                {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
+              </span>
             </div>
-          )}
-        </div>
-
-        {/* RIGHT COLUMN */}
-        <div className="space-y-6">
-
-          {/* What's happening now */}
-          {doingTasks.length > 0 && (
-            <div className="bg-primary/[0.04] border border-primary/15 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                  <Sparkles className="w-3.5 h-3.5 text-primary" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">Trabalhando Agora</h3>
-                <span className="ml-auto text-[10px] text-primary bg-primary/10 px-2 py-0.5 rounded-full tabular-nums">{doingTasks.length}</span>
-              </div>
-              <div className="space-y-2.5">
-                {doingTasks.slice(0, 6).map((t: any) => (
-                  <div key={t.id} className="flex items-start gap-2.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0 animate-pulse" />
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[12px] text-foreground truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.assignee?.full_name && ` · ${t.assignee.full_name}`}
-                      </p>
-                    </div>
-                    {t.due_date && (
-                      <span className={`text-[9px] shrink-0 tabular-nums ${daysUntil(t.due_date) <= 3 ? "text-amber-400" : "text-muted-foreground"}`}>
-                        {daysUntil(t.due_date)}d
-                      </span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Upcoming deadlines */}
-          {upcomingDeadlineTasks.length > 0 && (
-            <div className="bg-amber-500/[0.04] border border-amber-500/15 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center">
-                  <Clock className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">Prazos Próximos</h3>
-              </div>
-              <div className="space-y-2.5">
-                {upcomingDeadlineTasks.slice(0, 5).map((t: any) => {
-                  const dl = daysUntil(t.due_date);
-                  return (
-                    <div key={t.id} className="flex items-start gap-2.5">
-                      <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[12px] text-foreground truncate">{t.title}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {t.project?.name} · {formatDate(t.due_date)}
-                        </p>
-                      </div>
-                      <span className={`text-[10px] font-medium shrink-0 ${dl <= 2 ? "text-destructive" : "text-amber-400"}`}>
-                        {dl === 0 ? "Hoje" : dl === 1 ? "Amanhã" : `${dl}d`}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Overview of all tasks */}
-          {totalTasks > 0 && (
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-6 h-6 rounded-md bg-sky-500/10 flex items-center justify-center">
-                  <ClipboardList className="w-3.5 h-3.5 text-sky-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">Visão Geral das Tarefas</h3>
-              </div>
-              {(() => {
-                const backlog = backlogTasks.length;
-                const doing = doingTasks.length;
-                const review = reviewTasks.length;
-                const approved = approvedTasks.length;
-                const done = doneTasks.length;
-                const segments = [
-                  { label: "Concluídas", value: done, color: "bg-emerald-500", textColor: "text-emerald-400" },
-                  { label: "Aprovadas", value: approved, color: "bg-primary", textColor: "text-primary" },
-                  { label: "Em revisão", value: review, color: "bg-amber-400", textColor: "text-amber-400" },
-                  { label: "Em execução", value: doing, color: "bg-sky-400", textColor: "text-sky-400" },
-                  { label: "Planejadas", value: backlog, color: "bg-muted-foreground/30", textColor: "text-muted-foreground" },
-                ];
-                return (
-                  <>
-                    <div className="h-2 w-full rounded-full bg-secondary overflow-hidden flex">
-                      {segments.map((s) => (
-                        s.value > 0 && (
-                          <div
-                            key={s.label}
-                            className={`h-full ${s.color} transition-all duration-500`}
-                            style={{ width: `${(s.value / totalTasks) * 100}%` }}
-                          />
-                        )
-                      ))}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 mt-3">
-                      {segments.map((s) => (
-                        <div key={s.label} className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${s.color} shrink-0`} />
-                          <span className="text-[11px] text-muted-foreground">{s.label}</span>
-                          <span className={`text-[11px] font-semibold ${s.textColor} ml-auto tabular-nums`}>{s.value}</span>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Completion percentage */}
-                    <div className="mt-3 pt-3 border-t border-border">
-                      <div className="flex items-center justify-between">
-                        <span className="text-[11px] text-muted-foreground">Taxa de conclusão</span>
-                        <span className="text-[13px] font-bold text-emerald-400 tabular-nums">
-                          {totalTasks > 0 ? Math.round((done / totalTasks) * 100) : 0}%
-                        </span>
-                      </div>
-                    </div>
-                  </>
-                );
-              })()}
-            </div>
-          )}
-
-          {/* Backlog */}
-          {backlogTasks.length > 0 && (
-            <div className="bg-card border border-border rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-md bg-secondary flex items-center justify-center">
-                  <Hourglass className="w-3.5 h-3.5 text-muted-foreground" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">Tarefas Planejadas</h3>
-                <span className="ml-auto text-[10px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full tabular-nums">{backlogTasks.length}</span>
-              </div>
-              <div className="space-y-2">
-                {backlogTasks.slice(0, 6).map((t: any) => (
-                  <div key={t.id} className="flex items-start gap-2.5">
-                    <Circle className="w-3.5 h-3.5 text-muted-foreground/30 mt-0.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[12px] text-foreground/70 truncate">{t.title}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {t.project?.name}
-                        {t.due_date && ` · ${formatDateShort(t.due_date)}`}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-                {backlogTasks.length > 6 && (
-                  <p className="text-[10px] text-muted-foreground text-center pt-1">
-                    e mais {backlogTasks.length - 6} tarefas planejadas
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Pending approvals */}
-          {pendingFiles.length > 0 && (
-            <div className="bg-amber-500/[0.04] border border-amber-500/15 rounded-xl p-5">
-              <div className="flex items-center gap-2 mb-3">
-                <div className="w-6 h-6 rounded-md bg-amber-500/10 flex items-center justify-center">
-                  <FileCheck className="w-3.5 h-3.5 text-amber-400" />
-                </div>
-                <h3 className="text-sm font-semibold text-foreground">Aguardando Aprovação</h3>
-              </div>
-              <div className="space-y-2.5">
-                {pendingFiles.map((f: any) => (
-                  <div key={f.id} className="flex items-start gap-2.5">
-                    <div className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="text-[12px] text-foreground truncate">{f.file_name}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {(f as any).project?.name} · {relativeTime(f.created_at)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Activity feed */}
-          <div>
-            <div className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded-md bg-primary/10 flex items-center justify-center">
-                <BarChart3 className="w-3.5 h-3.5 text-primary" />
-              </div>
-              <h3 className="text-sm font-semibold text-foreground">Atividade Recente</h3>
-            </div>
-            {recentUpdates.length === 0 ? (
-              <div className="py-6 text-center">
-                <MessageSquare className="w-6 h-6 text-muted-foreground/30 mx-auto mb-2" />
-                <p className="text-[12px] text-muted-foreground">Nenhuma atualização ainda.</p>
+            {dashboardProjects.length === 0 ? (
+              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Novos projetos aparecerão aqui quando forem iniciados.
               </div>
             ) : (
-              <div className="space-y-0">
-                {recentUpdates.map((u: any) => {
-                  const Icon = updateIcons[u.update_type] || Zap;
-                  return (
-                    <div key={u.id} className="flex gap-3 py-2.5 border-b border-border/50 last:border-0">
-                      <div className="w-7 h-7 rounded-lg bg-secondary flex items-center justify-center shrink-0">
-                        <Icon className="w-3.5 h-3.5 text-muted-foreground" />
-                      </div>
+              dashboardProjects.map((project: any) => {
+                const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
+                const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
+                const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
+                return (
+                  <button
+                    key={project.id}
+                    type="button"
+                    onClick={() => onSelectProject(project)}
+                    className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
+                  >
+                    <div className="flex items-start gap-4">
+                      <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
                       <div className="min-w-0 flex-1">
-                        <p className="text-[12px] text-foreground/90 line-clamp-2">{u.message}</p>
-                        <p className="text-[10px] text-muted-foreground mt-0.5">
-                          {u.author?.full_name && `${u.author.full_name} · `}
-                          {u.project?.name} · {relativeTime(u.created_at)}
-                        </p>
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                              {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
+                            </p>
+                            <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
+                          </div>
+                          <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
+                        </div>
+                        <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                            {completed}/{projectMilestones.length} etapas
+                          </span>
+                          {project.deadline && (
+                            <span>
+                              {deadlineDistance !== null && deadlineDistance < 0
+                                ? "Prazo em atualização"
+                                : `Previsão ${formatDateShort(project.deadline)}`}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
-                  );
-                })}
-              </div>
+                  </button>
+                );
+              })
             )}
-          </div>
-        </div>
+          </section>
+        </FadeUp>
+
+        <FadeUp>
+          <section className="space-y-3">
+            <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
+            <div className="rounded-xl border border-border bg-card p-4">
+              {deliveredFiles.length === 0 ? (
+                <p className="py-6 text-center text-xs text-muted-foreground">
+                  Nenhuma entrega liberada ainda.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {deliveredFiles.slice(0, 6).map((file: any) => (
+                    <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                      <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
+                      <p className="mt-0.5 text-[10px] text-muted-foreground">
+                        {file.project?.name || "Entrega"} · v{file.version || 1}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </section>
+        </FadeUp>
       </div>
-      </FadeUp>
     </StaggerContainer>
   );
-}
-
-/* ───────── Sub-components ───────── */
-
-function SectionHeader({ icon: Icon, color, title, count }: { icon: typeof Activity; color: string; title: string; count?: number }) {
-  return (
-    <div className="flex items-center gap-2 mb-4">
-      <Icon className={`w-4 h-4 ${color}`} />
-      <h2 className="text-sm font-semibold text-foreground">{title}</h2>
-      {count !== undefined && (
-        <span className="text-[10px] text-muted-foreground bg-secondary px-2 py-0.5 rounded-full ml-1 tabular-nums">
-          {count}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function StatusDot({ status }: { status: string }) {
-  const styles: Record<string, string> = {
-    active: "bg-emerald-500 shadow-[0_0_6px] shadow-emerald-500/40",
-    review: "bg-amber-400",
-    planning: "bg-sky-400",
-    done: "bg-emerald-500",
-    paused: "bg-muted-foreground",
-  };
-  return <div className={`w-2 h-2 rounded-full shrink-0 ${styles[status] || "bg-muted-foreground"}`} />;
 }

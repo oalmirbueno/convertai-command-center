@@ -1,12 +1,8 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "@/contexts/AuthContext";
 import { useFiles, useProjects } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
-import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
-import { useQueryClient } from "@tanstack/react-query";
+import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { useToast } from "@/hooks/use-toast";
-import { notifyAdmin } from "@/lib/notifyHelpers";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -80,11 +76,10 @@ function ClientFileThumb({ file }: { file: any }) {
 }
 
 export default function ClientDocuments() {
-  const { user } = useAuth();
   const { clientId } = useClientIdentity();
   const { data: files, isLoading } = useFiles(undefined, clientId || undefined);
   const { data: projects } = useProjects();
-  const queryClient = useQueryClient();
+  const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
 
   const [activeFolder, setActiveFolder] = useState("estrategicos");
@@ -92,7 +87,6 @@ export default function ClientDocuments() {
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");
-  const [submitting, setSubmitting] = useState(false);
   const [previewFile, setPreviewFile] = useState<any>(null);
 
   // Build children map for carousel grouping
@@ -109,80 +103,54 @@ export default function ClientDocuments() {
 
   const filteredFiles = (files || []).filter((f: any) => {
     if (childIds.has(f.id)) return false; // hide children
+    if (!["client_shared", "approval"].includes(f.visibility)) return false;
+    if (f.status !== "ready" || f.archived_at) return false;
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     if (filterProject !== "all" && f.project_id !== filterProject) return false;
     return true;
   });
 
   const handleApprove = async () => {
-    if (!confirmApprove || !user) return;
-    setSubmitting(true);
+    if (!confirmApprove) return;
+    const file = (files || []).find((candidate: any) => candidate.id === confirmApprove);
+    if (!file) return;
     try {
-      await supabase.from("files").update({ approval_status: "approved" }).eq("id", confirmApprove);
-      const file = (files || []).find((f: any) => f.id === confirmApprove);
-
-      await notifyAdmin(`Cliente aprovou: ${file?.file_name}`, "approval", "/aprovacoes");
-
-      if (file?.project_id) {
-        const { data: upd } = await supabase.from("updates").insert({
-          project_id: file.project_id,
-          author_id: user.id,
-          message: `Cliente aprovou: ${file?.file_name}`,
-          update_type: "creative",
-        }).select().single();
-        notifyOpsUpdate(upd);
-      }
-      queryClient.invalidateQueries({ queryKey: ["files"] });
+      await decide({
+        fileId: file.id,
+        expectedVersion: file.version,
+        decision: "approved",
+      });
       toast({ title: "Aprovado com sucesso!" });
-    } catch {
-      toast({ title: "Erro ao aprovar", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao aprovar",
+        description: error?.message || "Atualize a página e tente novamente.",
+        variant: "destructive",
+      });
     }
-    setSubmitting(false);
     setConfirmApprove(null);
     setPreviewFile(null);
   };
 
   const handleReject = async () => {
-    if (!feedbackFileId || !user || feedbackText.trim().length < 10) return;
-    setSubmitting(true);
+    if (!feedbackFileId || feedbackText.trim().length < 10) return;
+    const file = (files || []).find((candidate: any) => candidate.id === feedbackFileId);
+    if (!file) return;
     try {
-      await supabase.from("files").update({
-        approval_status: "rejected",
+      await decide({
+        fileId: file.id,
+        expectedVersion: file.version,
+        decision: "rejected",
         feedback: feedbackText,
-      }).eq("id", feedbackFileId);
-
-      await notifyAdmin(`Cliente solicitou ajustes em: ${(files || []).find((f: any) => f.id === feedbackFileId)?.file_name}`, "approval", "/aprovacoes");
-
-      // Fetch complete file data for task creation
-      const { data: fileData } = await supabase.from("files").select("project_id, uploaded_by, file_name").eq("id", feedbackFileId).maybeSingle();
-
-      if (fileData?.project_id) {
-        const { data: upd2 } = await supabase.from("updates").insert({
-          project_id: fileData.project_id,
-          author_id: user.id,
-          message: `Cliente solicitou ajustes em: ${fileData.file_name}`,
-          update_type: "alert",
-        }).select().single();
-        notifyOpsUpdate(upd2);
-
-        // Create task in kanban on rejection
-        const { error: taskErr } = await supabase.from("tasks").insert({
-          project_id: fileData.project_id,
-          title: `Ajustar: ${fileData.file_name}`,
-          description: `Feedback do cliente:\n${feedbackText}`,
-          status: "backlog",
-          priority: "high",
-          assigned_to: fileData.uploaded_by || null,
-        });
-        if (!taskErr) queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      }
-
-      queryClient.invalidateQueries({ queryKey: ["files"] });
+      });
       toast({ title: "Feedback enviado" });
-    } catch {
-      toast({ title: "Erro ao enviar feedback", variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Erro ao enviar feedback",
+        description: error?.message || "Atualize a página e tente novamente.",
+        variant: "destructive",
+      });
     }
-    setSubmitting(false);
     setFeedbackFileId(null);
     setFeedbackText("");
     setPreviewFile(null);
@@ -207,6 +175,11 @@ export default function ClientDocuments() {
           </SelectContent>
         </Select>
       </div>
+      {isReadOnly && (
+        <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
+          Modo somente leitura: ações de aprovação estão bloqueadas enquanto você visualiza como cliente.
+        </div>
+      )}
 
       {/* Folder tabs */}
       <div className="flex items-center gap-1 overflow-x-auto pb-1">
@@ -336,11 +309,13 @@ export default function ClientDocuments() {
           {previewFile?.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
-                onClick={() => { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); }}>
+                disabled={isReadOnly}
+                onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
                 Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
-                onClick={() => { setConfirmApprove(previewFile.id); setPreviewFile(null); }}>
+                disabled={isReadOnly}
+                onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}>
                 Aprovar
               </Button>
             </DialogFooter>
@@ -355,7 +330,7 @@ export default function ClientDocuments() {
           <p className="text-sm text-muted-foreground">Esta ação não pode ser desfeita.</p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmApprove(null)}>Cancelar</Button>
-            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting}>
+            <Button className="bg-success hover:bg-success/90 text-white" onClick={handleApprove} disabled={submitting || isReadOnly}>
               {submitting ? "Aprovando..." : "Confirmar"}
             </Button>
           </DialogFooter>
@@ -370,7 +345,7 @@ export default function ClientDocuments() {
             value={feedbackText} onChange={(e) => setFeedbackText(e.target.value)} rows={4} />
           <DialogFooter>
             <Button variant="outline" onClick={() => setFeedbackFileId(null)}>Cancelar</Button>
-            <Button onClick={handleReject} disabled={submitting || feedbackText.trim().length < 10}>
+            <Button onClick={handleReject} disabled={submitting || isReadOnly || feedbackText.trim().length < 10}>
               {submitting ? "Enviando..." : "Enviar Feedback"}
             </Button>
           </DialogFooter>

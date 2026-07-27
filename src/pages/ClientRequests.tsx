@@ -2,7 +2,6 @@ import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { supabase } from "@/integrations/supabase/client";
-import { notifyOpsMilestone, notifyOpsUpdate } from "@/lib/opsSync";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,7 +24,7 @@ const priorityBadge: Record<string, { cls: string; label: string }> = {
 
 export default function ClientRequests() {
   const { user, profile } = useAuth();
-  const { clientId } = useClientIdentity();
+  const { clientId, isImpersonating } = useClientIdentity();
   const queryClient = useQueryClient();
   const [createOpen, setCreateOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -36,17 +35,22 @@ export default function ClientRequests() {
   const { data: requests, isLoading } = useQuery({
     queryKey: ["client-requests", clientId],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("client_requests")
-        .select("*")
+        .select("id, client_id, project_id, title, description, priority, status, created_at, updated_at")
         .eq("client_id", clientId!)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: !!user && !!clientId,
   });
 
   const handleCreate = async () => {
+    if (isImpersonating) {
+      toast.error("O modo de visualização do cliente é somente leitura");
+      return;
+    }
     if (!title.trim() || !description.trim()) {
       toast.error("Preencha título e descrição");
       return;
@@ -54,24 +58,12 @@ export default function ClientRequests() {
     setSaving(true);
     try {
       const { error } = await supabase.from("client_requests").insert({
-        client_id: user!.id,
+        client_id: clientId!,
         title: title.trim(),
         description: description.trim(),
         priority,
       });
       if (error) throw error;
-
-      // Create update
-      const { data: projects } = await supabase.from("projects").select("id").eq("client_id", user!.id).limit(1);
-      if (projects?.[0]) {
-        const { data: upd } = await supabase.from("updates").insert({
-          project_id: projects[0].id,
-          author_id: user!.id,
-          message: `Novo pedido: "${title.trim()}"`,
-          update_type: "system",
-        }).select().single();
-        notifyOpsUpdate(upd);
-      }
 
       // Notify admin
       const { data: adminId } = await supabase.rpc("get_admin_user_id");
@@ -90,7 +82,7 @@ export default function ClientRequests() {
       // Fire webhook
       fireWebhook(webhooks.clientRequest, {
         request_id: crypto.randomUUID(),
-        client_id: user!.id,
+        client_id: clientId!,
         client_name: profile?.full_name || '',
         company: profile?.company_name || '',
         title: title.trim(),
@@ -114,18 +106,22 @@ export default function ClientRequests() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <p className="heading-page">Meus Pedidos</p>
-        <button
-          onClick={() => setCreateOpen(true)}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" /> Novo Pedido
-        </button>
+        {!isImpersonating && (
+          <button
+            onClick={() => setCreateOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5" /> Novo Pedido
+          </button>
+        )}
       </div>
 
       {isLoading ? (
         <div className="text-sm text-muted-foreground py-8 text-center">Carregando...</div>
       ) : (requests || []).length === 0 ? (
-        <div className="text-sm text-muted-foreground py-8 text-center">Nenhum pedido ainda. Crie seu primeiro pedido!</div>
+        <div className="text-sm text-muted-foreground py-8 text-center">
+          {isImpersonating ? "Este cliente ainda não possui pedidos." : "Nenhum pedido ainda. Crie seu primeiro pedido!"}
+        </div>
       ) : (
         <div className="space-y-2 stagger-children">
           {(requests || []).map((r: any) => {
@@ -151,7 +147,7 @@ export default function ClientRequests() {
       )}
 
       {/* Create Modal */}
-      {createOpen && (
+      {createOpen && !isImpersonating && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setCreateOpen(false)} />
           <div className="relative bg-card border border-border rounded-t-2xl sm:rounded-2xl w-full max-w-[420px] sm:mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>

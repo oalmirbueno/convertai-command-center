@@ -3,6 +3,46 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 
+const CLIENT_SAFE_FILE_SELECT = `
+  id,
+  client_id,
+  project_id,
+  uploaded_by,
+  file_name,
+  file_url,
+  file_type,
+  folder,
+  description,
+  caption,
+  carousel_text,
+  approval_status,
+  feedback,
+  client_decided_by,
+  client_decided_at,
+  approval_requested_at,
+  visibility,
+  requires_approval,
+  status,
+  archived_at,
+  created_at,
+  updated_at,
+  parent_file_id,
+  revision_of_file_id,
+  locked_at,
+  version,
+  storage_bucket,
+  storage_path,
+  mime_type,
+  extension,
+  size_bytes,
+  page_count,
+  sheet_count,
+  slide_count,
+  uploader:profiles!files_uploaded_by_fkey(full_name),
+  project:projects(name),
+  client:profiles!files_client_id_fkey(full_name, company_name)
+`;
+
 export function useProjects() {
   const { user, profile } = useAuth();
   const isClient = profile?.role === "client";
@@ -211,7 +251,7 @@ export function useFiles(projectId?: string, clientId?: string) {
     queryFn: async () => {
       let query = supabase
         .from("files")
-        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name), project:projects(name), client:profiles!files_client_id_fkey(full_name, company_name)")
+        .select(CLIENT_SAFE_FILE_SELECT)
         .order("created_at", { ascending: false });
       if (projectId) query = query.eq("project_id", projectId);
       if (clientId) query = query.eq("client_id", clientId);
@@ -229,9 +269,9 @@ export function useAllFiles() {
   return useQuery({
     queryKey: ["all-files", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("files")
-        .select("*, uploader:profiles!files_uploaded_by_fkey(full_name), project:projects(name), client:profiles!files_client_id_fkey(full_name, company_name)")
+      const { data, error } = await (supabase as any)
+        .from("staff_files_secure")
+        .select("*")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
@@ -265,7 +305,7 @@ export function useClientRequests() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("client_requests")
-        .select("*")
+        .select("id, client_id, project_id, title, description, priority, status, created_at, updated_at")
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;

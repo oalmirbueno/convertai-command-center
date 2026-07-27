@@ -75,7 +75,11 @@ export function useClientDashboardData(clientId: string) {
   const { data: projects, isLoading: loadingProjects } = useQuery({
     queryKey: ["client-projects", clientId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("projects").select("*").eq("client_id", clientId).is("deleted_at", null).order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("projects")
+        .select("id, client_id, name, description, objectives, scope, project_type, status, progress, start_date, deadline, created_at")
+        .eq("client_id", clientId)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -85,36 +89,13 @@ export function useClientDashboardData(clientId: string) {
 
   const projectIds = (projects || []).map((p: any) => p.id);
 
-  const { data: recentUpdates } = useQuery({
-    queryKey: ["client-updates-all", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("updates")
-        .select("*, author:profiles!updates_author_id_fkey(full_name), project:projects!updates_project_id_fkey(name)")
-        .in("project_id", projectIds).order("created_at", { ascending: false }).limit(12);
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-    refetchInterval: 15000,
-  });
-
   const { data: milestones } = useQuery({
     queryKey: ["client-milestones-all", clientId, projectIds.join(",")],
     queryFn: async () => {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("milestones")
-        .select("*, project:projects!milestones_project_id_fkey(name)")
-        .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true }).limit(10);
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-  });
-
-  const { data: completedMilestones } = useQuery({
-    queryKey: ["client-done-milestones", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("milestones").select("id").in("project_id", projectIds).eq("status", "completed").is("deleted_at", null);
+        .select("id, project_id, title, status, target_date, completed_at, project:projects!milestones_project_id_fkey(name)")
+        .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true });
       return data || [];
     },
     enabled: !!user && projectIds.length > 0,
@@ -124,31 +105,31 @@ export function useClientDashboardData(clientId: string) {
     queryKey: ["client-pending-approvals", clientId],
     queryFn: async () => {
       const { data } = await supabase.from("files")
-        .select("id, file_name, created_at, project:projects!files_project_id_fkey(name)")
-        .eq("client_id", clientId).eq("approval_status", "pending")
-        .order("created_at", { ascending: false }).limit(5);
+        .select("id, file_name, created_at, version, project:projects!files_project_id_fkey(name)")
+        .eq("client_id", clientId)
+        .eq("visibility", "approval")
+        .eq("requires_approval", true)
+        .eq("approval_status", "pending")
+        .eq("status", "ready")
+        .is("archived_at", null)
+        .is("parent_file_id", null)
+        .order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!user && !!clientId,
   });
 
-  const { data: allTasks } = useQuery({
-    queryKey: ["client-all-tasks-detail", clientId, projectIds.join(",")],
-    queryFn: async () => {
-      if (!projectIds.length) return [];
-      const { data } = await supabase.from("tasks")
-        .select("id, title, status, due_date, priority, project_id, updated_at, assigned_to, assignee:profiles!tasks_assigned_to_fkey(full_name), project:projects!tasks_project_id_fkey(name)")
-        .in("project_id", projectIds).is("deleted_at", null).order("updated_at", { ascending: false });
-      return data || [];
-    },
-    enabled: !!user && projectIds.length > 0,
-    refetchInterval: 15000,
-  });
-
   const { data: deliveredFiles } = useQuery({
     queryKey: ["client-delivered-files", clientId],
     queryFn: async () => {
-      const { data } = await supabase.from("files").select("id, approval_status").eq("client_id", clientId);
+      const { data } = await supabase.from("files")
+        .select("id, file_name, created_at, version, approval_status, visibility, project:projects!files_project_id_fkey(name)")
+        .eq("client_id", clientId)
+        .in("visibility", ["client_shared", "approval"])
+        .eq("status", "ready")
+        .is("archived_at", null)
+        .is("parent_file_id", null)
+        .order("created_at", { ascending: false });
       return data || [];
     },
     enabled: !!user && !!clientId,
@@ -160,16 +141,17 @@ export function useClientDashboardData(clientId: string) {
   const avgProgress = activeProjects.length > 0
     ? Math.round(activeProjects.reduce((s: number, p: any) => s + (p.progress || 0), 0) / activeProjects.length) : 0;
 
-  const tasks = allTasks || [];
-  const doingTasks = tasks.filter((t: any) => t.status === "doing");
-  const reviewTasks = tasks.filter((t: any) => t.status === "review");
-  const doneTasks = tasks.filter((t: any) => t.status === "done");
-  const totalTasks = tasks.length;
+  // Tarefas e atualizações são bastidores da equipe e não são consultadas no painel do cliente.
+  const tasks: any[] = [];
+  const doingTasks: any[] = [];
+  const reviewTasks: any[] = [];
+  const doneTasks: any[] = [];
+  const totalTasks = 0;
 
   const totalFiles = (deliveredFiles || []).length;
   const approvedFiles = (deliveredFiles || []).filter((f: any) => f.approval_status === "approved").length;
-  const totalMilestones = (milestones || []).length + (completedMilestones || []).length;
-  const completedMilestonesCount = (completedMilestones || []).length;
+  const totalMilestones = (milestones || []).length;
+  const completedMilestonesCount = (milestones || []).filter((milestone: any) => milestone.status === "completed").length;
 
   return {
     loadingProjects,
@@ -190,7 +172,7 @@ export function useClientDashboardData(clientId: string) {
       deliveredFiles: deliveredFiles || [],
       approvedFiles,
       totalFiles,
-      recentUpdates: recentUpdates || [],
+      recentUpdates: [],
     },
   };
 }

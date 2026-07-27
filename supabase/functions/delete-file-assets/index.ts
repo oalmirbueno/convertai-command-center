@@ -5,6 +5,7 @@ import { z } from "https://esm.sh/zod@3.23.8";
 const StaffRoles = new Set(["admin", "design", "traffic", "manager"]);
 const MCP_FILE_PREFIX = "mcp-files://";
 const WORKSPACE_FILE_PREFIX = "workspace://";
+const FILES_PREFIX = "files://";
 
 const BodySchema = z.discriminatedUnion("target", [
   z.object({ target: z.literal("files"), fileIds: z.array(z.string().uuid()).min(1).max(200) }),
@@ -14,18 +15,37 @@ const BodySchema = z.discriminatedUnion("target", [
 type FileRow = {
   id: string;
   parent_file_id?: string | null;
+  revision_of_file_id?: string | null;
+  client_id?: string | null;
   file_url?: string | null;
   storage_bucket?: string | null;
   storage_path?: string | null;
+  agency_approval_status?: string | null;
+  approval_status?: string | null;
+  visibility?: string | null;
+  locked_at?: string | null;
 };
 
 type WorkspaceNode = {
   id: string;
   parent_id: string | null;
+  scope: "global" | "client";
+  client_id: string | null;
   kind: "folder" | "file";
   storage_path: string | null;
   sent_for_approval_file_id: string | null;
 };
+
+type FileDeletePlan = {
+  rows: FileRow[];
+  refs: Array<{ bucket: string; path: string }>;
+};
+
+class HttpError extends Error {
+  constructor(message: string, public status: number) {
+    super(message);
+  }
+}
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -38,6 +58,7 @@ function storageRefFromUrl(value?: string | null): { bucket: string; path: strin
   if (!value) return null;
   if (value.startsWith(MCP_FILE_PREFIX)) return { bucket: "mcp-files", path: value.slice(MCP_FILE_PREFIX.length) };
   if (value.startsWith(WORKSPACE_FILE_PREFIX)) return { bucket: "workspace", path: value.slice(WORKSPACE_FILE_PREFIX.length) };
+  if (value.startsWith(FILES_PREFIX)) return { bucket: "files", path: value.slice(FILES_PREFIX.length) };
   if (!/^https?:\/\//i.test(value)) return null;
   try {
     const url = new URL(value);
@@ -82,35 +103,108 @@ async function removeObjects(admin: any, refs: Array<{ bucket: string; path: str
   return { removed, errors };
 }
 
-async function deleteFileRows(admin: any, ids: string[]) {
-  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
-  if (!uniqueIds.length) return { deleted: 0, storageRemoved: 0, storageErrors: [] as string[] };
+function assertStorageCleanupSucceeded(errors: string[]) {
+  if (errors.length > 0) {
+    throw new HttpError(
+      `Falha ao limpar objetos privados do Storage: ${errors.join("; ")}`,
+      500,
+    );
+  }
+}
 
-  const [{ data: parents, error: parentError }, { data: children, error: childError }] = await Promise.all([
-    admin.from("files").select("id,parent_file_id,file_url,storage_bucket,storage_path").in("id", uniqueIds),
-    admin.from("files").select("id,parent_file_id,file_url,storage_bucket,storage_path").in("parent_file_id", uniqueIds),
+async function assertCallerCanDeleteFiles(caller: any, ids: string[]) {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  for (let offset = 0; offset < uniqueIds.length; offset += 25) {
+    const chunk = uniqueIds.slice(offset, offset + 25);
+    const checks = await Promise.all(
+      chunk.map(async (fileId) => {
+        const { data, error } = await caller.rpc("can_write_file", { _file_id: fileId });
+        if (error) throw error;
+        return data === true;
+      }),
+    );
+    if (checks.some((allowed) => !allowed)) {
+      throw new HttpError("Sem permissão para excluir um ou mais arquivos", 403);
+    }
+  }
+}
+
+async function prepareFileDelete(admin: any, ids: string[]): Promise<FileDeletePlan> {
+  const uniqueIds = Array.from(new Set(ids.filter(Boolean)));
+  if (!uniqueIds.length) return { rows: [], refs: [] };
+
+  const fields = [
+    "id",
+    "parent_file_id",
+    "revision_of_file_id",
+    "client_id",
+    "file_url",
+    "storage_bucket",
+    "storage_path",
+    "agency_approval_status",
+    "approval_status",
+    "visibility",
+    "locked_at",
+  ].join(",");
+  const [
+    { data: targets, error: targetError },
+    { data: children, error: childError },
+  ] = await Promise.all([
+    admin.from("files").select(fields).in("id", uniqueIds),
+    admin.from("files").select(fields).in("parent_file_id", uniqueIds),
   ]);
-  if (parentError) throw parentError;
+  if (targetError) throw targetError;
   if (childError) throw childError;
+  if ((targets || []).length !== uniqueIds.length) {
+    throw new HttpError("Um ou mais arquivos não foram encontrados", 404);
+  }
 
   const rowsById = new Map<string, FileRow>();
-  for (const row of [...(parents || []), ...(children || [])] as FileRow[]) rowsById.set(row.id, row);
+  for (const row of [...(targets || []), ...(children || [])] as FileRow[]) rowsById.set(row.id, row);
   const rows = Array.from(rowsById.values());
-  const childIds = rows.filter((row) => row.parent_file_id).map((row) => row.id);
-  const parentIds = rows.filter((row) => !row.parent_file_id).map((row) => row.id);
-
-  if (childIds.length) {
-    const { error } = await admin.from("files").delete().in("id", childIds);
-    if (error) throw error;
-  }
-  if (parentIds.length) {
-    const { error } = await admin.from("files").delete().in("id", parentIds);
-    if (error) throw error;
+  const { data: revisions, error: revisionError } = await admin
+    .from("files")
+    .select("id,revision_of_file_id")
+    .in("revision_of_file_id", rows.map((row) => row.id));
+  if (revisionError) throw revisionError;
+  if ((revisions || []).length > 0) {
+    throw new HttpError("Arquivos com histórico de versões não podem ser excluídos", 409);
   }
 
-  const refs = rows.map(storageRefFromFile).filter(Boolean) as Array<{ bucket: string; path: string }>;
+  const protectedFile = rows.find((row) =>
+    row.locked_at
+    || row.approval_status !== "none"
+    || row.agency_approval_status !== "not_requested"
+    || row.visibility !== "internal"
+  );
+  if (protectedFile) {
+    throw new HttpError("Arquivos enviados para revisão, compartilhados ou aprovados são imutáveis", 409);
+  }
+
+  const refs = rows
+    .map(storageRefFromFile)
+    .filter(Boolean) as Array<{ bucket: string; path: string }>;
+  return { rows, refs };
+}
+
+async function executeFileDelete(caller: any, admin: any, plan: FileDeletePlan) {
+  if (!plan.rows.length) {
+    return { deleted: 0, storageRemoved: 0, storageErrors: [] as string[] };
+  }
+  const ids = plan.rows.map((row) => row.id);
+  const { data: deletedRows, error: deleteError } = await caller
+    .from("files")
+    .delete()
+    .in("id", ids)
+    .select("id");
+  if (deleteError) throw deleteError;
+  if ((deletedRows || []).length !== ids.length) {
+    throw new HttpError("A autorização dos arquivos mudou durante a exclusão", 409);
+  }
+
+  const refs = plan.refs;
   const storage = await removeObjects(admin, refs);
-  return { deleted: rows.length, storageRemoved: storage.removed, storageErrors: storage.errors };
+  return { deleted: ids.length, storageRemoved: storage.removed, storageErrors: storage.errors };
 }
 
 async function collectWorkspaceTree(admin: any, root: WorkspaceNode) {
@@ -122,7 +216,7 @@ async function collectWorkspaceTree(admin: any, root: WorkspaceNode) {
     const parentId = stack.pop()!;
     const { data, error } = await admin
       .from("workspace_nodes")
-      .select("id,parent_id,kind,storage_path,sent_for_approval_file_id")
+      .select("id,parent_id,scope,client_id,kind,storage_path,sent_for_approval_file_id")
       .eq("parent_id", parentId);
     if (error) throw error;
     for (const child of (data || []) as WorkspaceNode[]) {
@@ -131,6 +225,23 @@ async function collectWorkspaceTree(admin: any, root: WorkspaceNode) {
     }
   }
   return Array.from(nodes.values());
+}
+
+async function assertCallerCanAccessWorkspaceTree(caller: any, nodes: WorkspaceNode[]) {
+  const ids = nodes.map((node) => node.id);
+  const visibleIds = new Set<string>();
+  for (let offset = 0; offset < ids.length; offset += 100) {
+    const chunk = ids.slice(offset, offset + 100);
+    const { data, error } = await caller
+      .from("workspace_nodes")
+      .select("id")
+      .in("id", chunk);
+    if (error) throw error;
+    for (const row of data || []) visibleIds.add(row.id);
+  }
+  if (ids.some((id) => !visibleIds.has(id))) {
+    throw new HttpError("Sem permissão para excluir um ou mais itens do workspace", 403);
+  }
 }
 
 Deno.serve(async (req) => {
@@ -145,6 +256,10 @@ Deno.serve(async (req) => {
     const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false, autoRefreshToken: false } });
     const token = (req.headers.get("Authorization") || "").replace(/^Bearer\s+/i, "").trim();
     if (!token) return json({ error: "Não autenticado" }, 401);
+    const caller = createClient(supabaseUrl, serviceRoleKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+      global: { headers: { Authorization: `Bearer ${token}` } },
+    });
 
     const { data: authData, error: authError } = await admin.auth.getUser(token);
     if (authError || !authData?.user) return json({ error: "Sessão inválida" }, 401);
@@ -161,39 +276,61 @@ Deno.serve(async (req) => {
     if (!parsed.success) return json({ error: "Dados inválidos", details: parsed.error.flatten().fieldErrors }, 400);
 
     if (parsed.data.target === "files") {
-      const result = await deleteFileRows(admin, parsed.data.fileIds);
+      await assertCallerCanDeleteFiles(caller, parsed.data.fileIds);
+      const plan = await prepareFileDelete(admin, parsed.data.fileIds);
+      await assertCallerCanDeleteFiles(caller, plan.rows.map((row) => row.id));
+      const result = await executeFileDelete(caller, admin, plan);
+      assertStorageCleanupSucceeded(result.storageErrors);
       return json({ ok: true, ...result });
     }
 
     const { data: root, error: rootError } = await admin
       .from("workspace_nodes")
-      .select("id,parent_id,kind,storage_path,sent_for_approval_file_id")
+      .select("id,parent_id,scope,client_id,kind,storage_path,sent_for_approval_file_id")
       .eq("id", parsed.data.nodeId)
       .maybeSingle();
     if (rootError) throw rootError;
     if (!root) return json({ ok: true, deleted: 0, storageRemoved: 0, storageErrors: [] });
 
     const tree = await collectWorkspaceTree(admin, root as WorkspaceNode);
+    await assertCallerCanAccessWorkspaceTree(caller, tree);
     const workspaceRefs = tree
       .filter((node) => node.kind === "file" && node.storage_path)
       .map((node) => ({ bucket: "workspace", path: node.storage_path! }));
-    const approvalIds = tree.map((node) => node.sent_for_approval_file_id).filter(Boolean) as string[];
+    const approvalIds = Array.from(new Set(
+      tree.map((node) => node.sent_for_approval_file_id).filter(Boolean) as string[],
+    ));
+    let approvalPlan: FileDeletePlan = { rows: [], refs: [] };
+    if (approvalIds.length) {
+      await assertCallerCanDeleteFiles(caller, approvalIds);
+      approvalPlan = await prepareFileDelete(admin, approvalIds);
+      await assertCallerCanDeleteFiles(caller, approvalPlan.rows.map((row) => row.id));
+    }
 
-    const { error: nodeError } = await admin.from("workspace_nodes").delete().eq("id", root.id);
+    const { data: deletedRoot, error: nodeError } = await caller
+      .from("workspace_nodes")
+      .delete()
+      .eq("id", root.id)
+      .select("id")
+      .maybeSingle();
     if (nodeError) throw nodeError;
+    if (!deletedRoot) throw new HttpError("A autorização do workspace mudou durante a exclusão", 409);
 
-    const approvalResult = approvalIds.length
-      ? await deleteFileRows(admin, approvalIds)
-      : { deleted: 0, storageRemoved: 0, storageErrors: [] as string[] };
+    const approvalResult = await executeFileDelete(caller, admin, approvalPlan);
     const workspaceStorage = await removeObjects(admin, workspaceRefs);
+    const storageErrors = [...workspaceStorage.errors, ...approvalResult.storageErrors];
+    assertStorageCleanupSucceeded(storageErrors);
 
     return json({
       ok: true,
       deleted: tree.length + approvalResult.deleted,
       storageRemoved: workspaceStorage.removed + approvalResult.storageRemoved,
-      storageErrors: [...workspaceStorage.errors, ...approvalResult.storageErrors],
+      storageErrors,
     });
   } catch (error: any) {
-    return json({ error: error?.message || "Falha ao excluir arquivo" }, 500);
+    return json(
+      { error: error?.message || "Falha ao excluir arquivo" },
+      error instanceof HttpError ? error.status : 500,
+    );
   }
 });

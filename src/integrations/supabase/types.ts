@@ -700,6 +700,67 @@ export type Database = {
           },
         ]
       }
+      file_approval_events: {
+        Row: {
+          actor_id: string | null
+          client_id: string
+          created_at: string
+          event_type: string
+          feedback: string | null
+          file_id: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          to_status: string
+        }
+        Insert: {
+          actor_id?: string | null
+          client_id: string
+          created_at?: string
+          event_type: string
+          feedback?: string | null
+          file_id: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          to_status: string
+        }
+        Update: {
+          actor_id?: string | null
+          client_id?: string
+          created_at?: string
+          event_type?: string
+          feedback?: string | null
+          file_id?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          to_status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "file_approval_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_approval_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "file_approval_events_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       file_processing_jobs: {
         Row: {
           attempts: number
@@ -755,11 +816,18 @@ export type Database = {
       }
       files: {
         Row: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
           approval_status: string
+          approval_requested_at: string | null
           archived_at: string | null
           caption: string | null
           carousel_text: string | null
           client_id: string
+          client_decided_at: string | null
+          client_decided_by: string | null
           created_at: string
           description: string | null
           extension: string | null
@@ -773,11 +841,13 @@ export type Database = {
           folder: string | null
           id: string
           idempotency_key: string | null
+          locked_at: string | null
           mime_type: string | null
           page_count: number | null
           parent_file_id: string | null
           project_id: string | null
           requires_approval: boolean | null
+          revision_of_file_id: string | null
           sensitivity: string | null
           sha256: string | null
           sheet_count: number | null
@@ -794,11 +864,18 @@ export type Database = {
           visibility: string | null
         }
         Insert: {
+          agency_approval_status?: string
+          agency_feedback?: string | null
+          agency_reviewed_at?: string | null
+          agency_reviewed_by?: string | null
           approval_status?: string
+          approval_requested_at?: string | null
           archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
           client_id: string
+          client_decided_at?: string | null
+          client_decided_by?: string | null
           created_at?: string
           description?: string | null
           extension?: string | null
@@ -812,11 +889,13 @@ export type Database = {
           folder?: string | null
           id?: string
           idempotency_key?: string | null
+          locked_at?: string | null
           mime_type?: string | null
           page_count?: number | null
           parent_file_id?: string | null
           project_id?: string | null
           requires_approval?: boolean | null
+          revision_of_file_id?: string | null
           sensitivity?: string | null
           sha256?: string | null
           sheet_count?: number | null
@@ -833,11 +912,18 @@ export type Database = {
           visibility?: string | null
         }
         Update: {
+          agency_approval_status?: string
+          agency_feedback?: string | null
+          agency_reviewed_at?: string | null
+          agency_reviewed_by?: string | null
           approval_status?: string
+          approval_requested_at?: string | null
           archived_at?: string | null
           caption?: string | null
           carousel_text?: string | null
           client_id?: string
+          client_decided_at?: string | null
+          client_decided_by?: string | null
           created_at?: string
           description?: string | null
           extension?: string | null
@@ -851,11 +937,13 @@ export type Database = {
           folder?: string | null
           id?: string
           idempotency_key?: string | null
+          locked_at?: string | null
           mime_type?: string | null
           page_count?: number | null
           parent_file_id?: string | null
           project_id?: string | null
           requires_approval?: boolean | null
+          revision_of_file_id?: string | null
           sensitivity?: string | null
           sha256?: string | null
           sheet_count?: number | null
@@ -873,8 +961,22 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "files_agency_reviewed_by_fkey"
+            columns: ["agency_reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "files_client_id_fkey"
             columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_client_decided_by_fkey"
+            columns: ["client_decided_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -891,6 +993,13 @@ export type Database = {
             columns: ["project_id"]
             isOneToOne: false
             referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "files_revision_of_file_id_fkey"
+            columns: ["revision_of_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
             referencedColumns: ["id"]
           },
           {
@@ -2284,6 +2393,7 @@ export type Database = {
       updates: {
         Row: {
           author_id: string
+          client_visible: boolean
           created_at: string
           id: string
           message: string
@@ -2292,6 +2402,7 @@ export type Database = {
         }
         Insert: {
           author_id: string
+          client_visible?: boolean
           created_at?: string
           id?: string
           message: string
@@ -2300,6 +2411,7 @@ export type Database = {
         }
         Update: {
           author_id?: string
+          client_visible?: boolean
           created_at?: string
           id?: string
           message?: string
@@ -2609,7 +2721,31 @@ export type Database = {
         Returns: boolean
       }
       can_access_client: { Args: { _client_id: string }; Returns: boolean }
+      can_client_read_file: { Args: { _file_id: string }; Returns: boolean }
       can_manage_client: { Args: { _client_id: string }; Returns: boolean }
+      can_read_file: { Args: { _file_id: string }; Returns: boolean }
+      can_staff_access_project: {
+        Args: { _project_id: string }
+        Returns: boolean
+      }
+      can_write_file: { Args: { _file_id: string }; Returns: boolean }
+      complete_contract_signature: {
+        Args: {
+          p_signature_ip: string
+          p_signature_name: string
+          p_token: string
+        }
+        Returns: string
+      }
+      decide_file_approval: {
+        Args: {
+          p_decision: string
+          p_expected_version: number
+          p_feedback?: string | null
+          p_file_id: string
+        }
+        Returns: string
+      }
       delete_email: {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
@@ -2645,6 +2781,14 @@ export type Database = {
           read_ct: number
         }[]
       }
+      release_file_to_client: {
+        Args: { p_file_id: string; p_mode: string }
+        Returns: Database["public"]["Tables"]["files"]["Row"]
+      }
+      request_file_agency_review: {
+        Args: { p_file_id: string }
+        Returns: Database["public"]["Tables"]["files"]["Row"]
+      }
       replace_managed_user_role: {
         Args: {
           _actor_id: string
@@ -2652,6 +2796,14 @@ export type Database = {
           _user_id: string
         }
         Returns: undefined
+      }
+      review_file_agency: {
+        Args: {
+          p_decision: string
+          p_feedback?: string | null
+          p_file_id: string
+        }
+        Returns: Database["public"]["Tables"]["files"]["Row"]
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }

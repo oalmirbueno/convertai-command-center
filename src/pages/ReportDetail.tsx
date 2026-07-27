@@ -20,6 +20,7 @@ import {
 import SourceDashboard from "@/components/reports/SourceDashboard";
 import ReportComparison from "@/components/reports/ReportComparison";
 import MetricsAudit from "@/components/reports/MetricsAudit";
+import { useResolvedFileUrl } from "@/lib/fileUrls";
 
 const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -100,12 +101,15 @@ export default function ReportDetail() {
     queryFn: async () => {
       const { data } = await supabase
         .from("reports")
-        .select("*, project:projects(name)")
+        .select("id, project_id, client_id, title, period_start, period_end, metrics, summary, file_url, status, created_by, created_at, highlights, next_steps, chart_type, chart_data, images, project:projects(name)")
         .eq("id", id!)
         .single();
       return data;
     },
     enabled: !!id,
+  });
+  const { url: reportFileUrl, loading: reportFileLoading } = useResolvedFileUrl({
+    fileUrl: report?.file_url,
   });
 
   // ── Relatório anterior do MESMO projeto (para comparação de seguidores etc.)
@@ -1537,8 +1541,14 @@ export default function ReportDetail() {
         </div>
         <div className="flex flex-col sm:flex-row flex-wrap gap-3">
           {report.file_url ? (
-            <a href={report.file_url} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold w-full sm:w-auto">
-              <Download className="w-4 h-4" /> Baixar Relatório em PDF
+            <a
+              href={reportFileUrl || undefined}
+              aria-disabled={reportFileLoading || !reportFileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold w-full sm:w-auto aria-disabled:opacity-50 aria-disabled:pointer-events-none"
+            >
+              <Download className="w-4 h-4" /> {reportFileLoading ? "Preparando arquivo..." : "Baixar Relatório em PDF"}
             </a>
           ) : (
             <button onClick={handlePrint} className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-primary text-primary-foreground hover:opacity-90 transition-opacity font-semibold cursor-pointer border-none w-full sm:w-auto">
