@@ -157,6 +157,66 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
       if (isEdit) {
         const { error } = await supabase.from("projects").update(payload).eq("id", editProject.id);
         if (error) throw error;
+
+        // Sincroniza plano financeiro do projeto para evitar duplicidade
+        try {
+          const { data: existingPlans } = await supabase
+            .from("project_payments")
+            .select("id")
+            .eq("project_id", editProject.id);
+          const planIds = (existingPlans || []).map((p: any) => p.id);
+
+          const wipePlans = async () => {
+            if (!planIds.length) return;
+            await supabase.from("payment_installments").delete().in("payment_id", planIds);
+            await supabase.from("project_payments").delete().in("id", planIds);
+          };
+
+          if (billingMode !== "one_off" || financialMode !== "create") {
+            // "Já cobrado" ou "Sem cobrança" (ou virou recorrente): remove qualquer fatura gerada antes
+            await wipePlans();
+          } else {
+            // "Gerar plano" no edit: recria plano só se valores mudaram ou não existe
+            const total = parseFloat(totalValue);
+            const ePct = parseFloat(entryPct) || 0;
+            const iCount = parseInt(installmentsCount) || 1;
+            await wipePlans();
+            const entryAmount = (total * ePct) / 100;
+            const remaining = total - entryAmount;
+            const perInstallment = iCount > 0 ? remaining / iCount : 0;
+            const { data: paymentData, error: payErr } = await supabase
+              .from("project_payments")
+              .insert({
+                project_id: editProject.id,
+                client_id: clientId,
+                total_value: total,
+                entry_percentage: ePct,
+                entry_amount: entryAmount,
+                installments_count: iCount,
+                created_by: user?.id,
+              } as any)
+              .select().single();
+            if (payErr) throw payErr;
+            const today = format(new Date(), "yyyy-MM-dd");
+            const instRows: any[] = [{
+              payment_id: paymentData.id, installment_number: 0, amount: entryAmount,
+              due_date: today, status: "pending", description: `Entrada (${ePct}%)`,
+            }];
+            for (let i = 1; i <= iCount; i++) {
+              const d = new Date(); d.setMonth(d.getMonth() + i);
+              instRows.push({
+                payment_id: paymentData.id, installment_number: i, amount: perInstallment,
+                due_date: format(d, "yyyy-MM-dd"), status: "pending",
+                description: iCount === 1 ? "Pagamento na entrega" : `Parcela ${i}/${iCount}`,
+              });
+            }
+            await supabase.from("payment_installments").insert(instRows);
+          }
+        } catch (e: any) {
+          console.error("plan sync failed", e);
+          toast.warning("Projeto salvo, mas falhou ao ajustar o plano financeiro.");
+        }
+
         toast.success("Projeto atualizado!");
 
         // Notifica Ops via proxy server-to-server
@@ -164,6 +224,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
           { id: editProject.id, client_id: clientId, ...payload },
           buildOpsContext()
         );
+
       } else {
         const { data: newProject, error } = await supabase.from("projects").insert(payload).select().single();
         if (error) throw error;
