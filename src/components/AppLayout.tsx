@@ -217,30 +217,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Mobile: centered Studio launcher */}
+        {/* Mobile: centered Studio launcher (staff only) */}
         <div className="flex-1 md:hidden flex items-center justify-center">
-          <button
-            type="button"
-            onClick={() => {
-              // Flag persistente: se o StudioPanel ainda não montou, ele lê a flag no mount.
-              (window as any).__studioOpenPending = true;
-              const fire = () => window.dispatchEvent(new Event("studio:open"));
-              if (location.pathname !== "/workspace") {
-                navigate("/workspace");
-                // Retry curto para cobrir o tempo de mount do painel.
-                window.setTimeout(fire, 60);
-                window.setTimeout(fire, 220);
-                window.setTimeout(fire, 500);
-              } else {
-                fire();
-              }
-            }}
-            className="h-8 px-3 rounded-full bg-primary/15 hover:bg-primary/25 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 border border-primary/30"
-            aria-label="Abrir Studio"
-          >
-            <Sparkles className="w-3.5 h-3.5" />
-            Studio
-          </button>
+          {isAdminOrTeam && (
+            <button
+              type="button"
+              onClick={() => {
+                // Flag persistente: se o StudioPanel ainda não montou, ele lê a flag no mount.
+                (window as any).__studioOpenPending = true;
+                const fire = () => window.dispatchEvent(new Event("studio:open"));
+                if (location.pathname !== "/workspace") {
+                  navigate("/workspace");
+                  // Retry curto para cobrir o tempo de mount do painel.
+                  window.setTimeout(fire, 60);
+                  window.setTimeout(fire, 220);
+                  window.setTimeout(fire, 500);
+                } else {
+                  fire();
+                }
+              }}
+              className="h-8 px-3 rounded-full bg-primary/15 hover:bg-primary/25 text-primary text-[12px] font-medium inline-flex items-center gap-1.5 border border-primary/30"
+              aria-label="Abrir Studio"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Studio
+            </button>
+          )}
         </div>
 
         {/* Right: Icons */}
