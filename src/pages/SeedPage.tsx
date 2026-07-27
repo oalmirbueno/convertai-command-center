@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
+import { createFileRecord } from "@/lib/fileRecordActions";
 import { toast } from "sonner";
 import { Loader2, Database, CheckCircle2 } from "lucide-react";
 import { Navigate } from "react-router-dom";
@@ -147,9 +148,9 @@ export default function SeedPage() {
 
       // Create files
       setProgress("Criando arquivos...");
-      await supabase.from("files").insert([
-        { project_id: p[0].id, client_id: clientId, uploaded_by: designId, file_name: "carrossel-padaria.pdf", file_url: "#", file_type: "creative", folder: "criativos", approval_status: "pending" },
-        { project_id: p[3].id, client_id: clientId, uploaded_by: adminId, file_name: "landing-page-preview.png", file_url: "#", file_type: "preview", folder: "entregas", approval_status: "pending" },
+      await Promise.all([
+        createFileRecord({ project_id: p[0].id, client_id: clientId, uploaded_by: designId, file_name: "carrossel-padaria.pdf", file_url: "#", file_type: "creative", folder: "criativos", approval_status: "pending" }),
+        createFileRecord({ project_id: p[3].id, client_id: clientId, uploaded_by: adminId, file_name: "landing-page-preview.png", file_url: "#", file_type: "preview", folder: "entregas", approval_status: "pending" }),
       ]);
 
       // Create financial data
