@@ -139,6 +139,7 @@ export interface EditorialPostBundle {
   internal: EditorialPostInternalRow | null;
   primaryFile: EditorialFileRow | null;
   publications: EditorialPublicationBundle[];
+  publicationSetComplete: boolean;
 }
 
 export interface EditorialCalendarFilters {
@@ -193,6 +194,31 @@ export function useEditorialClientScope(enabled: boolean) {
           .range(from, to),
       );
       return unique(rows.map((row) => row.client_id));
+    },
+    enabled: enabled && !!user && isEditorialStaff,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useEditorialLinkedTaskIds(enabled: boolean) {
+  const { user, profile } = useAuth();
+  const isEditorialStaff = ["admin", "manager", "design", "traffic"].includes(
+    profile?.role || "",
+  );
+
+  return useQuery({
+    queryKey: ["editorial-linked-task-ids", user?.id, profile?.role],
+    queryFn: async (): Promise<string[]> => {
+      const rows = await readAllPages<{ task_id: string | null }>(
+        (from, to) =>
+          editorialDb
+            .from("editorial_post_internal")
+            .select("task_id")
+            .not("task_id", "is", null)
+            .order("task_id", { ascending: true })
+            .range(from, to),
+      );
+      return unique(rows.map((row) => row.task_id));
     },
     enabled: enabled && !!user && isEditorialStaff,
     refetchInterval: 30_000,
@@ -474,23 +500,29 @@ async function readEditorialCalendar(
     publicationsByPostId.set(publication.post_id, current);
   });
 
+  const publicationSetComplete =
+    !forceClientView &&
+    !filters.platform &&
+    !(filters.rangeStart && filters.rangeEnd);
   let bundledPosts = posts.map((post) => ({
-      post,
-      internal: postInternalById.get(post.id) || null,
-      primaryFile: post.primary_file_id
-        ? fileById.get(post.primary_file_id) || null
-        : null,
-      publications: (publicationsByPostId.get(post.id) || [])
-        .map((publication) => ({
-          publication,
-          internal: publicationInternalById.get(publication.id) || null,
-          account:
-            accountById.get(publication.external_account_id) || null,
-          file: publication.file_id
-            ? fileById.get(publication.file_id) || null
-            : null,
-        })),
-    }));
+    post,
+    internal: postInternalById.get(post.id) || null,
+    primaryFile: post.primary_file_id
+      ? fileById.get(post.primary_file_id) || null
+      : null,
+    publications: (publicationsByPostId.get(post.id) || []).map(
+      (publication) => ({
+        publication,
+        internal: publicationInternalById.get(publication.id) || null,
+        account:
+          accountById.get(publication.external_account_id) || null,
+        file: publication.file_id
+          ? fileById.get(publication.file_id) || null
+          : null,
+      }),
+    ),
+    publicationSetComplete,
+  }));
 
   if (!actualStaff) {
     bundledPosts = bundledPosts.map((bundle) => ({
@@ -558,6 +590,25 @@ async function readEditorialCalendar(
     posts: bundledPosts,
     accounts: [...accountById.values()],
   };
+}
+
+export async function loadEditorialPostForMutation(
+  postId: string,
+  clientId: string,
+) {
+  const result = await readEditorialCalendar(
+    { clientId, postId },
+    true,
+    true,
+    false,
+  );
+  const bundle = result.posts[0];
+  if (!bundle || !bundle.publicationSetComplete) {
+    throw new Error(
+      "Não foi possível carregar o plano editorial completo. Atualize e tente novamente.",
+    );
+  }
+  return bundle;
 }
 
 export function useEditorialCalendar(
@@ -875,6 +926,12 @@ export function useEditorialMutations() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] }),
       queryClient.invalidateQueries({ queryKey: ["editorial-events"] }),
+      queryClient.invalidateQueries({
+        queryKey: ["editorial-linked-task-ids"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["editorial-editor-options"],
+      }),
     ]);
   };
 

@@ -85,6 +85,21 @@ type EditableFileState = {
 };
 
 type UploadPostSaveAction = "draft" | "internal_review" | "client_shared" | "approval";
+type UploadMode = "single" | "carousel" | "video_link";
+
+const UPLOAD_MODES = new Set<UploadMode>(["single", "carousel", "video_link"]);
+
+const parseUploadMode = (value: string | null): UploadMode | null =>
+  value && UPLOAD_MODES.has(value as UploadMode)
+    ? value as UploadMode
+    : null;
+
+const clearUploadLaunchParams = (params: URLSearchParams) => {
+  params.delete("novo");
+  params.delete("mode");
+  params.delete("project");
+  return params;
+};
 
 const isEditableFile = (file?: EditableFileState | null) =>
   !!file
@@ -213,7 +228,7 @@ export default function AdminFiles() {
     || ["design", "traffic", "manager"].includes(profile?.role || "");
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
   const { data: clients, isLoading: loadingClients } = useClients();
-  const { data: projects } = useProjects();
+  const { data: projects, isLoading: loadingProjects } = useProjects();
   const {
     data: allFiles,
     isLoading: loadingFiles,
@@ -228,6 +243,9 @@ export default function AdminFiles() {
   const requestedClientId = searchParams.get("client");
   const requestedFolderId = searchParams.get("folder");
   const requestedRevisionId = searchParams.get("revisionOf");
+  const requestedModeParam = searchParams.get("mode");
+  const requestedUploadMode = parseUploadMode(requestedModeParam);
+  const requestedProjectId = searchParams.get("project");
   const shouldOpenNewContent = searchParams.get("novo") === "1";
   const initialFolder = requestedFolderId && FOLDER_IDS.has(requestedFolderId)
     ? requestedFolderId
@@ -251,7 +269,7 @@ export default function AdminFiles() {
   } | null>(null);
 
   // Upload form state
-  const [uploadMode, setUploadMode] = useState<"single" | "carousel" | "video_link">("single");
+  const [uploadMode, setUploadMode] = useState<UploadMode>("single");
   const [uploadFiles, setUploadFiles] = useState<File[]>([]);
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(initialFolder);
@@ -282,9 +300,8 @@ export default function AdminFiles() {
     if (requestedClientId) {
       const clientExists = clients.some((client: any) => client.id === requestedClientId);
       if (!clientExists) {
-        const next = new URLSearchParams(searchParams);
+        const next = clearUploadLaunchParams(new URLSearchParams(searchParams));
         next.delete("client");
-        next.delete("novo");
         setSearchParams(next, { replace: true });
         toast({
           title: "Cliente não encontrado",
@@ -303,8 +320,10 @@ export default function AdminFiles() {
       const source = (allFiles || []).find((file: any) => file.id === requestedRevisionId);
       if (!source || source.client_id !== requestedClientId) {
         const next = new URLSearchParams(searchParams);
-        next.delete("revisionOf");
         next.delete("novo");
+        next.delete("mode");
+        next.delete("project");
+        next.delete("revisionOf");
         setUploadOpen(false);
         setSearchParams(next, { replace: true });
         toast({
@@ -320,6 +339,15 @@ export default function AdminFiles() {
       setUploadFolder(requestedFolderId);
     }
 
+    if (
+      shouldOpenNewContent
+      && !requestedRevisionId
+      && requestedProjectId
+      && loadingProjects
+    ) {
+      return;
+    }
+
     if (shouldOpenNewContent && requestedClientId) {
       setUploadFolder(activeFolder);
       if (revisionSource && initializedRevisionRef.current !== revisionSource.id) {
@@ -333,10 +361,34 @@ export default function AdminFiles() {
         setUploadCarousel(revisionSource.carousel_text || "");
         setUploadDescription(revisionSource.description || "");
         initializedRevisionRef.current = revisionSource.id;
+      } else if (!revisionSource) {
+        const requestedProject = requestedProjectId
+          ? (projects || []).find(
+              (project) =>
+                project.id === requestedProjectId
+                && project.client_id === requestedClientId,
+            )
+          : null;
+        setUploadMode(requestedUploadMode || "single");
+        setUploadProject(requestedProject?.id || "");
       }
       setUploadOpen(true);
       const next = new URLSearchParams(searchParams);
       next.delete("novo");
+      if (requestedModeParam && !requestedUploadMode) {
+        next.delete("mode");
+      }
+      if (
+        !revisionSource
+        && requestedProjectId
+        && !(projects || []).some(
+          (project) =>
+            project.id === requestedProjectId
+            && project.client_id === requestedClientId,
+        )
+      ) {
+        next.delete("project");
+      }
       setSearchParams(next, { replace: true });
     }
   }, [
@@ -346,7 +398,10 @@ export default function AdminFiles() {
     filesReadFailed,
     requestedClientId,
     requestedFolderId,
+    requestedModeParam,
+    requestedProjectId,
     requestedRevisionId,
+    requestedUploadMode,
     revisionSource,
     searchParams,
     setSearchParams,
@@ -354,6 +409,8 @@ export default function AdminFiles() {
     toast,
     activeFolder,
     isStaff,
+    loadingProjects,
+    projects,
   ]);
 
   const handleClientChange = (clientId: string) => {
@@ -363,7 +420,7 @@ export default function AdminFiles() {
     } else {
       next.set("client", clientId);
     }
-    next.delete("novo");
+    clearUploadLaunchParams(next);
     setSearchParams(next, { replace: true });
   };
 
@@ -786,7 +843,7 @@ export default function AdminFiles() {
         });
         setUploadOpen(false);
         resetUploadForm();
-        const next = new URLSearchParams(searchParams);
+        const next = clearUploadLaunchParams(new URLSearchParams(searchParams));
         next.delete("revisionOf");
         setSearchParams(next, { replace: true });
         setUploading(false);
@@ -905,7 +962,7 @@ export default function AdminFiles() {
       });
       setUploadOpen(false);
       resetUploadForm();
-      const next = new URLSearchParams(searchParams);
+      const next = clearUploadLaunchParams(new URLSearchParams(searchParams));
       next.delete("revisionOf");
       setSearchParams(next, { replace: true });
     } catch (err: any) {
@@ -941,8 +998,10 @@ export default function AdminFiles() {
     setUploadOpen(false);
     resetUploadForm();
     const next = new URLSearchParams(searchParams);
-    next.delete("revisionOf");
     next.delete("novo");
+    next.delete("mode");
+    next.delete("project");
+    next.delete("revisionOf");
     setSearchParams(next, { replace: true });
   };
 
