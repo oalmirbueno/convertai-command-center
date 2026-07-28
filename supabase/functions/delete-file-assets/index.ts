@@ -183,7 +183,9 @@ async function prepareFileDelete(admin: any, ids: string[]): Promise<FileDeleteP
 
   const refs = rows
     .map(storageRefFromFile)
-    .filter(Boolean) as Array<{ bucket: string; path: string }>;
+    .filter((ref): ref is { bucket: string; path: string } =>
+      ref !== null && ref.bucket !== "workspace"
+    );
   return { rows, refs };
 }
 
@@ -244,6 +246,48 @@ async function assertCallerCanAccessWorkspaceTree(caller: any, nodes: WorkspaceN
   }
 }
 
+async function assertWorkspaceTreeIsUnlinked(admin: any, nodes: WorkspaceNode[]) {
+  const linkedNodeIds = nodes
+    .filter((node) => Boolean(node.sent_for_approval_file_id))
+    .map((node) => node.id);
+  const workspacePaths = Array.from(new Set(
+    nodes
+      .filter((node) => node.kind === "file" && Boolean(node.storage_path))
+      .map((node) => node.storage_path!),
+  ));
+  const linkedFileIds = new Set<string>();
+
+  for (let offset = 0; offset < workspacePaths.length; offset += 50) {
+    const chunk = workspacePaths.slice(offset, offset + 50);
+    const [
+      { data: bucketPathMatches, error: bucketPathError },
+      { data: legacyUrlMatches, error: legacyUrlError },
+    ] = await Promise.all([
+      admin
+        .from("files")
+        .select("id")
+        .eq("storage_bucket", "workspace")
+        .in("storage_path", chunk),
+      admin
+        .from("files")
+        .select("id")
+        .in("file_url", chunk.map((path) => `${WORKSPACE_FILE_PREFIX}${path}`)),
+    ]);
+    if (bucketPathError) throw bucketPathError;
+    if (legacyUrlError) throw legacyUrlError;
+    for (const row of [...(bucketPathMatches || []), ...(legacyUrlMatches || [])]) {
+      linkedFileIds.add(row.id);
+    }
+  }
+
+  if (linkedNodeIds.length > 0 || linkedFileIds.size > 0) {
+    throw new HttpError(
+      "Itens vinculados a Arquivos não podem ser excluídos do Workspace; remova primeiro o vínculo em Arquivos",
+      409,
+    );
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
@@ -294,18 +338,10 @@ Deno.serve(async (req) => {
 
     const tree = await collectWorkspaceTree(admin, root as WorkspaceNode);
     await assertCallerCanAccessWorkspaceTree(caller, tree);
+    await assertWorkspaceTreeIsUnlinked(admin, tree);
     const workspaceRefs = tree
       .filter((node) => node.kind === "file" && node.storage_path)
       .map((node) => ({ bucket: "workspace", path: node.storage_path! }));
-    const approvalIds = Array.from(new Set(
-      tree.map((node) => node.sent_for_approval_file_id).filter(Boolean) as string[],
-    ));
-    let approvalPlan: FileDeletePlan = { rows: [], refs: [] };
-    if (approvalIds.length) {
-      await assertCallerCanDeleteFiles(caller, approvalIds);
-      approvalPlan = await prepareFileDelete(admin, approvalIds);
-      await assertCallerCanDeleteFiles(caller, approvalPlan.rows.map((row) => row.id));
-    }
 
     const { data: deletedRoot, error: nodeError } = await caller
       .from("workspace_nodes")
@@ -316,15 +352,14 @@ Deno.serve(async (req) => {
     if (nodeError) throw nodeError;
     if (!deletedRoot) throw new HttpError("A autorização do workspace mudou durante a exclusão", 409);
 
-    const approvalResult = await executeFileDelete(caller, admin, approvalPlan);
     const workspaceStorage = await removeObjects(admin, workspaceRefs);
-    const storageErrors = [...workspaceStorage.errors, ...approvalResult.storageErrors];
+    const storageErrors = workspaceStorage.errors;
     assertStorageCleanupSucceeded(storageErrors);
 
     return json({
       ok: true,
-      deleted: tree.length + approvalResult.deleted,
-      storageRemoved: workspaceStorage.removed + approvalResult.storageRemoved,
+      deleted: tree.length,
+      storageRemoved: workspaceStorage.removed,
       storageErrors,
     });
   } catch (error: any) {

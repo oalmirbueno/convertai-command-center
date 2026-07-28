@@ -12,6 +12,7 @@ const statusBadge: Record<string, { cls: string; label: string }> = {
   open: { cls: "bg-info/10 text-info", label: "Aberto" },
   in_progress: { cls: "bg-warning/10 text-warning", label: "Em Andamento" },
   done: { cls: "bg-success/10 text-success", label: "Concluído" },
+  completed: { cls: "bg-success/10 text-success", label: "Concluído" },
 };
 
 const priorityBadge: Record<string, { cls: string; label: string }> = {
@@ -44,6 +45,7 @@ export default function ClientRequests() {
       return data || [];
     },
     enabled: !!user && !!clientId,
+    refetchInterval: 15_000,
   });
 
   const handleCreate = async () => {
