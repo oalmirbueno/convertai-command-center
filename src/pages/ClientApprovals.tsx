@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
+import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useToast } from "@/hooks/use-toast";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -9,10 +10,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
-import { FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 
 const approvalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Pendente" },
@@ -123,6 +125,10 @@ export default function ClientApprovals() {
   const [previewFile, setPreviewFileRaw] = useState<any>(null);
   const [previewIdx, setPreviewIdx] = useState(0);
   const setPreviewFile = (f: any) => { setPreviewFileRaw(f); setPreviewIdx(0); };
+  const editorialPreview = useEditorialApprovalPreview(
+    previewFile?.id || null,
+    !!previewFile,
+  );
 
   // Keyboard arrows for carousel navigation inside preview.
   useEffect(() => {
@@ -344,6 +350,128 @@ export default function ClientApprovals() {
               {previewFile.caption && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
               {previewFile.description && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {editorialPreview.isLoading && (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Conferindo o conteúdo editorial vinculado…
+                </div>
+              )}
+              {editorialPreview.isError && (
+                <div
+                  role="alert"
+                  className="rounded-lg border border-destructive/20 bg-destructive/5 p-3"
+                >
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <div>
+                      <p className="text-xs font-medium text-destructive">
+                        Não foi possível conferir o conteúdo editorial.
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        A decisão fica bloqueada até a prévia ser validada.
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => editorialPreview.refetch()}
+                  >
+                    Tentar novamente
+                  </Button>
+                </div>
+              )}
+              {!editorialPreview.isLoading
+                && !editorialPreview.isError
+                && (editorialPreview.data || []).map((snapshot) => (
+                  <section
+                    key={snapshot.post_id}
+                    className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4"
+                  >
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
+                        Conteúdo editorial vinculado
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">
+                        {snapshot.title}
+                      </p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        Formato: {snapshot.content_type}
+                      </p>
+                    </div>
+                    {snapshot.objective && (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                          Objetivo
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                          {snapshot.objective}
+                        </p>
+                      </div>
+                    )}
+                    {snapshot.default_caption && (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                          Legenda base
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                          {snapshot.default_caption}
+                        </p>
+                      </div>
+                    )}
+                    {snapshot.plans.map((plan, planIndex) => (
+                      <div
+                        key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`}
+                        className="space-y-2 rounded-md border border-border bg-background/70 p-3"
+                      >
+                        <div>
+                          <p className="text-xs font-medium text-foreground">
+                            {PLATFORM_LABELS[
+                              plan.platform as EditorialPlatform
+                            ] || plan.platform}
+                          </p>
+                          {(plan.account_handle || plan.account_name) && (
+                            <p className="text-[11px] text-muted-foreground">
+                              {plan.account_handle || plan.account_name}
+                            </p>
+                          )}
+                        </div>
+                        {plan.caption && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Legenda da plataforma
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                              {plan.caption}
+                            </p>
+                          </div>
+                        )}
+                        {plan.first_comment && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Primeiro comentário
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                              {plan.first_comment}
+                            </p>
+                          </div>
+                        )}
+                        {plan.alt_text && (
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                              Texto alternativo
+                            </p>
+                            <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                              {plan.alt_text}
+                            </p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </section>
+                ))}
               {previewFile.approval_status === "rejected" && previewFile.feedback && (
                 <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
                   <p className="text-[11px] text-muted-foreground mb-0.5">Feedback anterior:</p>
@@ -356,12 +484,12 @@ export default function ClientApprovals() {
           {previewFile?.approval_status === "pending" && (
             <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
               <Button variant="outline" className="border-destructive text-destructive hover:bg-destructive/10"
-                disabled={isReadOnly}
+                disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
                 onClick={() => { if (!isReadOnly) { setFeedbackFileId(previewFile.id); setFeedbackText(""); setPreviewFile(null); } }}>
                 Solicitar ajuste
               </Button>
               <Button className="bg-success hover:bg-success/90 text-white"
-                disabled={isReadOnly}
+                disabled={isReadOnly || editorialPreview.isFetching || editorialPreview.isError}
                 onClick={() => { if (!isReadOnly) { setConfirmApprove(previewFile.id); setPreviewFile(null); } }}>
                 Aprovar
               </Button>

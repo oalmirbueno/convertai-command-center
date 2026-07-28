@@ -9,9 +9,10 @@ import ClientDocuments from "@/pages/ClientDocuments";
 import ClientReports from "@/pages/ClientReports";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
 import ClientRequests from "@/pages/ClientRequests";
+import EditorialCalendar from "@/pages/EditorialCalendar";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
-  ArrowLeft, Eye, ChevronDown, LayoutDashboard, CheckSquare,
+  ArrowLeft, Eye, ChevronDown, LayoutDashboard, CheckSquare, CalendarDays,
   FileText, BarChart3, DollarSign, ShoppingBag, KeyRound,
 } from "lucide-react";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -23,6 +24,7 @@ import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 const clientTabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "aprovacoes", label: "Aprovações", icon: CheckSquare },
+  { id: "calendario", label: "Calendário", icon: CalendarDays },
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "relatorios", label: "Relatórios", icon: BarChart3 },
   { id: "pedidos", label: "Pedidos", icon: ShoppingBag },
@@ -36,13 +38,17 @@ export default function AdminViewAsClient() {
   const clientId = searchParams.get("client");
   const projectId = searchParams.get("project");
   const tabParam = searchParams.get("tab") || "dashboard";
+  const activeTab = clientTabs.some((tab) => tab.id === tabParam)
+    ? tabParam
+    : "dashboard";
   const { data: clients, isLoading: loadingClients } = useClients();
   const [selectedClient, setSelectedClient] = useState<any>(null);
   const [selectorOpen, setSelectorOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(tabParam);
 
   useEffect(() => {
+    let cancelled = false;
+
     if (projectId && !clientId) {
       (async () => {
         const { data } = await supabase
@@ -50,27 +56,42 @@ export default function AdminViewAsClient() {
           .select("client_id")
           .eq("id", projectId)
           .maybeSingle();
+        if (cancelled) return;
         if (data?.client_id) {
-          setSearchParams({ client: data.client_id });
+          setSearchParams(
+            (current) => {
+              const next = new URLSearchParams(current);
+              next.set("client", data.client_id);
+              return next;
+            },
+            { replace: true },
+          );
         } else {
           navigate("/clientes");
         }
       })();
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (!clientId && !projectId) {
       setLoading(false);
-      return;
+      return () => {
+        cancelled = true;
+      };
     }
 
     if (clientId) {
+      setLoading(true);
+      setSelectedClient(null);
       (async () => {
         const { data } = await supabase
           .from("profiles")
           .select(PROFILE_SAFE_SELECT)
           .eq("id", clientId)
           .maybeSingle();
+        if (cancelled) return;
         if (!data) {
           navigate("/clientes");
           return;
@@ -79,19 +100,36 @@ export default function AdminViewAsClient() {
         setLoading(false);
       })();
     }
-  }, [clientId, projectId]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    clientId,
+    navigate,
+    projectId,
+    setSearchParams,
+  ]);
 
   const selectClient = (c: any) => {
     setSelectedClient(c);
-    setSearchParams({ client: c.id, tab: activeTab });
+    const next = new URLSearchParams(searchParams);
+    next.set("client", c.id);
+    next.set("tab", activeTab);
+    next.delete("project");
+    next.delete("content");
+    setSearchParams(next);
     setSelectorOpen(false);
     setLoading(false);
   };
 
   const switchTab = (tabId: string) => {
-    setActiveTab(tabId);
     if (clientId) {
-      setSearchParams({ client: clientId, tab: tabId });
+      const next = new URLSearchParams(searchParams);
+      next.set("client", clientId);
+      next.set("tab", tabId);
+      next.delete("content");
+      setSearchParams(next);
     }
   };
 
@@ -138,10 +176,11 @@ export default function AdminViewAsClient() {
         ) : (
           <div className="space-y-2 max-w-lg mx-auto">
             {(clients || []).filter((c: any) => c.plan_status === "active").map((c: any) => (
-              <div
+              <button
+                type="button"
                 key={c.id}
                 onClick={() => selectClient(c)}
-                className="bg-card border border-border rounded-xl px-5 py-4 flex items-center gap-4 hover:border-primary/30 transition-colors cursor-pointer"
+                className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-primary/30"
               >
                 <Avatar className="w-10 h-10 shrink-0">
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
@@ -153,7 +192,7 @@ export default function AdminViewAsClient() {
                   <p className="text-[11px] text-muted-foreground">{c.email}</p>
                 </div>
                 <Eye className="w-4 h-4 text-muted-foreground" />
-              </div>
+              </button>
             ))}
           </div>
         )}
@@ -174,6 +213,8 @@ export default function AdminViewAsClient() {
     switch (activeTab) {
       case "aprovacoes":
         return <ClientApprovals />;
+      case "calendario":
+        return <EditorialCalendar />;
       case "documentos":
         return <ClientDocuments />;
       case "relatorios":
@@ -219,7 +260,10 @@ export default function AdminViewAsClient() {
           {/* Client switcher */}
           <div className="relative">
             <button
+              type="button"
               onClick={() => setSelectorOpen(!selectorOpen)}
+              aria-expanded={selectorOpen}
+              aria-haspopup="listbox"
               className="flex items-center gap-1.5 text-xs text-sky-500/70 hover:text-sky-500 transition-colors bg-transparent border border-sky-500/20 rounded-lg px-3 py-1.5"
             >
               Trocar cliente
@@ -253,8 +297,10 @@ export default function AdminViewAsClient() {
         <div className="flex items-center gap-1 overflow-x-auto pb-1 mb-6 border-b border-border scrollbar-hide">
           {clientTabs.map((tab) => (
             <button
+              type="button"
               key={tab.id}
               onClick={() => switchTab(tab.id)}
+              aria-pressed={activeTab === tab.id}
               className={cn(
                 "flex items-center gap-2 px-4 py-2.5 text-[13px] font-medium whitespace-nowrap transition-all relative rounded-t-lg",
                 activeTab === tab.id

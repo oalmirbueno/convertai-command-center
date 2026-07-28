@@ -14,7 +14,7 @@ import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
-  Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive,
+  Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -32,11 +32,12 @@ const adminMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
+  { title: "Calendário", url: "/calendario", icon: CalendarDays },
   { title: "Clientes", url: "/clientes", icon: Users },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
 ];
 
 const adminMoreNav: NavItem[] = [
+  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Briefings", url: "/briefings", icon: FileText },
@@ -56,6 +57,7 @@ const adminMoreNav: NavItem[] = [
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
+  { title: "Calendário", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
 ];

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAllFiles, useClients } from "@/hooks/useSupabaseData";
+import { useEditorialApprovalPreview } from "@/hooks/useEditorialCalendar";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
@@ -9,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { FileImage, FileText, Film, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, FileImage, FileText, Film, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
@@ -19,6 +20,7 @@ import {
   type FileApprovalDecision,
   type FileReleaseMode,
 } from "@/lib/fileApprovalActions";
+import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
@@ -136,6 +138,10 @@ export default function AdminApprovals() {
   const [submitting, setSubmitting] = useState(false);
   const [reviewTarget, setReviewTarget] = useState<any>(null);
   const [reviewFeedback, setReviewFeedback] = useState("");
+  const editorialPreview = useEditorialApprovalPreview(
+    previewFile?.id || null,
+    !!previewFile,
+  );
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
 
   // Build carousel children map
@@ -495,6 +501,61 @@ export default function AdminApprovals() {
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
               {previewFile.description && <div><p className="text-[11px] text-muted-foreground uppercase">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}
+              {editorialPreview.isLoading && (
+                <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Conferindo o conteúdo editorial vinculado…
+                </div>
+              )}
+              {editorialPreview.isError && (
+                <div role="alert" className="rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                  <div className="flex gap-2">
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                    <div>
+                      <p className="text-xs font-medium text-destructive">
+                        Não foi possível conferir o conteúdo editorial.
+                      </p>
+                      <p className="mt-1 text-[11px] text-muted-foreground">
+                        Revisão e liberação ficam bloqueadas até a prévia ser validada.
+                      </p>
+                    </div>
+                  </div>
+                  <Button type="button" size="sm" variant="outline" className="mt-3" onClick={() => editorialPreview.refetch()}>
+                    Tentar novamente
+                  </Button>
+                </div>
+              )}
+              {!editorialPreview.isLoading
+                && !editorialPreview.isError
+                && (editorialPreview.data || []).map((snapshot) => (
+                  <section key={snapshot.post_id} className="space-y-3 rounded-lg border border-primary/20 bg-primary/[0.04] p-4">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase tracking-wider text-primary">
+                        Conteúdo editorial vinculado
+                      </p>
+                      <p className="mt-1 text-sm font-semibold text-foreground">{snapshot.title}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">Formato: {snapshot.content_type}</p>
+                    </div>
+                    {snapshot.objective && <p className="whitespace-pre-wrap text-xs text-foreground">{snapshot.objective}</p>}
+                    {snapshot.default_caption && (
+                      <div>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Legenda base</p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">{snapshot.default_caption}</p>
+                      </div>
+                    )}
+                    {snapshot.plans.map((plan, planIndex) => (
+                      <div key={`${plan.platform}-${plan.account_handle || plan.account_name || planIndex}`} className="space-y-1.5 rounded-md border border-border bg-background/70 p-3">
+                        <p className="text-xs font-medium text-foreground">
+                          {PLATFORM_LABELS[plan.platform as EditorialPlatform] || plan.platform}
+                          {(plan.account_handle || plan.account_name) ? ` · ${plan.account_handle || plan.account_name}` : ""}
+                        </p>
+                        {plan.caption && <p className="whitespace-pre-wrap text-xs text-foreground">{plan.caption}</p>}
+                        {plan.first_comment && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Primeiro comentário: {plan.first_comment}</p>}
+                        {plan.alt_text && <p className="whitespace-pre-wrap text-[11px] text-muted-foreground">Texto alternativo: {plan.alt_text}</p>}
+                      </div>
+                    ))}
+                  </section>
+                ))}
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`text-[11px] px-2.5 py-1 rounded-full ${(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).cls}`}>
                   {(agencyApprovalBadge[previewFile.agency_approval_status] || agencyApprovalBadge.not_requested).label}
@@ -538,7 +599,7 @@ export default function AdminApprovals() {
                     size="sm"
                     variant="outline"
                     className="border-destructive/40 text-destructive hover:bg-destructive/10"
-                    disabled={submitting}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => {
                       setReviewTarget(previewFile);
                       setReviewFeedback("");
@@ -549,7 +610,7 @@ export default function AdminApprovals() {
                   </Button>
                   <Button
                     size="sm"
-                    disabled={submitting}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleAgencyReview(previewFile, "approved")}
                   >
                     Aprovar internamente
@@ -564,14 +625,14 @@ export default function AdminApprovals() {
                   <Button
                     size="sm"
                     variant="outline"
-                    disabled={submitting}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleRelease(previewFile, "client_shared")}
                   >
                     Disponibilizar ao cliente
                   </Button>
                   <Button
                     size="sm"
-                    disabled={submitting}
+                    disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleRelease(previewFile, "approval")}
                   >
                     Enviar para aprovação
