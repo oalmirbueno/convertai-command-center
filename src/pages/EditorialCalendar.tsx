@@ -1,30 +1,54 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
+import {
+  DndContext,
+  DragOverlay,
+  KeyboardSensor,
+  PointerSensor,
+  TouchSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DragStartEvent,
+} from "@dnd-kit/core";
 import {
   AlertCircle,
   CalendarDays,
   CheckCircle2,
   Clock3,
+  GripVertical,
+  LayoutTemplate,
   RefreshCw,
   Send,
 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import EditorialToolbar, {
   type EditorialView,
 } from "@/components/editorial/EditorialToolbar";
-import EditorialCalendarViews from "@/components/editorial/EditorialCalendarViews";
+import EditorialCalendarViews, {
+  type ScheduledEditorialItem,
+} from "@/components/editorial/EditorialCalendarViews";
 import EditorialEditor from "@/components/editorial/EditorialEditor";
 import EditorialDetailSheet from "@/components/editorial/EditorialDetailSheet";
+import EditorialTaskInbox, {
+  type EditorialInboxTask,
+} from "@/components/editorial/EditorialTaskInbox";
 import {
   useEditorialClientScope,
   useEditorialCalendar,
+  useEditorialLinkedTaskIds,
+  useEditorialMutations,
   useEditorialPostDetail,
+  loadEditorialPostForMutation,
   type EditorialPostBundle,
 } from "@/hooks/useEditorialCalendar";
 import {
   useClients,
   useProjects,
+  useTasks,
   useTeamMembers,
 } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
@@ -42,14 +66,22 @@ import {
   type EditorialPlatform,
 } from "@/lib/editorial";
 import {
+  EDITORIAL_DEFAULT_TIME_ZONE,
   dateKeyInTimeZone,
   getEditorialQueryRange,
   getEditorialWeekDays,
   navigateEditorialDate,
   normalizeEditorialDateParam,
 } from "@/lib/editorialDate";
+import {
+  buildEditorialPostMutationPayload,
+  isEditorialPostPlanMutable,
+  isEditorialPublicationDraggable,
+  moveEditorialInstantToCalendarDate,
+  type EditableEditorialStage,
+} from "@/lib/editorialDrag";
 
-const validViews: EditorialView[] = ["month", "week", "list"];
+const validViews: EditorialView[] = ["board", "month", "week", "list"];
 const aggregateStatuses = Object.keys(
   EDITORIAL_STATUS_CONFIG,
 ) as EditorialAggregateStatus[];
@@ -85,6 +117,21 @@ interface CalendarTeamMemberRow {
   role?: string;
 }
 
+interface EditorialDraftSeed {
+  clientId: string;
+  projectId: string;
+  taskId?: string;
+  title?: string;
+  responsibleId?: string;
+  productionStatus?: EditableEditorialStage | "cancelled";
+  scheduledAt?: string;
+}
+
+interface DragSummary {
+  kind: "task" | "post" | "publication";
+  label: string;
+}
+
 function updateParam(
   current: URLSearchParams,
   key: string,
@@ -97,6 +144,7 @@ function updateParam(
 }
 
 function periodTitle(dateKey: string, view: EditorialView) {
+  if (view === "board") return "Fluxo completo de produção";
   const date = new Date(`${dateKey}T12:00:00`);
   if (view === "week") {
     const days = getEditorialWeekDays(dateKey);
@@ -159,22 +207,22 @@ function CalendarMetrics({ posts }: { posts: EditorialPostBundle[] }) {
   ];
 
   return (
-    <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+    <div className="grid grid-cols-2 overflow-hidden rounded-2xl border border-border bg-card/70 lg:grid-cols-4">
       {metrics.map((metric) => (
         <div
           key={metric.label}
-          className="flex items-center gap-3 rounded-xl border border-border bg-card px-4 py-3"
+          className="flex items-center gap-3 border-b border-r border-border px-4 py-3.5 last:border-r-0 lg:border-b-0"
         >
           <span
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-lg ${metric.className}`}
+            className={`inline-flex h-8 w-8 items-center justify-center rounded-lg ${metric.className}`}
           >
             <metric.icon className="h-4 w-4" />
           </span>
           <div>
-            <p className="text-lg font-semibold leading-none text-foreground">
+            <p className="text-base font-semibold leading-none text-foreground">
               {metric.value}
             </p>
-            <p className="mt-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+            <p className="mt-1.5 text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
               {metric.label}
             </p>
           </div>
@@ -233,12 +281,16 @@ export default function EditorialCalendar() {
   );
   const canUseTeamData = permissions.canEdit && !isImpersonating;
   const editorialScopeQuery = useEditorialClientScope(canUseTeamData);
+  const linkedTaskIdsQuery =
+    useEditorialLinkedTaskIds(canUseTeamData);
   const teamMembersQuery = useTeamMembers(canUseTeamData);
+  const tasksQuery = useTasks();
   const teamMembers = useMemo(
     () => teamMembersQuery.data || [],
     [teamMembersQuery.data],
   );
-  const range = getEditorialQueryRange(dateKey, view);
+  const range =
+    view === "board" ? null : getEditorialQueryRange(dateKey, view);
   const calendarQuery = useEditorialCalendar(
     {
       clientId: forcedClientId || undefined,
@@ -305,11 +357,26 @@ export default function EditorialCalendar() {
     forcedClientId || null,
     { forceClientView: isImpersonating },
   );
+  const { savePost, transitionPublication } = useEditorialMutations();
   const [editorOpen, setEditorOpen] = useState(false);
   const [editingPost, setEditingPost] =
     useState<EditorialPostBundle | null>(null);
   const [revisionSource, setRevisionSource] =
     useState<EditorialPostBundle | null>(null);
+  const [draftSeed, setDraftSeed] =
+    useState<EditorialDraftSeed | null>(null);
+  const [dragSummary, setDragSummary] =
+    useState<DragSummary | null>(null);
+  const [movingEditorial, setMovingEditorial] = useState(false);
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: { distance: 6 },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: { delay: 180, tolerance: 8 },
+    }),
+    useSensor(KeyboardSensor),
+  );
 
   const clientNames = useMemo(
     () =>
@@ -331,6 +398,60 @@ export default function EditorialCalendar() {
       ),
     [projectRows],
   );
+  const projectById = useMemo(
+    () =>
+      new Map(
+        editorialProjectRows.map((project) => [project.id, project]),
+      ),
+    [editorialProjectRows],
+  );
+  const inboxTasks = useMemo(() => {
+    if (!canUseTeamData) return [];
+    const linkedTaskIds = new Set(linkedTaskIdsQuery.data || []);
+    const statusOrder: Record<string, number> = {
+      review: 0,
+      approved: 0,
+      doing: 1,
+      backlog: 2,
+      todo: 2,
+      blocked: 3,
+    };
+    return ((tasksQuery.data || []) as EditorialInboxTask[])
+      .filter((task) => {
+        if (task.status === "done" || linkedTaskIds.has(task.id)) {
+          return false;
+        }
+        const project = projectById.get(task.project_id);
+        if (!project) return false;
+        if (forcedClientId && project.client_id !== forcedClientId) {
+          return false;
+        }
+        if (projectId !== "all" && task.project_id !== projectId) {
+          return false;
+        }
+        return true;
+      })
+      .sort((left, right) => {
+        const statusDifference =
+          (statusOrder[left.status] ?? 9) -
+          (statusOrder[right.status] ?? 9);
+        if (statusDifference !== 0) return statusDifference;
+        const leftDue = left.due_date
+          ? new Date(left.due_date).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        const rightDue = right.due_date
+          ? new Date(right.due_date).getTime()
+          : Number.MAX_SAFE_INTEGER;
+        return leftDue - rightDue;
+      });
+  }, [
+    canUseTeamData,
+    forcedClientId,
+    linkedTaskIdsQuery.data,
+    projectById,
+    projectId,
+    tasksQuery.data,
+  ]);
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -438,6 +559,7 @@ export default function EditorialCalendar() {
   const navigatePeriod = (
     action: "previous" | "next" | "today",
   ) => {
+    if (view === "board") return;
     const nextDate = navigateEditorialDate(
       dateKey,
       view,
@@ -447,7 +569,8 @@ export default function EditorialCalendar() {
     if (nextDate) setParam("date", nextDate);
   };
 
-  const openCreate = () => {
+  const openCreate = (seed: EditorialDraftSeed | null = null) => {
+    setDraftSeed(seed);
     setEditingPost(null);
     setRevisionSource(null);
     setEditorOpen(true);
@@ -457,6 +580,7 @@ export default function EditorialCalendar() {
     const next = new URLSearchParams(searchParams);
     next.delete("content");
     setSearchParams(next, { replace: true });
+    setDraftSeed(null);
     setRevisionSource(null);
     setEditingPost(bundle);
     setEditorOpen(true);
@@ -466,6 +590,7 @@ export default function EditorialCalendar() {
     const next = new URLSearchParams(searchParams);
     next.delete("content");
     setSearchParams(next, { replace: true });
+    setDraftSeed(null);
     setEditingPost(null);
     setRevisionSource(bundle);
     setEditorOpen(true);
@@ -477,8 +602,7 @@ export default function EditorialCalendar() {
     setSearchParams(next);
   };
 
-  const defaultScheduledAt = `${dateKey}T09:00`;
-  const editorClientId =
+  const selectedEditorClientId =
     forcedClientId ||
     (requestedClientId !== "all"
       ? requestedClientId
@@ -486,263 +610,579 @@ export default function EditorialCalendar() {
         ? editorialProjectRows.find((project) => project.id === projectId)
             ?.client_id || ""
         : "");
-  const editorProjectId = projectId === "all" ? "" : projectId;
+  const selectedEditorProjectId = projectId === "all" ? "" : projectId;
+
+  const openCreateOnDate = (targetDateKey: string) => {
+    openCreate({
+      clientId: selectedEditorClientId,
+      projectId: selectedEditorProjectId,
+      scheduledAt: `${targetDateKey}T09:00`,
+    });
+  };
+
+  const openCreateFromTask = (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+    targetStage?: EditableEditorialStage,
+  ) => {
+    const project = projectById.get(task.project_id);
+    if (!project) {
+      toast.error("O projeto desta tarefa não está disponível.");
+      return;
+    }
+    const dueDateKey =
+      task.due_date && /^\d{4}-\d{2}-\d{2}/.test(task.due_date)
+        ? task.due_date.slice(0, 10)
+        : null;
+    openCreate({
+      clientId: project.client_id,
+      projectId: task.project_id,
+      taskId: task.id,
+      title: task.title,
+      responsibleId: task.assigned_to || undefined,
+      productionStatus:
+        targetStage || (task.status === "doing" ? "production" : "draft"),
+      scheduledAt: `${targetDateKey || dueDateKey || dateKey}T09:00`,
+    });
+  };
+
+  const movePostToStage = useCallback(
+    async (
+      bundle: EditorialPostBundle,
+      targetStage: EditableEditorialStage,
+    ) => {
+      if (!permissions.canEdit || movingEditorial) return;
+      if (bundle.post.production_status === targetStage) return;
+      setMovingEditorial(true);
+      try {
+        const completeBundle = await loadEditorialPostForMutation(
+          bundle.post.id,
+          bundle.post.client_id,
+        );
+        if (!isEditorialPostPlanMutable(completeBundle)) {
+          throw new Error(
+            "Este conteúdo já está agendado ou finalizado. Abra os detalhes para continuar.",
+          );
+        }
+        if (completeBundle.post.production_status === targetStage) {
+          return;
+        }
+        const payload = buildEditorialPostMutationPayload(completeBundle, {
+          mutationId: crypto.randomUUID(),
+          productionStatus: targetStage,
+        });
+        await savePost.mutateAsync({
+          payload,
+          expectedVersion: completeBundle.post.version,
+        });
+        toast.success("Etapa de produção atualizada.");
+      } catch (error: unknown) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível mover o conteúdo.",
+        );
+      } finally {
+        setMovingEditorial(false);
+      }
+    },
+    [movingEditorial, permissions.canEdit, savePost],
+  );
+
+  const movePublicationToDate = useCallback(
+    async (item: ScheduledEditorialItem, targetDateKey: string) => {
+      if (movingEditorial) return;
+      const visiblePublication = item.publication.publication;
+      if (
+        !isEditorialPublicationDraggable(
+          item.post,
+          item.publication,
+          permissions,
+        )
+      ) {
+        toast.error(
+          "Esta publicação está bloqueada pela etapa ou pela aprovação.",
+        );
+        return;
+      }
+      setMovingEditorial(true);
+      try {
+        let completePost = item.post;
+        let publicationBundle = item.publication;
+        if (visiblePublication.status === "planned") {
+          completePost = await loadEditorialPostForMutation(
+            item.post.post.id,
+            item.post.post.client_id,
+          );
+          const completePublication = completePost.publications.find(
+            ({ publication }) =>
+              publication.id === visiblePublication.id,
+          );
+          if (!completePublication) {
+            throw new Error(
+              "A publicação mudou. Atualize o calendário e tente novamente.",
+            );
+          }
+          publicationBundle = completePublication;
+        }
+        if (
+          !isEditorialPublicationDraggable(
+            completePost,
+            publicationBundle,
+            permissions,
+          )
+        ) {
+          throw new Error(
+            "Esta publicação está bloqueada pela etapa ou pela aprovação.",
+          );
+        }
+
+        const publication = publicationBundle.publication;
+        const scheduledAt = moveEditorialInstantToCalendarDate(
+          publication.scheduled_at,
+          targetDateKey,
+        );
+        if (!scheduledAt) {
+          throw new Error(
+            "A data escolhida não existe neste fuso horário.",
+          );
+        }
+        if (
+          publication.scheduled_at &&
+          dateKeyInTimeZone(publication.scheduled_at) === targetDateKey
+        ) {
+          return;
+        }
+
+        if (publication.status === "planned") {
+          const payload = buildEditorialPostMutationPayload(completePost, {
+            mutationId: crypto.randomUUID(),
+            publicationId: publication.id,
+            scheduledAt,
+            scheduledTimezone: EDITORIAL_DEFAULT_TIME_ZONE,
+          });
+          await savePost.mutateAsync({
+            payload,
+            expectedVersion: completePost.post.version,
+          });
+        } else {
+          await transitionPublication.mutateAsync({
+            publicationId: publication.id,
+            action: "schedule",
+            expectedVersion: publication.version,
+            scheduledAt,
+            timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+          });
+        }
+        toast.success(`Publicação movida para ${targetDateKey}.`);
+      } catch (error: unknown) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível reagendar a publicação.",
+        );
+      } finally {
+        setMovingEditorial(false);
+      }
+    },
+    [movingEditorial, permissions, savePost, transitionPublication],
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const data = event.active.data.current;
+    if (!data) return;
+    setDragSummary({
+      kind: data.kind as DragSummary["kind"],
+      label: String(data.label || "Item editorial"),
+    });
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setDragSummary(null);
+    const activeData = event.active.data.current;
+    const overData = event.over?.data.current;
+    if (!activeData || !overData) return;
+
+    if (activeData.kind === "task") {
+      const task = activeData.task as EditorialInboxTask;
+      if (overData.kind === "date") {
+        openCreateFromTask(task, String(overData.dateKey));
+      } else if (
+        overData.kind === "stage" &&
+        overData.productionStatus
+      ) {
+        openCreateFromTask(
+          task,
+          undefined,
+          overData.productionStatus as EditableEditorialStage,
+        );
+      }
+      return;
+    }
+
+    if (
+      activeData.kind === "post" &&
+      overData.kind === "stage" &&
+      overData.productionStatus
+    ) {
+      void movePostToStage(
+        activeData.post as EditorialPostBundle,
+        overData.productionStatus as EditableEditorialStage,
+      );
+      return;
+    }
+
+    if (
+      activeData.kind === "publication" &&
+      overData.kind === "date"
+    ) {
+      void movePublicationToDate(
+        activeData.item as ScheduledEditorialItem,
+        String(overData.dateKey),
+      );
+    }
+  };
+
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams);
+    [
+      "q",
+      "client",
+      "project",
+      "platform",
+      "status",
+      "production",
+      "approval",
+      "responsible",
+    ].forEach((key) => next.delete(key));
+    setSearchParams(next, { replace: true });
+  };
+
+  const defaultScheduledAt =
+    draftSeed?.scheduledAt || `${dateKey}T09:00`;
+  const editorClientId =
+    draftSeed?.clientId || selectedEditorClientId;
+  const editorProjectId =
+    draftSeed?.projectId || selectedEditorProjectId;
   const pageTitle = periodTitle(dateKey, view);
 
   return (
-    <div className="space-y-5 pb-8">
-      <header className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <CalendarDays className="h-5 w-5" />
-            </span>
-            <div>
-              <h1 className="text-xl font-semibold text-foreground">
-                Calendário editorial
-              </h1>
-              <p className="text-xs text-muted-foreground">
-                Conteúdos, aprovações e publicações por plataforma ·
-                calendário em horário de Brasília
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
+      onDragCancel={() => setDragSummary(null)}
+    >
+      <div className="space-y-5 pb-8">
+        <header className="relative overflow-hidden rounded-2xl border border-border bg-card/75 px-4 py-4 sm:px-5">
+          <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex items-center gap-3">
+              <span className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <LayoutTemplate className="h-5 w-5" />
+              </span>
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
+                  Operação de conteúdo
+                </p>
+                <h1 className="mt-0.5 text-xl font-semibold text-foreground">
+                  Central editorial
+                </h1>
+                <p className="mt-1 text-xs leading-5 text-muted-foreground">
+                  Kanban, produção, mídia, aprovações e agenda no mesmo fluxo
+                </p>
+              </div>
+            </div>
+            <div className="flex max-w-xl items-start gap-2 rounded-xl border border-primary/15 bg-primary/[0.05] px-3.5 py-2.5 text-[11px] leading-5 text-muted-foreground">
+              <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
+              <p>
+                Arrastar organiza o trabalho. Publicar continua protegido pelos
+                gates e nunca acontece sozinho. Nenhuma rede social é acionada automaticamente.
               </p>
             </div>
           </div>
-        </div>
-        <div className="flex max-w-xl items-start gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-2 text-xs text-muted-foreground">
-          <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
-          <p>
-            Esta etapa organiza a fila e registra a publicação manual. Nenhuma
-            rede social é acionada automaticamente.
-          </p>
-        </div>
-      </header>
+        </header>
 
-      {editorialOptionsError && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-            <p className="text-xs text-muted-foreground">
-              Não foi possível carregar todas as opções editoriais. A criação
-              fica bloqueada até recarregar.
-            </p>
-          </div>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              void Promise.all([
-                clientsQuery.refetch(),
-                projectsQuery.refetch(),
-                teamMembersQuery.refetch(),
-                editorialScopeQuery.refetch(),
-              ]);
-            }}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Recarregar acesso
-          </Button>
-        </div>
-      )}
-
-      <CalendarMetrics posts={filteredPosts} />
-
-      <EditorialToolbar
-        title={pageTitle}
-        view={view}
-        search={search}
-        clientId={requestedClientId}
-        projectId={projectId}
-        platform={platform}
-        status={status}
-        productionStatus={productionStatus}
-        approvalStatus={approvalStatus}
-        responsibleId={responsibleId}
-        clients={
-          effectiveRole === "client"
-            ? []
-            : editorialClientRows.map((client) => ({
-                value: client.id,
-                label:
-                  client.company_name || client.full_name || "Cliente",
-              }))
-        }
-        projects={filteredProjects.map((project) => ({
-          value: project.id,
-          label: project.name,
-        }))}
-        platforms={EDITORIAL_PLATFORMS.map((item) => ({
-          value: item,
-          label: PLATFORM_LABELS[item],
-        }))}
-        statuses={aggregateStatuses.map((item) => ({
-          value: item,
-          label: EDITORIAL_STATUS_CONFIG[item].label,
-        }))}
-        productionStatuses={productionStatuses}
-        approvalStatuses={approvalStatuses}
-        responsibles={teamRows.map((member) => ({
-          value: member.id,
-          label: member.full_name || "Membro da equipe",
-        }))}
-        canCreate={canCreateEditorial}
-        onViewChange={(nextView) => setParam("view", nextView)}
-        onSearchChange={(value) => setParam("q", value)}
-        onClientChange={handleClientChange}
-        onProjectChange={(value) => setParam("project", value)}
-        onPlatformChange={(value) => setParam("platform", value)}
-        onStatusChange={(value) => setParam("status", value)}
-        onProductionStatusChange={(value) =>
-          setParam("production", value)
-        }
-        onApprovalStatusChange={(value) =>
-          setParam("approval", value)
-        }
-        onResponsibleChange={(value) =>
-          setParam("responsible", value)
-        }
-        onPrevious={() => navigatePeriod("previous")}
-        onToday={() => navigatePeriod("today")}
-        onNext={() => navigatePeriod("next")}
-        onCreate={openCreate}
-      />
-
-      {calendarQuery.isLoading ? (
-        <div className="space-y-3">
-          <Skeleton className="h-12 w-full rounded-xl" />
-          <Skeleton className="h-[420px] w-full rounded-xl" />
-        </div>
-      ) : calendarQuery.isError ? (
-        <div className="flex min-h-[280px] flex-col items-center justify-center rounded-xl border border-destructive/25 bg-destructive/5 p-6 text-center">
-          <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
-          <p className="text-sm font-medium text-foreground">
-            Não foi possível carregar o calendário
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Tente novamente. Se o problema continuar, avise a equipe
-            responsável pelo painel.
-          </p>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="mt-4"
-            onClick={() => calendarQuery.refetch()}
-          >
-            <RefreshCw className="mr-1.5 h-4 w-4" />
-            Recarregar
-          </Button>
-        </div>
-      ) : (
-        <EditorialCalendarViews
-          view={view}
-          anchorDate={new Date(`${dateKey}T12:00:00`)}
-          posts={filteredPosts}
-          clientNames={clientNames}
-          projectNames={projectNames}
-          canCreate={canCreateEditorial}
-          onSelectPost={openDetail}
-          onShowBacklog={() => setParam("view", "list")}
-        />
-      )}
-
-      {contentId && detailQuery.isError && !selectedPost && (
-        <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
-            <p className="text-xs text-muted-foreground">
-              Não foi possível abrir os detalhes deste conteúdo.
-            </p>
-          </div>
-          <div className="flex shrink-0 gap-2">
+        {editorialOptionsError && (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+              <p className="text-xs text-muted-foreground">
+                Não foi possível carregar todas as opções editoriais. A criação
+                fica bloqueada até recarregar.
+              </p>
+            </div>
             <Button
               type="button"
               variant="outline"
               size="sm"
-              onClick={() => detailQuery.refetch()}
+              onClick={() => {
+                void Promise.all([
+                  clientsQuery.refetch(),
+                  projectsQuery.refetch(),
+                  teamMembersQuery.refetch(),
+                  editorialScopeQuery.refetch(),
+                  tasksQuery.refetch(),
+                  linkedTaskIdsQuery.refetch(),
+                ]);
+              }}
             >
-              Tentar novamente
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setParam("content", "")}
-            >
-              Fechar
+              <RefreshCw className="mr-1.5 h-4 w-4" />
+              Recarregar acesso
             </Button>
           </div>
-        </div>
-      )}
+        )}
 
-      <EditorialEditor
-        open={editorOpen}
-        post={editingPost}
-        revisionOf={revisionSource}
-        clients={editorialClientRows.map((client) => ({
-          id: client.id,
-          name: client.company_name || client.full_name || "Cliente",
-        }))}
-        projects={editorialProjectRows.map((project) => ({
-          id: project.id,
-          name: project.name,
-          client_id: project.client_id,
-        }))}
-        teamMembers={teamRows.map((member) => ({
-          id: member.id,
-          name: member.full_name || "Membro da equipe",
-          role: member.role,
-        }))}
-        defaultClientId={editorClientId}
-        defaultProjectId={editorProjectId}
-        defaultScheduledAt={defaultScheduledAt}
-        onOpenChange={(nextOpen) => {
-          setEditorOpen(nextOpen);
-          if (!nextOpen) {
+        <CalendarMetrics posts={filteredPosts} />
+
+        <EditorialToolbar
+          title={pageTitle}
+          view={view}
+          search={search}
+          clientId={requestedClientId}
+          projectId={projectId}
+          platform={platform}
+          status={status}
+          productionStatus={productionStatus}
+          approvalStatus={approvalStatus}
+          responsibleId={responsibleId}
+          clients={
+            effectiveRole === "client"
+              ? []
+              : editorialClientRows.map((client) => ({
+                  value: client.id,
+                  label:
+                    client.company_name || client.full_name || "Cliente",
+                }))
+          }
+          projects={filteredProjects.map((project) => ({
+            value: project.id,
+            label: project.name,
+          }))}
+          platforms={EDITORIAL_PLATFORMS.map((item) => ({
+            value: item,
+            label: PLATFORM_LABELS[item],
+          }))}
+          statuses={aggregateStatuses.map((item) => ({
+            value: item,
+            label: EDITORIAL_STATUS_CONFIG[item].label,
+          }))}
+          productionStatuses={productionStatuses}
+          approvalStatuses={approvalStatuses}
+          responsibles={teamRows.map((member) => ({
+            value: member.id,
+            label: member.full_name || "Membro da equipe",
+          }))}
+          canCreate={canCreateEditorial}
+          onViewChange={(nextView) => setParam("view", nextView)}
+          onSearchChange={(value) => setParam("q", value)}
+          onClientChange={handleClientChange}
+          onProjectChange={(value) => setParam("project", value)}
+          onPlatformChange={(value) => setParam("platform", value)}
+          onStatusChange={(value) => setParam("status", value)}
+          onProductionStatusChange={(value) =>
+            setParam("production", value)
+          }
+          onApprovalStatusChange={(value) =>
+            setParam("approval", value)
+          }
+          onResponsibleChange={(value) =>
+            setParam("responsible", value)
+          }
+          onClearFilters={clearFilters}
+          onPrevious={() => navigatePeriod("previous")}
+          onToday={() => navigatePeriod("today")}
+          onNext={() => navigatePeriod("next")}
+          onCreate={() => openCreate()}
+        />
+
+        <div
+          className={
+            canUseTeamData
+              ? "grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]"
+              : ""
+          }
+        >
+          <main className="min-w-0">
+            {calendarQuery.isLoading ? (
+              <div className="space-y-3">
+                <Skeleton className="h-12 w-full rounded-xl" />
+                <Skeleton className="h-[480px] w-full rounded-2xl" />
+              </div>
+            ) : calendarQuery.isError ? (
+              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/5 p-6 text-center">
+                <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
+                <p className="text-sm font-medium text-foreground">
+                  Não foi possível carregar o calendário
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Tente novamente. Se o problema continuar, avise a equipe
+                  responsável pelo painel.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-4"
+                  onClick={() => calendarQuery.refetch()}
+                >
+                  <RefreshCw className="mr-1.5 h-4 w-4" />
+                  Recarregar
+                </Button>
+              </div>
+            ) : (
+              <EditorialCalendarViews
+                view={view}
+                anchorDate={new Date(`${dateKey}T12:00:00`)}
+                posts={filteredPosts}
+                clientNames={clientNames}
+                projectNames={projectNames}
+                canCreate={canCreateEditorial}
+                canEdit={permissions.canEdit}
+                canPublish={permissions.canPublish}
+                moving={movingEditorial}
+                onSelectPost={openDetail}
+                onCreateOnDate={openCreateOnDate}
+                onShowBacklog={() => setParam("view", "list")}
+              />
+            )}
+          </main>
+
+          {canUseTeamData && (
+            <EditorialTaskInbox
+              tasks={inboxTasks}
+              projectNames={projectNames}
+              loading={
+                tasksQuery.isLoading || linkedTaskIdsQuery.isLoading
+              }
+              error={tasksQuery.isError || linkedTaskIdsQuery.isError}
+              disabled={!canCreateEditorial || movingEditorial}
+              onCreateFromTask={(task) => openCreateFromTask(task)}
+            />
+          )}
+        </div>
+
+        <p className="sr-only" aria-live="polite">
+          {movingEditorial
+            ? "Salvando movimentação editorial"
+            : "Movimentação editorial concluída"}
+        </p>
+
+        {contentId && detailQuery.isError && !selectedPost && (
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
+            <div className="flex min-w-0 items-center gap-3">
+              <AlertCircle className="h-5 w-5 shrink-0 text-destructive" />
+              <p className="text-xs text-muted-foreground">
+                Não foi possível abrir os detalhes deste conteúdo.
+              </p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => detailQuery.refetch()}
+              >
+                Tentar novamente
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={() => setParam("content", "")}
+              >
+                Fechar
+              </Button>
+            </div>
+          </div>
+        )}
+
+        <EditorialEditor
+          open={editorOpen}
+          post={editingPost}
+          revisionOf={revisionSource}
+          clients={editorialClientRows.map((client) => ({
+            id: client.id,
+            name: client.company_name || client.full_name || "Cliente",
+          }))}
+          projects={editorialProjectRows.map((project) => ({
+            id: project.id,
+            name: project.name,
+            client_id: project.client_id,
+          }))}
+          teamMembers={teamRows.map((member) => ({
+            id: member.id,
+            name: member.full_name || "Membro da equipe",
+            role: member.role,
+          }))}
+          defaultClientId={editorClientId}
+          defaultProjectId={editorProjectId}
+          defaultScheduledAt={defaultScheduledAt}
+          defaultTaskId={draftSeed?.taskId}
+          defaultTitle={draftSeed?.title}
+          defaultResponsibleId={draftSeed?.responsibleId}
+          defaultProductionStatus={draftSeed?.productionStatus}
+          onOpenChange={(nextOpen) => {
+            setEditorOpen(nextOpen);
+            if (!nextOpen) {
+              setEditingPost(null);
+              setRevisionSource(null);
+              setDraftSeed(null);
+            }
+          }}
+          onSaved={(postId) => {
             setEditingPost(null);
             setRevisionSource(null);
-          }
-        }}
-        onSaved={(postId) => {
-          setEditingPost(null);
-          const next = new URLSearchParams(searchParams);
-          next.set("content", postId);
-          setSearchParams(next);
-        }}
-      />
+            setDraftSeed(null);
+            const next = new URLSearchParams(searchParams);
+            next.set("content", postId);
+            setSearchParams(next);
+          }}
+        />
 
-      <EditorialDetailSheet
-        open={!!selectedPost}
-        post={selectedPost}
-        clientName={
-          selectedPost
-            ? clientNames.get(selectedPost.post.client_id) || "Cliente"
-            : ""
-        }
-        projectName={
-          selectedPost
-            ? projectNames.get(selectedPost.post.project_id) || "Projeto"
-            : ""
-        }
-        responsibleName={
-          selectedPost?.internal?.responsible_id
-            ? teamRows.find(
-                (member) =>
-                  member.id ===
-                  selectedPost.internal?.responsible_id,
-              )?.full_name
-            : null
-        }
-        canEdit={permissions.canEdit}
-        canPublish={permissions.canPublish}
-        isImpersonating={isImpersonating}
-        onOpenChange={(nextOpen) => {
-          if (!nextOpen) setParam("content", "");
-        }}
-        onEdit={openEdit}
-        onCreateRevision={openRevision}
-        onArchived={() => setParam("content", "")}
-      />
-    </div>
+        <EditorialDetailSheet
+          open={!!selectedPost}
+          post={selectedPost}
+          clientName={
+            selectedPost
+              ? clientNames.get(selectedPost.post.client_id) || "Cliente"
+              : ""
+          }
+          projectName={
+            selectedPost
+              ? projectNames.get(selectedPost.post.project_id) || "Projeto"
+              : ""
+          }
+          responsibleName={
+            selectedPost?.internal?.responsible_id
+              ? teamRows.find(
+                  (member) =>
+                    member.id ===
+                    selectedPost.internal?.responsible_id,
+                )?.full_name
+              : null
+          }
+          canEdit={permissions.canEdit}
+          canPublish={permissions.canPublish}
+          isImpersonating={isImpersonating}
+          onOpenChange={(nextOpen) => {
+            if (!nextOpen) setParam("content", "");
+          }}
+          onEdit={openEdit}
+          onCreateRevision={openRevision}
+          onArchived={() => setParam("content", "")}
+        />
+      </div>
+
+      <DragOverlay dropAnimation={null}>
+        {dragSummary ? (
+          <div className="flex max-w-[280px] items-center gap-2 rounded-xl border border-primary/35 bg-popover px-3 py-2.5 text-xs font-medium text-popover-foreground shadow-xl">
+            <GripVertical className="h-4 w-4 shrink-0 text-primary" />
+            <span className="truncate">{dragSummary.label}</span>
+          </div>
+        ) : null}
+      </DragOverlay>
+    </DndContext>
   );
 }

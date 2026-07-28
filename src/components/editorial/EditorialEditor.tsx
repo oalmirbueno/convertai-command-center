@@ -14,11 +14,14 @@ import {
   AlertCircle,
   CalendarClock,
   FileCheck2,
+  FileImage,
+  Film,
   Loader2,
   LockKeyhole,
   Plus,
   RefreshCw,
   Trash2,
+  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -89,6 +92,10 @@ interface EditorialEditorProps {
   defaultClientId?: string;
   defaultProjectId?: string;
   defaultScheduledAt?: string;
+  defaultTaskId?: string;
+  defaultTitle?: string;
+  defaultResponsibleId?: string;
+  defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
 }
@@ -154,6 +161,10 @@ export default function EditorialEditor({
   defaultClientId = "",
   defaultProjectId = "",
   defaultScheduledAt = "",
+  defaultTaskId = "",
+  defaultTitle = "",
+  defaultResponsibleId = "",
+  defaultProductionStatus = "draft",
   onOpenChange,
   onSaved,
 }: EditorialEditorProps) {
@@ -302,14 +313,24 @@ export default function EditorialEditor({
 
     setClientId(revisionOf?.post.client_id || defaultClientId);
     setProjectId(revisionOf?.post.project_id || defaultProjectId);
-    setTitle(revisionOf?.post.title || "");
+    setTitle(revisionOf ? revisionOf.post.title : defaultTitle);
     setContentType(revisionOf?.post.content_type || "static");
     setObjective(revisionOf?.post.objective || "");
     setDefaultCaption(revisionOf?.post.default_caption || "");
-    setProductionStatus("draft");
+    setProductionStatus(
+      revisionOf ? "draft" : defaultProductionStatus,
+    );
     setPrimaryFileId("");
-    setTaskId(revisionOf?.internal?.task_id || "");
-    setResponsibleId(revisionOf?.internal?.responsible_id || "");
+    setTaskId(
+      revisionOf
+        ? revisionOf.internal?.task_id || ""
+        : defaultTaskId,
+    );
+    setResponsibleId(
+      revisionOf
+        ? revisionOf.internal?.responsible_id || ""
+        : defaultResponsibleId,
+    );
     setInternalNotes(revisionOf?.internal?.internal_notes || "");
     setPostIdempotencyKey(newIdempotencyKey());
     setPublications(
@@ -338,8 +359,12 @@ export default function EditorialEditor({
     setPendingMutationId(null);
   }, [
     defaultClientId,
+    defaultProductionStatus,
     defaultProjectId,
+    defaultResponsibleId,
     defaultScheduledAt,
+    defaultTaskId,
+    defaultTitle,
     open,
     post,
     revisionOf,
@@ -472,6 +497,24 @@ export default function EditorialEditor({
     setTaskId("");
     setResponsibleId("");
     setPublications([]);
+  };
+
+  const openMediaUploader = (
+    mode: "single" | "carousel" | "video_link",
+  ) => {
+    if (!clientId || !projectId) return;
+    const params = new URLSearchParams({
+      client: clientId,
+      project: projectId,
+      folder: "criativos",
+      novo: "1",
+      mode,
+    });
+    window.open(
+      `/arquivos?${params.toString()}`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   };
 
   const handleSave = async () => {
@@ -750,6 +793,64 @@ export default function EditorialEditor({
                 O calendário reutiliza os registros existentes de Arquivos,
                 Aprovações e Kanban.
               </p>
+            </div>
+            <div className="rounded-lg border border-border bg-muted/25 p-3">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Mídia do conteúdo
+                  </p>
+                  <p className="mt-0.5 text-[11px] text-muted-foreground">
+                    Envie pela biblioteca atual e depois atualize a lista.
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!clientId || !projectId}
+                    onClick={() => openMediaUploader("single")}
+                  >
+                    <Upload className="mr-1.5 h-3.5 w-3.5" />
+                    Arquivo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!clientId || !projectId}
+                    onClick={() => openMediaUploader("carousel")}
+                  >
+                    <FileImage className="mr-1.5 h-3.5 w-3.5" />
+                    Carrossel
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!clientId || !projectId}
+                    onClick={() => openMediaUploader("video_link")}
+                  >
+                    <Film className="mr-1.5 h-3.5 w-3.5" />
+                    Vídeo
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    disabled={!clientId || !projectId || loadingOptions}
+                    onClick={() => refetchOptions()}
+                  >
+                    <RefreshCw
+                      className={`mr-1.5 h-3.5 w-3.5 ${
+                        loadingOptions ? "animate-spin" : ""
+                      }`}
+                    />
+                    Atualizar biblioteca
+                  </Button>
+                </div>
+              </div>
             </div>
             {loadingOptions ? (
               <div className="flex h-20 items-center justify-center">
