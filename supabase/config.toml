@@ -55,6 +55,8 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = true
   [functions.preview-transactional-email]
     verify_jwt = false
+  [functions.request-task-workflow]
+    verify_jwt = true
   [functions.handle-email-unsubscribe]
     verify_jwt = false
   [functions.handle-email-suppression]
@@ -63,4 +65,3 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.mcp-oauth-metadata]
     verify_jwt = false
-

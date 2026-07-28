@@ -17,6 +17,10 @@ import { toast } from "sonner";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
+import {
+  requestIdFromTaskSource,
+  syncClientRequestStatusForTask,
+} from "@/lib/requestTaskWorkflow";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
@@ -56,6 +60,8 @@ export default function Kanban() {
   const [draggedTask, setDraggedTask] = useState<string | null>(null);
   const draggedTaskRef = useRef<string | null>(null);
   const suppressRealtimeUntilRef = useRef<number>(0);
+  const dropInFlightRef = useRef(false);
+  const [dropSaving, setDropSaving] = useState(false);
   const [mobileTab, setMobileTab] = useState("backlog");
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
@@ -106,12 +112,21 @@ export default function Kanban() {
 
   const handleDeleteTask = async () => {
     if (!deleteTask) return;
+    if (requestIdFromTaskSource(deleteTask.source)) {
+      toast.error(
+        "Tarefas vinculadas a pedidos não podem ser excluídas sem desvincular e reabrir o pedido.",
+      );
+      setDeleteTask(null);
+      return;
+    }
     const { error } = await supabase.from("tasks").delete().eq("id", deleteTask.id);
     if (error) {
       toast.error("Erro ao excluir tarefa");
       return;
     }
-    notifyOpsTaskDeleted(deleteTask.id, deleteTask.ops_node_id);
+    if (!requestIdFromTaskSource(deleteTask.source)) {
+      notifyOpsTaskDeleted(deleteTask.id, deleteTask.ops_node_id);
+    }
     toast.success("Tarefa excluída");
     setDeleteTask(null);
     queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -119,12 +134,33 @@ export default function Kanban() {
 
   // Filters
   const [searchParams] = useSearchParams();
+  const openedTaskParamRef = useRef<string | null>(null);
   const [filterProject, setFilterProject] = useState(searchParams.get("project") || "");
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
   const [filterDateTo, setFilterDateTo] = useState<Date | undefined>(undefined);
   const [sortBy, setSortBy] = useState<"manual" | "title_asc" | "title_desc" | "due_asc" | "due_desc" | "priority">("manual");
+
+  useEffect(() => {
+    const requestedTaskId = searchParams.get("task");
+    if (!requestedTaskId) {
+      openedTaskParamRef.current = null;
+      return;
+    }
+    if (openedTaskParamRef.current === requestedTaskId || !tasks) {
+      return;
+    }
+
+    const requestedTask = tasks.find(
+      (task: any) => task.id === requestedTaskId,
+    );
+    if (!requestedTask) return;
+
+    openedTaskParamRef.current = requestedTaskId;
+    setFilterProject(requestedTask.project_id || "");
+    setDetailTask(requestedTask);
+  }, [searchParams, tasks]);
 
   const hasFilters = filterProject || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
 
@@ -167,15 +203,79 @@ export default function Kanban() {
   const [dragOver, setDragOver] = useState<{ id: string; position: "top" | "bottom" } | null>(null);
 
   const persistColumnOrder = async (columnId: string, orderedIds: string[]) => {
-    await Promise.all(
+    const results = await Promise.all(
       orderedIds.map((id, i) =>
-        supabase.from("tasks").update({ task_order: (i + 1) * 10, status: columnId }).eq("id", id)
+        supabase
+          .from("tasks")
+          .update({ task_order: (i + 1) * 10 })
+          .eq("id", id)
+          .eq("status", columnId)
+          .select("id")
+          .maybeSingle()
       )
     );
+    const failed = results.find((result) => result.error || !result.data);
+    if (failed?.error) throw failed.error;
+    if (failed && !failed.data) {
+      throw new Error("Uma tarefa não foi encontrada ou não pode ser alterada.");
+    }
+  };
+
+  const persistTaskStatus = async (
+    taskId: string,
+    taskStatus: string,
+    nextStatus: string,
+    taskOrder: number | null | undefined,
+  ) => {
+    const { data, error } = await supabase
+      .from("tasks")
+      .update({
+        status: nextStatus,
+        task_order: taskOrder ?? null,
+      })
+      .eq("id", taskId)
+      .eq("status", taskStatus)
+      .select("id")
+      .maybeSingle();
+    if (error) throw error;
+    if (!data) {
+      throw new Error(
+        "A tarefa mudou em outra sessão. Atualize o Kanban antes de continuar.",
+      );
+    }
+  };
+
+  const syncLinkedRequest = async (
+    task: any,
+    taskStatus: string,
+  ) => {
+    try {
+      const result = await syncClientRequestStatusForTask({
+        taskId: task.id,
+        projectId: task.project_id,
+        source: task.source,
+        taskStatus,
+      });
+      if (result.synced) {
+        queryClient.invalidateQueries({ queryKey: ["client-requests"] });
+      }
+      return true;
+    } catch (error) {
+      console.error("Client request sync failed", error);
+      return false;
+    }
   };
 
   const handleDragStart = (taskId: string) => {
     if (isClient) return;
+    if (dropInFlightRef.current) {
+      toast.info("Aguarde a movimentação anterior terminar.");
+      return;
+    }
+    if (hasFilters) {
+      toast.info("Limpe os filtros e use a ordem manual para arrastar tarefas.");
+      return;
+    }
     draggedTaskRef.current = taskId;
     setDraggedTask(taskId);
   };
@@ -185,7 +285,23 @@ export default function Kanban() {
     if (isClient || !activeDragId) return;
     const task = (tasks || []).find((t: any) => t.id === activeDragId);
     if (!task) return;
+    if (dropInFlightRef.current || hasFilters) {
+      setDraggedTask(null);
+      draggedTaskRef.current = null;
+      return;
+    }
+    dropInFlightRef.current = true;
+    setDropSaving(true);
     const previousStatus = task.status;
+    const originalSourceIds = filteredTasks
+      .filter((candidate: any) => candidate.status === previousStatus)
+      .map((candidate: any) => candidate.id);
+    const originalDestinationIds = previousStatus === column
+      ? originalSourceIds
+      : filteredTasks
+        .filter((candidate: any) => candidate.status === column)
+        .map((candidate: any) => candidate.id);
+    const linkedRequestId = requestIdFromTaskSource(task.source);
 
     // Rebuild destination column ordering
     const destTasks = filteredTasks.filter((t: any) => t.status === column && t.id !== activeDragId);
@@ -198,6 +314,20 @@ export default function Kanban() {
     const srcIds = filteredTasks
       .filter((t: any) => t.status === previousStatus && t.id !== activeDragId)
       .map((t: any) => t.id);
+    const restoreOriginalColumnOrders = async () => {
+      if (previousStatus !== column) {
+        await persistTaskStatus(
+          activeDragId,
+          column,
+          previousStatus,
+          task.task_order,
+        );
+      }
+      await persistColumnOrder(previousStatus, originalSourceIds);
+      if (previousStatus !== column) {
+        await persistColumnOrder(column, originalDestinationIds);
+      }
+    };
 
     setDragOver(null);
     setDraggedTask(null);
@@ -223,58 +353,133 @@ export default function Kanban() {
     suppressRealtimeUntilRef.current = Date.now() + 2500;
     (async () => {
       try {
-        await persistColumnOrder(column, newDestIds);
-        if (previousStatus !== column) {
-          await persistColumnOrder(previousStatus, srcIds);
-        }
-
-        notifyOpsTaskUpdated(activeDragId);
-
-        const { data: { user: authUser } } = await supabase.auth.getUser();
-
-        if (["review", "done"].includes(column) && task.project_id && authUser && previousStatus !== column) {
-          await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
-          queryClient.invalidateQueries({ queryKey: ["all-files"] });
-          queryClient.invalidateQueries({ queryKey: ["files"] });
-        }
-
-        if (column === "done" && previousStatus !== column && task.project_id) {
-          if (authUser) {
-            const { data: upd } = await supabase.from("updates").insert({
-              project_id: task.project_id, author_id: authUser.id,
-              message: `"${task.title}" concluída`, update_type: "task",
-            }).select().single();
-            notifyOpsUpdate(upd);
+        let rollbackNeeded = previousStatus === column;
+        try {
+          if (previousStatus === column) {
+            await persistColumnOrder(column, newDestIds);
+          } else {
+            await persistTaskStatus(
+              activeDragId,
+              previousStatus,
+              column,
+              destOrder[activeDragId],
+            );
+            rollbackNeeded = true;
+            await persistColumnOrder(column, newDestIds);
+            await persistColumnOrder(previousStatus, srcIds);
           }
-          if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
-            await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
+
+          if (previousStatus !== column) {
+            const requestSyncOk = await syncLinkedRequest(task, column);
+            if (!requestSyncOk) {
+              throw new Error("REQUEST_SYNC_FAILED");
+            }
           }
-          const { notifyAdmin } = await import("@/lib/notifyHelpers");
-          if (authUser) {
-            await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
+        } catch (coreError) {
+          console.error("Drop persist failed", coreError);
+          let taskRollbackSucceeded = !rollbackNeeded;
+          if (rollbackNeeded) {
+            try {
+              await restoreOriginalColumnOrders();
+              taskRollbackSucceeded = true;
+              toast.error(
+                coreError instanceof Error
+                  && coreError.message === "REQUEST_SYNC_FAILED"
+                  ? "O pedido não pôde ser sincronizado; a movimentação da tarefa foi revertida."
+                  : "Erro ao salvar; a movimentação foi revertida.",
+              );
+            } catch (rollbackError) {
+              console.error("Drop rollback failed", rollbackError);
+              toast.error(
+                "Falha crítica ao salvar e reverter a movimentação. Atualize a tela.",
+              );
+            }
+          } else {
+            toast.error(
+              coreError instanceof Error
+                ? coreError.message
+                : "Não foi possível salvar a movimentação.",
+            );
           }
+          if (
+            taskRollbackSucceeded
+            && linkedRequestId
+            && previousStatus !== column
+          ) {
+            try {
+              await syncClientRequestStatusForTask({
+                taskId: task.id,
+                projectId: task.project_id,
+                source: task.source,
+                taskStatus: previousStatus,
+              });
+              queryClient.invalidateQueries({ queryKey: ["client-requests"] });
+            } catch (requestRollbackError) {
+              console.error("Client request rollback failed", requestRollbackError);
+              toast.error(
+                "A tarefa voltou, mas o pedido precisa ser reconciliado. Atualize a tela antes de continuar.",
+              );
+            }
+          }
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          return;
         }
 
-        if (previousStatus !== column && column !== "done") {
-          const { notifyAdmin } = await import("@/lib/notifyHelpers");
-          if (authUser && !profile?.role?.includes("admin")) {
-            await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+        try {
+          if (!linkedRequestId) {
+            notifyOpsTaskUpdated(activeDragId);
           }
-        }
 
-        if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
-          await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
-        }
+          const { data: { user: authUser } } = await supabase.auth.getUser();
 
-        if (previousStatus !== column) {
-          queryClient.invalidateQueries({ queryKey: ["milestones"] });
-          queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
-          queryClient.invalidateQueries({ queryKey: ["projects"] });
+          if (["review", "done"].includes(column) && task.project_id && authUser && previousStatus !== column) {
+            await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, authUser.id);
+            queryClient.invalidateQueries({ queryKey: ["all-files"] });
+            queryClient.invalidateQueries({ queryKey: ["files"] });
+          }
+
+          if (column === "done" && previousStatus !== column && task.project_id) {
+            if (authUser) {
+              const { data: upd } = await supabase.from("updates").insert({
+                project_id: task.project_id, author_id: authUser.id,
+                message: `"${task.title}" concluída`, update_type: "task",
+              }).select().single();
+              if (!linkedRequestId) notifyOpsUpdate(upd);
+            }
+            if (task.assigned_to && authUser && task.assigned_to !== authUser.id) {
+              await notifyUser(task.assigned_to, `Tarefa "${task.title}" marcada como concluída`, "task", "/kanban");
+            }
+            const { notifyAdmin } = await import("@/lib/notifyHelpers");
+            if (authUser) {
+              await notifyAdmin(`Tarefa "${task.title}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
+            }
+          }
+
+          if (previousStatus !== column && column !== "done") {
+            const { notifyAdmin } = await import("@/lib/notifyHelpers");
+            if (authUser && !profile?.role?.includes("admin")) {
+              await notifyAdmin(`${profile?.full_name || "Membro"} moveu "${task.title}" para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+            }
+          }
+
+          if (task.assigned_to && authUser && task.assigned_to !== authUser.id && previousStatus !== column) {
+            await notifyUser(task.assigned_to, `Tarefa "${task.title}" movida para ${columns.find(c => c.id === column)?.title || column}`, "task", "/kanban");
+          }
+
+          if (previousStatus !== column) {
+            queryClient.invalidateQueries({ queryKey: ["milestones"] });
+            queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
+            queryClient.invalidateQueries({ queryKey: ["projects"] });
+          }
+        } catch (sideEffectError) {
+          console.error("Post-move side effects failed", sideEffectError);
+          toast.error(
+            "A tarefa foi movida, mas uma etapa auxiliar falhou. Atualize a tela antes de repetir qualquer ação.",
+          );
         }
-      } catch (err) {
-        console.error("Drop persist failed", err);
-        toast.error("Erro ao salvar movimentação");
-        queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      } finally {
+        dropInFlightRef.current = false;
+        setDropSaving(false);
       }
     })();
   };
@@ -290,15 +495,57 @@ export default function Kanban() {
 
   const changeStatus = async (task: any, newStatus: string) => {
     if (task.status === newStatus) return;
+    if (dropInFlightRef.current) {
+      toast.info("Aguarde a movimentação anterior terminar.");
+      return;
+    }
+    dropInFlightRef.current = true;
+    setDropSaving(true);
     try {
-      const { error } = await supabase.from("tasks").update({ status: newStatus }).eq("id", task.id);
+      const { data: updatedTask, error } = await supabase
+        .from("tasks")
+        .update({ status: newStatus })
+        .eq("id", task.id)
+        .eq("status", task.status)
+        .select("id")
+        .maybeSingle();
       if (error) throw error;
+      if (!updatedTask) {
+        throw new Error("A tarefa não foi encontrada ou não pode ser alterada.");
+      }
+      const requestSyncOk = await syncLinkedRequest(
+        task,
+        newStatus,
+      );
       suppressRealtimeUntilRef.current = Date.now() + 2000;
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
-      toast.success(`Movido para ${statusLabels[newStatus] || newStatus}`);
+      if (requestSyncOk) {
+        toast.success(`Movido para ${statusLabels[newStatus] || newStatus}`);
+      } else {
+        try {
+          await persistTaskStatus(
+            task.id,
+            newStatus,
+            task.status,
+            task.task_order,
+          );
+          queryClient.invalidateQueries({ queryKey: ["tasks"] });
+          toast.error(
+            "O pedido não pôde ser sincronizado; a movimentação da tarefa foi revertida.",
+          );
+        } catch (rollbackError) {
+          console.error("Task status rollback failed", rollbackError);
+          toast.error(
+            "Falha crítica ao sincronizar o pedido e reverter a tarefa. Atualize a tela antes de continuar.",
+          );
+        }
+      }
     } catch (e) {
       console.error(e);
       toast.error("Erro ao mover tarefa");
+    } finally {
+      dropInFlightRef.current = false;
+      setDropSaving(false);
     }
   };
 
@@ -522,13 +769,23 @@ export default function Kanban() {
                     {colTasks.map((task: any) => (
                       <div
                         key={task.id}
-                        draggable={!isClient}
-                        onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                        role="button"
+                        tabIndex={0}
+                        aria-label={`Abrir tarefa ${task.title}`}
+                        draggable={!isClient && !hasFilters && !dropSaving}
+                        onDragStart={isClient || hasFilters || dropSaving ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
                         onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                         onClick={() => handleCardClick(task)}
+                        onKeyDown={(event) => {
+                          if (event.target !== event.currentTarget) return;
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            handleCardClick(task);
+                          }
+                        }}
                         className={cn(
                           "bg-card border border-border rounded-[10px] border-l-[3px] cursor-pointer active:scale-[0.99] transition-transform",
-                          !isClient && "cursor-grab active:cursor-grabbing",
+                          !isClient && !hasFilters && !dropSaving && "cursor-grab active:cursor-grabbing",
                           draggedTask === task.id && "opacity-40",
                           priorityBorderColors[task.priority] || "border-l-border"
                         )}
@@ -576,13 +833,17 @@ export default function Kanban() {
                                         <ArrowRight className="w-3 h-3 ml-auto text-muted-foreground" />
                                       </button>
                                     ))}
-                                    <div className="border-t border-border my-1" />
-                                    <button
-                                      onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
-                                      className="w-full flex items-center gap-2 px-2 py-2 rounded text-[13px] hover:bg-destructive/10 text-destructive"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" /> Excluir
-                                    </button>
+                                    {!requestIdFromTaskSource(task.source) && (
+                                      <>
+                                        <div className="border-t border-border my-1" />
+                                        <button
+                                          onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
+                                          className="w-full flex items-center gap-2 px-2 py-2 rounded text-[13px] hover:bg-destructive/10 text-destructive"
+                                        >
+                                          <Trash2 className="w-3.5 h-3.5" /> Excluir
+                                        </button>
+                                      </>
+                                    )}
                                   </PopoverContent>
                                 </Popover>
                               )}
@@ -645,8 +906,11 @@ export default function Kanban() {
                       <div key={task.id} className="relative">
                         {showTopLine && <div className="h-0.5 bg-primary rounded-full mb-1 animate-fade-in" />}
                         <div
-                          draggable={!isClient}
-                          onDragStart={isClient ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
+                          role="button"
+                          tabIndex={0}
+                          aria-label={`Abrir tarefa ${task.title}`}
+                          draggable={!isClient && !hasFilters && !dropSaving}
+                          onDragStart={isClient || hasFilters || dropSaving ? undefined : (e) => { e.stopPropagation(); handleDragStart(task.id); }}
                           onDragEnd={isClient ? undefined : () => { setDraggedTask(null); draggedTaskRef.current = null; setDragOver(null); }}
                           onDragOver={isClient ? undefined : (e) => {
                             e.preventDefault();
@@ -669,7 +933,14 @@ export default function Kanban() {
                             handleDrop(col.id, insertAt);
                           }}
                           onClick={() => handleCardClick(task)}
-                          className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${draggedTask === task.id ? "opacity-40" : ""} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
+                          onKeyDown={(event) => {
+                            if (event.target !== event.currentTarget) return;
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              handleCardClick(task);
+                            }
+                          }}
+                          className={`bg-card border border-border rounded-[10px] border-l-[3px] ${priorityBorderColors[task.priority] || "border-l-border"} ${isClient || hasFilters || dropSaving ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"} ${draggedTask === task.id ? "opacity-40" : ""} hover:border-muted-foreground/30 hover:-translate-y-px transition-all`}
                         >
                           <div className="p-3.5 space-y-2.5">
                             <div>
@@ -700,7 +971,7 @@ export default function Kanban() {
                                     {task.assignee?.full_name?.split(" ").map((n: string) => n[0]).join("").slice(0, 2) || "?"}
                                   </AvatarFallback>
                                 </Avatar>
-                                {!isClient && (
+                                {!isClient && !requestIdFromTaskSource(task.source) && (
                                   <button
                                     onClick={(e) => { e.stopPropagation(); setDeleteTask(task); }}
                                     className="text-muted-foreground hover:text-destructive transition-colors cursor-pointer bg-transparent border-none p-1 rounded"

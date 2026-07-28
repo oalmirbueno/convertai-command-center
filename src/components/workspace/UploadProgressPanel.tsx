@@ -104,17 +104,17 @@ export function UploadProgressPanel({ items, onCancel, onRetry, onDismiss, onCle
                         <RotateCw className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {(item.status === "uploading" || item.status === "queued") ? (
+                    {(item.status === "uploading" || item.status === "queued") && item.cancelable ? (
                       <button onClick={() => onCancel(item.id)} title="Cancelar"
                         className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive">
                         <XCircle className="w-3.5 h-3.5" />
                       </button>
-                    ) : (
+                    ) : item.status !== "uploading" && item.status !== "queued" ? (
                       <button onClick={() => onDismiss(item.id)} title="Remover"
                         className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-foreground">
                         <X className="w-3.5 h-3.5" />
                       </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
               </li>

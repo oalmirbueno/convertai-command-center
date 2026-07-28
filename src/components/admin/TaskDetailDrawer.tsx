@@ -18,6 +18,10 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import TaskChecklistTemplatePicker from "@/components/admin/TaskChecklistTemplatePicker";
 import { resolveFileUrl } from "@/lib/fileUrls";
+import {
+  requestIdFromTaskSource,
+  syncClientRequestStatusForTask,
+} from "@/lib/requestTaskWorkflow";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -33,6 +37,29 @@ const statusLabels: Record<string, string> = {
 };
 const statusOrder = ["backlog", "doing", "review", "approved", "done"];
 
+function SectionLoadError({
+  label,
+  onRetry,
+}: {
+  label: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-3 text-center">
+      <p className="text-[12px] text-destructive">
+        Não foi possível carregar {label}.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-2 text-[11px] font-medium text-foreground underline underline-offset-2"
+      >
+        Tentar novamente
+      </button>
+    </div>
+  );
+}
+
 interface Props {
   task: any;
   onClose: () => void;
@@ -45,6 +72,10 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const { profile } = useAuth();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const linkedRequestId = requestIdFromTaskSource(task.source);
+  const linkedProject = projects.find((project: any) => project.id === task.project_id);
+  const canManageLinkedAssignment =
+    profile?.role === "admin" || profile?.role === "manager";
 
   // Edit state
   const [editing, setEditing] = useState(false);
@@ -61,6 +92,35 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [commentsExpanded, setCommentsExpanded] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const savedTaskValuesRef = useRef({
+    title: task.title,
+    description: task.description || "",
+    priority: task.priority,
+    status: task.status,
+    assignedTo: task.assigned_to || "",
+    dueDate: task.due_date || "",
+  });
+  const requestStatusSyncRef = useRef(task.status);
+
+  useEffect(() => {
+    const next = {
+      title: task.title,
+      description: task.description || "",
+      priority: task.priority,
+      status: task.status,
+      assignedTo: task.assigned_to || "",
+      dueDate: task.due_date || "",
+    };
+    savedTaskValuesRef.current = next;
+    requestStatusSyncRef.current = task.status;
+    setTitle(next.title);
+    setDescription(next.description);
+    setPriority(next.priority);
+    setStatus(next.status);
+    setAssignedTo(next.assignedTo);
+    setDueDate(next.dueDate);
+    setEditing(false);
+  }, [task]);
 
   // Comment state
   const [commentText, setCommentText] = useState("");
@@ -74,15 +134,68 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [newCheckItem, setNewCheckItem] = useState("");
   const [addingCheck, setAddingCheck] = useState(false);
 
+  const {
+    data: linkedEligibleAssignees = [],
+    isLoading: loadingLinkedAssignees,
+    isError: linkedAssigneesReadFailed,
+  } = useQuery({
+    queryKey: [
+      "request-task-assignees",
+      profile?.id,
+      linkedProject?.client_id,
+    ],
+    queryFn: async () => {
+      const { data, error } = await supabase.functions.invoke(
+        "request-task-workflow",
+        {
+          body: {
+            action: "list_assignees",
+            clientId: linkedProject!.client_id,
+          },
+        },
+      );
+      if (error) throw error;
+      if (!data?.ok || !Array.isArray(data.assignees)) {
+        throw new Error(
+          data?.error || "Não foi possível carregar os responsáveis.",
+        );
+      }
+      return data.assignees;
+    },
+    enabled:
+      !!linkedRequestId
+      && !!linkedProject?.client_id
+      && canManageLinkedAssignment,
+  });
+  const currentAssignedMember = teamMembers.find(
+    (member: any) => member.id === assignedTo,
+  );
+  const assignmentOptions = linkedRequestId
+    ? (
+      currentAssignedMember
+      && !linkedEligibleAssignees.some(
+        (member: any) => member.id === currentAssignedMember.id,
+      )
+        ? [currentAssignedMember, ...linkedEligibleAssignees]
+        : linkedEligibleAssignees
+    )
+    : teamMembers;
+
   // Fetch attachments
-  const { data: attachments, isLoading: loadingAttachments } = useQuery({
+  const {
+    data: attachments,
+    isLoading: loadingAttachments,
+    isError: attachmentsReadFailed,
+    refetch: refetchAttachments,
+  } = useQuery({
     queryKey: ["task-attachments", task.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("task_attachments")
         .select("*, uploader:profiles!task_attachments_uploaded_by_fkey(full_name)")
         .eq("task_id", task.id)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return Promise.all((data || []).map(async (attachment: any) => {
         try {
           return {
@@ -97,27 +210,39 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   });
 
   // Fetch comments
-  const { data: comments, isLoading: loadingComments } = useQuery({
+  const {
+    data: comments,
+    isLoading: loadingComments,
+    isError: commentsReadFailed,
+    refetch: refetchComments,
+  } = useQuery({
     queryKey: ["task-comments", task.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("task_comments")
         .select("*, author:profiles!task_comments_author_id_fkey(full_name)")
         .eq("task_id", task.id)
         .order("created_at", { ascending: true });
+      if (error) throw error;
       return data || [];
     },
   });
 
   // Fetch checklist
-  const { data: checklistItems, isLoading: loadingChecklist } = useQuery({
+  const {
+    data: checklistItems,
+    isLoading: loadingChecklist,
+    isError: checklistReadFailed,
+    refetch: refetchChecklist,
+  } = useQuery({
     queryKey: ["task-checklist", task.id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("task_checklist_items")
         .select("*, creator:profiles!task_checklist_items_created_by_fkey(full_name)")
         .eq("task_id", task.id)
         .order("item_order", { ascending: true });
+      if (error) throw error;
       return data || [];
     },
   });
@@ -126,32 +251,101 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     if (!title.trim()) { toast.error("Título obrigatório"); return; }
     setSaving(true);
     try {
-      const previousAssignedTo = task.assigned_to;
-      const previousStatus = task.status;
-      await supabase.from("tasks").update({
+      const previousAssignedTo = savedTaskValuesRef.current.assignedTo;
+      const previousStatus = savedTaskValuesRef.current.status;
+      if (linkedRequestId && assignedTo !== previousAssignedTo) {
+        if (
+          !canManageLinkedAssignment
+          || loadingLinkedAssignees
+          || linkedAssigneesReadFailed
+          || (
+            assignedTo
+            && !linkedEligibleAssignees.some(
+              (member: any) => member.id === assignedTo,
+            )
+          )
+        ) {
+          throw new Error(
+            "O responsável não está autorizado para o cliente desta tarefa.",
+          );
+        }
+      }
+      let persistedStatus = status;
+      let linkedRequestStatusRolledBack = false;
+      const { data: updatedTask, error: taskUpdateError } = await supabase.from("tasks").update({
         title: title.trim(),
         description: description.trim() || null,
         priority, status,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
-      }).eq("id", task.id);
-      notifyOpsTaskUpdated(task.id);
+      }).eq("id", task.id).select("id").maybeSingle();
+      if (taskUpdateError) throw taskUpdateError;
+      if (!updatedTask) throw new Error("A tarefa não foi encontrada ou não pode ser alterada.");
+      savedTaskValuesRef.current = {
+        title: title.trim(),
+        description: description.trim(),
+        priority,
+        status,
+        assignedTo,
+        dueDate,
+      };
+      if (!requestIdFromTaskSource(task.source)) {
+        notifyOpsTaskUpdated(task.id);
+      }
 
       const { data: { user } } = await supabase.auth.getUser();
+      let linkedRequestSyncFailed = false;
+
+      if (requestStatusSyncRef.current !== status) {
+        try {
+          const result = await syncClientRequestStatusForTask({
+            taskId: task.id,
+            projectId: task.project_id,
+            source: task.source,
+            taskStatus: status,
+          });
+          requestStatusSyncRef.current = status;
+          if (result.synced) {
+            queryClient.invalidateQueries({ queryKey: ["client-requests"] });
+          }
+        } catch (error) {
+          linkedRequestSyncFailed = true;
+          console.error("Client request sync failed", error);
+          if (previousStatus !== status) {
+            const { data: rolledBack, error: rollbackError } = await supabase
+              .from("tasks")
+              .update({ status: previousStatus })
+              .eq("id", task.id)
+              .eq("status", status)
+              .select("id")
+              .maybeSingle();
+            if (rollbackError || !rolledBack) {
+              throw new Error(
+                "A sincronização do pedido falhou e o status da tarefa não pôde ser revertido com segurança.",
+              );
+            }
+            persistedStatus = previousStatus;
+            savedTaskValuesRef.current.status = previousStatus;
+            requestStatusSyncRef.current = previousStatus;
+            setStatus(previousStatus);
+            linkedRequestStatusRolledBack = true;
+          }
+        }
+      }
 
       if (assignedTo && assignedTo !== previousAssignedTo) {
         const project = projects.find((p: any) => p.id === task.project_id);
         await notifyUser(assignedTo, `Tarefa atribuída: "${title.trim()}"${project ? ` no projeto ${project.name}` : ""}`, "task", "/kanban");
       }
 
-      if (["review", "done"].includes(status) && previousStatus !== status && task.project_id && user) {
+      if (["review", "done"].includes(persistedStatus) && previousStatus !== persistedStatus && task.project_id && user) {
         await sendTaskAttachmentsToApproval(task.id, task.project_id, title.trim(), user.id);
         queryClient.invalidateQueries({ queryKey: ["all-files"] });
         queryClient.invalidateQueries({ queryKey: ["files"] });
       }
 
       // Notify on status change to done
-      if (status === "done" && previousStatus !== "done") {
+      if (persistedStatus === "done" && previousStatus !== "done") {
         const { notifyAdmin } = await import("@/lib/notifyHelpers");
         if (user) {
           await notifyAdmin(`Tarefa "${title.trim()}" concluída por ${profile?.full_name || "equipe"}`, "task", "/kanban");
@@ -162,8 +356,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       }
 
       // Notify assignee about status change
-      if (previousStatus !== status && status !== "done" && assignedTo && user && assignedTo !== user.id) {
-        const statusName = statusLabels[status] || status;
+      if (previousStatus !== persistedStatus && persistedStatus !== "done" && assignedTo && user && assignedTo !== user.id) {
+        const statusName = statusLabels[persistedStatus] || persistedStatus;
         await notifyUser(assignedTo, `Tarefa "${title.trim()}" movida para ${statusName}`, "task", "/kanban");
       }
 
@@ -171,7 +365,15 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       queryClient.invalidateQueries({ queryKey: ["tasks-timeline"] });
       queryClient.invalidateQueries({ queryKey: ["milestones-all"] });
       queryClient.invalidateQueries({ queryKey: ["projects"] });
-      toast.success("Tarefa atualizada!");
+      if (linkedRequestSyncFailed) {
+        toast.warning(
+          linkedRequestStatusRolledBack
+            ? "Os outros campos foram salvos, mas o status voltou ao anterior porque o pedido não pôde ser sincronizado."
+            : "Tarefa atualizada, mas o pedido vinculado não pôde ser sincronizado.",
+        );
+      } else {
+        toast.success("Tarefa atualizada!");
+      }
       setEditing(false);
     } catch (err: any) { toast.error(err.message); }
     finally { setSaving(false); }
@@ -258,13 +460,13 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       for (const mid of mentionedIds) {
         if (mid !== user.id && !notifiedSet.has(mid)) {
           notifiedSet.add(mid);
-          await notifyUser(mid, `Você foi mencionado em "${task.title}"`, "task", "/kanban");
+          await notifyUser(mid, `Você foi mencionado em "${title}"`, "task", "/kanban");
         }
       }
 
       // Notify assignee if not already notified
-      if (task.assigned_to && task.assigned_to !== user.id && !notifiedSet.has(task.assigned_to)) {
-        await notifyUser(task.assigned_to, `Novo comentário em "${task.title}"`, "task", "/kanban");
+      if (assignedTo && assignedTo !== user.id && !notifiedSet.has(assignedTo)) {
+        await notifyUser(assignedTo, `Novo comentário em "${title}"`, "task", "/kanban");
       }
     } catch (err: any) { toast.error(err.message); }
     finally { setSendingComment(false); }
@@ -348,8 +550,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
           file_type: file.type, file_size: file.size, uploaded_by: user.id,
         });
       }
-      if (["review", "done"].includes(task.status) && task.project_id) {
-        await sendTaskAttachmentsToApproval(task.id, task.project_id, task.title, user.id);
+      if (["review", "done"].includes(status) && task.project_id) {
+        await sendTaskAttachmentsToApproval(task.id, task.project_id, title, user.id);
         queryClient.invalidateQueries({ queryKey: ["all-files"] });
         queryClient.invalidateQueries({ queryKey: ["files"] });
       }
@@ -394,7 +596,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     setDownloadingZip(true);
     try {
       const zip = new JSZip();
-      const folder = zip.folder(task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
+      const folder = zip.folder(title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel");
       for (let i = 0; i < imageAttachments.length; i++) {
         const a = imageAttachments[i];
         const url = a.resolved_url || await resolveFileUrl({ fileUrl: a.file_url });
@@ -407,7 +609,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       const url = URL.createObjectURL(content);
       const link = document.createElement("a");
       link.href = url;
-      link.download = `${task.title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel"}.zip`;
+      link.download = `${title.replace(/[^a-zA-Z0-9À-ÿ\s]/g, "").trim() || "carrossel"}.zip`;
       link.click();
       URL.revokeObjectURL(url);
       toast.success("ZIP baixado!");
@@ -427,7 +629,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     link.click();
   };
 
-  const assignee = teamMembers.find((m: any) => m.id === (editing ? assignedTo : task.assigned_to));
+  const assignee = teamMembers.find((m: any) => m.id === assignedTo);
   const project = projects.find((p: any) => p.id === task.project_id);
 
   const checkedCount = (checklistItems || []).filter((i: any) => i.checked).length;
@@ -448,8 +650,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
           <div className="flex items-center gap-3">
-            <div className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${priorityColors[editing ? priority : task.priority]}`}>
-              {priorityLabels[editing ? priority : task.priority]}
+            <div className={`px-2 py-0.5 rounded-full text-[10px] font-medium ${priorityColors[priority]}`}>
+              {priorityLabels[priority]}
             </div>
             <span className="text-[11px] text-muted-foreground">{project?.name}</span>
           </div>
@@ -474,7 +676,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
             <input value={title} onChange={e => setTitle(e.target.value)}
               className="w-full text-lg font-semibold bg-secondary border border-border rounded-xl px-4 py-2.5 text-foreground focus:outline-none focus:border-primary/50" />
           ) : (
-            <h2 className="text-lg font-semibold text-foreground">{task.title}</h2>
+            <h2 className="text-lg font-semibold text-foreground">{title}</h2>
           )}
 
           {/* Meta grid */}
@@ -487,7 +689,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   {statusOrder.map(s => <option key={s} value={s}>{statusLabels[s]}</option>)}
                 </select>
               ) : (
-                <span className="text-[12px] px-2 py-0.5 rounded-full bg-secondary text-foreground inline-block">{statusLabels[task.status]}</span>
+                <span className="text-[12px] px-2 py-0.5 rounded-full bg-secondary text-foreground inline-block">{statusLabels[status]}</span>
               )}
             </div>
             <div className="space-y-1">
@@ -499,16 +701,24 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   <option value="high">Alta</option><option value="urgent">Urgente</option>
                 </select>
               ) : (
-                <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[task.priority]}`}>{priorityLabels[task.priority]}</span>
+                <span className={`text-[12px] px-2 py-0.5 rounded-full inline-block ${priorityColors[priority]}`}>{priorityLabels[priority]}</span>
               )}
             </div>
             <div className="space-y-1">
               <p className="text-[10px] uppercase tracking-wider text-muted-foreground flex items-center gap-1"><User className="w-3 h-3" /> Responsável</p>
               {editing ? (
                 <select value={assignedTo} onChange={e => setAssignedTo(e.target.value)}
+                  disabled={
+                    !!linkedRequestId
+                    && (
+                      !canManageLinkedAssignment
+                      || loadingLinkedAssignees
+                      || linkedAssigneesReadFailed
+                    )
+                  }
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer">
                   <option value="">Sem responsável</option>
-                  {teamMembers.map((m: any) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+                  {assignmentOptions.map((m: any) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
                 </select>
               ) : (
                 <p className="text-[13px] text-foreground">{assignee?.full_name || "—"}</p>
@@ -521,7 +731,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
               ) : (
                 <p className="text-[13px] text-foreground">
-                  {task.due_date ? new Date(task.due_date).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
+                  {dueDate ? new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
                 </p>
               )}
             </div>
@@ -548,8 +758,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   placeholder="Descreva as instruções detalhadas da tarefa..." />
               ) : (
                 <div className="bg-secondary/30 rounded-xl p-4 min-h-[80px]">
-                  {task.description ? (
-                    <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed">{task.description}</p>
+                  {description ? (
+                    <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed">{description}</p>
                   ) : (
                     <p className="text-[13px] text-muted-foreground italic">Sem descrição ou instruções adicionadas.</p>
                   )}
@@ -584,6 +794,11 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
                 {loadingChecklist ? (
                   <p className="text-[12px] text-muted-foreground text-center py-2">Carregando...</p>
+                ) : checklistReadFailed ? (
+                  <SectionLoadError
+                    label="o checklist"
+                    onRetry={() => void refetchChecklist()}
+                  />
                 ) : (
                   <div className="space-y-1">
                     {(checklistItems || []).map((item: any) => (
@@ -610,7 +825,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                 )}
 
                 {/* Add checklist item */}
-                {!readOnly && (
+                {!readOnly && !checklistReadFailed && (
                   <>
                     <div className="flex items-center gap-2">
                       <input
@@ -666,6 +881,11 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
 
                 {loadingAttachments ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4">Carregando anexos...</p>
+                ) : attachmentsReadFailed ? (
+                  <SectionLoadError
+                    label="os anexos"
+                    onRetry={() => void refetchAttachments()}
+                  />
                 ) : (attachments || []).length === 0 ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum anexo</p>
                 ) : (
@@ -760,6 +980,11 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               <div className="space-y-3">
                 {loadingComments ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4">Carregando...</p>
+                ) : commentsReadFailed ? (
+                  <SectionLoadError
+                    label="os comentários"
+                    onRetry={() => void refetchComments()}
+                  />
                 ) : (comments || []).length === 0 ? (
                   <p className="text-[12px] text-muted-foreground text-center py-4 italic">Nenhum comentário ainda.</p>
                 ) : (
@@ -848,7 +1073,16 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         {/* Footer actions */}
         {editing && (
           <div className="px-6 py-4 border-t border-border flex gap-3 shrink-0">
-            <button onClick={() => { setEditing(false); setTitle(task.title); setDescription(task.description || ""); setPriority(task.priority); setStatus(task.status); setAssignedTo(task.assigned_to || ""); setDueDate(task.due_date || ""); }}
+            <button onClick={() => {
+              const saved = savedTaskValuesRef.current;
+              setEditing(false);
+              setTitle(saved.title);
+              setDescription(saved.description);
+              setPriority(saved.priority);
+              setStatus(saved.status);
+              setAssignedTo(saved.assignedTo);
+              setDueDate(saved.dueDate);
+            }}
               disabled={saving}
               className="flex-1 py-2.5 rounded-xl text-[13px] text-muted-foreground border border-border hover:text-foreground transition-colors cursor-pointer bg-transparent">
               Cancelar

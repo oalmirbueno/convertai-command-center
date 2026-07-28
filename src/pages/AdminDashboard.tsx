@@ -19,6 +19,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from "@/lib/brandHelpers";
 import { PipelineBar } from "@/components/admin/ProjectPipeline";
 import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidget";
+import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -245,17 +246,34 @@ export default function AdminDashboard() {
   const handleDeleteProject = async () => {
     if (!confirmDeleteProject) return;
     const projectId = confirmDeleteProject;
-    await supabase.from("tasks").delete().eq("project_id", projectId);
-    await supabase.from("milestones").delete().eq("project_id", projectId);
-    await supabase.from("updates").delete().eq("project_id", projectId);
-    await supabase.from("projects").delete().eq("id", projectId);
-    // Avisa o Ops em background — UI já foi liberada.
-    const { notifyOpsDelete } = await import("@/lib/opsSync");
-    notifyOpsDelete("project", projectId);
-    queryClient.invalidateQueries({ queryKey: ["projects"] });
-    toast.success("Projeto excluído");
-    setConfirmDeleteProject(null);
-    setMenuProject(null);
+    try {
+      if (await projectHasLinkedRequestTasks(projectId)) {
+        toast.error(
+          "Este projeto possui um Pedido vinculado ao Kanban e não pode ser excluído.",
+        );
+        setConfirmDeleteProject(null);
+        return;
+      }
+      await supabase.from("tasks").delete().eq("project_id", projectId);
+      await supabase.from("milestones").delete().eq("project_id", projectId);
+      await supabase.from("updates").delete().eq("project_id", projectId);
+      await supabase.from("projects").delete().eq("id", projectId);
+      // Avisa o Ops em background — UI já foi liberada.
+      const { notifyOpsDelete } = await import("@/lib/opsSync");
+      notifyOpsDelete("project", projectId);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Projeto excluído");
+      setConfirmDeleteProject(null);
+      setMenuProject(null);
+    } catch (error) {
+      console.error("Project delete guard failed", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o projeto.",
+      );
+      setConfirmDeleteProject(null);
+    }
   };
 
   const generateQuizLink = async () => {

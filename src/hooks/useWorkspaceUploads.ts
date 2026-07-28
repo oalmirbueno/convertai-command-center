@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import * as tus from "tus-js-client";
 import { supabase } from "@/integrations/supabase/client";
+import { confirmStoredObject } from "@/lib/fileRecordActions";
 
 export type UploadItem = {
   id: string;
@@ -9,6 +10,7 @@ export type UploadItem = {
   mime: string;
   progress: number;   // 0..100
   status: "queued" | "uploading" | "done" | "error" | "canceled";
+  cancelable: boolean;
   error?: string;
   storagePath?: string;
   speed?: number;     // bytes/sec
@@ -25,20 +27,113 @@ type StartArgs = {
 };
 
 const CHUNK = 6 * 1024 * 1024; // Supabase resumable requirement
+const FAST_PATH_MAX = 100 * 1024 * 1024;
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+
+async function cleanupUnregisteredWorkspaceObject(key: string): Promise<"removed" | "registered"> {
+  const { data: registered, error: lookupError } = await supabase
+    .from("workspace_nodes")
+    .select("id")
+    .eq("storage_path", key)
+    .limit(1);
+  if (lookupError) {
+    throw new Error("Falha ao confirmar o upload; o objeto foi preservado por segurança.");
+  }
+  if (registered?.length) return "registered";
+
+  const { error: cleanupError } = await supabase.storage.from("workspace").remove([key]);
+  if (cleanupError) {
+    throw new Error("O registro falhou e o arquivo temporário não pôde ser removido.");
+  }
+  return "removed";
+}
+
+async function registerWorkspaceNode({
+  key,
+  file,
+  scope,
+  clientId,
+  parentId,
+  userId,
+}: {
+  key: string;
+  file: File;
+  scope: "global" | "client";
+  clientId: string | null;
+  parentId: string | null;
+  userId: string;
+}): Promise<"created" | "registered"> {
+  const existing = await supabase
+    .from("workspace_nodes")
+    .select("id")
+    .eq("storage_path", key)
+    .limit(1);
+  if (existing.error) {
+    throw new Error("Falha ao confirmar o registro; o objeto foi preservado por segurança.");
+  }
+  if (existing.data?.length) return "registered";
+
+  const { error: insertError } = await supabase.from("workspace_nodes").insert({
+    name: file.name,
+    kind: "file",
+    scope,
+    client_id: scope === "client" ? clientId : null,
+    parent_id: parentId,
+    mime: file.type || null,
+    size_bytes: file.size,
+    storage_path: key,
+    created_by: userId,
+  });
+  if (!insertError) return "created";
+
+  const recovered = await supabase
+    .from("workspace_nodes")
+    .select("id")
+    .eq("storage_path", key)
+    .limit(1);
+  if (recovered.error) {
+    throw new Error("Falha ao confirmar o registro; o objeto foi preservado por segurança.");
+  }
+  if (recovered.data?.length) return "registered";
+  throw insertError;
+}
 
 export function useWorkspaceUploads() {
   const [items, setItems] = useState<UploadItem[]>([]);
   const uploadsRef = useRef<Map<string, tus.Upload>>(new Map());
   const metaRef = useRef<Map<string, StartArgs & { file: File; ext: string; key: string }>>(new Map());
+  const finalizationsRef = useRef<Map<string, Promise<"created" | "registered">>>(new Map());
+  const completedRef = useRef<Set<string>>(new Set());
 
   const patch = (id: string, p: Partial<UploadItem>) =>
     setItems(prev => prev.map(x => (x.id === id ? { ...x, ...p } : x)));
+
+  const finalizeWorkspaceNode = useCallback((
+    args: Parameters<typeof registerWorkspaceNode>[0],
+  ) => {
+    const existing = finalizationsRef.current.get(args.key);
+    if (existing) return existing;
+    const pending = registerWorkspaceNode(args).catch((error) => {
+      if (finalizationsRef.current.get(args.key) === pending) {
+        finalizationsRef.current.delete(args.key);
+      }
+      throw error;
+    });
+    finalizationsRef.current.set(args.key, pending);
+    return pending;
+  }, []);
 
   const runOne = useCallback(async (id: string) => {
     const meta = metaRef.current.get(id);
     if (!meta) return;
     const { file, key, scope, clientId, parentId, userId, onDone } = meta;
+    const markDone = () => {
+      if (completedRef.current.has(id)) return;
+      completedRef.current.add(id);
+      patch(id, { status: "done", progress: 100, storagePath: key });
+      uploadsRef.current.delete(id);
+      onDone?.();
+    };
 
     const { data: sess } = await supabase.auth.getSession();
     const token = sess.session?.access_token;
@@ -50,14 +145,15 @@ export function useWorkspaceUploads() {
     // overhead (create + PATCH per chunk) and is dramatically faster on the
     // typical marketing assets uploaded here (images, docs, short reels).
     // Single-PUT is reliable up to ~100 MB; larger goes through resumable TUS.
-    const FAST_PATH_MAX = 100 * 1024 * 1024;
     if (file.size <= FAST_PATH_MAX) {
+      let uploadedObject = false;
+      let tick: ReturnType<typeof setInterval> | null = null;
       try {
         // Simulated smooth progress while the single PUT is in-flight — the
         // real byte-level progress is not exposed by supabase-js, so we ramp
         // to 90% and jump to 100% on success.
         let simulated = 0;
-        const tick = setInterval(() => {
+        tick = setInterval(() => {
           simulated = Math.min(90, simulated + (simulated < 40 ? 8 : 3));
           patch(id, { progress: simulated });
         }, 250);
@@ -66,19 +162,41 @@ export function useWorkspaceUploads() {
           contentType: file.type || "application/octet-stream",
           upsert: false,
         });
-        clearInterval(tick);
-        if (error) throw error;
-        const { error: insErr } = await supabase.from("workspace_nodes").insert({
-          name: file.name, kind: "file", scope,
-          client_id: scope === "client" ? clientId : null,
-          parent_id: parentId, mime: file.type || null,
-          size_bytes: file.size, storage_path: key, created_by: userId,
+        if (error) {
+          const objectState = await confirmStoredObject("workspace", key);
+          if (objectState === "missing") throw error;
+          if (objectState === "unknown") {
+            throw new Error(
+              "O envio perdeu a confirmação; o objeto foi preservado e precisa ser conferido antes de tentar novamente.",
+            );
+          }
+        }
+        uploadedObject = true;
+        await finalizeWorkspaceNode({
+          key,
+          file,
+          scope,
+          clientId,
+          parentId,
+          userId,
         });
-        if (insErr) throw insErr;
-        patch(id, { status: "done", progress: 100, storagePath: key });
-        onDone?.();
+        markDone();
       } catch (e: any) {
+        if (uploadedObject) {
+          try {
+            const cleanup = await cleanupUnregisteredWorkspaceObject(key);
+            if (cleanup === "registered") {
+              markDone();
+              return;
+            }
+          } catch (cleanupError: any) {
+            patch(id, { status: "error", error: cleanupError?.message || e?.message || "Erro no envio" });
+            return;
+          }
+        }
         patch(id, { status: "error", error: e?.message || "Erro no envio" });
+      } finally {
+        if (tick) clearInterval(tick);
       }
       return;
     }
@@ -103,7 +221,43 @@ export function useWorkspaceUploads() {
         cacheControl: "3600",
       },
       onError: (err: any) => {
-        patch(id, { status: "error", error: err?.message || "Erro no envio" });
+        void (async () => {
+          const objectState = await confirmStoredObject("workspace", key);
+          if (objectState === "exists") {
+            try {
+              await finalizeWorkspaceNode({
+                key,
+                file,
+                scope,
+                clientId,
+                parentId,
+                userId,
+              });
+              markDone();
+              return;
+            } catch (registrationError: any) {
+              try {
+                const cleanup = await cleanupUnregisteredWorkspaceObject(key);
+                if (cleanup === "registered") {
+                  markDone();
+                  return;
+                }
+              } catch (cleanupError: any) {
+                patch(id, {
+                  status: "error",
+                  error: cleanupError?.message || registrationError?.message || "Erro no envio",
+                });
+                return;
+              }
+            }
+          }
+          patch(id, {
+            status: "error",
+            error: objectState === "unknown"
+              ? "O envio perdeu a confirmação; o objeto foi preservado por segurança."
+              : err?.message || "Erro no envio",
+          });
+        })();
       },
       onProgress: (loaded, total) => {
         const now = Date.now();
@@ -117,18 +271,26 @@ export function useWorkspaceUploads() {
       },
       onSuccess: async () => {
         try {
-          const { error: insErr } = await supabase.from("workspace_nodes").insert({
-            name: file.name, kind: "file", scope,
-            client_id: scope === "client" ? clientId : null,
-            parent_id: parentId, mime: file.type || null,
-            size_bytes: file.size, storage_path: key, created_by: userId,
+          await finalizeWorkspaceNode({
+            key,
+            file,
+            scope,
+            clientId,
+            parentId,
+            userId,
           });
-          if (insErr) throw insErr;
-          patch(id, { status: "done", progress: 100, storagePath: key });
-          uploadsRef.current.delete(id);
-          onDone?.();
+          markDone();
         } catch (e: any) {
-          patch(id, { status: "error", error: e.message });
+          try {
+            const cleanup = await cleanupUnregisteredWorkspaceObject(key);
+            if (cleanup === "registered") {
+              markDone();
+              return;
+            }
+            patch(id, { status: "error", error: e?.message || "Erro ao registrar o arquivo" });
+          } catch (cleanupError: any) {
+            patch(id, { status: "error", error: cleanupError?.message || e?.message || "Erro no envio" });
+          }
         }
       },
     });
@@ -137,10 +299,17 @@ export function useWorkspaceUploads() {
     // Resume prior upload if any
     try {
       const previous = await upload.findPreviousUploads();
-      if (previous.length) upload.resumeFromPreviousUpload(previous[0]);
-    } catch {}
+      const matchingUpload = previous.find(
+        (candidate) =>
+          candidate.metadata?.bucketName === "workspace"
+          && candidate.metadata?.objectName === key,
+      );
+      if (matchingUpload) upload.resumeFromPreviousUpload(matchingUpload);
+    } catch {
+      // Resume discovery is opportunistic; a fresh upload remains safe.
+    }
     upload.start();
-  }, []);
+  }, [finalizeWorkspaceNode]);
 
 
   const enqueue = useCallback((args: StartArgs) => {
@@ -149,7 +318,15 @@ export function useWorkspaceUploads() {
       const ext = file.name.includes(".") ? file.name.split(".").pop()! : "bin";
       const key = `${args.scope}/${args.scope === "client" ? args.clientId : "global"}/${crypto.randomUUID()}.${ext}`;
       metaRef.current.set(id, { ...args, file, ext, key });
-      return { id, name: file.name, size: file.size, mime: file.type, progress: 0, status: "queued" };
+      return {
+        id,
+        name: file.name,
+        size: file.size,
+        mime: file.type,
+        progress: 0,
+        status: "queued",
+        cancelable: file.size > FAST_PATH_MAX,
+      };
     });
     setItems(prev => [...newItems, ...prev]);
     // Kick off in parallel (browser will queue at network level)
@@ -157,6 +334,8 @@ export function useWorkspaceUploads() {
   }, [runOne]);
 
   const cancel = useCallback((id: string) => {
+    const meta = metaRef.current.get(id);
+    if (!meta || meta.file.size <= FAST_PATH_MAX) return;
     const up = uploadsRef.current.get(id);
     if (up) { up.abort(true).catch(() => {}); uploadsRef.current.delete(id); }
     patch(id, { status: "canceled" });
@@ -171,8 +350,11 @@ export function useWorkspaceUploads() {
   }, []);
 
   const dismiss = useCallback((id: string) => {
+    const meta = metaRef.current.get(id);
     setItems(prev => prev.filter(x => x.id !== id));
     metaRef.current.delete(id);
+    completedRef.current.delete(id);
+    if (meta) finalizationsRef.current.delete(meta.key);
   }, []);
 
   return { items, enqueue, cancel, retry, clearDone, dismiss };

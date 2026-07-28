@@ -18,14 +18,20 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List, RefreshCw,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import SharedCarouselSlider from "@/components/shared/CarouselSlider";
 import AdminContracts from "@/pages/AdminContracts";
 import { downloadFile } from "@/lib/fileActions";
-import { createFileRecord } from "@/lib/fileRecordActions";
+import {
+  confirmStoredObject,
+  createFileRecord,
+  recoverFailedFileRecordById,
+  recoverOrCleanupFailedFileRecord,
+} from "@/lib/fileRecordActions";
+import { FILE_FOLDERS, FILE_TYPES } from "@/lib/fileMetadata";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import {
   releaseFileToClient,
@@ -34,19 +40,10 @@ import {
   type FileReleaseMode,
 } from "@/lib/fileApprovalActions";
 
-const FOLDERS = [
-  { id: "estrategicos", label: "Estratégicos" },
-  { id: "contratos", label: "Contratos" },
-  { id: "materiais", label: "Materiais Gráficos" },
-  { id: "entregas", label: "Entregas" },
-  { id: "criativos", label: "Criativos" },
-  { id: "relatorios", label: "Relatórios" },
-  { id: "operacionais", label: "Operacionais" },
-];
+const FOLDERS = FILE_FOLDERS;
 
-const FOLDER_IDS = new Set(FOLDERS.map((folder) => folder.id));
+const FOLDER_IDS = new Set<string>(FOLDERS.map((folder) => folder.id));
 
-const FILE_TYPES = ["documento", "contrato", "criativo", "relatório", "estratégico", "outro"];
 const ACCEPTED = "*/*";
 const MAX_SIZE = 100 * 1024 * 1024; // Mesmo limite configurado no bucket.
 
@@ -217,7 +214,14 @@ export default function AdminFiles() {
   const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
   const { data: clients, isLoading: loadingClients } = useClients();
   const { data: projects } = useProjects();
-  const { data: allFiles, isLoading: loadingFiles } = useAllFiles();
+  const {
+    data: allFiles,
+    isLoading: loadingFiles,
+    isError: filesReadFailed,
+    error: filesReadError,
+    refetch: refetchFiles,
+    isFetching: refreshingFiles,
+  } = useAllFiles();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
@@ -239,6 +243,12 @@ export default function AdminFiles() {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const initializedRevisionRef = useRef<string | null>(null);
+  const uploadAttemptRef = useRef<{
+    fingerprint: string;
+    batchId: string;
+    fileIds: string[];
+  } | null>(null);
 
   // Upload form state
   const [uploadMode, setUploadMode] = useState<"single" | "carousel" | "video_link">("single");
@@ -260,6 +270,12 @@ export default function AdminFiles() {
     : null;
   const revisionVersion = revisionSource ? Number(revisionSource.version || 1) + 1 : 1;
 
+  const invalidateFileViews = () => Promise.all([
+    queryClient.invalidateQueries({ queryKey: ["all-files"] }),
+    queryClient.invalidateQueries({ queryKey: ["files"] }),
+    queryClient.invalidateQueries({ queryKey: ["workspace-client-files"] }),
+  ]);
+
   useEffect(() => {
     if (!isStaff || !clients) return;
 
@@ -279,17 +295,21 @@ export default function AdminFiles() {
       }
     }
 
-    if (requestedRevisionId && loadingFiles) return;
+    // Never turn a read failure into an unlinked revision. Keep the URL and
+    // wait for the explicit retry in the error state.
+    if (requestedRevisionId && (loadingFiles || filesReadFailed)) return;
 
     if (requestedRevisionId && !loadingFiles) {
       const source = (allFiles || []).find((file: any) => file.id === requestedRevisionId);
       if (!source || source.client_id !== requestedClientId) {
         const next = new URLSearchParams(searchParams);
         next.delete("revisionOf");
+        next.delete("novo");
+        setUploadOpen(false);
         setSearchParams(next, { replace: true });
         toast({
           title: "Versão anterior não encontrada",
-          description: "O novo conteúdo será salvo sem vínculo de correção.",
+          description: "Atualize Arquivos e abra a correção novamente para preservar o histórico.",
           variant: "destructive",
         });
         return;
@@ -302,7 +322,7 @@ export default function AdminFiles() {
 
     if (shouldOpenNewContent && requestedClientId) {
       setUploadFolder(activeFolder);
-      if (revisionSource) {
+      if (revisionSource && initializedRevisionRef.current !== revisionSource.id) {
         const sourceChildren = (allFiles || []).filter((file: any) => file.parent_file_id === revisionSource.id);
         setUploadMode(isCarouselAssetGroup(revisionSource, sourceChildren) ? "carousel" : "single");
         setUploadName(revisionSource.file_name || "");
@@ -312,6 +332,7 @@ export default function AdminFiles() {
         setUploadCaption(revisionSource.caption || "");
         setUploadCarousel(revisionSource.carousel_text || "");
         setUploadDescription(revisionSource.description || "");
+        initializedRevisionRef.current = revisionSource.id;
       }
       setUploadOpen(true);
       const next = new URLSearchParams(searchParams);
@@ -322,6 +343,7 @@ export default function AdminFiles() {
     clients,
     allFiles,
     loadingFiles,
+    filesReadFailed,
     requestedClientId,
     requestedFolderId,
     requestedRevisionId,
@@ -370,7 +392,7 @@ export default function AdminFiles() {
         .maybeSingle();
       if (error) throw error;
       if (!data) throw new Error("O arquivo não foi alterado.");
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      void invalidateFileViews();
       setPreviewFile({ ...previewFile, file_name: editNameValue.trim() });
       setEditingName(false);
       toast({ title: "Nome atualizado" });
@@ -397,7 +419,7 @@ export default function AdminFiles() {
         .select("id");
       if (error) throw error;
       if (!data?.length) throw new Error("Nenhum arquivo foi alterado.");
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      void invalidateFileViews();
       if (previewFile?.id === fileId) {
         setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);
       }
@@ -481,7 +503,7 @@ export default function AdminFiles() {
     }
     try {
       await requestFileAgencyReview(file.id);
-      await queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      await invalidateFileViews();
       setPreviewFile((current: any) => current?.id === file.id
         ? { ...current, agency_approval_status: "pending" }
         : current);
@@ -502,7 +524,7 @@ export default function AdminFiles() {
     if (!canReviewAndRelease || !file?.id) return;
     try {
       await reviewFileAgency(file.id, "approved");
-      await queryClient.invalidateQueries({ queryKey: ["all-files"] });
+      await invalidateFileViews();
       setPreviewFile((current: any) => current?.id === file.id
         ? {
           ...current,
@@ -527,8 +549,7 @@ export default function AdminFiles() {
     try {
       await releaseFileToClient(file.id, mode);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["all-files"] }),
-        queryClient.invalidateQueries({ queryKey: ["files"] }),
+        invalidateFileViews(),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
       setPreviewFile(null);
@@ -562,8 +583,7 @@ export default function AdminFiles() {
       await reviewFileAgency(file.id, "approved");
       await releaseFileToClient(file.id, mode);
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["all-files"] }),
-        queryClient.invalidateQueries({ queryKey: ["files"] }),
+        invalidateFileViews(),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
       ]);
       setPreviewFile(null);
@@ -616,11 +636,61 @@ export default function AdminFiles() {
     return "O cliente ainda não recebeu esta versão.";
   };
 
+  const ensureUploadAttempt = (totalFiles: number) => {
+    const fingerprint = JSON.stringify({
+      clientId: selectedClient,
+      revisionId: revisionSource?.id || null,
+      mode: uploadMode,
+      videoUrl: uploadMode === "video_link" ? uploadVideoUrl.trim() : null,
+      name: uploadName,
+      folder: uploadFolder,
+      project: uploadProject,
+      type: uploadType,
+      postSaveAction: uploadPostSaveAction,
+      caption: uploadCaption,
+      carousel: uploadCarousel,
+      description: uploadDescription,
+      files: uploadFiles.map((file) => ({
+        name: file.name,
+        size: file.size,
+        type: file.type,
+        lastModified: file.lastModified,
+      })),
+    });
+    if (
+      uploadAttemptRef.current?.fingerprint === fingerprint
+      && uploadAttemptRef.current.fileIds.length === totalFiles
+    ) {
+      return uploadAttemptRef.current;
+    }
+    if (uploadAttemptRef.current) {
+      throw new Error(
+        "Este envio já foi iniciado. Para evitar duplicação, mantenha os mesmos arquivos e informações ao tentar novamente.",
+      );
+    }
+    const attempt = {
+      fingerprint,
+      batchId: crypto.randomUUID(),
+      fileIds: Array.from({ length: totalFiles }, () => crypto.randomUUID()),
+    };
+    uploadAttemptRef.current = attempt;
+    return attempt;
+  };
+
   const handleUpload = async () => {
     if (!isStaff) {
       toast({
         title: "Acesso restrito",
         description: "Somente a equipe da Aceleriq pode criar entregas por esta tela.",
+        variant: "destructive",
+      });
+      return;
+    }
+    if (requestedRevisionId && !revisionSource) {
+      toast({
+        title: "Versão anterior ainda não carregada",
+        description:
+          "Atualize Arquivos antes de enviar a correção para preservar o vínculo e o histórico.",
         variant: "destructive",
       });
       return;
@@ -654,6 +724,9 @@ export default function AdminFiles() {
         throw new Error("Sua sessão expirou. Faça login novamente para enviar arquivos.");
       }
       const authUid = authData.user.id;
+      const uploadAttempt = ensureUploadAttempt(
+        uploadMode === "video_link" ? 1 : uploadFiles.length,
+      );
 
       let rootFileId: string | null = null;
       const revisionOfFileId = revisionSource?.client_id === selectedClient ? revisionSource.id : null;
@@ -669,31 +742,43 @@ export default function AdminFiles() {
             return `Vídeo • ${u.hostname.replace(/^www\./, "")}`;
           } catch { return "Vídeo externo"; }
         })();
-        const fileId = crypto.randomUUID();
-        const inserted = await createFileRecord({
-          id: fileId,
-          client_id: selectedClient,
-          file_name: displayName,
-          file_url: url,
-          file_type: "video",
-          folder: uploadFolder,
-          uploaded_by: authUid,
-          project_id: uploadProject === "none" ? null : uploadProject || null,
-          approval_status: "none",
-          agency_approval_status: "not_requested",
-          visibility: "internal",
-          requires_approval: false,
-          status: "ready",
-          version: nextVersion,
-          revision_of_file_id: revisionOfFileId,
-          caption: uploadCaption.trim() || null,
-          description: uploadDescription.trim() || null,
-        });
+        const fileId = uploadAttempt.fileIds[0];
+        let inserted;
+        try {
+          inserted = await createFileRecord({
+            id: fileId,
+            client_id: selectedClient,
+            file_name: displayName,
+            file_url: url,
+            file_type: "video",
+            folder: uploadFolder,
+            uploaded_by: authUid,
+            project_id: uploadProject === "none" ? null : uploadProject || null,
+            approval_status: "none",
+            agency_approval_status: "not_requested",
+            visibility: "internal",
+            requires_approval: false,
+            status: "ready",
+            version: nextVersion,
+            revision_of_file_id: revisionOfFileId,
+            caption: uploadCaption.trim() || null,
+            description: uploadDescription.trim() || null,
+            idempotency_key: `admin-files-upload:${uploadAttempt.batchId}:0`,
+          });
+        } catch (insertError) {
+          const recovered = await recoverFailedFileRecordById({
+            fileId,
+            clientId: selectedClient,
+            fileUrl: url,
+          });
+          if (!recovered) throw insertError;
+          inserted = recovered;
+        }
         rootFileId = inserted?.id || fileId;
+        await invalidateFileViews();
         const completedAction = await applyPostSaveAction(rootFileId);
         setUploadProgress(100);
-        queryClient.invalidateQueries({ queryKey: ["all-files"] });
-        queryClient.invalidateQueries({ queryKey: ["files"] });
+        void invalidateFileViews();
         queryClient.invalidateQueries({ queryKey: ["notifications"] });
         toast({
           title: postSaveTitle(completedAction),
@@ -717,12 +802,20 @@ export default function AdminFiles() {
       for (let i = 0; i < totalFiles; i++) {
         const file = uploadFiles[i];
         const ext = file.name.split(".").pop();
-        const fileId = crypto.randomUUID();
+        const fileId = uploadAttempt.fileIds[i];
         const groupId = parentFileId || fileId;
         const path = `${selectedClient}/${groupId}/v${nextVersion}/${i + 1}-${storageSafeName(file.name)}`;
 
         const { error: storageError } = await supabase.storage.from("files").upload(path, file);
-        if (storageError) throw storageError;
+        if (storageError) {
+          const objectState = await confirmStoredObject("files", path);
+          if (objectState === "missing") throw storageError;
+          if (objectState === "unknown") {
+            throw new Error(
+              "O envio perdeu a confirmação; o objeto foi preservado e precisa ser conferido antes de tentar novamente.",
+            );
+          }
+        }
 
         const fileName = i === 0
           ? (uploadName || file.name)
@@ -754,13 +847,15 @@ export default function AdminFiles() {
             carousel_text: i === 0 ? (uploadCarousel.trim() || null) : null,
             description: i === 0 ? (uploadDescription.trim() || null) : null,
             parent_file_id: isCarousel && i > 0 ? parentFileId : null,
+            idempotency_key: `admin-files-upload:${uploadAttempt.batchId}:${i}`,
           });
         } catch (insertError: any) {
-          const { error: cleanupError } = await supabase.storage.from("files").remove([path]);
-          if (cleanupError) {
-            throw new Error(`${insertError.message}. O arquivo temporário também não pôde ser removido.`);
-          }
-          throw insertError;
+          const recovered = await recoverOrCleanupFailedFileRecord({
+            fileId,
+            storagePath: path,
+          });
+          if (!recovered) throw insertError;
+          inserted = recovered;
         }
 
         if (i === 0 && inserted) {
@@ -772,6 +867,7 @@ export default function AdminFiles() {
       }
 
       if (!rootFileId) throw new Error("Não foi possível identificar a entrega criada.");
+      await invalidateFileViews();
       const completedAction = await applyPostSaveAction(rootFileId);
 
       // Notificação estritamente interna. O cliente só é avisado pelo RPC de liberação.
@@ -801,8 +897,7 @@ export default function AdminFiles() {
       }
 
       setUploadProgress(100);
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      queryClient.invalidateQueries({ queryKey: ["files"] });
+      void invalidateFileViews();
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
       toast({
         title: postSaveTitle(completedAction, isCarousel, totalFiles),
@@ -827,6 +922,8 @@ export default function AdminFiles() {
 
 
   const resetUploadForm = () => {
+    initializedRevisionRef.current = null;
+    uploadAttemptRef.current = null;
     setUploadMode("single");
     setUploadFiles([]);
     setUploadName("");
@@ -838,6 +935,15 @@ export default function AdminFiles() {
     setUploadCarousel("");
     setUploadDescription("");
     setUploadVideoUrl("");
+  };
+
+  const closeUploadForm = () => {
+    setUploadOpen(false);
+    resetUploadForm();
+    const next = new URLSearchParams(searchParams);
+    next.delete("revisionOf");
+    next.delete("novo");
+    setSearchParams(next, { replace: true });
   };
 
   const [confirmDeleteFile, setConfirmDeleteFile] = useState<{ id: string; name?: string } | null>(null);
@@ -862,9 +968,7 @@ export default function AdminFiles() {
       });
       if (error) throw error;
       if ((data as any)?.error) throw new Error((data as any).error);
-      queryClient.invalidateQueries({ queryKey: ["all-files"] });
-      queryClient.invalidateQueries({ queryKey: ["files"] });
-      queryClient.invalidateQueries({ queryKey: ["workspace-client-files"] });
+      void invalidateFileViews();
       if (previewFile?.id === confirmDeleteFile.id) setPreviewFile(null);
       toast({ title: "Arquivo excluído" });
       setConfirmDeleteFile(null);
@@ -985,7 +1089,10 @@ export default function AdminFiles() {
             <Button
               onClick={() => { setUploadFolder(activeFolder); setUploadOpen(true); }}
               className="rounded-xl gap-2"
-              disabled={selectedClient === "all"}
+              disabled={
+                selectedClient === "all"
+                || (!!requestedRevisionId && !revisionSource)
+              }
             >
               <Upload className="w-4 h-4" />
               Novo conteúdo
@@ -995,6 +1102,26 @@ export default function AdminFiles() {
           {/* File list */}
           {loadingFiles || loadingClients ? (
             <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
+          ) : filesReadFailed ? (
+            <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-8 text-center">
+              <FolderOpen className="mx-auto mb-3 h-8 w-8 text-destructive/70" />
+              <p className="text-sm font-medium text-foreground">Não foi possível carregar Arquivos</p>
+              <p className="mx-auto mt-1 max-w-lg text-xs text-muted-foreground">
+                A pasta não está vazia. Houve uma falha de leitura
+                {filesReadError instanceof Error ? `: ${filesReadError.message}` : "."}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4 gap-2"
+                onClick={() => void refetchFiles()}
+                disabled={refreshingFiles}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshingFiles ? "animate-spin" : ""}`} />
+                Tentar novamente
+              </Button>
+            </div>
           ) : filteredFiles.length === 0 ? (
             <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
               <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
@@ -1292,7 +1419,17 @@ export default function AdminFiles() {
       </Dialog>
 
       {/* Upload Modal */}
-      <Dialog open={uploadOpen} onOpenChange={(o) => { if (!uploading) { setUploadOpen(o); if (!o) resetUploadForm(); } }}>
+      <Dialog
+        open={uploadOpen}
+        onOpenChange={(open) => {
+          if (uploading) return;
+          if (open) {
+            setUploadOpen(true);
+          } else {
+            closeUploadForm();
+          }
+        }}
+      >
         <DialogContent className="max-w-lg p-0 gap-0 flex flex-col max-h-[85vh]">
           <DialogHeader className="px-6 pt-5 pb-3 shrink-0 border-b border-border">
             <DialogTitle>Novo conteúdo</DialogTitle>
@@ -1553,7 +1690,7 @@ export default function AdminFiles() {
             {uploading && <Progress value={uploadProgress} className="h-2 rounded-full" />}
           </div>
           <DialogFooter className="px-6 py-3 border-t border-border shrink-0">
-            <Button variant="outline" onClick={() => { setUploadOpen(false); resetUploadForm(); }} disabled={uploading}>Cancelar</Button>
+            <Button variant="outline" onClick={closeUploadForm} disabled={uploading}>Cancelar</Button>
             <Button onClick={handleUpload} disabled={uploading || (uploadMode === "video_link" ? !uploadVideoUrl.trim() : uploadFiles.length === 0)}>
               {uploading
                 ? "Salvando..."

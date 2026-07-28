@@ -311,6 +311,7 @@ export function useClientRequests() {
       return data;
     },
     enabled: !!user,
+    refetchInterval: 15_000,
   });
 }
 

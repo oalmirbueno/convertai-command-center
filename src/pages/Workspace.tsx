@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
-import { createFileRecord } from "@/lib/fileRecordActions";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useProjects } from "@/hooks/useSupabaseData";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription,
 } from "@/components/ui/dialog";
@@ -21,17 +23,16 @@ import {
   Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
   Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
   Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
-  ChevronDown, Check, X as XIcon, Wand2, Link2, Copy,
+  ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
+import { FILE_FOLDERS, FILE_TYPES } from "@/lib/fileMetadata";
 import {
-  releaseFileToClient,
-  requestFileAgencyReview,
-  reviewFileAgency,
-  type FileReleaseMode,
-} from "@/lib/fileApprovalActions";
+  handoffWorkspaceFileToFiles,
+  suggestedFileType,
+} from "@/lib/workspaceFileHandoff";
 import { useWorkspaceUploads } from "@/hooks/useWorkspaceUploads";
 import { UploadProgressPanel } from "@/components/workspace/UploadProgressPanel";
 import { TemplatePicker } from "@/components/workspace/TemplatePicker";
@@ -203,7 +204,7 @@ export default function Workspace() {
   const { toast } = useToast();
 
   const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
-  const canReviewAndRelease = profile?.role === "admin" || profile?.role === "manager";
+  const { data: projects } = useProjects();
 
   // Single atomic navigation state — prevents context mixing when switching
   // scope, client, or folder. Every transition goes through `nav.*` setters
@@ -256,9 +257,18 @@ export default function Workspace() {
   const [pickerFilter, setPickerFilter] = useState<"all" | "az" | "za" | "recent">("all");
   const [tagFilter, setTagFilter] = useState<"all" | SmartTag>("all");
   const [sortBy, setSortBy] = useState<"recent" | "old" | "az" | "za">("recent");
+  const [handoffNode, setHandoffNode] = useState<Node | null>(null);
+  const [handoffName, setHandoffName] = useState("");
+  const [handoffFolder, setHandoffFolder] = useState("materiais");
+  const [handoffType, setHandoffType] = useState("outro");
+  const [handoffProject, setHandoffProject] = useState("none");
+  const [handoffSaving, setHandoffSaving] = useState(false);
 
   // Close selection whenever context changes — avoids acting on a stale node.
-  useEffect(() => { setSelected(null); }, [navToken]);
+  useEffect(() => {
+    setSelected(null);
+    setHandoffNode(null);
+  }, [navToken]);
 
 
   const { data: clients } = useQuery({
@@ -276,7 +286,14 @@ export default function Workspace() {
     enabled: isStaff,
   });
 
-  const { data: nodes, isLoading } = useQuery({
+  const {
+    data: nodes,
+    isLoading,
+    isError: workspaceReadFailed,
+    error: workspaceReadError,
+    refetch: refetchWorkspace,
+    isFetching: refreshingWorkspace,
+  } = useQuery({
     queryKey: ["workspace-nodes", scope, clientId, parent?.id || null],
     queryFn: async () => {
       if (parent?.id && isVirt(parent.id)) return [] as Node[];
@@ -290,23 +307,42 @@ export default function Workspace() {
     },
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
   });
 
 
-  // Full folder list of current scope (for "Move to..." menu)
-  const { data: allFolders } = useQuery({
-    queryKey: ["workspace-folders", scope, clientId],
+  // Full scope index supports move menus and detects linked descendants before
+  // destructive actions. It is read-only and does not duplicate file objects.
+  const { data: workspaceIndex } = useQuery({
+    queryKey: ["workspace-index", scope, clientId],
     queryFn: async () => {
-      let q: any = (supabase as any).from("workspace_nodes").select("id, parent_id, name")
-        .eq("scope", scope).eq("kind", "folder");
+      let q: any = (supabase as any)
+        .from("workspace_nodes")
+        .select("id, parent_id, name, kind, storage_path, sent_for_approval_file_id")
+        .eq("scope", scope);
       if (scope === "client") q = q.eq("client_id", clientId!);
-      const { data } = await q;
-      return (data || []) as { id: string; parent_id: string | null; name: string }[];
+      const { data, error } = await q;
+      if (error) throw error;
+      return (data || []) as Array<{
+        id: string;
+        parent_id: string | null;
+        name: string;
+        kind: "folder" | "file";
+        storage_path: string | null;
+        sent_for_approval_file_id: string | null;
+      }>;
     },
     enabled: isStaff && (scope === "global" || !!clientId),
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
   });
 
+  const allFolders = useMemo(
+    () => (workspaceIndex || []).filter((node) => node.kind === "folder"),
+    [workspaceIndex],
+  );
 
   const folderPaths = useMemo(() => {
     const map = new Map<string, string>();
@@ -324,22 +360,30 @@ export default function Workspace() {
   // (Stack reset happens atomically inside nav.setScope/setClient.)
 
   // Existing client files (from public.files) — merged as virtual folders/files
-  const { data: clientFiles } = useQuery({
+  const {
+    data: clientFiles,
+    isError: clientFilesReadFailed,
+    error: clientFilesReadError,
+    refetch: refetchClientFiles,
+    isFetching: refreshingClientFiles,
+  } = useQuery({
     queryKey: ["workspace-client-files", clientId],
     queryFn: async () => {
       if (!clientId) return [] as any[];
       // Fetch all files (parents + carousel children) so we can group carousels
       // and show every slide inside the preview.
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("staff_files_secure")
         .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, visibility, created_at, uploaded_by, parent_file_id, size_bytes")
         .eq("client_id", clientId)
         .order("created_at", { ascending: false });
+      if (error) throw error;
       return data || [];
     },
     enabled: isStaff && scope === "client" && !!clientId,
-    staleTime: 60_000,
-    placeholderData: (prev: any) => prev,
+    staleTime: 10_000,
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: true,
   });
 
   // Group carousel children by parent for fast preview rendering
@@ -360,12 +404,54 @@ export default function Workspace() {
     return s;
   }, [clientFiles]);
 
+  const workspaceStoragePaths = useMemo(
+    () => new Set(
+      (workspaceIndex || [])
+        .filter((node) => node.kind === "file" && node.storage_path)
+        .map((node) => node.storage_path as string),
+    ),
+    [workspaceIndex],
+  );
+
+  const linkedWorkspacePaths = useMemo(
+    () => new Set(
+      ((clientFiles as any[]) || [])
+        .filter((file) => file.storage_bucket === "workspace" && file.storage_path)
+        .map((file) => file.storage_path as string),
+    ),
+    [clientFiles],
+  );
+
+  const blockedWorkspaceDeleteIds = useMemo(() => {
+    const blocked = new Set<string>();
+    const byId = new Map((workspaceIndex || []).map((node) => [node.id, node]));
+    for (const node of workspaceIndex || []) {
+      const isLinked = !!node.sent_for_approval_file_id
+        || (!!node.storage_path && linkedWorkspacePaths.has(node.storage_path));
+      if (!isLinked) continue;
+      let current: typeof node | undefined = node;
+      while (current) {
+        if (blocked.has(current.id)) break;
+        blocked.add(current.id);
+        current = current.parent_id ? byId.get(current.parent_id) : undefined;
+      }
+    }
+    return blocked;
+  }, [workspaceIndex, linkedWorkspacePaths]);
+
 
   // Build virtual nodes for current view (root or inside a virtual folder)
   const virtualNodes: Node[] = useMemo(() => {
     if (scope !== "client" || !clientId || !clientFiles?.length) return [];
     // Exclude carousel children — they render only inside the parent's preview.
-    const parents = (clientFiles as any[]).filter((f) => !f.parent_file_id);
+    const parents = (clientFiles as any[]).filter((f) => {
+      if (f.parent_file_id) return false;
+      return !(
+        f.storage_bucket === "workspace"
+        && f.storage_path
+        && workspaceStoragePaths.has(f.storage_path)
+      );
+    });
     const currentVirtId = parent?.id;
     const insideVirtFolder = currentVirtId && currentVirtId.startsWith(VIRT_PREFIX + "folder:");
     if (!parent) {
@@ -404,23 +490,26 @@ export default function Workspace() {
         });
     }
     return [];
-  }, [clientFiles, scope, clientId, parent]);
+  }, [clientFiles, scope, clientId, parent, workspaceStoragePaths, virtChildrenMap]);
 
   const filtered = useMemo(() => {
-    const merged: Node[] = [
-      ...(virtualNodes || []),
-      ...((nodes || []).filter((n) => !(parent?.id && parent.id.startsWith(VIRT_PREFIX)))),
-    ];
-    // Dedup by name (real workspace_nodes win over virtual with same name)
+    const candidates = parent?.id?.startsWith(VIRT_PREFIX)
+      ? [...virtualNodes]
+      : [...(nodes || []), ...virtualNodes];
+    // Keep homonyms. Collapse only the exact same row/object identity, with
+    // real Workspace nodes winning over their virtual Files projection.
     const seen = new Set<string>();
-    const out: Node[] = [];
-    for (const n of [...(nodes || []), ...virtualNodes]) {
-      const key = `${n.kind}:${n.name.replace(/ \(\d+\)$/, "")}`;
-      if (parent?.id?.startsWith(VIRT_PREFIX)) { out.push(n); continue; }
-      if (seen.has(key) && n.__virtual) continue;
-      seen.add(key); out.push(n);
+    const base: Node[] = [];
+    for (const node of candidates) {
+      const bucket = node.__virtual ? node.__storage_bucket : "workspace";
+      const path = node.__virtual ? node.__storage_path : node.storage_path;
+      const identity = path
+        ? `object:${bucket || "external"}:${path}`
+        : `row:${node.id}`;
+      if (seen.has(identity)) continue;
+      seen.add(identity);
+      base.push(node);
     }
-    const base = parent?.id?.startsWith(VIRT_PREFIX) ? merged : out;
     const s = search.trim().toLowerCase();
     let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
     if (tagFilter !== "all") res = res.filter(n => n.kind === "folder" || tagOf(n, base) === tagFilter);
@@ -485,7 +574,7 @@ export default function Workspace() {
       if (Object.keys(fullPatch).length) setSignedUrls(prev => ({ ...prev, ...fullPatch }));
     })();
     return () => { alive = false; };
-  }, [filtered]);
+  }, [filtered, coverUrls, signedUrls]);
 
   const coverFor = (n: Node): string | null => {
     if (n.kind !== "file") return null;
@@ -514,8 +603,9 @@ export default function Workspace() {
 
   function invalidate() {
     qc.invalidateQueries({ queryKey: ["workspace-nodes"] });
-    qc.invalidateQueries({ queryKey: ["workspace-folders"] });
+    qc.invalidateQueries({ queryKey: ["workspace-index"] });
     qc.invalidateQueries({ queryKey: ["workspace-client-files"] });
+    qc.invalidateQueries({ queryKey: ["all-files"] });
     qc.invalidateQueries({ queryKey: ["files"] });
   }
 
@@ -871,6 +961,15 @@ export default function Workspace() {
 
   async function performDelete(n: Node) {
     if (deletingNode) return;
+    if (isWorkspaceDeletionBlocked(n)) {
+      toast({
+        title: "Arquivo protegido",
+        description: "Remova primeiro o vínculo na área Arquivos. O original continuará no Workspace.",
+        variant: "destructive",
+      });
+      setConfirmDelete(null);
+      return;
+    }
     setDeletingNode(true);
     try {
       if (n.__virtual && n.kind === "folder") {
@@ -995,98 +1094,81 @@ export default function Workspace() {
     invalidate();
   }
 
-  function canRequestInternalReview(n: Node | null) {
-    if (!n || n.kind !== "file" || scope !== "client" || !clientId) return false;
-    if (n.__virtual) {
-      return !!n.__file_id
-        && (!n.__agency_approval_status || n.__agency_approval_status === "not_requested");
-    }
-    return !!n.storage_path && !n.sent_for_approval_file_id;
+  const clientProjects = useMemo(
+    () => ((projects || []) as any[]).filter((project) => project.client_id === clientId),
+    [projects, clientId],
+  );
+
+  function canSendToFiles(n: Node | null) {
+    return !!n
+      && !n.__virtual
+      && n.kind === "file"
+      && !!n.storage_path
+      && scope === "client"
+      && !!clientId
+      && n.client_id === clientId;
   }
 
-  function canReleaseToClient(n: Node | null) {
-    if (!canReviewAndRelease || !n || n.kind !== "file" || scope !== "client" || !clientId) return false;
-    if (n.__virtual) {
-      if (!n.__file_id) return false;
-      if (n.__visibility && n.__visibility !== "internal") return false;
-      return !n.__agency_approval_status
-        || ["not_requested", "pending", "approved"].includes(n.__agency_approval_status);
-    }
-    return !!n.storage_path && !n.sent_for_approval_file_id;
+  function isWorkspaceDeletionBlocked(n: Node | null) {
+    return !!n && !n.__virtual && blockedWorkspaceDeleteIds.has(n.id);
   }
 
-  async function ensureFileRecordForDelivery(n: Node) {
-    if (n.__virtual && n.__file_id) return n.__file_id;
-    if (!n.storage_path) throw new Error("Arquivo sem origem de armazenamento.");
-    const ext = extOf(n.name).toLowerCase() || null;
-    const fileRow = await createFileRecord({
-      file_name: n.name,
-      file_url: `workspace://${n.storage_path}`,
-      file_type: n.mime || mediaKindFromFile(n.name, undefined, n.mime),
-      mime_type: n.mime || null,
-      extension: ext,
-      storage_bucket: "workspace",
-      storage_path: n.storage_path,
-      size_bytes: n.size_bytes || 0,
-      uploaded_by: user?.id,
-      client_id: clientId,
-      approval_status: "none",
-      agency_approval_status: "not_requested",
-      requires_approval: false,
-      status: "ready",
-      visibility: "internal",
-      folder: "materiais",
-    });
-    await supabase.from("workspace_nodes").update({ sent_for_approval_file_id: (fileRow as any).id }).eq("id", n.id);
-    return (fileRow as any).id as string;
+  function isWorkspaceFileLinked(n: Node | null) {
+    return !!n
+      && !n.__virtual
+      && n.kind === "file"
+      && (
+        !!n.sent_for_approval_file_id
+        || (!!n.storage_path && linkedWorkspacePaths.has(n.storage_path))
+      );
   }
 
-  async function sendToInternalReview(n: Node) {
-    if (!user || n.kind !== "file") return;
-    if (scope !== "client" || !clientId) {
-      toast({ title: "Selecione um cliente", description: "Aprovação é enviada em contexto de cliente.", variant: "destructive" });
-      return;
-    }
-    try {
-      const fileId = await ensureFileRecordForDelivery(n);
-      await requestFileAgencyReview(fileId);
-      toast({ title: "Enviado para revisão interna" });
-      invalidate();
-      qc.invalidateQueries({ queryKey: ["files"] });
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
-    }
-  }
-
-  async function releaseToClient(n: Node, mode: FileReleaseMode) {
-    if (!user || n.kind !== "file") return;
-    if (scope !== "client" || !clientId) {
-      toast({ title: "Selecione um cliente", description: "Liberação é feita no contexto do cliente.", variant: "destructive" });
-      return;
-    }
-    try {
-      const fileId = await ensureFileRecordForDelivery(n);
-      const agencyStatus = n.__virtual ? n.__agency_approval_status : "not_requested";
-      if (!agencyStatus || agencyStatus === "not_requested") {
-        await requestFileAgencyReview(fileId);
-        await reviewFileAgency(fileId, "approved");
-      } else if (agencyStatus === "pending") {
-        await reviewFileAgency(fileId, "approved");
-      } else if (agencyStatus !== "approved") {
-        throw new Error("Arquivo não está elegível para liberação ao cliente.");
-      }
-      await releaseFileToClient(fileId, mode);
+  function openHandoff(n: Node) {
+    if (!canSendToFiles(n)) {
       toast({
-        title: mode === "approval" ? "Enviado para aprovação do cliente" : "Disponibilizado ao cliente",
-        description: mode === "approval"
-          ? "O cliente pode aprovar ou pedir ajustes no painel."
-          : "O cliente pode visualizar sem aprovação final.",
+        title: "Selecione um arquivo de cliente",
+        description: "Arquivos globais continuam somente no Workspace.",
+        variant: "destructive",
       });
+      return;
+    }
+    setHandoffNode(n);
+    setHandoffName(n.name);
+    setHandoffFolder("materiais");
+    setHandoffType(suggestedFileType(n.name, n.mime));
+    setHandoffProject(
+      clientProjects.length === 1 ? clientProjects[0].id : "none",
+    );
+  }
+
+  async function submitHandoff() {
+    if (!handoffNode || !user || !clientId || handoffSaving) return;
+    setHandoffSaving(true);
+    try {
+      const result = await handoffWorkspaceFileToFiles({
+        node: handoffNode,
+        clientId,
+        userId: user.id,
+        fileName: handoffName,
+        folder: handoffFolder,
+        fileType: handoffType,
+        projectId: handoffProject === "none" ? null : handoffProject,
+      });
+      toast({
+        title: result.created ? "Enviado para Arquivos" : "Arquivo já sincronizado",
+        description: "O conteúdo continua interno. A liberação ao cliente é feita somente em Arquivos.",
+      });
+      setHandoffNode(null);
       setSelected(null);
       invalidate();
-      qc.invalidateQueries({ queryKey: ["notifications"] });
-    } catch (e: any) {
-      toast({ title: "Erro", description: e.message, variant: "destructive" });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível enviar para Arquivos",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setHandoffSaving(false);
     }
   }
 
@@ -1120,7 +1202,11 @@ export default function Workspace() {
     return (
       <DropdownMenu>
         <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-          <button className="p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground">
+          <button
+            type="button"
+            aria-label={`Ações de ${n.name}`}
+            className="p-1 rounded-md hover:bg-secondary text-muted-foreground hover:text-foreground"
+          >
             <MoreVertical className="w-3.5 h-3.5" />
           </button>
         </DropdownMenuTrigger>
@@ -1182,24 +1268,19 @@ export default function Workspace() {
                 ))}
             </DropdownMenuSubContent>
           </DropdownMenuSub>
-          {canRequestInternalReview(n) && (
-            <DropdownMenuItem onSelect={() => sendToInternalReview(n)}>
-              <Send className="w-3.5 h-3.5 mr-2" /> Solicitar revisão interna
+          {canSendToFiles(n) && (
+            <DropdownMenuItem onSelect={() => openHandoff(n)}>
+              <Send className="w-3.5 h-3.5 mr-2" /> Enviar para Arquivos
             </DropdownMenuItem>
           )}
-          {canReleaseToClient(n) && (
-            <>
-              <DropdownMenuItem onSelect={() => releaseToClient(n, "client_shared")}>
-                <Check className="w-3.5 h-3.5 mr-2" /> Disponibilizar ao cliente
-              </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => releaseToClient(n, "approval")}>
-                <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
-              </DropdownMenuItem>
-            </>
-          )}
           <DropdownMenuSeparator />
-          <DropdownMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
-            <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+          <DropdownMenuItem
+            onSelect={() => setConfirmDelete(n)}
+            disabled={isWorkspaceDeletionBlocked(n)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-2" />
+            {isWorkspaceDeletionBlocked(n) ? "Remova de Arquivos antes" : "Excluir"}
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -1244,8 +1325,6 @@ export default function Workspace() {
 
   function renderContextMenu(n: Node, children: React.ReactNode) {
     const isFolder = n.kind === "folder";
-    const canReview = canRequestInternalReview(n);
-    const canRelease = canReleaseToClient(n);
     return (
       <ContextMenu>
         <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
@@ -1314,29 +1393,22 @@ export default function Workspace() {
                 ))}
             </ContextMenuSubContent>
           </ContextMenuSub>
-          {(canReview || canRelease) && (
+          {canSendToFiles(n) && (
             <>
               <ContextMenuSeparator />
-              {canReview && (
-                <ContextMenuItem onSelect={() => sendToInternalReview(n)}>
-                  <Send className="w-3.5 h-3.5 mr-2" /> Solicitar revisão interna
-                </ContextMenuItem>
-              )}
-              {canRelease && (
-                <>
-                  <ContextMenuItem onSelect={() => releaseToClient(n, "client_shared")}>
-                    <Check className="w-3.5 h-3.5 mr-2" /> Disponibilizar ao cliente
-                  </ContextMenuItem>
-                  <ContextMenuItem onSelect={() => releaseToClient(n, "approval")}>
-                    <Send className="w-3.5 h-3.5 mr-2" /> Enviar para aprovação
-                  </ContextMenuItem>
-                </>
-              )}
+              <ContextMenuItem onSelect={() => openHandoff(n)}>
+                <Send className="w-3.5 h-3.5 mr-2" /> Enviar para Arquivos
+              </ContextMenuItem>
             </>
           )}
           <ContextMenuSeparator />
-          <ContextMenuItem onSelect={() => setConfirmDelete(n)} className="text-destructive focus:text-destructive">
-            <Trash2 className="w-3.5 h-3.5 mr-2" /> Excluir
+          <ContextMenuItem
+            onSelect={() => setConfirmDelete(n)}
+            disabled={isWorkspaceDeletionBlocked(n)}
+            className="text-destructive focus:text-destructive"
+          >
+            <Trash2 className="w-3.5 h-3.5 mr-2" />
+            {isWorkspaceDeletionBlocked(n) ? "Remova de Arquivos antes" : "Excluir"}
           </ContextMenuItem>
         </ContextMenuContent>
       </ContextMenu>
@@ -1351,14 +1423,14 @@ export default function Workspace() {
 
   const rootDropActive = dragOverArea && dragOverId === null;
 
-  const filteredClients = useMemo(() => {
+  const filteredClients = (() => {
     const list = [...(clients || [])] as any[];
     const q = pickerQuery.trim().toLowerCase();
     let out = q ? list.filter(c => ((c.company_name || c.full_name || "").toLowerCase().includes(q))) : list;
     if (pickerFilter === "az") out = [...out].sort((a, b) => (a.company_name || a.full_name || "").localeCompare(b.company_name || b.full_name || ""));
     else if (pickerFilter === "za") out = [...out].sort((a, b) => (b.company_name || b.full_name || "").localeCompare(a.company_name || a.full_name || ""));
     return out;
-  }, [clients, pickerQuery, pickerFilter]);
+  })();
 
   const currentClient = (clients || []).find((c: any) => c.id === clientId) as any;
   const contextLabel = scope === "global"
@@ -1566,8 +1638,27 @@ export default function Workspace() {
             </div>
           </div>
 
-
-
+          {scope === "client" && !!clientId && clientFilesReadFailed && (
+            <div className="mb-3 flex items-center gap-3 rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-xs">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium text-foreground">Workspace disponível; sincronização com Arquivos temporariamente indisponível.</p>
+                <p className="truncate text-muted-foreground">
+                  {clientFilesReadError instanceof Error ? clientFilesReadError.message : "Tente atualizar a sincronização."}
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 gap-1.5"
+                onClick={() => void refetchClientFiles()}
+                disabled={refreshingClientFiles}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${refreshingClientFiles ? "animate-spin" : ""}`} />
+                Atualizar
+              </Button>
+            </div>
+          )}
 
           {/* Drop zone wrapper */}
           <div
@@ -1597,6 +1688,26 @@ export default function Workspace() {
               <div className="text-center py-16 text-sm text-muted-foreground">Selecione um cliente na barra lateral.</div>
             ) : isLoading ? (
               <div className="text-center py-16 text-sm text-muted-foreground">Carregando...</div>
+            ) : workspaceReadFailed ? (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/5 px-5 py-12 text-center">
+                <Folder className="mx-auto mb-3 h-8 w-8 text-destructive/70" />
+                <p className="text-sm font-medium text-foreground">Não foi possível carregar esta pasta</p>
+                <p className="mx-auto mt-1 max-w-lg text-xs text-muted-foreground">
+                  A pasta não está vazia. Houve uma falha de leitura
+                  {workspaceReadError instanceof Error ? `: ${workspaceReadError.message}` : "."}
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="mt-4 gap-1.5"
+                  onClick={() => void refetchWorkspace()}
+                  disabled={refreshingWorkspace}
+                >
+                  <RefreshCw className={`h-3.5 w-3.5 ${refreshingWorkspace ? "animate-spin" : ""}`} />
+                  Tentar novamente
+                </Button>
+              </div>
             ) : !filtered.length ? (
               <div className="text-center py-16 text-sm text-muted-foreground">
                 <Folder className="w-8 h-8 mx-auto mb-2 opacity-40" />
@@ -1619,20 +1730,25 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
                       className={cn(
                         "group relative rounded-xl border bg-card hover:border-primary/40 transition-all overflow-hidden flex flex-col cursor-pointer aspect-square",
                         dragActive ? "border-primary bg-primary/10 ring-2 ring-primary/40" : "border-border"
                       )}
                     >
+                      <button
+                        type="button"
+                        aria-label={`${isFolder ? "Abrir pasta" : "Visualizar arquivo"} ${n.name}`}
+                        onClick={() => isFolder ? nav.push(n) : setSelected(n)}
+                        className="absolute inset-0 z-[1] rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                      />
                         <div className="absolute top-1.5 right-1.5 z-10 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                         {renderActionsMenu(n)}
                       </div>
-                      {n.sent_for_approval_file_id && (
-                        <span className="absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning backdrop-blur">↗ aprovação</span>
+                      {isWorkspaceFileLinked(n) && (
+                        <span className="pointer-events-none absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-success/15 text-success backdrop-blur">Em Arquivos</span>
                       )}
                       {!!n.__carousel_count && n.__carousel_count > 0 && (
-                        <span className="absolute bottom-9 left-1.5 z-10 text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-primary/85 text-primary-foreground shadow">
+                        <span className="pointer-events-none absolute bottom-9 left-1.5 z-10 text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-primary/85 text-primary-foreground shadow">
                           Carrossel · {n.__carousel_count + 1}
                         </span>
                       )}
@@ -1706,15 +1822,22 @@ export default function Workspace() {
                       onDragOver={(e) => isFolder && onDragOverFolder(e, n.id)}
                       onDragLeave={() => isFolder && setDragOverId(null)}
                       onDrop={(e) => isFolder && onDropFolder(e, n.id)}
-                      onClick={() => isFolder ? nav.push(n) : setSelected(n)}
-                      className={cn("w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors cursor-pointer",
+                      className={cn("relative w-full flex items-center gap-3 px-4 py-2.5 hover:bg-secondary/40 transition-colors cursor-pointer",
                         dragActive && "bg-primary/10 ring-1 ring-primary/40")}
                     >
+                      <button
+                        type="button"
+                        aria-label={`${isFolder ? "Abrir pasta" : "Visualizar arquivo"} ${n.name}`}
+                        onClick={() => isFolder ? nav.push(n) : setSelected(n)}
+                        className="absolute inset-0 z-[1] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
+                      />
                       <Icon className={cn("w-4 h-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} />
                       <span className="flex-1 text-[13px] truncate">{n.name}</span>
                       {!isFolder && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
-                      {n.sent_for_approval_file_id && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-warning/15 text-warning">aprovação</span>}
-                      {renderActionsMenu(n)}
+                      {isWorkspaceFileLinked(n) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success/15 text-success">Em Arquivos</span>}
+                      <div className="relative z-10">
+                        {renderActionsMenu(n)}
+                      </div>
                     </div>
                     ))}
                     </div>
@@ -1760,29 +1883,26 @@ export default function Workspace() {
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
-                {canRequestInternalReview(selected) && (
-                  <Button size="sm" variant="outline" onClick={() => sendToInternalReview(selected)} className="gap-1.5">
-                    <Send className="w-3.5 h-3.5" /> Solicitar revisão interna
+                {canSendToFiles(selected) && (
+                  <Button size="sm" onClick={() => openHandoff(selected)} className="gap-1.5">
+                    <Send className="w-3.5 h-3.5" /> Enviar para Arquivos
                   </Button>
-                )}
-                {canReleaseToClient(selected) && (
-                  <>
-                    <Button size="sm" variant="outline" onClick={() => releaseToClient(selected, "client_shared")} className="gap-1.5">
-                      <Check className="w-3.5 h-3.5" /> Disponibilizar ao cliente
-                    </Button>
-                    <Button size="sm" onClick={() => releaseToClient(selected, "approval")} className="gap-1.5 bg-primary">
-                      <Send className="w-3.5 h-3.5" /> Enviar para aprovação
-                    </Button>
-                  </>
                 )}
                 {selected.__virtual && (
                   <span className="text-[11px] text-muted-foreground">De Arquivos {selected.__approval_status && selected.__approval_status !== "none" ? `· ${selected.__approval_status}` : ""}</span>
                 )}
                 {selected.sent_for_approval_file_id && (
-                  <span className="text-[11px] text-warning">Já enviado para aprovação</span>
+                  <span className="text-[11px] text-success">Já está em Arquivos</span>
                 )}
                 <div className="flex-1" />
-                <Button size="sm" variant="ghost" onClick={() => setConfirmDelete(selected)} className="gap-1.5 text-destructive hover:text-destructive">
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setConfirmDelete(selected)}
+                  disabled={isWorkspaceDeletionBlocked(selected)}
+                  title={isWorkspaceDeletionBlocked(selected) ? "Remova o vínculo em Arquivos antes de excluir no Workspace." : undefined}
+                  className="gap-1.5 text-destructive hover:text-destructive"
+                >
                   <Trash2 className="w-3.5 h-3.5" /> Excluir
                 </Button>
               </div>
@@ -1793,6 +1913,90 @@ export default function Workspace() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Explicit Workspace → Arquivos handoff. This never requests review or
+          exposes content to the client; those gates remain in AdminFiles. */}
+      <Dialog
+        open={!!handoffNode}
+        onOpenChange={(open) => {
+          if (!open && !handoffSaving) setHandoffNode(null);
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Enviar para Arquivos</DialogTitle>
+            <DialogDescription>
+              Cria somente o vínculo interno para {currentClient?.company_name || currentClient?.full_name || "o cliente"}.
+              O mesmo objeto físico será reutilizado e nada será liberado ao cliente automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-1">
+            <div className="space-y-1.5">
+              <Label htmlFor="workspace-handoff-name">Nome</Label>
+              <Input
+                id="workspace-handoff-name"
+                value={handoffName}
+                onChange={(event) => setHandoffName(event.target.value)}
+                disabled={handoffSaving}
+              />
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label id="workspace-handoff-folder-label">
+                  Pasta em Arquivos
+                </Label>
+                <Select value={handoffFolder} onValueChange={setHandoffFolder} disabled={handoffSaving}>
+                  <SelectTrigger aria-labelledby="workspace-handoff-folder-label">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FILE_FOLDERS.map((folder) => (
+                      <SelectItem key={folder.id} value={folder.id}>{folder.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label id="workspace-handoff-type-label">Tipo</Label>
+                <Select value={handoffType} onValueChange={setHandoffType} disabled={handoffSaving}>
+                  <SelectTrigger aria-labelledby="workspace-handoff-type-label">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {FILE_TYPES.map((fileType) => (
+                      <SelectItem key={fileType} value={fileType}>{fileType}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label id="workspace-handoff-project-label">Projeto</Label>
+              <Select value={handoffProject} onValueChange={setHandoffProject} disabled={handoffSaving}>
+                <SelectTrigger aria-labelledby="workspace-handoff-project-label">
+                  <SelectValue placeholder="Nenhum projeto" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Nenhum projeto</SelectItem>
+                  {clientProjects.map((project: any) => (
+                    <SelectItem key={project.id} value={project.id}>{project.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="rounded-lg bg-secondary/60 px-3 py-2 text-xs text-muted-foreground">
+              Depois do envio, revisão interna e liberação ao cliente continuam disponíveis somente na área Arquivos.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setHandoffNode(null)} disabled={handoffSaving}>Cancelar</Button>
+            <Button onClick={submitHandoff} disabled={handoffSaving || !handoffName.trim()}>
+              {handoffSaving && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+              {handoffSaving ? "Enviando..." : "Enviar para Arquivos"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1848,7 +2052,9 @@ export default function Workspace() {
           <DialogHeader>
             <DialogTitle>Excluir {confirmDelete?.kind === "folder" ? "pasta" : "arquivo"}?</DialogTitle>
             <DialogDescription>
-              {confirmDelete?.kind === "folder"
+              {confirmDelete?.__virtual && confirmDelete.__storage_bucket === "workspace"
+                ? <>O vínculo de <b>{confirmDelete.name}</b> em Arquivos será removido. O original continuará no Workspace.</>
+                : confirmDelete?.kind === "folder"
                 ? <>A pasta <b>{confirmDelete?.name}</b> e todo seu conteúdo serão removidos permanentemente.</>
                 : <>O arquivo <b>{confirmDelete?.name}</b> será removido permanentemente.</>}
             </DialogDescription>
@@ -1894,7 +2100,9 @@ export default function Workspace() {
         }))}
         onOpenFile={(id) => {
           const found = (filtered || []).find(n => n.id === id);
-          if (found) found.kind === "folder" ? nav.push(found) : setSelected(found);
+          if (!found) return;
+          if (found.kind === "folder") nav.push(found);
+          else setSelected(found);
         }}
       />
     </div>
@@ -1902,16 +2110,51 @@ export default function Workspace() {
 }
 
 function FilePreview({ node, getUrl }: { node: Node; getUrl: (n: Node) => Promise<string> }) {
-  const [url, setUrl] = useState("");
-  useEffect(() => { setUrl(""); getUrl(node).then(setUrl).catch(() => setUrl("")); }, [node.id]);
-  if (!url) return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
+  const getUrlRef = useRef(getUrl);
+  getUrlRef.current = getUrl;
+  const [attempt, setAttempt] = useState(0);
+  const [preview, setPreview] = useState<{
+    status: "loading" | "ready" | "error";
+    url: string;
+  }>({ status: "loading", url: "" });
+  useEffect(() => {
+    let active = true;
+    setPreview({ status: "loading", url: "" });
+    getUrlRef.current(node)
+      .then((url) => {
+        if (active) setPreview({ status: "ready", url });
+      })
+      .catch(() => {
+        if (active) setPreview({ status: "error", url: "" });
+      });
+    return () => {
+      active = false;
+    };
+  }, [node, attempt]);
+  if (preview.status === "loading") {
+    return <div className="h-64 flex items-center justify-center text-xs text-muted-foreground">Carregando preview...</div>;
+  }
+  if (preview.status === "error") {
+    return (
+      <div className="h-64 flex flex-col items-center justify-center gap-2 text-xs text-muted-foreground">
+        <span>Não foi possível carregar o preview.</span>
+        <button
+          type="button"
+          onClick={() => setAttempt((value) => value + 1)}
+          className="font-medium text-foreground underline underline-offset-2"
+        >
+          Tentar novamente
+        </button>
+      </div>
+    );
+  }
   // Delegate to the shared preview which handles images (zoom), PDFs (with
   // fallback UI), audio, video, and external providers (YouTube/Vimeo/Loom/Drive)
   // uniformly. Extension detection covers files uploaded without a mime type.
   return (
     <FilePreviewContent
       fileName={node.name}
-      fileUrl={url}
+      fileUrl={preview.url}
       fileId={node.__file_id || node.id}
       storageBucket={node.__storage_bucket}
       storagePath={node.__storage_path}

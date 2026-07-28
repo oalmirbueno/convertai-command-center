@@ -10,6 +10,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { X, Edit3, Trash2, ExternalLink, Eye, Users, CheckCircle2, Clock, Circle, LayoutGrid } from "lucide-react";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { ProjectPipelineChecklist } from "./ProjectPipeline";
+import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
 
 const STATUS_OPTIONS = [
   { value: "planning", label: "Planejamento" },
@@ -86,14 +87,31 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
   };
 
   const handleDelete = async () => {
-    await supabase.from("tasks").delete().eq("project_id", project.id);
-    await supabase.from("milestones").delete().eq("project_id", project.id);
-    await supabase.from("updates").delete().eq("project_id", project.id);
-    await supabase.from("projects").delete().eq("id", project.id);
-    queryClient.invalidateQueries({ queryKey: ["projects"] });
-    toast.success("Projeto excluído");
-    setConfirmDelete(false);
-    onClose();
+    try {
+      if (await projectHasLinkedRequestTasks(project.id)) {
+        toast.error(
+          "Este projeto possui um Pedido vinculado ao Kanban e não pode ser excluído.",
+        );
+        setConfirmDelete(false);
+        return;
+      }
+      await supabase.from("tasks").delete().eq("project_id", project.id);
+      await supabase.from("milestones").delete().eq("project_id", project.id);
+      await supabase.from("updates").delete().eq("project_id", project.id);
+      await supabase.from("projects").delete().eq("id", project.id);
+      queryClient.invalidateQueries({ queryKey: ["projects"] });
+      toast.success("Projeto excluído");
+      setConfirmDelete(false);
+      onClose();
+    } catch (error) {
+      console.error("Project delete guard failed", error);
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível excluir o projeto.",
+      );
+      setConfirmDelete(false);
+    }
   };
 
   // Team: unique assignees from tasks
