@@ -1327,9 +1327,15 @@ SELECT throws_like(
   $sql$
     SELECT public.save_editorial_post(
       jsonb_set(
-        state.payload,
-        '{id}',
-        to_jsonb(state.result->>'post_id')
+        jsonb_set(
+          state.payload,
+          '{id}',
+          to_jsonb(state.result->>'post_id')
+        ),
+        '{mutation_id}',
+        to_jsonb(
+          '96200000-0000-0000-0000-000000000002'::text
+        )
       ),
       NULL
     )
@@ -1348,6 +1354,7 @@ SELECT
     'project_id', '92000000-0000-0000-0000-00000000000a',
     'primary_file_id', '94000000-0000-0000-0000-00000000000c',
     'idempotency_key', '96000000-0000-0000-0000-000000000009',
+    'mutation_id', '96200000-0000-0000-0000-000000000009',
     'title', 'Must roll back',
     'content_type', 'static',
     'production_status', 'ready',
@@ -1450,12 +1457,18 @@ SELECT lives_ok(
     SET result = public.save_editorial_post(
       jsonb_set(
         jsonb_set(
-          state.payload,
-          '{id}',
-          to_jsonb(state.post_id::text)
+          jsonb_set(
+            state.payload,
+            '{id}',
+            to_jsonb(state.post_id::text)
+          ),
+          '{default_caption}',
+          to_jsonb('Updated editorial caption before approval'::text)
         ),
-        '{default_caption}',
-        to_jsonb('Updated editorial caption before approval'::text)
+        '{mutation_id}',
+        to_jsonb(
+          '96200000-0000-0000-0000-000000000003'::text
+        )
       ),
       1
     )
@@ -1718,11 +1731,15 @@ SELECT pg_temp.act_as(
 );
 SELECT lives_ok(
   $sql$
-    SELECT public.request_file_agency_review(
-      '94000000-0000-0000-0000-00000000000a'
-    )
+    SELECT public.request_file_agency_review(requested.file_id)
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000a'::uuid,
+        '94000000-0000-0000-0000-00000000000d'::uuid
+      ]
+    ) AS requested(file_id)
   $sql$,
-  'assigned design requests agency review for the editorial asset'
+  'assigned design requests review for primary and platform files'
 );
 
 SELECT throws_like(
@@ -1754,21 +1771,33 @@ SELECT pg_temp.act_as(
 SELECT lives_ok(
   $sql$
     SELECT public.review_file_agency(
-      '94000000-0000-0000-0000-00000000000a',
+      requested.file_id,
       'approved',
       NULL
     )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000a'::uuid,
+        '94000000-0000-0000-0000-00000000000d'::uuid
+      ]
+    ) AS requested(file_id)
   $sql$,
-  'assigned manager approves the agency gate'
+  'assigned manager approves primary and platform files at the agency gate'
 );
 SELECT lives_ok(
   $sql$
     SELECT public.release_file_to_client(
-      '94000000-0000-0000-0000-00000000000a',
+      requested.file_id,
       'approval'
     )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000a'::uuid,
+        '94000000-0000-0000-0000-00000000000d'::uuid
+      ]
+    ) AS requested(file_id)
   $sql$,
-  'assigned manager releases the asset for client approval'
+  'assigned manager releases primary and platform files to the client'
 );
 
 SELECT pg_temp.act_as(
@@ -1793,13 +1822,19 @@ SELECT is(
 SELECT lives_ok(
   $sql$
     SELECT public.decide_file_approval(
-      '94000000-0000-0000-0000-00000000000a',
+      requested.file_id,
       1,
       'approved',
       NULL
     )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000a'::uuid,
+        '94000000-0000-0000-0000-00000000000d'::uuid
+      ]
+    ) AS requested(file_id)
   $sql$,
-  'client approves the exact released file version'
+  'client approves the exact primary and platform file versions'
 );
 
 SELECT is(

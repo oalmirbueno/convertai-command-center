@@ -398,6 +398,9 @@ AS $$
       AND auth.uid() = post.client_id
       AND public.has_role(auth.uid(), 'client'::public.app_role)
       AND post.primary_file_id IS NOT NULL
+      AND internal.approval_fingerprint IS NOT NULL
+      AND internal.approval_fingerprint =
+        public.editorial_compute_approval_fingerprint(post.id)
       AND EXISTS (
         SELECT 1
         FROM public.files AS file_row
@@ -411,28 +414,6 @@ AS $$
           AND file_row.visibility = 'approval'
           AND file_row.approval_status = 'approved'
           AND file_row.locked_at IS NOT NULL
-          AND internal.approval_fingerprint IS NOT NULL
-      )
-      AND EXISTS (
-        SELECT 1
-        FROM public.editorial_publications AS publication
-        JOIN public.editorial_publication_internal AS publication_internal
-          ON publication_internal.publication_id = publication.id
-        JOIN public.files AS effective_file
-          ON effective_file.id =
-            COALESCE(publication.file_id, post.primary_file_id)
-        WHERE publication.post_id = post.id
-          AND publication.status IN ('scheduled', 'published')
-          AND publication_internal.included_in_approval_snapshot
-          AND effective_file.parent_file_id IS NULL
-          AND effective_file.client_id = post.client_id
-          AND effective_file.project_id = post.project_id
-          AND effective_file.archived_at IS NULL
-          AND COALESCE(effective_file.status, 'ready') = 'ready'
-          AND effective_file.agency_approval_status = 'approved'
-          AND effective_file.visibility = 'approval'
-          AND effective_file.approval_status = 'approved'
-          AND effective_file.locked_at IS NOT NULL
       )
   )
 $$;
