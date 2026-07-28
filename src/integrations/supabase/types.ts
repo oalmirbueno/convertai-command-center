@@ -446,6 +446,447 @@ export type Database = {
         }
         Relationships: []
       }
+      editorial_events: {
+        Row: {
+          actor_id: string | null
+          client_id: string
+          created_at: string
+          event_type: string
+          from_status: string | null
+          id: string
+          metadata: Json
+          post_id: string
+          publication_id: string | null
+          to_status: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          client_id: string
+          created_at?: string
+          event_type: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          post_id: string
+          publication_id?: string | null
+          to_status?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          client_id?: string
+          created_at?: string
+          event_type?: string
+          from_status?: string | null
+          id?: string
+          metadata?: Json
+          post_id?: string
+          publication_id?: string | null
+          to_status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_events_post_id_fkey"
+            columns: ["post_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_events_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_post_internal: {
+        Row: {
+          approval_fingerprint: string | null
+          client_id: string
+          created_at: string
+          created_by: string
+          idempotency_key: string
+          internal_notes: string | null
+          last_mutation_fingerprint: string | null
+          last_mutation_id: string | null
+          post_id: string
+          request_fingerprint: string
+          responsible_id: string | null
+          revision_of_post_id: string | null
+          task_id: string | null
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          approval_fingerprint?: string | null
+          client_id: string
+          created_at?: string
+          created_by: string
+          idempotency_key: string
+          internal_notes?: string | null
+          last_mutation_fingerprint?: string | null
+          last_mutation_id?: string | null
+          post_id: string
+          request_fingerprint: string
+          responsible_id?: string | null
+          revision_of_post_id?: string | null
+          task_id?: string | null
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          approval_fingerprint?: string | null
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          idempotency_key?: string
+          internal_notes?: string | null
+          last_mutation_fingerprint?: string | null
+          last_mutation_id?: string | null
+          post_id?: string
+          request_fingerprint?: string
+          responsible_id?: string | null
+          revision_of_post_id?: string | null
+          task_id?: string | null
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_post_internal_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_post_fk"
+            columns: ["post_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_posts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_responsible_id_fkey"
+            columns: ["responsible_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_revision_of_post_id_fkey"
+            columns: ["revision_of_post_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_posts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_task_id_fkey"
+            columns: ["task_id"]
+            isOneToOne: false
+            referencedRelation: "tasks"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_post_internal_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_posts: {
+        Row: {
+          archived_at: string | null
+          client_id: string
+          content_type: string
+          created_at: string
+          default_caption: string | null
+          id: string
+          objective: string | null
+          primary_file_id: string | null
+          production_status: string
+          project_id: string
+          title: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          archived_at?: string | null
+          client_id: string
+          content_type: string
+          created_at?: string
+          default_caption?: string | null
+          id?: string
+          objective?: string | null
+          primary_file_id?: string | null
+          production_status?: string
+          project_id: string
+          title: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          archived_at?: string | null
+          client_id?: string
+          content_type?: string
+          created_at?: string
+          default_caption?: string | null
+          id?: string
+          objective?: string | null
+          primary_file_id?: string | null
+          production_status?: string
+          project_id?: string
+          title?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_posts_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_posts_primary_file_id_fkey"
+            columns: ["primary_file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_posts_primary_file_id_fkey"
+            columns: ["primary_file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_posts_project_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      editorial_publication_internal: {
+        Row: {
+          attempt_count: number
+          client_id: string
+          created_at: string
+          created_by: string
+          failure_code: string | null
+          failure_reason: string | null
+          idempotency_key: string
+          included_in_approval_snapshot: boolean
+          last_attempt_at: string | null
+          publication_id: string
+          published_by: string | null
+          request_fingerprint: string
+          scheduled_by: string | null
+          updated_at: string
+          updated_by: string
+        }
+        Insert: {
+          attempt_count?: number
+          client_id: string
+          created_at?: string
+          created_by: string
+          failure_code?: string | null
+          failure_reason?: string | null
+          idempotency_key: string
+          included_in_approval_snapshot?: boolean
+          last_attempt_at?: string | null
+          publication_id: string
+          published_by?: string | null
+          request_fingerprint: string
+          scheduled_by?: string | null
+          updated_at?: string
+          updated_by: string
+        }
+        Update: {
+          attempt_count?: number
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          failure_code?: string | null
+          failure_reason?: string | null
+          idempotency_key?: string
+          included_in_approval_snapshot?: boolean
+          last_attempt_at?: string | null
+          publication_id?: string
+          published_by?: string | null
+          request_fingerprint?: string
+          scheduled_by?: string | null
+          updated_at?: string
+          updated_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_publication_internal_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publication_internal_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publication_internal_publication_fk"
+            columns: ["publication_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_publications"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "editorial_publication_internal_published_by_fkey"
+            columns: ["published_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publication_internal_scheduled_by_fkey"
+            columns: ["scheduled_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publication_internal_updated_by_fkey"
+            columns: ["updated_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      editorial_publications: {
+        Row: {
+          alt_text: string | null
+          caption: string | null
+          client_id: string
+          created_at: string
+          external_account_id: string
+          external_post_id: string | null
+          file_id: string | null
+          first_comment: string | null
+          id: string
+          permalink: string | null
+          platform: string
+          post_id: string
+          project_id: string
+          published_at: string | null
+          scheduled_at: string | null
+          scheduled_timezone: string
+          status: string
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          alt_text?: string | null
+          caption?: string | null
+          client_id: string
+          created_at?: string
+          external_account_id: string
+          external_post_id?: string | null
+          file_id?: string | null
+          first_comment?: string | null
+          id?: string
+          permalink?: string | null
+          platform: string
+          post_id: string
+          project_id: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          scheduled_timezone?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          alt_text?: string | null
+          caption?: string | null
+          client_id?: string
+          created_at?: string
+          external_account_id?: string
+          external_post_id?: string | null
+          file_id?: string | null
+          first_comment?: string | null
+          id?: string
+          permalink?: string | null
+          platform?: string
+          post_id?: string
+          project_id?: string
+          published_at?: string | null
+          scheduled_at?: string | null
+          scheduled_timezone?: string
+          status?: string
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "editorial_publications_account_fk"
+            columns: ["external_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "editorial_publications_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "files"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publications_file_id_fkey"
+            columns: ["file_id"]
+            isOneToOne: false
+            referencedRelation: "staff_files_secure"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "editorial_publications_post_fk"
+            columns: ["post_id", "client_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "editorial_posts"
+            referencedColumns: ["id", "client_id", "project_id"]
+          },
+        ]
+      }
       email_send_log: {
         Row: {
           created_at: string
@@ -2867,6 +3308,10 @@ export type Database = {
       }
     }
     Functions: {
+      archive_editorial_post: {
+        Args: { p_expected_version: number; p_post_id: string }
+        Returns: Json
+      }
       briefing_public_get: {
         Args: { _token: string }
         Returns: {
@@ -2970,6 +3415,30 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      editorial_can_publish_client: {
+        Args: { _client_id: string }
+        Returns: boolean
+      }
+      editorial_client_can_read_post: {
+        Args: { _post_id: string }
+        Returns: boolean
+      }
+      editorial_client_can_read_publication: {
+        Args: { _publication_id: string }
+        Returns: boolean
+      }
+      editorial_compute_approval_fingerprint: {
+        Args: { _post_id: string }
+        Returns: string
+      }
+      editorial_file_is_publishable: {
+        Args: { _client_id: string; _file_id: string; _project_id: string }
+        Returns: boolean
+      }
+      editorial_staff_can_access_client: {
+        Args: { _client_id: string }
+        Returns: boolean
+      }
       email_queue_dispatch: { Args: never; Returns: undefined }
       enqueue_email: {
         Args: { payload: Json; queue_name: string }
@@ -3004,6 +3473,17 @@ export type Database = {
       }
       files_reference_path: { Args: { _url: string }; Returns: string }
       get_admin_user_id: { Args: never; Returns: string }
+      get_editorial_approval_preview: {
+        Args: { p_file_id: string }
+        Returns: {
+          content_type: string
+          default_caption: string
+          objective: string
+          plans: Json
+          post_id: string
+          title: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -3208,6 +3688,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      save_editorial_post: {
+        Args: { p_expected_version?: number; p_payload: Json }
+        Returns: Json
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       storage_client_from_path: { Args: { _name: string }; Returns: string }
@@ -3218,6 +3702,21 @@ export type Database = {
       storage_object_write_allowed: {
         Args: { _bucket: string; _name: string }
         Returns: boolean
+      }
+      transition_editorial_publication: {
+        Args: {
+          p_action: string
+          p_expected_version: number
+          p_external_post_id?: string
+          p_failure_code?: string
+          p_failure_reason?: string
+          p_permalink?: string
+          p_publication_id: string
+          p_published_at?: string
+          p_scheduled_at?: string
+          p_timezone?: string
+        }
+        Returns: Json
       }
       try_uuid: { Args: { _value: string }; Returns: string }
       user_owns_project: {
