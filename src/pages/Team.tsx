@@ -5,6 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { UserPlus, X, Loader2, Trash2, Edit3, AlertTriangle, Check, Search } from "lucide-react";
 import { toast } from "sonner";
+import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 
 const roleBadge: Record<string, { cls: string; label: string }> = {
   admin: { cls: "bg-primary/10 text-primary", label: "Admin" },
@@ -54,7 +55,12 @@ export default function Team() {
       body,
       headers: { Authorization: `Bearer ${session.access_token}` },
     });
-    if (res.error || res.data?.error) throw new Error(res.data?.error || res.error?.message || "Erro");
+    if (res.data?.error) throw new Error(res.data.error);
+    if (res.error) {
+      throw new Error(
+        await getSupabaseFunctionErrorMessage(res.error, "Erro"),
+      );
+    }
     return res.data;
   };
 

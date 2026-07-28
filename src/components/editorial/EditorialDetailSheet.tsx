@@ -1,0 +1,968 @@
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
+import {
+  AlertTriangle,
+  Archive,
+  CalendarCheck2,
+  CheckCircle2,
+  Clock3,
+  ExternalLink,
+  FileCheck2,
+  History,
+  Loader2,
+  Pencil,
+  RotateCcw,
+  Send,
+  XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  useEditorialMutations,
+  useEditorialPostEvents,
+  type EditorialPostBundle,
+  type EditorialPublicationBundle,
+} from "@/hooks/useEditorialCalendar";
+import {
+  EDITORIAL_STATUS_CONFIG,
+  PLATFORM_LABELS,
+  PRODUCTION_STATUS_LABELS,
+  PUBLICATION_STATUS_LABELS,
+  aggregateEditorialStatus,
+  isFileEditable,
+  isFilePublishable,
+  type EditorialPlatform,
+  type EditorialPublicationStatus,
+  type EditorialProductionStatus,
+} from "@/lib/editorial";
+import {
+  EDITORIAL_DEFAULT_TIME_ZONE,
+  isoUtcToZonedDateTimeLocal,
+  zonedDateTimeLocalToIso,
+} from "@/lib/editorialDate";
+import { cn } from "@/lib/utils";
+
+type PublicationAction =
+  | "schedule"
+  | "publish"
+  | "fail"
+  | "cancel"
+  | "reopen";
+
+interface EditorialDetailSheetProps {
+  open: boolean;
+  post: EditorialPostBundle | null;
+  clientName: string;
+  projectName: string;
+  responsibleName?: string | null;
+  canEdit: boolean;
+  canPublish: boolean;
+  isImpersonating: boolean;
+  onOpenChange: (open: boolean) => void;
+  onEdit: (post: EditorialPostBundle) => void;
+  onCreateRevision: (post: EditorialPostBundle) => void;
+  onArchived: () => void;
+}
+
+const eventLabels: Record<string, string> = {
+  post_created: "Conteúdo criado",
+  post_updated: "Conteúdo atualizado",
+  production_status_changed: "Etapa de produção alterada",
+  post_archived: "Conteúdo arquivado",
+  publication_created: "Plano de publicação criado",
+  publication_updated: "Plano de publicação atualizado",
+  publication_scheduled: "Publicação agendada",
+  publication_rescheduled: "Publicação reagendada",
+  publication_published: "Publicação confirmada",
+  publication_failed: "Falha registrada",
+  publication_cancelled: "Publicação cancelada",
+  publication_reopened: "Publicação reaberta",
+  approval_snapshot_agency_approved:
+    "Snapshot editorial aprovado pela agência",
+  approval_snapshot_agency_rejected:
+    "Ajustes editoriais pedidos pela agência",
+  approval_snapshot_client_approved:
+    "Snapshot editorial aprovado pelo cliente",
+  approval_snapshot_client_rejected:
+    "Ajustes editoriais pedidos pelo cliente",
+};
+
+const publicationStatusClasses: Record<string, string> = {
+  planned: "border-violet-500/25 bg-violet-500/10 text-violet-500",
+  scheduled: "border-sky-500/25 bg-sky-500/10 text-sky-500",
+  published: "border-success/25 bg-success/10 text-success",
+  failed: "border-destructive/25 bg-destructive/10 text-destructive",
+  cancelled: "border-border bg-muted text-muted-foreground",
+};
+
+function formatDateTime(value: string | null, timeZone: string) {
+  if (!value) return "Sem data definida";
+  return new Intl.DateTimeFormat("pt-BR", {
+    timeZone,
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(new Date(value));
+}
+
+function publicationFileReady(
+  post: EditorialPostBundle,
+  publication: EditorialPublicationBundle,
+) {
+  const effectiveFile = publication.publication.file_id
+    ? publication.file
+    : post.primaryFile;
+  return (
+    post.post.production_status === "ready" &&
+    isFilePublishable(post.primaryFile) &&
+    isFilePublishable(effectiveFile)
+  );
+}
+
+export default function EditorialDetailSheet({
+  open,
+  post,
+  clientName,
+  projectName,
+  responsibleName,
+  canEdit,
+  canPublish,
+  isImpersonating,
+  onOpenChange,
+  onEdit,
+  onCreateRevision,
+  onArchived,
+}: EditorialDetailSheetProps) {
+  const { transitionPublication, archivePost } = useEditorialMutations();
+  const isStaff = canEdit || canPublish;
+  const {
+    data: events,
+    isLoading: loadingEvents,
+    isError: eventsFailed,
+    error: eventsError,
+    refetch: refetchEvents,
+  } = useEditorialPostEvents(
+    post?.post.id || null,
+    open && isStaff && !isImpersonating,
+  );
+  const [actionTarget, setActionTarget] =
+    useState<EditorialPublicationBundle | null>(null);
+  const [action, setAction] = useState<PublicationAction | null>(null);
+  const [scheduledAt, setScheduledAt] = useState("");
+  const [permalink, setPermalink] = useState("");
+  const [externalPostId, setExternalPostId] = useState("");
+  const [failureCode, setFailureCode] = useState("");
+  const [failureReason, setFailureReason] = useState("");
+
+  useEffect(() => {
+    if (!open) {
+      setActionTarget(null);
+      setAction(null);
+    }
+  }, [open]);
+
+  const aggregateStatus = useMemo(
+    () =>
+      aggregateEditorialStatus(
+        post?.publications.map(({ publication }) => ({
+          status: publication.status,
+        })) || [],
+      ),
+    [post],
+  );
+
+  if (!post) return null;
+
+  const editable =
+    canEdit &&
+    !isImpersonating &&
+    post.post.production_status !== "archived" &&
+    post.publications.every(({ publication }) =>
+      ["planned", "cancelled"].includes(publication.status),
+    );
+  const approvalFiles = [
+    post.primaryFile,
+    ...post.publications
+      .filter(({ publication }) => publication.status !== "cancelled")
+      .map(({ publication, file }) =>
+        publication.file_id ? file : null,
+      ),
+  ].filter(Boolean);
+  const canCreateRevision =
+    canEdit &&
+    !isImpersonating &&
+    post.post.production_status !== "archived" &&
+    approvalFiles.some((file) => !isFileEditable(file));
+
+  const openAction = (
+    publication: EditorialPublicationBundle,
+    nextAction: PublicationAction,
+  ) => {
+    setActionTarget(publication);
+    setAction(nextAction);
+    setScheduledAt(
+      publication.publication.scheduled_at
+        ? isoUtcToZonedDateTimeLocal(
+            publication.publication.scheduled_at,
+            publication.publication.scheduled_timezone,
+          ) || ""
+        : "",
+    );
+    setPermalink(publication.publication.permalink || "");
+    setExternalPostId(publication.publication.external_post_id || "");
+    setFailureCode(publication.internal?.failure_code || "");
+    setFailureReason(publication.internal?.failure_reason || "");
+  };
+
+  const closeAction = (force = false) => {
+    if (transitionPublication.isPending && !force) return;
+    setActionTarget(null);
+    setAction(null);
+  };
+
+  const handleTransition = async () => {
+    if (!actionTarget || !action) return;
+    const publication = actionTarget.publication;
+    let scheduledIso: string | null = null;
+    if (action === "schedule") {
+      scheduledIso = zonedDateTimeLocalToIso(
+        scheduledAt,
+        publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
+      );
+      if (!scheduledIso) {
+        toast.error("Informe uma data e horário válidos.");
+        return;
+      }
+    }
+    if (action === "publish" && !/^https?:\/\/\S+$/i.test(permalink.trim())) {
+      toast.error("Informe a URL pública da publicação.");
+      return;
+    }
+    if (action === "fail" && failureReason.trim().length < 5) {
+      toast.error("Descreva a falha com pelo menos 5 caracteres.");
+      return;
+    }
+
+    try {
+      await transitionPublication.mutateAsync({
+        publicationId: publication.id,
+        action,
+        expectedVersion: publication.version,
+        scheduledAt: scheduledIso,
+        timezone: publication.scheduled_timezone,
+        permalink: permalink.trim() || null,
+        externalPostId: externalPostId.trim() || null,
+        failureCode: failureCode.trim() || null,
+        failureReason: failureReason.trim() || null,
+      });
+      toast.success(
+        action === "schedule"
+          ? "Publicação agendada."
+          : action === "publish"
+            ? "Publicação confirmada."
+            : action === "fail"
+              ? "Falha registrada."
+              : action === "cancel"
+                ? "Publicação cancelada."
+                : "Publicação reaberta.",
+      );
+      closeAction(true);
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível atualizar a publicação.",
+      );
+    }
+  };
+
+  const handleArchive = async () => {
+    if (
+      !window.confirm(
+        "Arquivar este conteúdo? Ele sairá do calendário ativo, mas o histórico será preservado.",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      await archivePost.mutateAsync({
+        postId: post.post.id,
+        expectedVersion: post.post.version,
+      });
+      toast.success("Conteúdo arquivado.");
+      onArchived();
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error
+          ? error.message
+          : "Não foi possível arquivar o conteúdo.",
+      );
+    }
+  };
+
+  const aggregateConfig = EDITORIAL_STATUS_CONFIG[aggregateStatus];
+
+  return (
+    <>
+      <Sheet open={open} onOpenChange={onOpenChange}>
+        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
+          <SheetHeader>
+            <div className="flex items-start justify-between gap-4 pr-8">
+              <div className="min-w-0">
+                <SheetTitle className="truncate">{post.post.title}</SheetTitle>
+                <SheetDescription className="mt-1">
+                  {clientName} · {projectName}
+                </SheetDescription>
+              </div>
+              <Badge
+                variant="outline"
+                style={{
+                  borderColor: `${aggregateConfig.color}55`,
+                  backgroundColor: `${aggregateConfig.color}18`,
+                  color: aggregateConfig.color,
+                }}
+              >
+                {aggregateConfig.label}
+              </Badge>
+            </div>
+          </SheetHeader>
+
+          <div className="space-y-6 py-6">
+            <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Formato
+                </p>
+                <p className="mt-1 text-sm text-foreground">
+                  {post.post.content_type}
+                </p>
+              </div>
+              {isStaff && post.internal?.responsible_id && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Responsável
+                  </p>
+                  <p className="mt-1 text-sm text-foreground">
+                    {responsibleName ||
+                      `Usuário ${post.internal.responsible_id.slice(0, 8)}`}
+                  </p>
+                </div>
+              )}
+              {isStaff && post.internal?.task_id && (
+                <div>
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Tarefa vinculada
+                  </p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="mt-1 h-auto p-0 text-sm"
+                    asChild
+                  >
+                    <Link to={`/kanban?task=${post.internal.task_id}`}>
+                      Abrir no Kanban
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              <div>
+                <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                  Produção
+                </p>
+                <p className="mt-1 text-sm text-foreground">
+                  {PRODUCTION_STATUS_LABELS[
+                    post.post
+                      .production_status as EditorialProductionStatus
+                  ] || post.post.production_status}
+                </p>
+              </div>
+              {post.post.objective && (
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Objetivo
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                    {post.post.objective}
+                  </p>
+                </div>
+              )}
+              {post.post.default_caption && (
+                <div className="sm:col-span-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                    Legenda base
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                    {post.post.default_caption}
+                  </p>
+                </div>
+              )}
+              {isStaff && post.internal?.revision_of_post_id && (
+                <div className="sm:col-span-2">
+                  <Button
+                    type="button"
+                    variant="link"
+                    className="h-auto p-0 text-xs"
+                    asChild
+                  >
+                    <Link
+                      to={`/calendario?content=${post.internal.revision_of_post_id}`}
+                    >
+                      Abrir conteúdo de origem desta revisão
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              {isStaff && post.internal?.internal_notes && (
+                <div className="rounded-lg border border-warning/20 bg-warning/5 p-3 sm:col-span-2">
+                  <p className="text-[10px] font-medium uppercase tracking-wide text-warning">
+                    Nota interna
+                  </p>
+                  <p className="mt-1 whitespace-pre-wrap text-sm text-foreground">
+                    {post.internal.internal_notes}
+                  </p>
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-xl border border-border p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Arquivo principal e aprovação
+                  </h3>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {post.primaryFile?.file_name ||
+                      "Nenhum arquivo principal vinculado"}
+                  </p>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    isFilePublishable(post.primaryFile)
+                      ? "border-success/30 bg-success/10 text-success"
+                      : "border-warning/30 bg-warning/10 text-warning"
+                  }
+                >
+                  <FileCheck2 className="mr-1 h-3 w-3" />
+                  {isFilePublishable(post.primaryFile)
+                    ? "Principal aprovado"
+                    : "Aprovação pendente"}
+                </Badge>
+              </div>
+              {isStaff && !isFilePublishable(post.primaryFile) && (
+                <Button
+                  type="button"
+                  variant="link"
+                  className="mt-2 h-auto p-0 text-xs"
+                  asChild
+                >
+                  <Link
+                    to={`/aprovacoes?client=${post.post.client_id}`}
+                    onClick={() => onOpenChange(false)}
+                  >
+                    Abrir Aprovações
+                  </Link>
+                </Button>
+              )}
+            </section>
+
+            <section className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-semibold text-foreground">
+                  Publicações
+                </h3>
+                <Badge variant="secondary">{post.publications.length}</Badge>
+              </div>
+
+              {post.publications.map((bundle) => {
+                const publication = bundle.publication;
+                const ready = publicationFileReady(post, bundle);
+                const effectiveFile = publication.file_id
+                  ? bundle.file
+                  : post.primaryFile;
+                return (
+                  <article
+                    key={publication.id}
+                    className="space-y-3 rounded-xl border border-border bg-card p-4"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">
+                          {PLATFORM_LABELS[
+                            publication.platform as EditorialPlatform
+                          ] || publication.platform}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {bundle.account?.handle ||
+                            bundle.account?.display_name ||
+                            "Conta vinculada"}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={cn(
+                          publicationStatusClasses[publication.status],
+                        )}
+                      >
+                        {PUBLICATION_STATUS_LABELS[
+                          publication.status as EditorialPublicationStatus
+                        ] || publication.status}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Clock3 className="h-3.5 w-3.5" />
+                      {formatDateTime(
+                        publication.scheduled_at,
+                        publication.scheduled_timezone,
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-3">
+                      <div>
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          {publication.file_id
+                            ? "Arquivo específico"
+                            : "Arquivo principal usado"}
+                        </p>
+                        <p className="mt-1 text-xs text-foreground">
+                          {effectiveFile?.file_name ||
+                            "Arquivo indisponível"}
+                        </p>
+                      </div>
+                      <Badge
+                        variant="outline"
+                        className={
+                          isFilePublishable(effectiveFile)
+                            ? "border-success/30 bg-success/10 text-success"
+                            : "border-warning/30 bg-warning/10 text-warning"
+                        }
+                      >
+                        {isFilePublishable(effectiveFile)
+                          ? "Double-gate aprovado"
+                          : "Aprovação pendente"}
+                      </Badge>
+                    </div>
+
+                    {publication.caption && (
+                      <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-xs text-foreground">
+                        {publication.caption}
+                      </p>
+                    )}
+                    {publication.first_comment && (
+                      <div className="rounded-lg bg-muted/40 p-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Primeiro comentário
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                          {publication.first_comment}
+                        </p>
+                      </div>
+                    )}
+                    {publication.alt_text && (
+                      <div className="rounded-lg bg-muted/40 p-3">
+                        <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+                          Texto alternativo
+                        </p>
+                        <p className="mt-1 whitespace-pre-wrap text-xs text-foreground">
+                          {publication.alt_text}
+                        </p>
+                      </div>
+                    )}
+
+                    {isStaff && bundle.internal?.failure_reason && (
+                      <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
+                        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                        <div>
+                          <p className="text-xs font-medium text-destructive">
+                            {bundle.internal.failure_code || "Falha"}
+                          </p>
+                          <p className="mt-0.5 text-xs text-muted-foreground">
+                            {bundle.internal.failure_reason}
+                          </p>
+                        </div>
+                      </div>
+                    )}
+
+                    {publication.permalink && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        asChild
+                      >
+                        <a
+                          href={publication.permalink}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <ExternalLink className="mr-1.5 h-3.5 w-3.5" />
+                          Ver publicação
+                        </a>
+                      </Button>
+                    )}
+
+                    {canPublish && !isImpersonating && (
+                      <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                        {["planned", "scheduled", "failed"].includes(
+                          publication.status,
+                        ) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            disabled={!ready}
+                            onClick={() => openAction(bundle, "schedule")}
+                            title={
+                              ready
+                                ? "Agendar publicação"
+                                : "Finalize produção e aprovações primeiro"
+                            }
+                          >
+                            <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                            {publication.status === "scheduled"
+                              ? "Reagendar"
+                              : "Agendar"}
+                          </Button>
+                        )}
+                        {["planned", "scheduled", "failed"].includes(
+                          publication.status,
+                        ) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={!ready}
+                            onClick={() => openAction(bundle, "publish")}
+                          >
+                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            Confirmar publicação
+                          </Button>
+                        )}
+                        {["scheduled", "failed"].includes(
+                          publication.status,
+                        ) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openAction(bundle, "fail")}
+                          >
+                            <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+                            Registrar falha
+                          </Button>
+                        )}
+                        {publication.status !== "published" &&
+                          publication.status !== "cancelled" && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => openAction(bundle, "cancel")}
+                            >
+                              <XCircle className="mr-1.5 h-3.5 w-3.5" />
+                              Cancelar
+                            </Button>
+                          )}
+                        {["failed", "cancelled"].includes(
+                          publication.status,
+                        ) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => openAction(bundle, "reopen")}
+                          >
+                            <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                            Reabrir
+                          </Button>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+
+              {post.publications.length === 0 && (
+                <div className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">
+                  Este conteúdo ainda não tem plataformas planejadas.
+                </div>
+              )}
+            </section>
+
+            {isStaff && !isImpersonating && (
+              <section className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <History className="h-4 w-4 text-primary" />
+                  <h3 className="text-sm font-semibold text-foreground">
+                    Histórico
+                  </h3>
+                </div>
+                {loadingEvents ? (
+                  <div className="flex h-20 items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                ) : eventsFailed ? (
+                  <div
+                    role="alert"
+                    className="rounded-lg border border-destructive/20 bg-destructive/5 p-3"
+                  >
+                    <p className="text-xs font-medium text-destructive">
+                      Não foi possível carregar o histórico.
+                    </p>
+                    <p className="mt-1 text-[11px] text-muted-foreground">
+                      {eventsError instanceof Error
+                        ? eventsError.message
+                        : "Atualize e tente novamente."}
+                    </p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => refetchEvents()}
+                    >
+                      Tentar novamente
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {(events || []).map((event) => (
+                      <div
+                        key={event.id}
+                        className="flex gap-3 rounded-lg border border-border p-3"
+                      >
+                        <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-primary" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-medium text-foreground">
+                            {eventLabels[event.event_type] ||
+                              event.event_type}
+                          </p>
+                          <p className="mt-0.5 text-[10px] text-muted-foreground">
+                            {new Intl.DateTimeFormat("pt-BR", {
+                              dateStyle: "short",
+                              timeStyle: "short",
+                              timeZone:
+                                Intl.DateTimeFormat().resolvedOptions()
+                                  .timeZone,
+                            }).format(new Date(event.created_at))}
+                            {event.from_status || event.to_status
+                              ? ` · ${event.from_status || "—"} → ${event.to_status || "—"}`
+                              : ""}
+                          </p>
+                          <p className="mt-1 text-[10px] text-muted-foreground">
+                            Por{" "}
+                            {event.actor_name ||
+                              (event.actor_id
+                                ? `usuário ${event.actor_id.slice(0, 8)}`
+                                : "sistema")}
+                          </p>
+                        </div>
+                      </div>
+                    ))}
+                    {(events || []).length === 0 && (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum evento registrado.
+                      </p>
+                    )}
+                  </div>
+                )}
+              </section>
+            )}
+          </div>
+
+          {(editable || canCreateRevision || (canPublish && !isImpersonating)) && (
+            <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-2 border-t border-border bg-background py-4">
+              {canPublish && !isImpersonating && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  className="text-destructive hover:text-destructive"
+                  disabled={
+                    archivePost.isPending ||
+                    post.publications.some(
+                      ({ publication }) =>
+                        publication.status === "scheduled",
+                    )
+                  }
+                  title={
+                    post.publications.some(
+                      ({ publication }) =>
+                        publication.status === "scheduled",
+                    )
+                      ? "Cancele primeiro as publicações agendadas"
+                      : "Arquivar conteúdo"
+                  }
+                  onClick={handleArchive}
+                >
+                  {archivePost.isPending ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Archive className="mr-1.5 h-4 w-4" />
+                  )}
+                  Arquivar
+                </Button>
+              )}
+              <div className="flex flex-wrap justify-end gap-2">
+              {canCreateRevision && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onCreateRevision(post)}
+                >
+                  <RotateCcw className="mr-1.5 h-4 w-4" />
+                  Criar revisão
+                </Button>
+              )}
+              {editable && (
+                <Button type="button" onClick={() => onEdit(post)}>
+                  <Pencil className="mr-1.5 h-4 w-4" />
+                  Editar conteúdo
+                </Button>
+              )}
+              </div>
+            </div>
+          )}
+        </SheetContent>
+      </Sheet>
+
+      <Dialog open={!!actionTarget && !!action} onOpenChange={closeAction}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {action === "schedule"
+                ? "Agendar publicação"
+                : action === "publish"
+                  ? "Confirmar publicação"
+                  : action === "fail"
+                    ? "Registrar falha"
+                    : action === "cancel"
+                      ? "Cancelar publicação"
+                      : "Reabrir publicação"}
+            </DialogTitle>
+            <DialogDescription>
+              Esta ação será registrada no histórico. Nenhuma plataforma
+              externa é acionada automaticamente.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {action === "schedule" && (
+              <div className="space-y-2">
+                <Label htmlFor="publication-schedule-at">
+                  Data e horário
+                </Label>
+                <Input
+                  id="publication-schedule-at"
+                  type="datetime-local"
+                  value={scheduledAt}
+                  onChange={(event) => setScheduledAt(event.target.value)}
+                />
+              </div>
+            )}
+            {action === "publish" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="publication-permalink">
+                    URL pública
+                  </Label>
+                  <Input
+                    id="publication-permalink"
+                    type="url"
+                    value={permalink}
+                    onChange={(event) => setPermalink(event.target.value)}
+                    placeholder="https://..."
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publication-external-id">
+                    ID externo (opcional)
+                  </Label>
+                  <Input
+                    id="publication-external-id"
+                    value={externalPostId}
+                    onChange={(event) =>
+                      setExternalPostId(event.target.value)
+                    }
+                  />
+                </div>
+              </>
+            )}
+            {action === "fail" && (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="publication-failure-code">
+                    Código (opcional)
+                  </Label>
+                  <Input
+                    id="publication-failure-code"
+                    value={failureCode}
+                    onChange={(event) => setFailureCode(event.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="publication-failure-reason">Motivo</Label>
+                  <Textarea
+                    id="publication-failure-reason"
+                    value={failureReason}
+                    onChange={(event) => setFailureReason(event.target.value)}
+                    rows={4}
+                  />
+                </div>
+              </>
+            )}
+            {(action === "cancel" || action === "reopen") && (
+              <p className="text-sm text-muted-foreground">
+                {action === "cancel"
+                  ? "O registro permanece no histórico e pode ser reaberto depois."
+                  : "A publicação volta ao estado planejado para ser revisada."}
+              </p>
+            )}
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={closeAction}
+              disabled={transitionPublication.isPending}
+            >
+              Voltar
+            </Button>
+            <Button
+              type="button"
+              onClick={handleTransition}
+              disabled={transitionPublication.isPending}
+              variant={action === "cancel" ? "destructive" : "default"}
+            >
+              {transitionPublication.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Send className="mr-2 h-4 w-4" />
+              )}
+              Confirmar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}

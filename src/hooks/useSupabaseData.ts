@@ -315,7 +315,7 @@ export function useClientRequests() {
   });
 }
 
-export function useTeamMembers() {
+export function useTeamMembers(queryEnabled = true) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["team-members", user?.id],
@@ -341,6 +341,6 @@ export function useTeamMembers() {
         role: roles?.find((r: any) => r.user_id === p.id)?.role || "admin",
       }));
     },
-    enabled: !!user,
+    enabled: !!user && queryEnabled,
   });
 }

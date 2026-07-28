@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
+import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 import { Switch } from "@/components/ui/switch";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { notifyUser } from "@/lib/notifyHelpers";
@@ -354,8 +355,15 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
       const res = await supabase.functions.invoke("manage-team", {
         body: { action: "delete", user_id: client.id },
       });
-      if (res.error) throw new Error(res.error.message || "Erro ao excluir");
       if (res.data?.error) throw new Error(res.data.error);
+      if (res.error) {
+        throw new Error(
+          await getSupabaseFunctionErrorMessage(
+            res.error,
+            "Erro ao excluir",
+          ),
+        );
+      }
 
       toast.success("Cliente excluído com sucesso!");
       queryClient.invalidateQueries({ queryKey: ["clients"] });

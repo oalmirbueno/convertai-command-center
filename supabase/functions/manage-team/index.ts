@@ -6,6 +6,8 @@ const corsHeaders = {
 };
 
 const MANAGED_ROLES = new Set(["admin", "client", "design", "traffic", "manager"]);
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -128,6 +130,7 @@ Deno.serve(async (req) => {
     if (action === "delete") {
       const { user_id } = payload;
       if (!user_id) throw new Error("Missing user_id");
+      if (!UUID_PATTERN.test(user_id)) throw new Error("Invalid user_id");
       if (user_id === caller.id) throw new Error("Cannot delete yourself");
 
       // Administrator accounts must be demoted through the locked role RPC
@@ -142,11 +145,66 @@ Deno.serve(async (req) => {
         throw new Error("Demote the administrator before deleting this account");
       }
 
+      // Editorial history is append-only and keeps its actors/owners. Refuse
+      // deletion before mutating any legacy table so role, profile and Auth
+      // never diverge when the account participates in that history.
+      const editorialDependencyChecks = await Promise.all([
+        adminClient
+          .from("editorial_posts")
+          .select("id")
+          .eq("client_id", user_id)
+          .limit(1),
+        adminClient
+          .from("editorial_post_internal")
+          .select("post_id")
+          .or(
+            `responsible_id.eq.${user_id},created_by.eq.${user_id},updated_by.eq.${user_id}`,
+          )
+          .limit(1),
+        adminClient
+          .from("editorial_publication_internal")
+          .select("publication_id")
+          .or(
+            `created_by.eq.${user_id},updated_by.eq.${user_id},scheduled_by.eq.${user_id},published_by.eq.${user_id}`,
+          )
+          .limit(1),
+        adminClient
+          .from("editorial_events")
+          .select("id")
+          .or(`client_id.eq.${user_id},actor_id.eq.${user_id}`)
+          .limit(1),
+      ]);
+      if (editorialDependencyChecks.some(({ error }) => error)) {
+        throw new Error("Failed to verify editorial history");
+      }
+      if (
+        editorialDependencyChecks.some(
+          ({ data }) => Array.isArray(data) && data.length > 0,
+        )
+      ) {
+        return new Response(
+          JSON.stringify({
+            error:
+              "Este usuário possui histórico editorial e não pode ser excluído. Desative seus acessos e preserve o registro de auditoria.",
+            code: "editorial_history_conflict",
+          }),
+          {
+            status: 409,
+            headers: {
+              ...corsHeaders,
+              "Content-Type": "application/json",
+            },
+          },
+        );
+      }
+
       // Clean up ALL foreign key references before deleting auth user
       const cleanup = async (label: string, promise: any) => {
         const res = await promise;
-        if (res.error) console.error(`Cleanup ${label} failed:`, res.error);
-        else console.log(`Cleanup ${label}: ok`);
+        if (res.error) {
+          console.error(`Cleanup ${label} failed:`, res.error);
+          throw new Error(`Failed to clean ${label}`);
+        }
       };
 
       await cleanup("tasks", adminClient.from("tasks").update({ assigned_to: null }).eq("assigned_to", user_id));
@@ -165,8 +223,8 @@ Deno.serve(async (req) => {
       await cleanup("briefings", adminClient.from("briefings").delete().eq("client_id", user_id));
       await cleanup("projects_client", adminClient.from("projects").update({ client_id: caller.id }).eq("client_id", user_id));
       await cleanup("projects_created", adminClient.from("projects").update({ created_by: null }).eq("created_by", user_id));
-      await cleanup("user_roles", adminClient.from("user_roles").delete().eq("user_id", user_id));
       await cleanup("profiles", adminClient.from("profiles").delete().eq("id", user_id));
+      await cleanup("user_roles", adminClient.from("user_roles").delete().eq("user_id", user_id));
 
       // Finally delete auth user
       const { error: deleteError } = await adminClient.auth.admin.deleteUser(user_id);

@@ -104,6 +104,46 @@ describe("identity boundary required by the internal agent Kanban", () => {
     expect(manageTeam).toMatch(/targetRoles\?\.some\(\(\{ role \}\) => role === "admin"\)/);
   });
 
+  it("blocks account deletion before mutation when editorial history exists", () => {
+    const preflight = manageTeam.indexOf(
+      "const editorialDependencyChecks = await Promise.all",
+    );
+    const firstCleanup = manageTeam.indexOf(
+      'await cleanup("tasks"',
+      preflight,
+    );
+    const profileCleanup = manageTeam.indexOf(
+      'await cleanup("profiles"',
+      firstCleanup,
+    );
+    const roleCleanup = manageTeam.indexOf(
+      'await cleanup("user_roles"',
+      firstCleanup,
+    );
+    const authDelete = manageTeam.indexOf(
+      "adminClient.auth.admin.deleteUser(user_id)",
+      firstCleanup,
+    );
+
+    expect(preflight).toBeGreaterThan(-1);
+    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
+      'code: "editorial_history_conflict"',
+    );
+    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
+      "status: 409",
+    );
+    expect(manageTeam.slice(preflight, firstCleanup)).toContain(
+      '"editorial_events"',
+    );
+    expect(firstCleanup).toBeGreaterThan(preflight);
+    expect(profileCleanup).toBeGreaterThan(firstCleanup);
+    expect(roleCleanup).toBeGreaterThan(profileCleanup);
+    expect(authDelete).toBeGreaterThan(roleCleanup);
+    expect(manageTeam).toContain(
+      "throw new Error(`Failed to clean ${label}`)",
+    );
+  });
+
   it("authenticates the internal Ops notification after deleting a member", () => {
     const notifyStart = manageTeam.indexOf("// Notify Ops (best-effort)");
     const notifyEnd = manageTeam.indexOf("return new Response", notifyStart);

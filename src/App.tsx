@@ -41,6 +41,7 @@ import Workspace from "@/pages/Workspace";
 import UnsubscribePage from "@/pages/UnsubscribePage";
 import FirstAccess from "@/pages/FirstAccess";
 import AdminContracts from "@/pages/AdminContracts";
+import EditorialCalendar from "@/pages/EditorialCalendar";
 import ContractPublic from "@/pages/ContractPublic";
 import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
 import OAuthConsent from "@/pages/OAuthConsent";
@@ -110,6 +111,7 @@ function AppRoutes() {
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
       <Route path="/briefings" element={<ProtectedRoute><AppLayout><AdminBriefings /></AppLayout></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
+      <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
       <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />

@@ -1,5 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { LayoutDashboard, HardDrive, Bell, FolderOpen, CheckSquare } from "lucide-react";
+import {
+  LayoutDashboard,
+  HardDrive,
+  Bell,
+  FolderOpen,
+  CheckSquare,
+  CalendarDays,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -10,12 +17,14 @@ interface Props {
 
 /**
  * Mobile-only bottom navigation. App-style tab bar with safe-area support.
- * O Studio agora abre pelo botão no topo (TopBar), não pelo tab bar.
+ * O Studio abre pelo botão no topo. Calendário entra sem retirar o atalho
+ * operacional de Workspace/Aprovações.
  */
 export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Props) {
   const { profile } = useAuth();
-  const isStaff = profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "");
-
+  const isStaff =
+    profile?.role === "admin" ||
+    ["design", "traffic", "manager"].includes(profile?.role || "");
   const tabBase =
     "flex-1 flex flex-col items-center justify-center gap-0.5 h-full text-[10px] font-medium transition-colors";
 
@@ -42,20 +51,38 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
           <span>Projetos</span>
         </NavLink>
 
+        <NavLink
+          to="/calendario"
+          className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
+        >
+          <CalendarDays className="w-5 h-5" />
+          <span>Calendário</span>
+        </NavLink>
+
         {isStaff ? (
           <NavLink
             to="/workspace"
-            className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
+            className={({ isActive }) =>
+              cn(
+                tabBase,
+                isActive ? "text-primary" : "text-muted-foreground",
+              )
+            }
           >
-            <HardDrive className="w-5 h-5" />
+            <HardDrive className="h-5 w-5" />
             <span>Workspace</span>
           </NavLink>
         ) : (
           <NavLink
             to="/aprovacoes"
-            className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
+            className={({ isActive }) =>
+              cn(
+                tabBase,
+                isActive ? "text-primary" : "text-muted-foreground",
+              )
+            }
           >
-            <CheckSquare className="w-5 h-5" />
+            <CheckSquare className="h-5 w-5" />
             <span>Aprovações</span>
           </NavLink>
         )}
