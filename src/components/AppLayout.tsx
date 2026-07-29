@@ -13,7 +13,7 @@ import { Bell, LogOut, Menu, X, MoreHorizontal, Search, Zap, Sun, Moon, Sparkles
 import { useTheme } from "@/contexts/ThemeContext";
 import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
-  BarChart3, GitBranch, DollarSign, FileArchive, Settings,
+  Activity, BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -33,10 +33,11 @@ const adminMainNav: NavItem[] = [
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
   { title: "Calendário", url: "/calendario", icon: CalendarDays },
-  { title: "Clientes", url: "/clientes", icon: Users },
+  { title: "Analytics", url: "/analytics", icon: Activity },
 ];
 
 const adminMoreNav: NavItem[] = [
+  { title: "Clientes", url: "/clientes", icon: Users },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
@@ -59,10 +60,11 @@ const clientMainNav: NavItem[] = [
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Calendário", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-  { title: "Cofre", url: "/cofre", icon: KeyRound },
+  { title: "Analytics", url: "/analytics", icon: Activity },
 ];
 
 const clientMoreNav: NavItem[] = [
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Documentos", url: "/documentos", icon: FileText },
@@ -91,7 +93,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
   const moreNav = isAdminOrTeam ? adminMoreNav : clientMoreNav;
   const { data: notifData } = useNotifications();
-  const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
+  const unreadCount = (notifData || []).filter((notification) => !notification.read).length;
 
   const fullTourSteps = isAdmin ? adminTourSteps : isTeam ? teamTourSteps : clientTourSteps;
 
@@ -130,7 +132,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const handleTourClose = useCallback(() => {
     setTourOpen(false);
     if (user) {
-      supabase.from("profiles").update({ onboarding_done: true } as any).eq("id", user.id).then();
+      supabase.from("profiles").update({ onboarding_done: true }).eq("id", user.id).then();
     }
   }, [user]);
 
@@ -225,7 +227,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               type="button"
               onClick={() => {
                 // Flag persistente: se o StudioPanel ainda não montou, ele lê a flag no mount.
-                (window as any).__studioOpenPending = true;
+                (
+                  window as Window & { __studioOpenPending?: boolean }
+                ).__studioOpenPending = true;
                 const fire = () => window.dispatchEvent(new Event("studio:open"));
                 if (location.pathname !== "/workspace") {
                   navigate("/workspace");
@@ -352,7 +356,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <main
         className={cn(
           "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
-          location.pathname === "/calendario"
+          location.pathname === "/calendario" ||
+          location.pathname === "/analytics"
             ? "max-w-[1400px]"
             : "max-w-[1280px]",
         )}

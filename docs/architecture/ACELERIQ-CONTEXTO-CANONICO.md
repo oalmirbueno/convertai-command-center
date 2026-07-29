@@ -93,4 +93,6 @@ Planos-base editáveis: R$ 597, R$ 1.197, R$ 2.297, R$ 5.597 e Sob Medida. Servi
 - Existem um MCP oficial do Lovable com sessão/RLS e um endpoint legado mais amplo; a consolidação deve favorecer o oficial, mantendo compatibilidade controlada.
 - O primeiro objetivo é estabilizar contexto, segurança e fluxo de trabalho antes de ampliar o ecossistema autônomo.
 - A decisão proposta para classificação de tarefas e sincronização Kanban/editorial está registrada em [`ADR-0001`](decisions/ADR-0001-workstream-e-sincronizacao-editorial.md).
+- O Bloco 6 V1, Analytics, Conversões e UTMs, está delimitado como operação manual-first em [`ADR-0002`](decisions/ADR-0002-analytics-attribution-v1.md) e na migration `20260729180204_add_growth_analytics_v1.sql`. Até migration e frontend serem publicados, não tratar o recurso como disponível em produção.
+- Relatórios, Financeiro e Ops não são fontes de atribuição. APIs de mídia, CRM, Pixel/CAPI e modelos automáticos de atribuição permanecem para fases separadas.
 - Mudanças futuras devem atualizar este documento e um registro de estado/decisões para evitar perda de contexto.
