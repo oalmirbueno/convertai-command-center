@@ -2262,7 +2262,547 @@ SELECT ok(
 );
 
 -- ---------------------------------------------------------------------------
--- 8. History is staff-only, correctly scoped and immutable for every role.
+-- 8. Pre-approved media is adopted canonically and scheduled atomically.
+-- ---------------------------------------------------------------------------
+SELECT pg_temp.act_as_owner();
+
+UPDATE public.files
+SET
+  file_name = 'Approved launch asset.png',
+  caption = 'Approved launch caption',
+  description = 'Approved launch context',
+  mime_type = 'image/png',
+  extension = 'png'
+WHERE id = '94000000-0000-0000-0000-00000000000e';
+
+UPDATE public.files
+SET
+  file_name = 'Approved internal document.pdf',
+  file_type = 'application/pdf',
+  mime_type = 'application/pdf',
+  extension = 'pdf'
+WHERE id = '94000000-0000-0000-0000-00000000000f';
+
+INSERT INTO public.tasks (
+  id,
+  project_id,
+  title,
+  description,
+  status,
+  priority,
+  assigned_to,
+  source
+) VALUES (
+  '95000000-0000-0000-0000-00000000000e',
+  '92000000-0000-0000-0000-00000000000a',
+  'Approved media publication',
+  'Task context must not replace approved public copy',
+  'backlog',
+  'medium',
+  '91000000-0000-0000-0000-000000000003',
+  'portal'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000003'
+);
+SELECT lives_ok(
+  $sql$
+    SELECT public.request_file_agency_review(requested.file_id)
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000e'::uuid,
+        '94000000-0000-0000-0000-00000000000f'::uuid
+      ]
+    ) AS requested(file_id)
+  $sql$,
+  'assigned design requests review for the approved-media fixtures'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT lives_ok(
+  $sql$
+    SELECT public.review_file_agency(
+      requested.file_id,
+      'approved',
+      NULL
+    )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000e'::uuid,
+        '94000000-0000-0000-0000-00000000000f'::uuid
+      ]
+    ) AS requested(file_id)
+  $sql$,
+  'assigned manager approves the approved-media fixtures internally'
+);
+SELECT lives_ok(
+  $sql$
+    SELECT public.release_file_to_client(
+      requested.file_id,
+      'approval'
+    )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000e'::uuid,
+        '94000000-0000-0000-0000-00000000000f'::uuid
+      ]
+    ) AS requested(file_id)
+  $sql$,
+  'assigned manager releases the approved-media fixtures to the client'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-00000000000a'
+);
+SELECT lives_ok(
+  $sql$
+    SELECT public.decide_file_approval(
+      requested.file_id,
+      1,
+      'approved',
+      NULL
+    )
+    FROM unnest(
+      ARRAY[
+        '94000000-0000-0000-0000-00000000000e'::uuid,
+        '94000000-0000-0000-0000-00000000000f'::uuid
+      ]
+    ) AS requested(file_id)
+  $sql$,
+  'client approves the exact media and document versions'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+
+INSERT INTO pg_temp.editorial_test_state (label, payload)
+VALUES (
+  'approved_media',
+  jsonb_build_object(
+    'client_id', '91000000-0000-0000-0000-00000000000a',
+    'project_id', '92000000-0000-0000-0000-00000000000a',
+    'primary_file_id', '94000000-0000-0000-0000-00000000000e',
+    'task_id', '95000000-0000-0000-0000-00000000000e',
+    'responsible_id', '91000000-0000-0000-0000-000000000003',
+    'idempotency_key', '96000000-0000-0000-0000-00000000000e',
+    'mutation_id', '96200000-0000-0000-0000-00000000000e',
+    'title', 'Unapproved replacement title',
+    'content_type', 'static',
+    'objective', 'Unapproved replacement context',
+    'default_caption', ' Unapproved replacement caption ',
+    'production_status', 'draft',
+    'internal_notes', 'Internal scheduling note',
+    'publications', jsonb_build_array()
+  )
+);
+
+SELECT lives_ok(
+  $sql$
+    UPDATE pg_temp.editorial_test_state
+    SET result = public.save_editorial_post(payload, NULL)
+    WHERE label = 'approved_media'
+  $sql$,
+  'assigned manager adopts an unused double-gate approved media root'
+);
+
+SELECT pg_temp.act_as_owner();
+UPDATE pg_temp.editorial_test_state AS state
+SET post_id = (state.result->>'post_id')::uuid
+WHERE state.label = 'approved_media';
+
+SELECT ok(
+  (
+    SELECT
+      post.primary_file_id =
+        '94000000-0000-0000-0000-00000000000e'::uuid
+      AND post.title = 'Approved launch asset.png'
+      AND post.objective = 'Approved launch context'
+      AND post.default_caption = 'Approved launch caption'
+      AND post.production_status = 'ready'
+      AND internal.internal_notes = 'Internal scheduling note'
+      AND internal.approval_fingerprint =
+        public.editorial_compute_approval_fingerprint(post.id)
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_posts AS post ON post.id = state.post_id
+    JOIN public.editorial_post_internal AS internal
+      ON internal.post_id = post.id
+    WHERE state.label = 'approved_media'
+  ),
+  'approved media canonicalizes theme, context and caption but keeps internal notes'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.editorial_publications AS publication
+    JOIN pg_temp.editorial_test_state AS state
+      ON state.post_id = publication.post_id
+    WHERE state.label = 'approved_media'
+  ),
+  0,
+  'approved media may stay accountless without inventing a publication'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT is(
+  (
+    SELECT (
+      public.save_editorial_post(state.payload, NULL)
+      ->>'recovered'
+    )::boolean
+    FROM pg_temp.editorial_test_state AS state
+    WHERE state.label = 'approved_media'
+  ),
+  true,
+  'exact approved-media creation retry is recovered idempotently'
+);
+
+SELECT throws_like(
+  $sql$
+    SELECT public.save_editorial_post(
+      jsonb_build_object(
+        'client_id', '91000000-0000-0000-0000-00000000000a',
+        'project_id', '92000000-0000-0000-0000-00000000000a',
+        'primary_file_id', '94000000-0000-0000-0000-00000000000e',
+        'idempotency_key', '96000000-0000-0000-0000-0000000000e2',
+        'mutation_id', '96200000-0000-0000-0000-0000000000e2',
+        'title', 'Second use must fail',
+        'content_type', 'static',
+        'production_status', 'ready',
+        'publications', jsonb_build_array()
+      ),
+      NULL
+    )
+  $sql$,
+  '%already linked to another content%',
+  'an approved media root cannot be linked to a second content'
+);
+
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      SELECT public.save_editorial_post(
+        jsonb_build_object(
+          'client_id', '91000000-0000-0000-0000-00000000000a',
+          'project_id', '92000000-0000-0000-0000-00000000000a',
+          'primary_file_id', '94000000-0000-0000-0000-00000000000f',
+          'idempotency_key', '96000000-0000-0000-0000-00000000000f',
+          'mutation_id', '96200000-0000-0000-0000-00000000000f',
+          'title', 'PDF must not become social media',
+          'content_type', 'static',
+          'production_status', 'ready',
+          'publications', jsonb_build_array()
+        ),
+        NULL
+      )
+    $sql$
+  ),
+  'an approved PDF is not accepted as publishable editorial media'
+);
+
+SELECT pg_temp.act_as_owner();
+UPDATE pg_temp.editorial_test_state AS state
+SET
+  payload = jsonb_build_object(
+    'id', state.post_id,
+    'client_id', '91000000-0000-0000-0000-00000000000a',
+    'project_id', '92000000-0000-0000-0000-00000000000a',
+    'primary_file_id', '94000000-0000-0000-0000-00000000000e',
+    'task_id', '95000000-0000-0000-0000-00000000000e',
+    'responsible_id', '91000000-0000-0000-0000-000000000003',
+    'idempotency_key', '96000000-0000-0000-0000-00000000000e',
+    'mutation_id', '96200000-0000-0000-0000-0000000000e3',
+    'title', 'Tampered title on reopen',
+    'content_type', 'static',
+    'objective', 'Tampered context on reopen',
+    'default_caption', '  Tampered caption on reopen  ',
+    'production_status', 'draft',
+    'internal_notes', 'Updated internal scheduling note',
+    'publications', jsonb_build_array(
+      jsonb_build_object(
+        'external_account_id',
+          '93000000-0000-0000-0000-000000000001',
+        'file_id', '94000000-0000-0000-0000-00000000000e',
+        'caption', '  Tampered platform caption  ',
+        'first_comment', 'Unapproved first comment',
+        'alt_text', 'Unapproved alt text',
+        'scheduled_at', now() + interval '6 days',
+        'scheduled_timezone', 'America/Sao_Paulo',
+        'idempotency_key',
+          '96100000-0000-0000-0000-00000000000e'
+      )
+    )
+  )
+WHERE state.label = 'approved_media';
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT lives_ok(
+  $sql$
+    UPDATE pg_temp.editorial_test_state AS state
+    SET result = public.save_editorial_post(
+      state.payload,
+      (
+        SELECT post.version
+        FROM public.editorial_posts AS post
+        WHERE post.id = state.post_id
+      )
+    )
+    WHERE state.label = 'approved_media'
+  $sql$,
+  'account, date and timezone are saved and scheduled in one transaction'
+);
+
+SELECT ok(
+  (
+    SELECT
+      post.title = 'Approved launch asset.png'
+      AND post.objective = 'Approved launch context'
+      AND post.default_caption = 'Approved launch caption'
+      AND publication.file_id =
+        '94000000-0000-0000-0000-00000000000e'::uuid
+      AND publication.caption = 'Approved launch caption'
+      AND publication.first_comment IS NULL
+      AND publication.alt_text IS NULL
+      AND publication.status = 'scheduled'
+      AND publication.scheduled_at IS NOT NULL
+      AND publication.scheduled_timezone = 'America/Sao_Paulo'
+      AND internal.included_in_approval_snapshot
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_posts AS post ON post.id = state.post_id
+    JOIN public.editorial_publications AS publication
+      ON publication.post_id = post.id
+    JOIN public.editorial_publication_internal AS internal
+      ON internal.publication_id = publication.id
+    WHERE state.label = 'approved_media'
+  ),
+  'atomic scheduling preserves only the canonical approved public payload'
+);
+
+SELECT pg_temp.act_as_owner();
+UPDATE pg_temp.editorial_test_state AS state
+SET payload = jsonb_set(
+  jsonb_set(
+    jsonb_set(
+      jsonb_set(
+        state.payload,
+        '{mutation_id}',
+        to_jsonb(
+          '96200000-0000-0000-0000-0000000000e4'::text
+        )
+      ),
+      '{publications,0,id}',
+      to_jsonb(publication.id::text)
+    ),
+    '{publications,0,scheduled_at}',
+    to_jsonb((now() + interval '8 days')::text)
+  ),
+  '{publications,0,scheduled_timezone}',
+  to_jsonb('UTC'::text)
+)
+FROM public.editorial_publications AS publication
+WHERE state.label = 'approved_media'
+  AND publication.post_id = state.post_id;
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT lives_ok(
+  $sql$
+    UPDATE pg_temp.editorial_test_state AS state
+    SET result = public.save_editorial_post(
+      state.payload,
+      (
+        SELECT post.version
+        FROM public.editorial_posts AS post
+        WHERE post.id = state.post_id
+      )
+    )
+    WHERE state.label = 'approved_media'
+  $sql$,
+  'approved scheduled media can change account envelope date and timezone atomically'
+);
+
+SELECT ok(
+  (
+    SELECT
+      publication.status = 'scheduled'
+      AND publication.scheduled_at > now() + interval '7 days'
+      AND publication.scheduled_timezone = 'UTC'
+      AND publication.caption = 'Approved launch caption'
+      AND publication.first_comment IS NULL
+      AND publication.alt_text IS NULL
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_publications AS publication
+      ON publication.post_id = state.post_id
+    WHERE state.label = 'approved_media'
+  ),
+  'replanning keeps approved copy canonical while applying the editable schedule envelope'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.task_comments
+    WHERE task_id = '95000000-0000-0000-0000-00000000000e'
+  ),
+  0,
+  'scheduling alone does not create a false publication receipt'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.notifications
+    WHERE notification_type = 'publication'
+      AND link =
+        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+  ),
+  0,
+  'scheduling alone sends no published notification'
+);
+
+SELECT throws_like(
+  $sql$
+    SELECT public.transition_editorial_publication(
+      publication.id,
+      'publish',
+      publication.version
+    )
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_publications AS publication
+      ON publication.post_id = state.post_id
+    WHERE state.label = 'approved_media'
+  $sql$,
+  '%valid public URL%',
+  'published state still requires a confirmed public permalink'
+);
+
+SELECT is(
+  (
+    SELECT publication.status
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_publications AS publication
+      ON publication.post_id = state.post_id
+    WHERE state.label = 'approved_media'
+  ),
+  'scheduled',
+  'failed confirmation leaves the approved publication scheduled'
+);
+
+SELECT lives_ok(
+  $sql$
+    UPDATE pg_temp.editorial_test_state AS state
+    SET transition_result = public.transition_editorial_publication(
+      publication.id,
+      'publish',
+      publication.version,
+      NULL,
+      NULL,
+      'https://example.test/editorial/approved-media',
+      'approved-media-external-id'
+    )
+    FROM public.editorial_publications AS publication
+    WHERE state.label = 'approved_media'
+      AND publication.post_id = state.post_id
+  $sql$,
+  'manager confirms the real public result with its permalink'
+);
+
+SELECT ok(
+  (
+    SELECT
+      comment.author_id =
+        '91000000-0000-0000-0000-000000000002'::uuid
+      AND comment.content =
+        'Publicado em instagram: https://example.test/editorial/approved-media'
+    FROM public.task_comments AS comment
+    WHERE comment.task_id =
+      '95000000-0000-0000-0000-00000000000e'
+  ),
+  'published transition writes one permalink receipt to task notes'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.notifications
+    WHERE notification_type = 'publication'
+      AND link =
+        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+  ),
+  4,
+  'published transition notifies only the assigned Client A staff and admins'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.notifications
+    WHERE notification_type = 'publication'
+      AND link =
+        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+      AND user_id IN (
+        '91000000-0000-0000-0000-00000000000a'::uuid,
+        '91000000-0000-0000-0000-00000000000b'::uuid,
+        '91000000-0000-0000-0000-00000000000e'::uuid
+      )
+  ),
+  0,
+  'published notification never crosses into clients or unassigned staff'
+);
+
+SELECT is(
+  (
+    SELECT (
+      public.transition_editorial_publication(
+        publication.id,
+        'publish',
+        1,
+        NULL,
+        NULL,
+        publication.permalink,
+        publication.external_post_id
+      )->>'recovered'
+    )::boolean
+    FROM pg_temp.editorial_test_state AS state
+    JOIN public.editorial_publications AS publication
+      ON publication.post_id = state.post_id
+    WHERE state.label = 'approved_media'
+  ),
+  true,
+  'exact published retry is recovered idempotently'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.task_comments
+    WHERE task_id = '95000000-0000-0000-0000-00000000000e'
+  ),
+  1,
+  'published retry does not duplicate the permalink comment'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.notifications
+    WHERE notification_type = 'publication'
+      AND link =
+        '/kanban?task=95000000-0000-0000-0000-00000000000e'
+  ),
+  4,
+  'published retry does not duplicate notifications'
+);
+
+-- ---------------------------------------------------------------------------
+-- 9. History is staff-only, correctly scoped and immutable for every role.
 -- ---------------------------------------------------------------------------
 SELECT pg_temp.act_as(
   '91000000-0000-0000-0000-00000000000a'

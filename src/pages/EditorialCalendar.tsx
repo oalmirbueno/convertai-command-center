@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -43,6 +43,7 @@ import {
   useEditorialPostDetail,
   loadEditorialPostForMutation,
   type EditorialPostBundle,
+  type EditorialRealtimeGate,
 } from "@/hooks/useEditorialCalendar";
 import {
   useClients,
@@ -86,6 +87,11 @@ import {
   kanbanStatusForEditorialStage,
 } from "@/lib/taskWorkstreams";
 import {
+  updateCachedEditorialPostStage,
+  updateCachedEditorialPublicationDate,
+  updateCachedTaskStatus,
+} from "@/lib/editorialOptimistic";
+import {
   TASK_DELIVERY_TYPE_LABELS,
   contentTypeForDeliveryType,
   isPublishableTask,
@@ -99,9 +105,7 @@ const validViews: EditorialView[] = ["board", "month", "week", "list"];
 const aggregateStatuses = Object.keys(
   EDITORIAL_STATUS_CONFIG,
 ) as EditorialAggregateStatus[];
-const productionStatuses = Object.entries(
-  EDITORIAL_PRODUCTION_STATUS_CONFIG,
-)
+const productionStatuses = Object.entries(EDITORIAL_PRODUCTION_STATUS_CONFIG)
   .filter(([value]) => value !== "archived")
   .map(([value, config]) => ({ value, label: config.label }));
 const approvalStatuses = [
@@ -148,11 +152,7 @@ interface DragSummary {
   label: string;
 }
 
-function updateParam(
-  current: URLSearchParams,
-  key: string,
-  value: string,
-) {
+function updateParam(current: URLSearchParams, key: string, value: string) {
   const next = new URLSearchParams(current);
   if (!value || value === "all") next.delete(key);
   else next.set(key, value);
@@ -273,6 +273,14 @@ export default function EditorialCalendar() {
   const { isImpersonating, impersonatedId } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
   const queryClient = useQueryClient();
+  const editorialRealtimeGateRef = useRef<EditorialRealtimeGate>({
+    pendingCount: 0,
+    deferred: false,
+  });
+  const pendingMoveKeysRef = useRef(new Set<string>());
+  const [pendingMoveKeys, setPendingMoveKeys] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
   const effectiveRole = isImpersonating ? "client" : profile?.role;
   const todayKey = dateKeyInTimeZone(new Date()) || "2026-01-01";
   const requestedView = searchParams.get("view") as EditorialView | null;
@@ -290,17 +298,13 @@ export default function EditorialCalendar() {
   const projectId = searchParams.get("project") || "all";
   const platform = searchParams.get("platform") || "all";
   const status = searchParams.get("status") || "all";
-  const productionStatus =
-    searchParams.get("production") || "all";
+  const productionStatus = searchParams.get("production") || "all";
   const approvalStatus = searchParams.get("approval") || "all";
-  const requestedResponsibleId =
-    searchParams.get("responsible") || "all";
+  const requestedResponsibleId = searchParams.get("responsible") || "all";
   const contentId = searchParams.get("content");
   const permissions = editorialPermissions(effectiveRole);
   const responsibleId =
-    permissions.canEdit && !isImpersonating
-      ? requestedResponsibleId
-      : "all";
+    permissions.canEdit && !isImpersonating ? requestedResponsibleId : "all";
   const forcedClientId =
     effectiveRole === "client"
       ? impersonatedId || profile?.id || ""
@@ -310,26 +314,26 @@ export default function EditorialCalendar() {
 
   const clientsQuery = useClients();
   const projectsQuery = useProjects();
-  const clients = useMemo(
-    () => clientsQuery.data || [],
-    [clientsQuery.data],
-  );
+  const clients = useMemo(() => clientsQuery.data || [], [clientsQuery.data]);
   const projects = useMemo(
     () => projectsQuery.data || [],
     [projectsQuery.data],
   );
   const canUseTeamData = permissions.canEdit && !isImpersonating;
   const editorialScopeQuery = useEditorialClientScope(canUseTeamData);
-  const linkedTaskIdsQuery =
-    useEditorialLinkedTaskIds(canUseTeamData);
+  const linkedTaskIdsQuery = useEditorialLinkedTaskIds(
+    canUseTeamData,
+    editorialRealtimeGateRef,
+  );
   const teamMembersQuery = useTeamMembers(canUseTeamData);
-  const tasksQuery = useTasks();
+  const tasksQuery = useTasks(undefined, {
+    refetchInterval: pendingMoveKeys.size > 0 ? false : 15_000,
+  });
   const teamMembers = useMemo(
     () => teamMembersQuery.data || [],
     [teamMembersQuery.data],
   );
-  const range =
-    view === "board" ? null : getEditorialQueryRange(dateKey, view);
+  const range = view === "board" ? null : getEditorialQueryRange(dateKey, view);
   const calendarQuery = useEditorialCalendar(
     {
       clientId: forcedClientId || undefined,
@@ -338,7 +342,10 @@ export default function EditorialCalendar() {
       rangeStart: range?.startIso,
       rangeEnd: range?.endExclusiveIso,
     },
-    { forceClientView: isImpersonating },
+    {
+      forceClientView: isImpersonating,
+      realtimeGate: editorialRealtimeGateRef,
+    },
   );
   const clientRows = clients as unknown as CalendarClientRow[];
   const projectRows = projects as unknown as CalendarProjectRow[];
@@ -382,9 +389,7 @@ export default function EditorialCalendar() {
   );
   const teamRows = useMemo(
     () =>
-      canUseTeamData
-        ? (teamMembers as unknown as CalendarTeamMemberRow[])
-        : [],
+      canUseTeamData ? (teamMembers as unknown as CalendarTeamMemberRow[]) : [],
     [canUseTeamData, teamMembers],
   );
   const posts = useMemo(
@@ -398,15 +403,13 @@ export default function EditorialCalendar() {
   );
   const { savePost, transitionPublication } = useEditorialMutations();
   const [editorOpen, setEditorOpen] = useState(false);
-  const [editingPost, setEditingPost] =
-    useState<EditorialPostBundle | null>(null);
+  const [editingPost, setEditingPost] = useState<EditorialPostBundle | null>(
+    null,
+  );
   const [revisionSource, setRevisionSource] =
     useState<EditorialPostBundle | null>(null);
-  const [draftSeed, setDraftSeed] =
-    useState<EditorialDraftSeed | null>(null);
-  const [dragSummary, setDragSummary] =
-    useState<DragSummary | null>(null);
-  const [movingEditorial, setMovingEditorial] = useState(false);
+  const [draftSeed, setDraftSeed] = useState<EditorialDraftSeed | null>(null);
+  const [dragSummary, setDragSummary] = useState<DragSummary | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -430,18 +433,12 @@ export default function EditorialCalendar() {
   const projectNames = useMemo(
     () =>
       new Map(
-        projectRows.map((project) => [
-          project.id,
-          project.name || "Projeto",
-        ]),
+        projectRows.map((project) => [project.id, project.name || "Projeto"]),
       ),
     [projectRows],
   );
   const projectById = useMemo(
-    () =>
-      new Map(
-        editorialProjectRows.map((project) => [project.id, project]),
-      ),
+    () => new Map(editorialProjectRows.map((project) => [project.id, project])),
     [editorialProjectRows],
   );
   const designMemberIds = useMemo(
@@ -506,9 +503,7 @@ export default function EditorialCalendar() {
     return ((tasksQuery.data || []) as EditorialInboxTask[])
       .filter((task) => {
         if (
-          task.source
-            ?.toLocaleLowerCase("pt-BR")
-            .startsWith("client_request:")
+          task.source?.toLocaleLowerCase("pt-BR").startsWith("client_request:")
         ) {
           return false;
         }
@@ -531,8 +526,7 @@ export default function EditorialCalendar() {
           (priorityOrder[right.priority || ""] ?? 9);
         if (priorityDifference !== 0) return priorityDifference;
         const statusDifference =
-          (statusOrder[left.status] ?? 9) -
-          (statusOrder[right.status] ?? 9);
+          (statusOrder[left.status] ?? 9) - (statusOrder[right.status] ?? 9);
         if (statusDifference !== 0) return statusDifference;
         const leftDue = left.due_date
           ? new Date(left.due_date).getTime()
@@ -542,13 +536,7 @@ export default function EditorialCalendar() {
           : Number.MAX_SAFE_INTEGER;
         return leftDue - rightDue;
       });
-  }, [
-    canUseTeamData,
-    forcedClientId,
-    projectById,
-    projectId,
-    tasksQuery.data,
-  ]);
+  }, [canUseTeamData, forcedClientId, projectById, projectId, tasksQuery.data]);
   const normalizedTaskSearch = useMemo(
     () =>
       search
@@ -560,10 +548,7 @@ export default function EditorialCalendar() {
   );
   const matchesTaskFilters = useCallback(
     (task: EditorialInboxTask) => {
-      if (
-        responsibleId !== "all" &&
-        task.assigned_to !== responsibleId
-      ) {
+      if (responsibleId !== "all" && task.assigned_to !== responsibleId) {
         return false;
       }
       if (
@@ -572,18 +557,12 @@ export default function EditorialCalendar() {
       ) {
         return false;
       }
-      if (
-        platform !== "all" ||
-        status !== "all" ||
-        approvalStatus !== "all"
-      ) {
+      if (platform !== "all" || status !== "all" || approvalStatus !== "all") {
         return false;
       }
       if (!normalizedTaskSearch) return true;
       const deliveryType = task.delivery_type as
-        | TaskDeliveryType
-        | null
-        | undefined;
+        TaskDeliveryType | null | undefined;
       const searchable = [
         task.title,
         task.description,
@@ -619,20 +598,15 @@ export default function EditorialCalendar() {
           isEditorialTask(task, designMemberIds) &&
           matchesTaskFilters(task),
       ),
-    [
-      candidateTasks,
-      designMemberIds,
-      linkedTaskIds,
-      matchesTaskFilters,
-    ],
+    [candidateTasks, designMemberIds, linkedTaskIds, matchesTaskFilters],
   );
   const scheduledPostIds = useMemo(
     () =>
       new Set(
         posts
           .filter((bundle) =>
-            bundle.publications.some(
-              ({ publication }) => Boolean(publication.scheduled_at),
+            bundle.publications.some(({ publication }) =>
+              Boolean(publication.scheduled_at),
             ),
           )
           .map((bundle) => bundle.post.id),
@@ -641,16 +615,14 @@ export default function EditorialCalendar() {
   );
   const calendarTasks = useMemo(
     () =>
-      candidateTasks.filter(
-        (task) => {
-          const linkedPostId = linkedPostIdByTaskId[task.id];
-          return (
-            isPublishableTask(task, designMemberIds) &&
-            matchesTaskFilters(task) &&
-            (!linkedPostId || !scheduledPostIds.has(linkedPostId))
-          );
-        },
-      ),
+      candidateTasks.filter((task) => {
+        const linkedPostId = linkedPostIdByTaskId[task.id];
+        return (
+          isPublishableTask(task, designMemberIds) &&
+          matchesTaskFilters(task) &&
+          (!linkedPostId || !scheduledPostIds.has(linkedPostId))
+        );
+      }),
     [
       candidateTasks,
       designMemberIds,
@@ -660,15 +632,12 @@ export default function EditorialCalendar() {
     ],
   );
   const taskDataLoading =
-    canUseTeamData &&
-    (tasksQuery.isLoading || linkedTaskIdsQuery.isLoading);
+    canUseTeamData && (tasksQuery.isLoading || linkedTaskIdsQuery.isLoading);
   const taskDataError =
-    canUseTeamData &&
-    (tasksQuery.isError || linkedTaskIdsQuery.isError);
+    canUseTeamData && (tasksQuery.isError || linkedTaskIdsQuery.isError);
   const taskDataReady =
     !canUseTeamData ||
-    (tasksQuery.data !== undefined &&
-      linkedTaskIdsQuery.data !== undefined);
+    (tasksQuery.data !== undefined && linkedTaskIdsQuery.data !== undefined);
   const tasksForCurrentView =
     !canUseTeamData || !taskDataReady
       ? []
@@ -678,8 +647,7 @@ export default function EditorialCalendar() {
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
-        (project) =>
-          !forcedClientId || project.client_id === forcedClientId,
+        (project) => !forcedClientId || project.client_id === forcedClientId,
       ),
     [editorialProjectRows, forcedClientId],
   );
@@ -779,16 +747,9 @@ export default function EditorialCalendar() {
     setSearchParams(next, { replace: true });
   };
 
-  const navigatePeriod = (
-    action: "previous" | "next" | "today",
-  ) => {
+  const navigatePeriod = (action: "previous" | "next" | "today") => {
     if (view === "board") return;
-    const nextDate = navigateEditorialDate(
-      dateKey,
-      view,
-      action,
-      new Date(),
-    );
+    const nextDate = navigateEditorialDate(dateKey, view, action, new Date());
     if (nextDate) setParam("date", nextDate);
   };
 
@@ -863,16 +824,11 @@ export default function EditorialCalendar() {
       taskId: task.id,
       title: task.title,
       context: task.description?.trim() || undefined,
-      contentType:
-        contentTypeForDeliveryType(task.delivery_type) || "static",
+      contentType: contentTypeForDeliveryType(task.delivery_type) || "static",
       responsibleId: task.assigned_to || undefined,
       productionStatus:
-        targetStage ||
-        editorialStageForTaskStatus(task.status) ||
-        "draft",
-      scheduledAt: targetDateKey
-        ? `${targetDateKey}T09:00`
-        : undefined,
+        targetStage || editorialStageForTaskStatus(task.status) || "draft",
+      scheduledAt: targetDateKey ? `${targetDateKey}T09:00` : undefined,
     });
   };
 
@@ -889,16 +845,49 @@ export default function EditorialCalendar() {
     openCreateFromTask(task, targetDateKey, targetStage);
   };
 
+  const beginEditorialMove = useCallback((key: string) => {
+    if (pendingMoveKeysRef.current.has(key)) return false;
+    pendingMoveKeysRef.current.add(key);
+    editorialRealtimeGateRef.current.pendingCount =
+      pendingMoveKeysRef.current.size;
+    setPendingMoveKeys(new Set(pendingMoveKeysRef.current));
+    return true;
+  }, []);
+
+  const finishEditorialMove = useCallback(
+    (key: string) => {
+      pendingMoveKeysRef.current.delete(key);
+      editorialRealtimeGateRef.current.pendingCount =
+        pendingMoveKeysRef.current.size;
+      setPendingMoveKeys(new Set(pendingMoveKeysRef.current));
+      if (pendingMoveKeysRef.current.size > 0) return;
+
+      editorialRealtimeGateRef.current.deferred = false;
+      void Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: ["editorial-calendar"],
+        }),
+        queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+        queryClient.invalidateQueries({
+          queryKey: ["editorial-linked-task-ids"],
+        }),
+      ]);
+    },
+    [queryClient],
+  );
+
   const moveTaskToStage = useCallback(
-    async (
-      task: EditorialInboxTask,
-      targetStage: EditableEditorialStage,
-    ) => {
-      if (!permissions.canEdit || movingEditorial) return;
+    async (task: EditorialInboxTask, targetStage: EditableEditorialStage) => {
+      if (!permissions.canEdit) return;
       const targetStatus = kanbanStatusForEditorialStage(targetStage);
       if (!targetStatus) return;
-      if (canonicalTaskStatus(task.status) === targetStatus) return;
-      setMovingEditorial(true);
+      const previousStatus = canonicalTaskStatus(task.status);
+      if (previousStatus === targetStatus) return;
+      const moveKey = `task:${task.id}`;
+      if (!beginEditorialMove(moveKey)) return;
+      queryClient.setQueriesData({ queryKey: ["tasks"] }, (value) =>
+        updateCachedTaskStatus(value, task.id, targetStatus),
+      );
       try {
         const { data, error } = await supabase
           .from("tasks")
@@ -913,21 +902,14 @@ export default function EditorialCalendar() {
             "A tarefa mudou em outra sessão. Atualize e tente novamente.",
           );
         }
-        const { notifyOpsTaskUpdated } = await import(
-          "@/lib/opsTaskSync"
-        );
+        const { notifyOpsTaskUpdated } = await import("@/lib/opsTaskSync");
         notifyOpsTaskUpdated(task.id);
-        await tasksQuery.refetch();
         toast.success("Tarefa atualizada também no Kanban central.");
         try {
           const {
             data: { user: authUser },
           } = await supabase.auth.getUser();
-          if (
-            targetStatus === "review" &&
-            task.project_id &&
-            authUser
-          ) {
+          if (targetStatus === "review" && task.project_id && authUser) {
             await sendTaskAttachmentsToApproval(
               task.id,
               task.project_id,
@@ -940,9 +922,8 @@ export default function EditorialCalendar() {
             ]);
           }
           if (authUser) {
-            const { notifyAdmin, notifyUser } = await import(
-              "@/lib/notifyHelpers"
-            );
+            const { notifyAdmin, notifyUser } =
+              await import("@/lib/notifyHelpers");
             if (!profile?.role?.includes("admin")) {
               await notifyAdmin(
                 `${profile?.full_name || "Membro"} moveu "${task.title}" pelo calendário editorial`,
@@ -950,10 +931,7 @@ export default function EditorialCalendar() {
                 "/kanban",
               );
             }
-            if (
-              task.assigned_to &&
-              task.assigned_to !== authUser.id
-            ) {
+            if (task.assigned_to && task.assigned_to !== authUser.id) {
               await notifyUser(
                 task.assigned_to,
                 `Tarefa "${task.title}" atualizada pelo calendário editorial`,
@@ -979,22 +957,25 @@ export default function EditorialCalendar() {
           );
         }
       } catch (error: unknown) {
+        queryClient.setQueriesData({ queryKey: ["tasks"] }, (value) =>
+          updateCachedTaskStatus(value, task.id, previousStatus),
+        );
         toast.error(
           error instanceof Error
             ? error.message
             : "Não foi possível mover a tarefa.",
         );
       } finally {
-        setMovingEditorial(false);
+        finishEditorialMove(moveKey);
       }
     },
     [
-      movingEditorial,
+      beginEditorialMove,
+      finishEditorialMove,
       permissions.canEdit,
       profile?.full_name,
       profile?.role,
       queryClient,
-      tasksQuery,
     ],
   );
 
@@ -1003,9 +984,16 @@ export default function EditorialCalendar() {
       bundle: EditorialPostBundle,
       targetStage: EditableEditorialStage,
     ) => {
-      if (!permissions.canEdit || movingEditorial) return;
+      if (!permissions.canEdit) return;
       if (bundle.post.production_status === targetStage) return;
-      setMovingEditorial(true);
+      const previousStage = bundle.post.production_status;
+      const moveKey = `post:${bundle.post.id}`;
+      if (!beginEditorialMove(moveKey)) return;
+      queryClient.setQueriesData(
+        { queryKey: ["editorial-calendar"] },
+        (value) =>
+          updateCachedEditorialPostStage(value, bundle.post.id, targetStage),
+      );
       try {
         const completeBundle = await loadEditorialPostForMutation(
           bundle.post.id,
@@ -1026,24 +1014,39 @@ export default function EditorialCalendar() {
         await savePost.mutateAsync({
           payload,
           expectedVersion: completeBundle.post.version,
+          deferRefresh: true,
         });
         toast.success("Etapa de produção atualizada.");
       } catch (error: unknown) {
+        queryClient.setQueriesData(
+          { queryKey: ["editorial-calendar"] },
+          (value) =>
+            updateCachedEditorialPostStage(
+              value,
+              bundle.post.id,
+              previousStage,
+            ),
+        );
         toast.error(
           error instanceof Error
             ? error.message
             : "Não foi possível mover o conteúdo.",
         );
       } finally {
-        setMovingEditorial(false);
+        finishEditorialMove(moveKey);
       }
     },
-    [movingEditorial, permissions.canEdit, savePost],
+    [
+      beginEditorialMove,
+      finishEditorialMove,
+      permissions.canEdit,
+      queryClient,
+      savePost,
+    ],
   );
 
   const movePublicationToDate = useCallback(
     async (item: ScheduledEditorialItem, targetDateKey: string) => {
-      if (movingEditorial) return;
       const visiblePublication = item.publication.publication;
       if (
         !isEditorialPublicationDraggable(
@@ -1057,7 +1060,31 @@ export default function EditorialCalendar() {
         );
         return;
       }
-      setMovingEditorial(true);
+      const scheduledAt = moveEditorialInstantToCalendarDate(
+        visiblePublication.scheduled_at,
+        targetDateKey,
+      );
+      if (!scheduledAt) {
+        toast.error("A data escolhida não existe neste fuso horário.");
+        return;
+      }
+      if (
+        visiblePublication.scheduled_at &&
+        dateKeyInTimeZone(visiblePublication.scheduled_at) === targetDateKey
+      ) {
+        return;
+      }
+      const moveKey = `publication:${visiblePublication.id}`;
+      if (!beginEditorialMove(moveKey)) return;
+      queryClient.setQueriesData(
+        { queryKey: ["editorial-calendar"] },
+        (value) =>
+          updateCachedEditorialPublicationDate(
+            value,
+            visiblePublication.id,
+            scheduledAt,
+          ),
+      );
       try {
         let completePost = item.post;
         let publicationBundle = item.publication;
@@ -1067,8 +1094,7 @@ export default function EditorialCalendar() {
             item.post.post.client_id,
           );
           const completePublication = completePost.publications.find(
-            ({ publication }) =>
-              publication.id === visiblePublication.id,
+            ({ publication }) => publication.id === visiblePublication.id,
           );
           if (!completePublication) {
             throw new Error(
@@ -1090,21 +1116,6 @@ export default function EditorialCalendar() {
         }
 
         const publication = publicationBundle.publication;
-        const scheduledAt = moveEditorialInstantToCalendarDate(
-          publication.scheduled_at,
-          targetDateKey,
-        );
-        if (!scheduledAt) {
-          throw new Error(
-            "A data escolhida não existe neste fuso horário.",
-          );
-        }
-        if (
-          publication.scheduled_at &&
-          dateKeyInTimeZone(publication.scheduled_at) === targetDateKey
-        ) {
-          return;
-        }
 
         if (publication.status === "planned") {
           const payload = buildEditorialPostMutationPayload(completePost, {
@@ -1116,6 +1127,7 @@ export default function EditorialCalendar() {
           await savePost.mutateAsync({
             payload,
             expectedVersion: completePost.post.version,
+            deferRefresh: true,
           });
         } else {
           await transitionPublication.mutateAsync({
@@ -1124,20 +1136,37 @@ export default function EditorialCalendar() {
             expectedVersion: publication.version,
             scheduledAt,
             timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+            deferRefresh: true,
           });
         }
         toast.success(`Publicação movida para ${targetDateKey}.`);
       } catch (error: unknown) {
+        queryClient.setQueriesData(
+          { queryKey: ["editorial-calendar"] },
+          (value) =>
+            updateCachedEditorialPublicationDate(
+              value,
+              visiblePublication.id,
+              visiblePublication.scheduled_at,
+            ),
+        );
         toast.error(
           error instanceof Error
             ? error.message
             : "Não foi possível reagendar a publicação.",
         );
       } finally {
-        setMovingEditorial(false);
+        finishEditorialMove(moveKey);
       }
     },
-    [movingEditorial, permissions, savePost, transitionPublication],
+    [
+      beginEditorialMove,
+      finishEditorialMove,
+      permissions,
+      queryClient,
+      savePost,
+      transitionPublication,
+    ],
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -1159,10 +1188,7 @@ export default function EditorialCalendar() {
       const task = activeData.task as EditorialInboxTask;
       if (overData.kind === "date") {
         openCreateFromTask(task, String(overData.dateKey));
-      } else if (
-        overData.kind === "stage" &&
-        overData.productionStatus
-      ) {
+      } else if (overData.kind === "stage" && overData.productionStatus) {
         void moveTaskToStage(
           task,
           overData.productionStatus as EditableEditorialStage,
@@ -1183,10 +1209,7 @@ export default function EditorialCalendar() {
       return;
     }
 
-    if (
-      activeData.kind === "publication" &&
-      overData.kind === "date"
-    ) {
+    if (activeData.kind === "publication" && overData.kind === "date") {
       void movePublicationToDate(
         activeData.item as ScheduledEditorialItem,
         String(overData.dateKey),
@@ -1210,10 +1233,8 @@ export default function EditorialCalendar() {
   };
 
   const defaultScheduledAt = draftSeed?.scheduledAt || "";
-  const editorClientId =
-    draftSeed?.clientId || selectedEditorClientId;
-  const editorProjectId =
-    draftSeed?.projectId || selectedEditorProjectId;
+  const editorClientId = draftSeed?.clientId || selectedEditorClientId;
+  const editorProjectId = draftSeed?.projectId || selectedEditorProjectId;
   const pageTitle = periodTitle(dateKey, view);
   const kanbanHref = useMemo(() => {
     const params = new URLSearchParams({ area: "editorial" });
@@ -1256,7 +1277,8 @@ export default function EditorialCalendar() {
               <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <p>
                 Arrastar organiza o trabalho. Publicar continua protegido pelos
-                gates e nunca acontece sozinho. Nenhuma rede social é acionada automaticamente.
+                gates e nunca acontece sozinho. Nenhuma rede social é acionada
+                automaticamente.
               </p>
             </div>
           </div>
@@ -1294,9 +1316,7 @@ export default function EditorialCalendar() {
 
         <CalendarMetrics
           posts={filteredPosts}
-          taskCount={
-            canUseTeamData ? tasksForCurrentView.length : undefined
-          }
+          taskCount={canUseTeamData ? tasksForCurrentView.length : undefined}
         />
 
         <EditorialToolbar
@@ -1315,8 +1335,7 @@ export default function EditorialCalendar() {
               ? []
               : editorialClientRows.map((client) => ({
                   value: client.id,
-                  label:
-                    client.company_name || client.full_name || "Cliente",
+                  label: client.company_name || client.full_name || "Cliente",
                 }))
           }
           projects={filteredProjects.map((project) => ({
@@ -1344,15 +1363,9 @@ export default function EditorialCalendar() {
           onProjectChange={(value) => setParam("project", value)}
           onPlatformChange={(value) => setParam("platform", value)}
           onStatusChange={(value) => setParam("status", value)}
-          onProductionStatusChange={(value) =>
-            setParam("production", value)
-          }
-          onApprovalStatusChange={(value) =>
-            setParam("approval", value)
-          }
-          onResponsibleChange={(value) =>
-            setParam("responsible", value)
-          }
+          onProductionStatusChange={(value) => setParam("production", value)}
+          onApprovalStatusChange={(value) => setParam("approval", value)}
+          onResponsibleChange={(value) => setParam("responsible", value)}
           onClearFilters={clearFilters}
           onPrevious={() => navigatePeriod("previous")}
           onToday={() => navigatePeriod("today")}
@@ -1474,7 +1487,7 @@ export default function EditorialCalendar() {
               canCreate={canCreateEditorial}
               canEdit={permissions.canEdit}
               canPublish={permissions.canPublish}
-              moving={movingEditorial}
+              moving={false}
               onSelectPost={openDetail}
               onCreateFromTask={openTaskItem}
               onCreateOnDate={openCreateOnDate}
@@ -1484,8 +1497,8 @@ export default function EditorialCalendar() {
         </main>
 
         <p className="sr-only" aria-live="polite">
-          {movingEditorial
-            ? "Salvando movimentação editorial"
+          {pendingMoveKeys.size > 0
+            ? `Salvando ${pendingMoveKeys.size} movimentação editorial`
             : "Movimentação editorial concluída"}
         </p>
 
@@ -1583,8 +1596,7 @@ export default function EditorialCalendar() {
             selectedPost?.internal?.responsible_id
               ? teamRows.find(
                   (member) =>
-                    member.id ===
-                    selectedPost.internal?.responsible_id,
+                    member.id === selectedPost.internal?.responsible_id,
                 )?.full_name
               : null
           }

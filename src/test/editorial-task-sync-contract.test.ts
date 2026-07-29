@@ -78,12 +78,13 @@ describe("editorial design task workspace contract", () => {
     expect(views).toContain("[scrollbar-gutter:stable]");
   });
 
-  it("uses a centered editor and keeps the existing upload route guarded", () => {
+  it("uses a centered editor with the approved media library inline", () => {
     expect(editor).toContain("<Dialog open={open}");
     expect(editor).toContain("max-w-5xl");
     expect(editor).not.toContain("<Sheet open={open}");
-    expect(editor).toContain('folder: "criativos"');
-    expect(editor).toContain('"noopener,noreferrer"');
+    expect(editor).toContain("<ApprovedMediaPicker");
+    expect(editor).toContain("onSelect={selectApprovedMedia}");
+    expect(editor).not.toContain("window.open(");
     expect(editor).toContain(
       'window.addEventListener("focus", refreshOptionsOnFocus)',
     );
