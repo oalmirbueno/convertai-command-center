@@ -43,6 +43,7 @@ import {
   createReportDraftSchema,
   createTask,
   createTaskSchema,
+  TASK_DELIVERY_TYPE_VALUES,
   updateProject,
   updateProjectSchema,
   updateTask,
@@ -199,7 +200,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.7.1',
+  version: '1.7.2',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -832,7 +833,7 @@ const createTaskTool: ToolDefinition = {
   name: 'aceleriq_create_task',
   title: 'Criar tarefa',
   description:
-    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, assigned_to, due_date, milestone_id, idempotency_key. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente.',
+    'Cria uma tarefa em um projeto existente. Campos permitidos apenas: project_id, title, description, status, priority, delivery_type, assigned_to, due_date, milestone_id, idempotency_key. Nunca cria projetos, clientes ou faturamento. Nunca envia notificações ao cliente.',
   scopes: WRITE,
   annotations: WRITE_ANNOTATIONS,
   inputSchema: {
@@ -843,6 +844,10 @@ const createTaskTool: ToolDefinition = {
       description: { type: 'string', maxLength: 4000 },
       status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review', 'done'] },
       priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      delivery_type: {
+        type: 'string',
+        enum: [...TASK_DELIVERY_TYPE_VALUES],
+      },
       assigned_to: { type: 'string', format: 'uuid' },
       due_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
       milestone_id: { type: 'string', format: 'uuid' },
@@ -874,6 +879,10 @@ const updateTaskTool: ToolDefinition = {
       description: { type: ['string', 'null'], maxLength: 4000 },
       status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review', 'done'] },
       priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      delivery_type: {
+        type: 'string',
+        enum: [...TASK_DELIVERY_TYPE_VALUES],
+      },
       assigned_to: { type: ['string', 'null'], format: 'uuid' },
       due_date: { type: ['string', 'null'], pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
       milestone_id: { type: ['string', 'null'], format: 'uuid' },

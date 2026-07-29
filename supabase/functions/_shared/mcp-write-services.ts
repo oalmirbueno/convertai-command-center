@@ -99,6 +99,30 @@ const IDEMPOTENCY_KEY = z.string().min(8).max(128).regex(/^[A-Za-z0-9._:\-]+$/, 
 
 const TASK_STATUS = z.enum(['backlog', 'todo', 'doing', 'review', 'done']);
 const TASK_PRIORITY = z.enum(['low', 'medium', 'high', 'urgent']);
+export const TASK_DELIVERY_TYPE_VALUES = [
+  'unspecified',
+  'design',
+  'branding',
+  'static',
+  'carousel',
+  'reel',
+  'story',
+  'video',
+  'short',
+  'article',
+  'google_post',
+  'planning',
+  'copywriting',
+  'website',
+  'landing_page',
+  'automation',
+  'traffic',
+  'seo',
+  'document',
+  'report',
+  'other',
+] as const;
+const TASK_DELIVERY_TYPE = z.enum(TASK_DELIVERY_TYPE_VALUES);
 
 // ─── create_task ──────────────────────────────────────────────
 export const createTaskSchema = z.object({
@@ -107,6 +131,7 @@ export const createTaskSchema = z.object({
   description: z.string().trim().max(4000).optional(),
   status: TASK_STATUS.optional(),
   priority: TASK_PRIORITY.optional(),
+  delivery_type: TASK_DELIVERY_TYPE.optional(),
   assigned_to: UUID.optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, { message: 'due_date must be YYYY-MM-DD' }).optional(),
   milestone_id: UUID.optional(),
@@ -118,7 +143,7 @@ export type CreateTaskInput = z.infer<typeof createTaskSchema>;
 export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
   const replay = await replayIdempotent(
     'aceleriq_create_task', ctx.keyId, input.idempotency_key,
-    async (id) => (await db().from('tasks').select('id, project_id, milestone_id, title, description, status, priority, assigned_to, due_date, created_at, updated_at').eq('id', id).maybeSingle()).data,
+    async (id) => (await db().from('tasks').select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, created_at, updated_at').eq('id', id).maybeSingle()).data,
   );
   if (replay) {
     if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as any).id;
@@ -155,6 +180,7 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
     description: input.description ?? null,
     status: input.status ?? 'backlog',
     priority: input.priority ?? 'medium',
+    delivery_type: input.delivery_type ?? 'unspecified',
     assigned_to: input.assigned_to ?? null,
     due_date: input.due_date ?? null,
     milestone_id: input.milestone_id ?? null,
@@ -164,7 +190,7 @@ export async function createTask(input: CreateTaskInput, ctx: WriteCtx) {
   const { data, error } = await db()
     .from('tasks')
     .insert(row)
-    .select('id, project_id, milestone_id, title, description, status, priority, assigned_to, due_date, source, created_at, updated_at')
+    .select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, source, created_at, updated_at')
     .single();
   if (error) throw new WriteError('validation', error.message);
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
@@ -179,6 +205,7 @@ export const updateTaskSchema = z.object({
   description: z.string().trim().max(4000).nullable().optional(),
   status: TASK_STATUS.optional(),
   priority: TASK_PRIORITY.optional(),
+  delivery_type: TASK_DELIVERY_TYPE.optional(),
   assigned_to: UUID.nullable().optional(),
   due_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   milestone_id: UUID.nullable().optional(),
@@ -193,7 +220,7 @@ export type UpdateTaskInput = z.infer<typeof updateTaskSchema>;
 export async function updateTask(input: UpdateTaskInput, ctx: WriteCtx) {
   const replay = await replayIdempotent(
     'aceleriq_update_task', ctx.keyId, input.idempotency_key,
-    async (id) => (await db().from('tasks').select('id, project_id, milestone_id, title, description, status, priority, assigned_to, due_date, updated_at').eq('id', id).maybeSingle()).data,
+    async (id) => (await db().from('tasks').select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, updated_at').eq('id', id).maybeSingle()).data,
   );
   if (replay) {
     if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as any).id;
@@ -222,7 +249,7 @@ export async function updateTask(input: UpdateTaskInput, ctx: WriteCtx) {
 
   // Allowlist patch — nothing outside these keys crosses into the DB call.
   const patch: Record<string, unknown> = {};
-  for (const k of ['title', 'description', 'status', 'priority', 'assigned_to', 'due_date', 'milestone_id'] as const) {
+  for (const k of ['title', 'description', 'status', 'priority', 'delivery_type', 'assigned_to', 'due_date', 'milestone_id'] as const) {
     if (k in input) (patch as any)[k] = (input as any)[k];
   }
 
@@ -230,7 +257,7 @@ export async function updateTask(input: UpdateTaskInput, ctx: WriteCtx) {
     .from('tasks')
     .update(patch)
     .eq('id', input.task_id)
-    .select('id, project_id, milestone_id, title, description, status, priority, assigned_to, due_date, source, created_at, updated_at')
+    .select('id, project_id, milestone_id, title, description, status, priority, delivery_type, assigned_to, due_date, source, created_at, updated_at')
     .single();
   if (error) throw new WriteError('validation', error.message);
   if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;

@@ -62,7 +62,7 @@ import {
   isFilePublishable,
   type EditorialPlatform,
 } from "@/lib/editorial";
-import { isDesignTask } from "@/lib/taskWorkstreams";
+import { isPublishableTask } from "@/lib/taskDeliveryTypes";
 
 interface Option {
   id: string;
@@ -95,12 +95,12 @@ interface EditorialEditorProps {
   defaultScheduledAt?: string;
   defaultTaskId?: string;
   defaultTitle?: string;
+  defaultContentType?: string;
   defaultResponsibleId?: string;
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
   lockTaskId?: boolean;
   linkedTaskIds?: readonly string[];
   designMemberIds?: readonly string[];
-  allowAllTasks?: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
 }
@@ -170,12 +170,12 @@ export default function EditorialEditor({
   defaultScheduledAt = "",
   defaultTaskId = "",
   defaultTitle = "",
+  defaultContentType = "static",
   defaultResponsibleId = "",
   defaultProductionStatus = "draft",
   lockTaskId = false,
   linkedTaskIds = EMPTY_ID_LIST,
   designMemberIds = EMPTY_ID_LIST,
-  allowAllTasks = false,
   onOpenChange,
   onSaved,
 }: EditorialEditorProps) {
@@ -338,7 +338,9 @@ export default function EditorialEditor({
     setClientId(revisionOf?.post.client_id || defaultClientId);
     setProjectId(revisionOf?.post.project_id || defaultProjectId);
     setTitle(revisionOf ? revisionOf.post.title : defaultTitle);
-    setContentType(revisionOf?.post.content_type || "static");
+    setContentType(
+      revisionOf?.post.content_type || defaultContentType || "static",
+    );
     setObjective(revisionOf?.post.objective || "");
     setDefaultCaption(revisionOf?.post.default_caption || "");
     setProductionStatus(
@@ -383,6 +385,7 @@ export default function EditorialEditor({
     setPendingMutationId(null);
   }, [
     defaultClientId,
+    defaultContentType,
     defaultProductionStatus,
     defaultProjectId,
     defaultResponsibleId,
@@ -460,11 +463,10 @@ export default function EditorialEditor({
         task.id === taskId ||
         (
           !linkedIds.has(task.id) &&
-          (allowAllTasks || isDesignTask(task, designIds))
+          isPublishableTask(task, designIds)
         ),
     );
   }, [
-    allowAllTasks,
     designMemberIds,
     linkedTaskIds,
     options?.tasks,

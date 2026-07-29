@@ -11,6 +11,11 @@ import {
   EDITORIAL_PLATFORMS,
   isFilePublishable,
 } from "@/lib/editorial";
+import {
+  buildEditorialTaskLinkIndex,
+  type EditorialTaskLinkIndex,
+  type EditorialTaskLinkRow,
+} from "@/lib/editorialTaskLinks";
 
 // The generated Database type is updated only after this unapplied migration
 // reaches a Supabase branch. Keep the escape hatch local to the new schema.
@@ -210,21 +215,20 @@ export function useEditorialLinkedTaskIds(enabled: boolean) {
 
   const query = useQuery({
     queryKey: ["editorial-linked-task-ids", user?.id, profile?.role],
-    queryFn: async (): Promise<string[]> => {
-      const links = await readAllPages<{
-        post_id: string;
-        task_id: string | null;
-      }>(
+    queryFn: async (): Promise<EditorialTaskLinkIndex> => {
+      const links = await readAllPages<EditorialTaskLinkRow>(
         (from, to) =>
           editorialDb
             .from("editorial_post_internal")
-            .select("post_id, task_id")
+            .select("post_id, task_id, revision_of_post_id")
             .not("task_id", "is", null)
             .order("task_id", { ascending: true })
             .range(from, to),
       );
       const postIds = unique(links.map((row) => row.post_id));
-      if (postIds.length === 0) return [];
+      if (postIds.length === 0) {
+        return { taskIds: [], postIdByTaskId: {} };
+      }
 
       const activePosts = await readInChunks<{ id: string }>(
         postIds,
@@ -239,11 +243,7 @@ export function useEditorialLinkedTaskIds(enabled: boolean) {
             .range(from, to),
       );
       const activePostIds = new Set(activePosts.map((post) => post.id));
-      return unique(
-        links
-          .filter((link) => activePostIds.has(link.post_id))
-          .map((link) => link.task_id),
-      );
+      return buildEditorialTaskLinkIndex(links, activePostIds);
     },
     enabled: enabled && !!user && isEditorialStaff,
     refetchInterval: 30_000,
@@ -895,12 +895,13 @@ export function useEditorialEditorOptions(
             status: string;
             due_date: string | null;
             workstream: string | null;
+            delivery_type: string | null;
             source: string | null;
           }>((from, to) =>
             editorialDb
               .from("tasks")
               .select(
-                "id, project_id, title, assigned_to, status, due_date, workstream, source",
+                "id, project_id, title, assigned_to, status, due_date, workstream, delivery_type, source",
               )
               .eq("project_id", projectId)
               .is("deleted_at", null)

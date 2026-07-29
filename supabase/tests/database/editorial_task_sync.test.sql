@@ -60,9 +60,36 @@ SELECT ok(
 );
 
 SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'tasks'
+      AND column_name = 'delivery_type'
+      AND data_type = 'text'
+      AND is_nullable = 'NO'
+      AND column_default = '''unspecified''::text'
+  ),
+  'tasks.delivery_type is required and defaults to unspecified'
+);
+
+SELECT ok(
+  EXISTS (
+    SELECT 1
+    FROM pg_constraint
+    WHERE conrelid = 'public.tasks'::regclass
+      AND conname = 'tasks_delivery_type_check'
+      AND contype = 'c'
+      AND convalidated
+      AND pg_get_constraintdef(oid) LIKE '%delivery_type%'
+  ),
+  'tasks_delivery_type_check is present and validated'
+);
+
+SELECT ok(
   (
     SELECT
-      count(*) = 15
+      count(*) = 21
       AND bool_and(
         NOT pg_temp.public_has_execute(
           procedure_row.oid::regprocedure
@@ -97,6 +124,12 @@ SELECT ok(
         ('public.editorial_sync_post_from_task_trigger()'),
         ('public.editorial_lock_task_sync()'),
         ('public.editorial_lock_task_sync_trigger()'),
+        ('public.editorial_delivery_type_is_publishable(text)'),
+        ('public.editorial_content_type_for_delivery_type(text)'),
+        ('public.editorial_delivery_type_for_content_type(text)'),
+        ('public.editorial_reconcile_task_delivery_types()'),
+        ('public.editorial_task_delivery_type_guard()'),
+        ('public.editorial_post_delivery_type_guard()'),
         ('public.save_editorial_post_unlocked(jsonb,integer)'),
         (
           'public.transition_editorial_publication_unlocked(uuid,text,integer,timestamptz,text,text,text,text,text,timestamptz)'
@@ -112,7 +145,7 @@ SELECT ok(
 SELECT ok(
   (
     SELECT
-      count(*) = 13
+      count(*) = 15
       AND bool_and(
         trigger_row.tgenabled = 'O'
         AND NOT trigger_row.tgisinternal
@@ -185,6 +218,16 @@ SELECT ok(
           'public.tasks',
           'tasks_editorial_sync_lock_update_trg',
           'public.editorial_lock_task_sync_trigger()'
+        ),
+        (
+          'public.tasks',
+          'tasks_editorial_delivery_type_guard_trg',
+          'public.editorial_task_delivery_type_guard()'
+        ),
+        (
+          'public.editorial_posts',
+          'editorial_post_delivery_type_guard_trg',
+          'public.editorial_post_delivery_type_guard()'
         )
     ) AS expected(relation_name, trigger_name, function_signature)
     JOIN pg_trigger AS trigger_row
@@ -254,7 +297,8 @@ INSERT INTO public.tasks (
   status,
   priority,
   source,
-  workstream
+  workstream,
+  delivery_type
 )
 VALUES
   (
@@ -264,7 +308,8 @@ VALUES
     'backlog',
     'medium',
     'portal',
-    'design'
+    'design',
+    DEFAULT
   ),
   (
     '9a300000-0000-0000-0000-000000000002',
@@ -273,6 +318,7 @@ VALUES
     'backlog',
     'medium',
     'portal',
+    DEFAULT,
     DEFAULT
   ),
   (
@@ -282,6 +328,47 @@ VALUES
     'backlog',
     'medium',
     'client_request:fixture',
+    DEFAULT,
+    DEFAULT
+  ),
+  (
+    '9a300000-0000-0000-0000-000000000004',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Branding explícito',
+    'backlog',
+    'medium',
+    'portal',
+    'design',
+    'branding'
+  ),
+  (
+    '9a300000-0000-0000-0000-000000000005',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Carrossel explícito',
+    'backlog',
+    'medium',
+    'portal',
+    'design',
+    'carousel'
+  ),
+  (
+    '9a300000-0000-0000-0000-000000000006',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Criar carrossel de lançamento',
+    'backlog',
+    'medium',
+    'portal',
+    'general',
+    DEFAULT
+  ),
+  (
+    '9a300000-0000-0000-0000-000000000007',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Planejamento editorial de carrossel',
+    'backlog',
+    'medium',
+    'portal',
+    'general',
     DEFAULT
   );
 
@@ -295,6 +382,16 @@ SELECT is(
   'new tasks use the general workstream by default'
 );
 
+SELECT is(
+  (
+    SELECT delivery_type
+    FROM public.tasks
+    WHERE id = '9a300000-0000-0000-0000-000000000002'
+  ),
+  'unspecified',
+  'new tasks keep the compatible unspecified delivery type by default'
+);
+
 SELECT throws_ok(
   $sql$
     UPDATE public.tasks
@@ -304,6 +401,51 @@ SELECT throws_ok(
   '23514',
   NULL,
   'tasks_workstream_check rejects unknown workstreams'
+);
+
+SELECT throws_ok(
+  $sql$
+    UPDATE public.tasks
+    SET delivery_type = 'podcast'
+    WHERE id = '9a300000-0000-0000-0000-000000000002'
+  $sql$,
+  '23514',
+  NULL,
+  'tasks_delivery_type_check rejects unknown delivery types'
+);
+
+SELECT is(
+  public.editorial_reconcile_task_delivery_types(),
+  1,
+  'delivery type reconciliation updates only one unambiguous legacy title'
+);
+
+SELECT is(
+  (
+    SELECT delivery_type
+    FROM public.tasks
+    WHERE id = '9a300000-0000-0000-0000-000000000006'
+  ),
+  'carousel',
+  'an unambiguous legacy carousel title is backfilled'
+);
+
+SELECT is(
+  (
+    SELECT delivery_type
+    FROM public.tasks
+    WHERE id = '9a300000-0000-0000-0000-000000000007'
+  ),
+  'unspecified',
+  'a legacy title with competing signals remains unspecified'
+);
+
+SELECT ok(
+  public.editorial_delivery_type_is_publishable('carousel')
+  AND NOT public.editorial_delivery_type_is_publishable('branding')
+  AND public.editorial_content_type_for_delivery_type('design') = 'static'
+  AND public.editorial_delivery_type_for_content_type('reel') = 'reel',
+  'canonical delivery type helpers agree on publishability and mappings'
 );
 
 INSERT INTO public.external_accounts (
@@ -367,14 +509,31 @@ INSERT INTO public.editorial_posts (
   content_type,
   production_status
 )
-VALUES (
-  '9a600000-0000-0000-0000-000000000001',
-  '9a100000-0000-0000-0000-00000000000a',
-  '9a200000-0000-0000-0000-00000000000a',
-  'Primary synchronized post',
-  'static',
-  'draft'
-);
+VALUES
+  (
+    '9a600000-0000-0000-0000-000000000001',
+    '9a100000-0000-0000-0000-00000000000a',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Primary synchronized post',
+    'static',
+    'draft'
+  ),
+  (
+    '9a600000-0000-0000-0000-000000000004',
+    '9a100000-0000-0000-0000-00000000000a',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Post for non-publishable task',
+    'static',
+    'draft'
+  ),
+  (
+    '9a600000-0000-0000-0000-000000000005',
+    '9a100000-0000-0000-0000-00000000000a',
+    '9a200000-0000-0000-0000-00000000000a',
+    'Post with mismatched task type',
+    'static',
+    'draft'
+  );
 
 INSERT INTO public.editorial_post_internal (
   post_id,
@@ -393,6 +552,84 @@ VALUES (
   repeat('1', 64),
   '9a100000-0000-0000-0000-000000000001',
   '9a100000-0000-0000-0000-000000000001'
+);
+
+SELECT is(
+  (
+    SELECT delivery_type
+    FROM public.tasks
+    WHERE id = '9a300000-0000-0000-0000-000000000001'
+  ),
+  'static',
+  'linking an unspecified task aligns it to the post content type'
+);
+
+SELECT throws_like(
+  $sql$
+    INSERT INTO public.editorial_post_internal (
+      post_id,
+      client_id,
+      task_id,
+      idempotency_key,
+      request_fingerprint,
+      created_by,
+      updated_by
+    ) VALUES (
+      '9a600000-0000-0000-0000-000000000004',
+      '9a100000-0000-0000-0000-00000000000a',
+      '9a300000-0000-0000-0000-000000000004',
+      '9a800000-0000-0000-0000-000000000004',
+      repeat('4', 64),
+      '9a100000-0000-0000-0000-000000000001',
+      '9a100000-0000-0000-0000-000000000001'
+    )
+  $sql$,
+  '%Somente tarefas com tipo publicável%',
+  'an explicitly non-publishable task cannot be linked to editorial'
+);
+
+SELECT throws_like(
+  $sql$
+    INSERT INTO public.editorial_post_internal (
+      post_id,
+      client_id,
+      task_id,
+      idempotency_key,
+      request_fingerprint,
+      created_by,
+      updated_by
+    ) VALUES (
+      '9a600000-0000-0000-0000-000000000005',
+      '9a100000-0000-0000-0000-00000000000a',
+      '9a300000-0000-0000-0000-000000000005',
+      '9a800000-0000-0000-0000-000000000005',
+      repeat('5', 64),
+      '9a100000-0000-0000-0000-000000000001',
+      '9a100000-0000-0000-0000-000000000001'
+    )
+  $sql$,
+  '%não corresponde ao formato do conteúdo editorial%',
+  'a publishable task cannot be linked to a different editorial format'
+);
+
+SELECT throws_like(
+  $sql$
+    UPDATE public.tasks
+    SET delivery_type = 'branding'
+    WHERE id = '9a300000-0000-0000-0000-000000000001'
+  $sql$,
+  '%precisa manter um tipo publicável%',
+  'an active editorial task cannot change to a non-publishable type'
+);
+
+SELECT throws_like(
+  $sql$
+    UPDATE public.editorial_posts
+    SET content_type = 'reel'
+    WHERE id = '9a600000-0000-0000-0000-000000000001'
+  $sql$,
+  '%não corresponde ao tipo da tarefa vinculada%',
+  'a linked post cannot diverge from the explicit task delivery type'
 );
 
 -- ---------------------------------------------------------------------------

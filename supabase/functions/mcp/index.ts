@@ -184,6 +184,29 @@ var list_tasks_default = defineTool4({
 // src/lib/mcp/tools/create-task.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z as z4 } from "npm:zod@^3.25.76";
+var TASK_DELIVERY_TYPES = [
+  "unspecified",
+  "design",
+  "branding",
+  "static",
+  "carousel",
+  "reel",
+  "story",
+  "video",
+  "short",
+  "article",
+  "google_post",
+  "planning",
+  "copywriting",
+  "website",
+  "landing_page",
+  "automation",
+  "traffic",
+  "seo",
+  "document",
+  "report",
+  "other"
+];
 var create_task_default = defineTool5({
   name: "create_task",
   title: "Criar tarefa",
@@ -194,6 +217,7 @@ var create_task_default = defineTool5({
     description: z4.string().optional(),
     status: z4.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
     priority: z4.enum(["low", "medium", "high", "urgent"]).optional(),
+    delivery_type: z4.enum(TASK_DELIVERY_TYPES).optional(),
     due_date: z4.string().optional().describe("ISO date (YYYY-MM-DD).")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -209,6 +233,7 @@ var create_task_default = defineTool5({
       status,
       kanban_status: status,
       priority: input.priority ?? "medium",
+      delivery_type: input.delivery_type ?? "unspecified",
       due_date: input.due_date ?? null
     }).select().single();
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };

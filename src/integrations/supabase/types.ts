@@ -2750,6 +2750,7 @@ export type Database = {
           assigned_to: string | null
           created_at: string
           deleted_at: string | null
+          delivery_type: string
           description: string | null
           due_date: string | null
           id: string
@@ -2775,6 +2776,7 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           deleted_at?: string | null
+          delivery_type?: string
           description?: string | null
           due_date?: string | null
           id?: string
@@ -2800,6 +2802,7 @@ export type Database = {
           assigned_to?: string | null
           created_at?: string
           deleted_at?: string | null
+          delivery_type?: string
           description?: string | null
           due_date?: string | null
           id?: string

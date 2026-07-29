@@ -32,6 +32,11 @@ import {
 } from "@dnd-kit/core";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import type {
   EditorialPostBundle,
@@ -44,6 +49,10 @@ import {
   aggregateEditorialStatus,
   getEditorialApprovalStage,
 } from "@/lib/editorial";
+import {
+  TASK_DELIVERY_TYPE_LABELS,
+  type TaskDeliveryType,
+} from "@/lib/taskDeliveryTypes";
 import {
   isEditorialPostPlanMutable,
   isEditorialPublicationDraggable,
@@ -64,7 +73,10 @@ interface EditorialCalendarViewsProps {
   canPublish: boolean;
   moving?: boolean;
   onSelectPost: (post: EditorialPostBundle) => void;
-  onCreateFromTask?: (task: EditorialInboxTask) => void;
+  onCreateFromTask?: (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+  ) => void;
   onCreateOnDate: (dateKey: string) => void;
   onShowBacklog: () => void;
 }
@@ -173,6 +185,11 @@ function localDateKey(date: Date) {
   return format(date, "yyyy-MM-dd");
 }
 
+function taskDateKey(task: EditorialInboxTask) {
+  const value = task.due_date?.slice(0, 10) || "";
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) ? value : null;
+}
+
 function flattenScheduled(posts: EditorialPostBundle[]) {
   return posts
     .flatMap((post) =>
@@ -198,6 +215,18 @@ function groupScheduledByDate(items: ScheduledEditorialItem[]) {
     if (!key) continue;
     const current = grouped.get(key) || [];
     current.push(item);
+    grouped.set(key, current);
+  }
+  return grouped;
+}
+
+function groupTasksByDate(tasks: EditorialInboxTask[]) {
+  const grouped = new Map<string, EditorialInboxTask[]>();
+  for (const task of tasks) {
+    const key = taskDateKey(task);
+    if (!key) continue;
+    const current = grouped.get(key) || [];
+    current.push(task);
     grouped.set(key, current);
   }
   return grouped;
@@ -361,6 +390,53 @@ function PublicationPill({
   );
 }
 
+function taskDeliveryTypeLabel(task: EditorialInboxTask) {
+  const type = task.delivery_type as TaskDeliveryType | null | undefined;
+  return type && TASK_DELIVERY_TYPE_LABELS[type]
+    ? TASK_DELIVERY_TYPE_LABELS[type]
+    : "Conteúdo";
+}
+
+function TaskSchedulePill({
+  task,
+  compact = false,
+  projectScopeName,
+  onClick,
+}: {
+  task: EditorialInboxTask;
+  compact?: boolean;
+  projectScopeName?: string;
+  onClick: () => void;
+}) {
+  const deliveryType = taskDeliveryTypeLabel(task);
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Abrir tarefa ${task.title}, ${deliveryType}`}
+      className={cn(
+        "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
+        compact ? "px-2 py-1.5" : "p-2.5",
+      )}
+    >
+      <div className="flex min-w-0 items-center gap-1.5">
+        <Palette
+          className="h-3.5 w-3.5 shrink-0 text-violet-500"
+          aria-hidden="true"
+        />
+        <span className="truncate text-[11px] font-medium">
+          {task.title}
+        </span>
+      </div>
+      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
+        {deliveryType}
+        {projectScopeName ? ` · ${projectScopeName}` : ""}
+      </p>
+    </button>
+  );
+}
+
 function EmptyState({ canCreate }: { canCreate: boolean }) {
   return (
     <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-dashed border-border bg-card/40 px-6 text-center">
@@ -419,27 +495,37 @@ function DroppableDay({
 function MobileAgenda({
   days,
   itemsByDate,
+  tasksByDate,
+  projectScopeNames,
   canCreate,
   canEdit,
   canPublish,
   moving,
   onCreateOnDate,
   onSelectPost,
+  onCreateFromTask,
 }: {
   days: Date[];
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
+  tasksByDate: Map<string, EditorialInboxTask[]>;
+  projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
   onCreateOnDate: (dateKey: string) => void;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+  ) => void;
 }) {
   return (
     <div className="space-y-2 md:hidden">
       {days.map((day) => {
         const key = localDateKey(day);
         const dayItems = itemsByDate.get(key) || [];
+        const dayTasks = tasksByDate.get(key) || [];
         return (
           <DroppableDay
             key={key}
@@ -470,6 +556,14 @@ function MobileAgenda({
               )}
             </div>
             <div className="space-y-2">
+              {dayTasks.map((task) => (
+                <TaskSchedulePill
+                  key={task.id}
+                  task={task}
+                  projectScopeName={projectScopeNames.get(task.project_id)}
+                  onClick={() => onCreateFromTask(task, key)}
+                />
+              ))}
               {dayItems.map((item) => (
                 <PublicationPill
                   key={item.publication.publication.id}
@@ -480,7 +574,7 @@ function MobileAgenda({
                   onClick={() => onSelectPost(item.post)}
                 />
               ))}
-              {dayItems.length === 0 && (
+              {dayItems.length === 0 && dayTasks.length === 0 && (
                 <p className="rounded-lg border border-dashed border-border/75 py-3 text-center text-[10px] text-muted-foreground/65">
                   Solte uma tarefa ou publicação aqui
                 </p>
@@ -496,21 +590,30 @@ function MobileAgenda({
 function MonthView({
   anchorDate,
   itemsByDate,
+  tasksByDate,
+  projectScopeNames,
   canCreate,
   canEdit,
   canPublish,
   moving,
   onCreateOnDate,
   onSelectPost,
+  onCreateFromTask,
 }: {
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
+  tasksByDate: Map<string, EditorialInboxTask[]>;
+  projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
   onCreateOnDate: (dateKey: string) => void;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+  ) => void;
 }) {
   const start = startOfWeek(startOfMonth(anchorDate), { weekStartsOn: 1 });
   const end = endOfWeek(endOfMonth(anchorDate), { weekStartsOn: 1 });
@@ -522,12 +625,15 @@ function MonthView({
       <MobileAgenda
         days={days.filter((day) => isSameMonth(day, anchorDate))}
         itemsByDate={itemsByDate}
+        tasksByDate={tasksByDate}
+        projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
         canPublish={canPublish}
         moving={moving}
         onCreateOnDate={onCreateOnDate}
         onSelectPost={onSelectPost}
+        onCreateFromTask={onCreateFromTask}
       />
       <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card md:block">
         <div className="min-w-[840px]">
@@ -551,7 +657,17 @@ function MonthView({
             {days.map((day) => {
               const key = localDateKey(day);
               const dayItems = itemsByDate.get(key) || [];
-              const visibleItems = dayItems.slice(0, 3);
+              const dayTasks = tasksByDate.get(key) || [];
+              const visibleTasks = dayTasks.slice(0, 3);
+              const visibleItems = dayItems.slice(
+                0,
+                Math.max(0, 3 - visibleTasks.length),
+              );
+              const hiddenTasks = dayTasks.slice(visibleTasks.length);
+              const hiddenItems = dayItems.slice(visibleItems.length);
+              const dayCount = dayItems.length + dayTasks.length;
+              const visibleCount =
+                visibleItems.length + visibleTasks.length;
               return (
                 <DroppableDay
                   key={key}
@@ -576,9 +692,9 @@ function MonthView({
                       {format(day, "d")}
                     </span>
                     <div className="flex items-center gap-1.5">
-                      {dayItems.length > 0 && (
+                      {dayCount > 0 && (
                         <span className="text-[10px] text-muted-foreground">
-                          {dayItems.length}
+                          {dayCount}
                         </span>
                       )}
                       {canCreate && isSameMonth(day, anchorDate) && (
@@ -594,6 +710,17 @@ function MonthView({
                     </div>
                   </div>
                   <div className="space-y-1.5">
+                    {visibleTasks.map((task) => (
+                      <TaskSchedulePill
+                        key={task.id}
+                        task={task}
+                        compact
+                        projectScopeName={projectScopeNames.get(
+                          task.project_id,
+                        )}
+                        onClick={() => onCreateFromTask(task, key)}
+                      />
+                    ))}
                     {visibleItems.map((item) => (
                       <PublicationPill
                         key={item.publication.publication.id}
@@ -605,10 +732,50 @@ function MonthView({
                         onClick={() => onSelectPost(item.post)}
                       />
                     ))}
-                    {dayItems.length > visibleItems.length && (
-                      <p className="px-1 text-[10px] font-medium text-primary">
-                        +{dayItems.length - visibleItems.length} neste dia
-                      </p>
+                    {dayCount > visibleCount && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <button
+                            type="button"
+                            className="inline-flex min-h-7 w-full items-center rounded-md px-1 text-left text-[10px] font-medium text-primary transition-colors hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
+                            aria-label={`Ver mais ${dayCount - visibleCount} itens de ${format(day, "dd 'de' MMMM", { locale: ptBR })}`}
+                          >
+                            +{dayCount - visibleCount} neste dia
+                          </button>
+                        </PopoverTrigger>
+                        <PopoverContent
+                          align="start"
+                          className="max-h-[min(420px,70vh)] w-[min(22rem,calc(100vw-2rem))] overflow-y-auto p-3"
+                        >
+                          <p className="mb-2 text-xs font-semibold text-foreground">
+                            {format(day, "EEEE, dd 'de' MMMM", {
+                              locale: ptBR,
+                            })}
+                          </p>
+                          <div className="space-y-2">
+                            {hiddenTasks.map((task) => (
+                              <TaskSchedulePill
+                                key={task.id}
+                                task={task}
+                                projectScopeName={projectScopeNames.get(
+                                  task.project_id,
+                                )}
+                                onClick={() => onCreateFromTask(task, key)}
+                              />
+                            ))}
+                            {hiddenItems.map((item) => (
+                              <PublicationPill
+                                key={item.publication.publication.id}
+                                item={item}
+                                canEdit={canEdit}
+                                canPublish={canPublish}
+                                moving={moving}
+                                onClick={() => onSelectPost(item.post)}
+                              />
+                            ))}
+                          </div>
+                        </PopoverContent>
+                      </Popover>
                     )}
                   </div>
                 </DroppableDay>
@@ -624,21 +791,30 @@ function MonthView({
 function WeekView({
   anchorDate,
   itemsByDate,
+  tasksByDate,
+  projectScopeNames,
   canCreate,
   canEdit,
   canPublish,
   moving,
   onCreateOnDate,
   onSelectPost,
+  onCreateFromTask,
 }: {
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
+  tasksByDate: Map<string, EditorialInboxTask[]>;
+  projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
   onCreateOnDate: (dateKey: string) => void;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+  ) => void;
 }) {
   const start = startOfWeek(anchorDate, { weekStartsOn: 1 });
   const days = Array.from({ length: 7 }, (_, index) => addDays(start, index));
@@ -649,18 +825,22 @@ function WeekView({
       <MobileAgenda
         days={days}
         itemsByDate={itemsByDate}
+        tasksByDate={tasksByDate}
+        projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
         canPublish={canPublish}
         moving={moving}
         onCreateOnDate={onCreateOnDate}
         onSelectPost={onSelectPost}
+        onCreateFromTask={onCreateFromTask}
       />
       <div className="hidden overflow-x-auto rounded-2xl border border-border bg-card md:block">
         <div className="grid min-w-[920px] grid-cols-7">
           {days.map((day) => {
             const key = localDateKey(day);
             const dayItems = itemsByDate.get(key) || [];
+            const dayTasks = tasksByDate.get(key) || [];
             return (
               <DroppableDay
                 key={key}
@@ -701,6 +881,16 @@ function WeekView({
                   </div>
                 </header>
                 <div className="space-y-2 p-2.5">
+                  {dayTasks.map((task) => (
+                    <TaskSchedulePill
+                      key={task.id}
+                      task={task}
+                      projectScopeName={projectScopeNames.get(
+                        task.project_id,
+                      )}
+                      onClick={() => onCreateFromTask(task, key)}
+                    />
+                  ))}
                   {dayItems.map((item) => (
                     <PublicationPill
                       key={item.publication.publication.id}
@@ -711,7 +901,7 @@ function WeekView({
                       onClick={() => onSelectPost(item.post)}
                     />
                   ))}
-                  {dayItems.length === 0 && (
+                  {dayItems.length === 0 && dayTasks.length === 0 && (
                     <p className="rounded-lg border border-dashed border-border/70 py-8 text-center text-[10px] text-muted-foreground/60">
                       Solte aqui
                     </p>
@@ -915,7 +1105,7 @@ function BoardTaskCard({
               <Palette className="h-3.5 w-3.5" />
             </span>
             <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
-              Tarefa do Kanban
+              {taskDeliveryTypeLabel(task)} · Kanban
             </span>
           </div>
           <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
@@ -1154,145 +1344,274 @@ function BoardView({
   );
 }
 
+type ListTimelineItem =
+  | {
+      kind: "task";
+      dateKey: string;
+      sortKey: string;
+      task: EditorialInboxTask;
+    }
+  | {
+      kind: "publication";
+      dateKey: string;
+      sortKey: string;
+      item: ScheduledEditorialItem;
+    };
+
 function ListView({
+  anchorDate,
   posts,
   items,
+  tasks,
   clientNames,
   projectNames,
+  projectScopeNames,
+  responsibleNames,
   canEdit,
   canPublish,
   moving,
   onSelectPost,
+  onCreateFromTask,
 }: {
+  anchorDate: Date;
   posts: EditorialPostBundle[];
   items: ScheduledEditorialItem[];
+  tasks: EditorialInboxTask[];
   clientNames: Map<string, string>;
   projectNames: Map<string, string>;
+  projectScopeNames: Map<string, string>;
+  responsibleNames: Map<string, string>;
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+  ) => void;
 }) {
-  const sorted = [...items].sort((a, b) =>
-    (a.publication.publication.scheduled_at || "").localeCompare(
-      b.publication.publication.scheduled_at || "",
-    ),
-  );
   const backlogItems = flattenBacklog(posts);
+  const monthStartKey = localDateKey(startOfMonth(anchorDate));
+  const monthEndKey = localDateKey(endOfMonth(anchorDate));
+  const datedTasks = tasks
+    .filter((task) => {
+      const key = taskDateKey(task);
+      return Boolean(
+        key && key >= monthStartKey && key <= monthEndKey,
+      );
+    })
+    .sort((left, right) =>
+      (taskDateKey(left) || "").localeCompare(taskDateKey(right) || ""),
+    );
+  const undatedTasks = tasks.filter((task) => !taskDateKey(task));
+  const timelineItems = [
+    ...datedTasks.map<ListTimelineItem>((task) => {
+      const dateKey = taskDateKey(task) || "";
+      return {
+        kind: "task",
+        dateKey,
+        sortKey: `${dateKey}:0`,
+        task,
+      };
+    }),
+    ...items.flatMap<ListTimelineItem>((item) => {
+      const scheduledAt = item.publication.publication.scheduled_at;
+      const dateKey = scheduledDateKey(scheduledAt);
+      return dateKey
+        ? [
+            {
+              kind: "publication",
+              dateKey,
+              sortKey: `${dateKey}:1:${scheduledAt || ""}`,
+              item,
+            },
+          ]
+        : [];
+    }),
+  ].sort((left, right) => left.sortKey.localeCompare(right.sortKey));
 
   return (
     <div className="space-y-3">
-      {sorted.map((item) => {
-        const publication = item.publication.publication;
-        const draggable = isEditorialPublicationDraggable(
-          item.post,
-          item.publication,
-          { canEdit, canPublish },
-        );
-        return (
-          <article
-            key={publication.id}
-            className="flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/35 sm:flex-row sm:items-center"
-          >
-            <button
-              type="button"
-              onClick={() => onSelectPost(item.post)}
-              className="flex min-w-0 flex-1 flex-col gap-3 text-left sm:flex-row sm:items-center"
-            >
-              <div className="flex min-w-[92px] items-center gap-2 sm:block">
-                <p className="text-sm font-semibold text-foreground">
-                  {publication.scheduled_at
-                    ? new Intl.DateTimeFormat("pt-BR", {
+      {timelineItems.length > 0 && (
+        <section className="space-y-2">
+          <div className="flex items-center gap-2 px-1">
+            <CalendarClock className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-medium text-foreground">
+              Agenda cronológica
+            </h3>
+            <Badge variant="secondary">{timelineItems.length}</Badge>
+          </div>
+          {timelineItems.map((timelineItem) => {
+            if (timelineItem.kind === "task") {
+              const { task, dateKey } = timelineItem;
+              return (
+                <button
+                  key={`task:${task.id}`}
+                  type="button"
+                  onClick={() => onCreateFromTask(task, dateKey)}
+                  className="flex w-full flex-col gap-3 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-4 text-left transition-colors hover:border-violet-500/45 sm:flex-row sm:items-center"
+                >
+                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
+                    <p className="text-sm font-semibold text-foreground">
+                      {new Intl.DateTimeFormat("pt-BR", {
+                        day: "2-digit",
+                        month: "short",
+                      }).format(new Date(`${dateKey}T12:00:00`))}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      Prazo da tarefa
+                    </p>
+                  </div>
+                  <span className="h-9 w-1 shrink-0 rounded-full bg-violet-500" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {task.title}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
+                      {taskDeliveryTypeLabel(task)}
+                      {task.assigned_to
+                        ? ` · ${responsibleNames.get(task.assigned_to) || "Responsável"}`
+                        : ""}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className="w-fit border-violet-500/25 bg-violet-500/10 text-violet-500"
+                  >
+                    Abrir ou preparar
+                  </Badge>
+                </button>
+              );
+            }
+
+            const item = timelineItem.item;
+            const publication = item.publication.publication;
+            const draggable = isEditorialPublicationDraggable(
+              item.post,
+              item.publication,
+              { canEdit, canPublish },
+            );
+            return (
+              <article
+                key={`publication:${publication.id}`}
+                className="flex w-full flex-col gap-3 rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/35 sm:flex-row sm:items-center"
+              >
+                <button
+                  type="button"
+                  onClick={() => onSelectPost(item.post)}
+                  className="flex min-w-0 flex-1 flex-col gap-3 text-left sm:flex-row sm:items-center"
+                >
+                  <div className="flex min-w-[92px] items-center gap-2 sm:block">
+                    <p className="text-sm font-semibold text-foreground">
+                      {new Intl.DateTimeFormat("pt-BR", {
                         timeZone: "America/Sao_Paulo",
                         day: "2-digit",
                         month: "short",
-                      }).format(new Date(publication.scheduled_at))
-                    : "Sem data"}
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  {publication.scheduled_at
-                    ? timeFormatter.format(
-                        new Date(publication.scheduled_at),
-                      )
-                    : ""}
-                </p>
-              </div>
-              <span
-                className={cn(
-                  "h-9 w-1 shrink-0 rounded-full",
-                  platformDots[publication.platform] ||
-                    "bg-muted-foreground",
-                )}
-              />
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-foreground">
-                  {item.post.post.title}
-                </p>
-                <p className="mt-1 truncate text-xs text-muted-foreground">
-                  {clientNames.get(item.post.post.client_id) || "Cliente"} ·{" "}
-                  {projectNames.get(item.post.post.project_id) || "Projeto"} ·{" "}
-                  {item.publication.account?.display_name ||
-                    platformLabels[publication.platform] ||
-                    publication.platform}
-                </p>
-              </div>
-              <Badge
-                variant="outline"
-                className={cn(
-                  "w-fit",
-                  statusClasses[publication.status] ||
-                    statusClasses.planned,
-                )}
-              >
-                {publication.status === "published" && (
-                  <CheckCircle2 className="mr-1 h-3 w-3" />
-                )}
-                {statusLabels[publication.status] || publication.status}
-              </Badge>
-            </button>
-            <div className="flex shrink-0 items-center gap-1">
-              {draggable && !moving && (
+                      }).format(new Date(publication.scheduled_at!))}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {timeFormatter.format(
+                        new Date(publication.scheduled_at!),
+                      )}
+                    </p>
+                  </div>
                 <span
-                  className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-[10px] text-muted-foreground"
-                  title="Use a visualização de calendário para arrastar"
-                >
-                  <GripVertical className="h-3 w-3" />
-                  Mover
-                </span>
-              )}
-              {publication.permalink && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8"
-                  asChild
-                >
-                  <a
-                    href={publication.permalink}
-                    target="_blank"
-                    rel="noreferrer"
-                    aria-label="Abrir publicação"
+                  className={cn(
+                    "h-9 w-1 shrink-0 rounded-full",
+                    platformDots[publication.platform] ||
+                      "bg-muted-foreground",
+                  )}
+                />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-medium text-foreground">
+                      {item.post.post.title}
+                    </p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">
+                      {clientNames.get(item.post.post.client_id) || "Cliente"} ·{" "}
+                      {projectNames.get(item.post.post.project_id) || "Projeto"} ·{" "}
+                      {item.publication.account?.display_name ||
+                        platformLabels[publication.platform] ||
+                        publication.platform}
+                    </p>
+                  </div>
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "w-fit",
+                      statusClasses[publication.status] ||
+                        statusClasses.planned,
+                    )}
                   >
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                </Button>
-              )}
-            </div>
-          </article>
-        );
-      })}
+                    {publication.status === "published" && (
+                      <CheckCircle2 className="mr-1 h-3 w-3" />
+                    )}
+                    {statusLabels[publication.status] || publication.status}
+                  </Badge>
+                </button>
+                <div className="flex shrink-0 items-center gap-1">
+                  {draggable && !moving && (
+                    <span
+                      className="inline-flex h-8 items-center gap-1 rounded-lg border border-border px-2 text-[10px] text-muted-foreground"
+                      title="Use a visualização de calendário para arrastar"
+                    >
+                      <GripVertical className="h-3 w-3" />
+                      Mover
+                    </span>
+                  )}
+                  {publication.permalink && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-8 w-8"
+                      asChild
+                    >
+                      <a
+                        href={publication.permalink}
+                        target="_blank"
+                        rel="noreferrer"
+                        aria-label="Abrir publicação"
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </a>
+                    </Button>
+                  )}
+                </div>
+              </article>
+            );
+          })}
+        </section>
+      )}
 
-      {backlogItems.length > 0 && (
+      {(backlogItems.length > 0 || undatedTasks.length > 0) && (
         <section className="rounded-2xl border border-dashed border-border bg-card/40 p-4">
           <div className="mb-3 flex items-center gap-2">
             <CircleDashed className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-foreground">
               Sem agendamento
             </h3>
-            <Badge variant="secondary">{backlogItems.length}</Badge>
+            <Badge variant="secondary">
+              {backlogItems.length + undatedTasks.length}
+            </Badge>
           </div>
           <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {undatedTasks.map((task) => (
+              <button
+                key={task.id}
+                type="button"
+                onClick={() => onCreateFromTask(task)}
+                className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
+              >
+                <p className="truncate text-xs font-medium text-foreground">
+                  {task.title}
+                </p>
+                <p className="mt-1 truncate text-[10px] text-muted-foreground">
+                  {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
+                  {taskDeliveryTypeLabel(task)}
+                </p>
+              </button>
+            ))}
             {backlogItems.map(({ post, publication }) => (
               <button
                 key={
@@ -1345,12 +1664,24 @@ export default function EditorialCalendarViews({
     () => groupScheduledByDate(items),
     [items],
   );
-  const backlogCount = useMemo(
-    () => flattenBacklog(posts).length,
-    [posts],
+  const tasksByDate = useMemo(
+    () => groupTasksByDate(tasks),
+    [tasks],
   );
+  const backlogCount = useMemo(
+    () =>
+      flattenBacklog(posts).length +
+      tasks.filter((task) => !taskDateKey(task)).length,
+    [posts, tasks],
+  );
+  const listMonthStartKey = localDateKey(startOfMonth(anchorDate));
+  const listMonthEndKey = localDateKey(endOfMonth(anchorDate));
+  const hasVisibleListTask = tasks.some((task) => {
+    const key = taskDateKey(task);
+    return !key || (key >= listMonthStartKey && key <= listMonthEndKey);
+  });
 
-  if (posts.length === 0 && view === "list") {
+  if (posts.length === 0 && !hasVisibleListTask && view === "list") {
     return <EmptyState canCreate={canCreate} />;
   }
 
@@ -1398,12 +1729,15 @@ export default function EditorialCalendarViews({
         <MonthView
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
+          tasksByDate={tasksByDate}
+          projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
           canPublish={canPublish}
           moving={moving}
           onCreateOnDate={onCreateOnDate}
           onSelectPost={onSelectPost}
+          onCreateFromTask={onCreateFromTask}
         />
       </>
     );
@@ -1415,26 +1749,34 @@ export default function EditorialCalendarViews({
         <WeekView
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
+          tasksByDate={tasksByDate}
+          projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
           canPublish={canPublish}
           moving={moving}
           onCreateOnDate={onCreateOnDate}
           onSelectPost={onSelectPost}
+          onCreateFromTask={onCreateFromTask}
         />
       </>
     );
   }
   return (
     <ListView
+      anchorDate={anchorDate}
       posts={posts}
       items={items}
+      tasks={tasks}
       clientNames={clientNames}
       projectNames={projectNames}
+      projectScopeNames={projectScopeNames}
+      responsibleNames={responsibleNames}
       canEdit={canEdit}
       canPublish={canPublish}
       moving={moving}
       onSelectPost={onSelectPost}
+      onCreateFromTask={onCreateFromTask}
     />
   );
 }

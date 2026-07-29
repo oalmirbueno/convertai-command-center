@@ -16,6 +16,11 @@ import {
   TASK_WORKSTREAM_OPTIONS,
   type TaskWorkstream,
 } from "@/lib/taskWorkstreams";
+import {
+  TASK_DELIVERY_TYPE_OPTIONS,
+  suggestedWorkstreamForDeliveryType,
+  type TaskDeliveryType,
+} from "@/lib/taskDeliveryTypes";
 
 const PRIORITIES = [
   { value: "low", label: "Baixa" },
@@ -43,6 +48,8 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const [milestoneId, setMilestoneId] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [deliveryType, setDeliveryType] =
+    useState<TaskDeliveryType | "">("");
   const [workstream, setWorkstream] = useState<TaskWorkstream>("general");
   const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
@@ -67,6 +74,9 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       setMilestoneId(editTask.milestone_id || "");
       setDescription(editTask.description || "");
       setPriority(editTask.priority || "medium");
+      setDeliveryType(
+        (editTask.delivery_type as TaskDeliveryType) || "unspecified",
+      );
       setWorkstream((editTask.workstream as TaskWorkstream) || "general");
       setAssignedTo(editTask.assigned_to || "");
       setDueDate(editTask.due_date ? new Date(editTask.due_date) : undefined);
@@ -76,6 +86,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       setMilestoneId("");
       setDescription("");
       setPriority("medium");
+      setDeliveryType("");
       setWorkstream("general");
       setAssignedTo("");
       setDueDate(undefined);
@@ -96,6 +107,13 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       toast.error("Selecione o projeto");
       return;
     }
+    if (
+      !isEdit
+      && (!deliveryType || deliveryType === "unspecified")
+    ) {
+      toast.error("Selecione o tipo de entrega");
+      return;
+    }
 
     setSaving(true);
     try {
@@ -105,6 +123,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
         milestone_id: milestoneId || null,
         description: description.trim() || null,
         priority,
+        delivery_type: deliveryType || "unspecified",
         workstream,
         assigned_to: assignedTo || null,
         due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
@@ -205,6 +224,41 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
             <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</label>
             <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Detalhes da tarefa..."
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
+          </div>
+
+          <div className="space-y-1.5">
+            <label
+              htmlFor="task-delivery-type"
+              className="text-[11px] uppercase tracking-wider text-muted-foreground"
+            >
+              Tipo de entrega {!isEdit && "*"}
+            </label>
+            <select
+              id="task-delivery-type"
+              value={deliveryType}
+              onChange={(event) => {
+                const nextType = event.target.value as TaskDeliveryType;
+                setDeliveryType(nextType);
+                setWorkstream(
+                  suggestedWorkstreamForDeliveryType(nextType),
+                );
+              }}
+              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+            >
+              {!deliveryType && (
+                <option value="">Selecionar tipo...</option>
+              )}
+              {deliveryType === "unspecified" && (
+                <option value="unspecified">Não definido (legado)</option>
+              )}
+              {TASK_DELIVERY_TYPE_OPTIONS
+                .filter((option) => option.value !== "unspecified")
+                .map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+            </select>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
