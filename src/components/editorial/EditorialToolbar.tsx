@@ -152,6 +152,7 @@ export default function EditorialToolbar({
   const isActiveFilter = (value: string) =>
     Boolean(value && value !== "all");
   const advancedFilterCount = [
+    platform,
     status,
     productionStatus,
     approvalStatus,
@@ -170,8 +171,8 @@ export default function EditorialToolbar({
     ].some(isActiveFilter);
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-col gap-3 rounded-xl border border-border bg-card/70 p-3 lg:flex-row lg:items-center lg:justify-between sm:p-4">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card/70">
+      <div className="flex flex-col gap-3 p-3 sm:p-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex min-w-0 items-center gap-2 sm:gap-3">
           {view !== "board" && (
             <div className="flex shrink-0 items-center rounded-lg border border-border bg-background">
@@ -252,7 +253,7 @@ export default function EditorialToolbar({
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-2 rounded-xl border border-border bg-card/60 p-3 sm:grid-cols-2 xl:flex xl:items-center">
+      <div className="grid grid-cols-1 gap-2 border-t border-border bg-card/40 p-3 sm:grid-cols-2 xl:flex xl:items-center">
         <div className="relative min-w-0 sm:col-span-2 xl:min-w-[280px] xl:flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -279,14 +280,6 @@ export default function EditorialToolbar({
           onChange={onProjectChange}
           className="xl:w-[170px]"
         />
-        <FilterSelect
-          value={platform}
-          label="Todas as plataformas"
-          options={platforms}
-          onChange={onPlatformChange}
-          className="xl:w-[170px]"
-        />
-
         <Popover>
           <PopoverTrigger asChild>
             <Button
@@ -322,7 +315,7 @@ export default function EditorialToolbar({
                   Mais filtros
                 </p>
                 <p className="mt-0.5 text-xs text-muted-foreground">
-                  Refine a etapa, aprovação e responsável.
+                  Refine plataforma, etapa, aprovação e responsável.
                 </p>
               </div>
               <Button
@@ -339,6 +332,17 @@ export default function EditorialToolbar({
             </div>
 
             <div className="mt-3 grid gap-3">
+              <div className="space-y-1.5">
+                <p className="text-xs font-medium text-foreground">
+                  Plataforma
+                </p>
+                <FilterSelect
+                  value={platform}
+                  label="Todas as plataformas"
+                  options={platforms}
+                  onChange={onPlatformChange}
+                />
+              </div>
               <div className="space-y-1.5">
                 <p className="text-xs font-medium text-foreground">
                   Publicação

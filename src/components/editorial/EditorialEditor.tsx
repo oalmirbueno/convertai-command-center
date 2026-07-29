@@ -36,13 +36,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetFooter,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import {
   useEditorialEditorOptions,
@@ -62,6 +62,7 @@ import {
   isFilePublishable,
   type EditorialPlatform,
 } from "@/lib/editorial";
+import { isDesignTask } from "@/lib/taskWorkstreams";
 
 interface Option {
   id: string;
@@ -96,9 +97,14 @@ interface EditorialEditorProps {
   defaultTitle?: string;
   defaultResponsibleId?: string;
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
+  linkedTaskIds?: readonly string[];
+  designMemberIds?: readonly string[];
+  allowAllTasks?: boolean;
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
 }
+
+const EMPTY_ID_LIST: readonly string[] = [];
 
 const contentTypes = [
   { value: "static", label: "Post estático" },
@@ -165,6 +171,9 @@ export default function EditorialEditor({
   defaultTitle = "",
   defaultResponsibleId = "",
   defaultProductionStatus = "draft",
+  linkedTaskIds = EMPTY_ID_LIST,
+  designMemberIds = EMPTY_ID_LIST,
+  allowAllTasks = false,
   onOpenChange,
   onSaved,
 }: EditorialEditorProps) {
@@ -262,6 +271,19 @@ export default function EditorialEditor({
     projectId || null,
     open,
   );
+
+  useEffect(() => {
+    if (!open || !clientId || !projectId) return;
+
+    const refreshOptionsOnFocus = () => {
+      void refetchOptions();
+    };
+
+    window.addEventListener("focus", refreshOptionsOnFocus);
+    return () => {
+      window.removeEventListener("focus", refreshOptionsOnFocus);
+    };
+  }, [clientId, open, projectId, refetchOptions]);
 
   useEffect(() => {
     if (!open) return;
@@ -384,6 +406,24 @@ export default function EditorialEditor({
         member.role === "admin" || assignments.has(member.id),
     );
   }, [options?.assignments, teamMembers]);
+  const selectableTasks = useMemo(() => {
+    const linkedIds = new Set(linkedTaskIds);
+    const designIds = new Set(designMemberIds);
+    return (options?.tasks || []).filter(
+      (task) =>
+        task.id === taskId ||
+        (
+          !linkedIds.has(task.id) &&
+          (allowAllTasks || isDesignTask(task, designIds))
+        ),
+    );
+  }, [
+    allowAllTasks,
+    designMemberIds,
+    linkedTaskIds,
+    options?.tasks,
+    taskId,
+  ]);
   const selectedFile =
     options?.files.find((file) => file.id === primaryFileId) ||
     (
@@ -502,7 +542,7 @@ export default function EditorialEditor({
   const openMediaUploader = (
     mode: "single" | "carousel" | "video_link",
   ) => {
-    if (!clientId || !projectId) return;
+    if (!clientId || !projectId || contentLocked) return;
     const params = new URLSearchParams({
       client: clientId,
       project: projectId,
@@ -623,25 +663,34 @@ export default function EditorialEditor({
   };
 
   return (
-    <Sheet open={open} onOpenChange={requestOpenChange}>
-      <SheetContent className="w-full overflow-y-auto sm:max-w-3xl">
-        <SheetHeader>
-          <SheetTitle>
+    <Dialog open={open} onOpenChange={requestOpenChange}>
+      <DialogContent className="bottom-[max(0.5rem,env(safe-area-inset-bottom))] top-[max(0.5rem,env(safe-area-inset-top))] flex w-[calc(100vw-1rem)] max-w-5xl translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:bottom-auto sm:top-1/2 sm:max-h-[calc(100dvh-3rem)] sm:translate-y-[-50%]">
+        <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-4 pr-12 text-left sm:px-6 sm:py-5 sm:pr-14">
+          <DialogTitle>
             {post
               ? "Editar conteúdo editorial"
               : revisionOf
                 ? "Nova revisão editorial"
                 : "Novo conteúdo editorial"}
-          </SheetTitle>
-          <SheetDescription>
+          </DialogTitle>
+          <DialogDescription className="max-w-3xl">
             {revisionOf
               ? "Escolha a nova versão do arquivo e revise o copy antes de enviar novamente para aprovação."
               : "Prepare o conteúdo e os planos por plataforma. Agendar e confirmar publicação são ações separadas."}
-          </SheetDescription>
-        </SheetHeader>
+          </DialogDescription>
+        </DialogHeader>
 
-        <div className="space-y-6 py-6">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
           <section className="grid gap-4 rounded-xl border border-border p-4 md:grid-cols-2">
+            <div className="md:col-span-2">
+              <h3 className="text-sm font-semibold text-foreground">
+                Informações principais
+              </h3>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Defina o conteúdo antes de vincular mídia, tarefa e
+                plataformas.
+              </p>
+            </div>
             <div className="space-y-2">
               <Label htmlFor="editorial-client">Cliente</Label>
               <Select
@@ -794,62 +843,97 @@ export default function EditorialEditor({
                 Aprovações e Kanban.
               </p>
             </div>
-            <div className="rounded-lg border border-border bg-muted/25 p-3">
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div>
-                  <p className="text-xs font-semibold text-foreground">
-                    Mídia do conteúdo
-                  </p>
-                  <p className="mt-0.5 text-[11px] text-muted-foreground">
-                    Envie pela biblioteca atual e depois atualize a lista.
-                  </p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!clientId || !projectId}
-                    onClick={() => openMediaUploader("single")}
-                  >
-                    <Upload className="mr-1.5 h-3.5 w-3.5" />
-                    Arquivo
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!clientId || !projectId}
-                    onClick={() => openMediaUploader("carousel")}
-                  >
-                    <FileImage className="mr-1.5 h-3.5 w-3.5" />
-                    Carrossel
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    disabled={!clientId || !projectId}
-                    onClick={() => openMediaUploader("video_link")}
-                  >
-                    <Film className="mr-1.5 h-3.5 w-3.5" />
-                    Vídeo
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    disabled={!clientId || !projectId || loadingOptions}
-                    onClick={() => refetchOptions()}
-                  >
-                    <RefreshCw
-                      className={`mr-1.5 h-3.5 w-3.5 ${
-                        loadingOptions ? "animate-spin" : ""
-                      }`}
-                    />
-                    Atualizar biblioteca
-                  </Button>
-                </div>
+            <div className="rounded-xl border border-border bg-muted/20 p-3 sm:p-4">
+              <div>
+                <p className="text-xs font-semibold text-foreground">
+                  Adicionar mídia
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Abra a biblioteca no modo certo sem alterar o formato
+                  escolhido para o conteúdo.
+                </p>
+              </div>
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
+                  disabled={!clientId || !projectId || contentLocked}
+                  onClick={() => openMediaUploader("single")}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Upload className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">
+                      Arquivo
+                    </span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Imagem ou peça única
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
+                  disabled={!clientId || !projectId || contentLocked}
+                  onClick={() =>
+                    openMediaUploader("carousel")
+                  }
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <FileImage className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">
+                      Carrossel
+                    </span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Sequência de cards
+                    </span>
+                  </span>
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
+                  disabled={!clientId || !projectId || contentLocked}
+                  onClick={() => openMediaUploader("video_link")}
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Film className="h-4 w-4" />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="block text-sm font-semibold">
+                      Vídeo
+                    </span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      Upload ou link de vídeo
+                    </span>
+                  </span>
+                </Button>
+              </div>
+              <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
+                <p className="text-xs text-muted-foreground">
+                  Ao voltar para esta aba, a biblioteca atualiza
+                  automaticamente.
+                </p>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="self-start sm:self-auto"
+                  disabled={!clientId || !projectId || loadingOptions}
+                  onClick={() => refetchOptions()}
+                >
+                  <RefreshCw
+                    className={`mr-1.5 h-3.5 w-3.5 ${
+                      loadingOptions ? "animate-spin" : ""
+                    }`}
+                  />
+                  Atualizar biblioteca
+                </Button>
               </div>
             </div>
             {loadingOptions ? (
@@ -934,7 +1018,7 @@ export default function EditorialEditor({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">Sem tarefa</SelectItem>
-                      {(options?.tasks || []).map((task) => (
+                      {selectableTasks.map((task) => (
                         <SelectItem key={task.id} value={task.id}>
                           {task.title}
                         </SelectItem>
@@ -1263,7 +1347,7 @@ export default function EditorialEditor({
           </section>
         </div>
 
-        <SheetFooter className="sticky bottom-0 border-t border-border bg-background py-4">
+        <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background px-4 py-3 sm:px-6 sm:py-4 sm:space-x-0">
           <Button
             type="button"
             variant="outline"
@@ -1284,8 +1368,8 @@ export default function EditorialEditor({
             )}
             Salvar conteúdo
           </Button>
-        </SheetFooter>
-      </SheetContent>
-    </Sheet>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

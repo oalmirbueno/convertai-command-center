@@ -353,7 +353,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         className={cn(
           "fixed inset-x-0 top-[calc(env(safe-area-inset-top)+80px)] bottom-[calc(env(safe-area-inset-bottom)+72px)] z-0 mx-auto w-full overflow-y-auto overflow-x-hidden px-4 md:static md:px-6 md:pt-[calc(env(safe-area-inset-top)+80px)] md:pb-[calc(env(safe-area-inset-bottom)+96px)] md:overflow-visible",
           location.pathname === "/calendario"
-            ? "max-w-[1520px]"
+            ? "max-w-[1400px]"
             : "max-w-[1280px]",
         )}
         style={{ WebkitOverflowScrolling: 'touch', overscrollBehavior: 'contain' }}

@@ -22,6 +22,11 @@ import {
   requestIdFromTaskSource,
   syncClientRequestStatusForTask,
 } from "@/lib/requestTaskWorkflow";
+import {
+  TASK_WORKSTREAM_LABELS,
+  TASK_WORKSTREAM_OPTIONS,
+  type TaskWorkstream,
+} from "@/lib/taskWorkstreams";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -83,6 +88,9 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority);
   const [status, setStatus] = useState(task.status);
+  const [workstream, setWorkstream] = useState<TaskWorkstream>(
+    (task.workstream as TaskWorkstream) || "general",
+  );
   const [assignedTo, setAssignedTo] = useState(task.assigned_to || "");
   const [dueDate, setDueDate] = useState(task.due_date || "");
   const [saving, setSaving] = useState(false);
@@ -97,6 +105,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     description: task.description || "",
     priority: task.priority,
     status: task.status,
+    workstream: (task.workstream as TaskWorkstream) || "general",
     assignedTo: task.assigned_to || "",
     dueDate: task.due_date || "",
   });
@@ -108,6 +117,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       description: task.description || "",
       priority: task.priority,
       status: task.status,
+      workstream: (task.workstream as TaskWorkstream) || "general",
       assignedTo: task.assigned_to || "",
       dueDate: task.due_date || "",
     };
@@ -117,6 +127,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     setDescription(next.description);
     setPriority(next.priority);
     setStatus(next.status);
+    setWorkstream(next.workstream);
     setAssignedTo(next.assignedTo);
     setDueDate(next.dueDate);
     setEditing(false);
@@ -276,6 +287,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         title: title.trim(),
         description: description.trim() || null,
         priority, status,
+        workstream,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
       }).eq("id", task.id).select("id").maybeSingle();
@@ -286,6 +298,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         description: description.trim(),
         priority,
         status,
+        workstream,
         assignedTo,
         dueDate,
       };
@@ -735,6 +748,35 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                 </p>
               )}
             </div>
+            <div className="space-y-1 col-span-2">
+              {editing ? (
+                <>
+                  <label
+                    htmlFor="task-detail-workstream"
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                  >
+                    Área
+                  </label>
+                  <select
+                    id="task-detail-workstream"
+                    value={workstream}
+                    onChange={e => setWorkstream(e.target.value as TaskWorkstream)}
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                  >
+                    {TASK_WORKSTREAM_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>{option.label}</option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Área</p>
+                  <span className="text-[12px] px-2 py-0.5 rounded-full bg-primary/10 text-primary inline-block">
+                    {TASK_WORKSTREAM_LABELS[workstream]}
+                  </span>
+                </>
+              )}
+            </div>
           </div>
 
           {task.milestone?.title && (
@@ -1080,6 +1122,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               setDescription(saved.description);
               setPriority(saved.priority);
               setStatus(saved.status);
+              setWorkstream(saved.workstream);
               setAssignedTo(saved.assignedTo);
               setDueDate(saved.dueDate);
             }}

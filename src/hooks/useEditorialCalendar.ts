@@ -202,27 +202,81 @@ export function useEditorialClientScope(enabled: boolean) {
 
 export function useEditorialLinkedTaskIds(enabled: boolean) {
   const { user, profile } = useAuth();
+  const queryClient = useQueryClient();
   const isEditorialStaff = ["admin", "manager", "design", "traffic"].includes(
     profile?.role || "",
   );
 
-  return useQuery({
+  const query = useQuery({
     queryKey: ["editorial-linked-task-ids", user?.id, profile?.role],
     queryFn: async (): Promise<string[]> => {
-      const rows = await readAllPages<{ task_id: string | null }>(
+      const links = await readAllPages<{
+        post_id: string;
+        task_id: string | null;
+      }>(
         (from, to) =>
           editorialDb
             .from("editorial_post_internal")
-            .select("task_id")
+            .select("post_id, task_id")
             .not("task_id", "is", null)
             .order("task_id", { ascending: true })
             .range(from, to),
       );
-      return unique(rows.map((row) => row.task_id));
+      const postIds = unique(links.map((row) => row.post_id));
+      if (postIds.length === 0) return [];
+
+      const activePosts = await readInChunks<{ id: string }>(
+        postIds,
+        (chunk, from, to) =>
+          editorialDb
+            .from("editorial_posts")
+            .select("id")
+            .in("id", chunk)
+            .in("production_status", ["draft", "production", "ready"])
+            .is("archived_at", null)
+            .order("id", { ascending: true })
+            .range(from, to),
+      );
+      const activePostIds = new Set(activePosts.map((post) => post.id));
+      return unique(
+        links
+          .filter((link) => activePostIds.has(link.post_id))
+          .map((link) => link.task_id),
+      );
     },
     enabled: enabled && !!user && isEditorialStaff,
     refetchInterval: 30_000,
   });
+
+  useEffect(() => {
+    if (!enabled || !user || !isEditorialStaff) return;
+
+    const refreshTasks = () => {
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      queryClient.invalidateQueries({
+        queryKey: ["editorial-linked-task-ids"],
+      });
+    };
+    const channel = supabase
+      .channel(`editorial-task-links:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "tasks" },
+        refreshTasks,
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "editorial_posts" },
+        refreshTasks,
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [enabled, isEditorialStaff, queryClient, user]);
+
+  return query;
 }
 
 export interface EditorialApprovalPreviewPlan {
@@ -838,11 +892,13 @@ export function useEditorialEditorOptions(
             assigned_to: string | null;
             status: string;
             due_date: string | null;
+            workstream: string | null;
+            source: string | null;
           }>((from, to) =>
             editorialDb
               .from("tasks")
               .select(
-                "id, project_id, title, assigned_to, status, due_date",
+                "id, project_id, title, assigned_to, status, due_date, workstream, source",
               )
               .eq("project_id", projectId)
               .is("deleted_at", null)
@@ -926,6 +982,7 @@ export function useEditorialMutations() {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] }),
       queryClient.invalidateQueries({ queryKey: ["editorial-events"] }),
+      queryClient.invalidateQueries({ queryKey: ["tasks"] }),
       queryClient.invalidateQueries({
         queryKey: ["editorial-linked-task-ids"],
       }),

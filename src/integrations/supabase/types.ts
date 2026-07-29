@@ -2328,6 +2328,7 @@ export type Database = {
           task_order: number | null
           title: string
           updated_at: string
+          workstream: string
         }
         Insert: {
           assigned_to?: string | null
@@ -2352,6 +2353,7 @@ export type Database = {
           task_order?: number | null
           title: string
           updated_at?: string
+          workstream?: string
         }
         Update: {
           assigned_to?: string | null
@@ -2376,6 +2378,7 @@ export type Database = {
           task_order?: number | null
           title?: string
           updated_at?: string
+          workstream?: string
         }
         Relationships: [
           {

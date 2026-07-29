@@ -92,4 +92,5 @@ Planos-base editáveis: R$ 597, R$ 1.197, R$ 2.297, R$ 5.597 e Sob Medida. Servi
 - Baseline documental em 20/07/2026: `main` em `3129a07042a27bf6abfd6502383a1dbed407a9c1`, merge do PR #8 (`fix: tornar nova entrada financeira consistente`). Este SHA é uma fotografia histórica; antes de cada lote, confirmar novamente o `main` remoto.
 - Existem um MCP oficial do Lovable com sessão/RLS e um endpoint legado mais amplo; a consolidação deve favorecer o oficial, mantendo compatibilidade controlada.
 - O primeiro objetivo é estabilizar contexto, segurança e fluxo de trabalho antes de ampliar o ecossistema autônomo.
+- A decisão proposta para classificação de tarefas e sincronização Kanban/editorial está registrada em [`ADR-0001`](decisions/ADR-0001-workstream-e-sincronizacao-editorial.md).
 - Mudanças futuras devem atualizar este documento e um registro de estado/decisões para evitar perda de contexto.
