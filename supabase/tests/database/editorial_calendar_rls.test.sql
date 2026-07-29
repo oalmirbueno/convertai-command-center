@@ -1895,21 +1895,29 @@ SELECT throws_like(
     SELECT public.save_editorial_post(
       jsonb_set(
         jsonb_set(
-          state.payload,
-          '{idempotency_key}',
+          jsonb_set(
+            state.payload,
+            '{idempotency_key}',
+            to_jsonb(
+              '96000000-0000-0000-0000-00000000000d'::text
+            )
+          ),
+          '{title}',
           to_jsonb(
-            '96000000-0000-0000-0000-00000000000d'::text
+            'Cannot reuse an approved file'::text
           )
         ),
-        '{title}',
-        to_jsonb('Cannot reuse an approved file'::text)
+        '{publications,1,file_id}',
+        to_jsonb(
+          '94000000-0000-0000-0000-00000000000a'::text
+        )
       ),
       NULL
     )
     FROM pg_temp.editorial_test_state AS state
     WHERE state.label = 'client_a'
   $sql$,
-  '%primary file is already under review%',
+  '%approved editorial media is already linked to another content%',
   'a new post cannot reuse a primary file after final approval'
 );
 
@@ -2656,6 +2664,7 @@ SELECT is(
   0,
   'scheduling alone does not create a false publication receipt'
 );
+SELECT pg_temp.act_as_owner();
 SELECT is(
   (
     SELECT count(*)::integer
@@ -2668,6 +2677,9 @@ SELECT is(
   'scheduling alone sends no published notification'
 );
 
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
 SELECT throws_like(
   $sql$
     SELECT public.transition_editorial_publication(
@@ -2729,6 +2741,7 @@ SELECT ok(
   'published transition writes one permalink receipt to task notes'
 );
 
+SELECT pg_temp.act_as_owner();
 SELECT is(
   (
     SELECT count(*)::integer
@@ -2758,6 +2771,9 @@ SELECT is(
   'published notification never crosses into clients or unassigned staff'
 );
 
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
 SELECT is(
   (
     SELECT (
@@ -2780,6 +2796,7 @@ SELECT is(
   'exact published retry is recovered idempotently'
 );
 
+SELECT pg_temp.act_as_owner();
 SELECT is(
   (
     SELECT count(*)::integer
