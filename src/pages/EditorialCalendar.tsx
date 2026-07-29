@@ -136,6 +136,7 @@ interface EditorialDraftSeed {
   projectId: string;
   taskId?: string;
   title?: string;
+  context?: string;
   contentType?: string;
   responsibleId?: string;
   productionStatus?: EditableEditorialStage | "cancelled";
@@ -861,6 +862,7 @@ export default function EditorialCalendar() {
       projectId: task.project_id,
       taskId: task.id,
       title: task.title,
+      context: task.description?.trim() || undefined,
       contentType:
         contentTypeForDeliveryType(task.delivery_type) || "static",
       responsibleId: task.assigned_to || undefined,
@@ -1539,6 +1541,7 @@ export default function EditorialCalendar() {
           defaultScheduledAt={defaultScheduledAt}
           defaultTaskId={draftSeed?.taskId}
           defaultTitle={draftSeed?.title}
+          defaultContext={draftSeed?.context}
           defaultContentType={draftSeed?.contentType}
           defaultResponsibleId={draftSeed?.responsibleId}
           defaultProductionStatus={draftSeed?.productionStatus}
