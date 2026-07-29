@@ -97,6 +97,7 @@ interface EditorialEditorProps {
   defaultTitle?: string;
   defaultResponsibleId?: string;
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
+  lockTaskId?: boolean;
   linkedTaskIds?: readonly string[];
   designMemberIds?: readonly string[];
   allowAllTasks?: boolean;
@@ -171,6 +172,7 @@ export default function EditorialEditor({
   defaultTitle = "",
   defaultResponsibleId = "",
   defaultProductionStatus = "draft",
+  lockTaskId = false,
   linkedTaskIds = EMPTY_ID_LIST,
   designMemberIds = EMPTY_ID_LIST,
   allowAllTasks = false,
@@ -392,6 +394,50 @@ export default function EditorialEditor({
     revisionOf,
   ]);
 
+  useEffect(() => {
+    if (
+      !open ||
+      post ||
+      revisionOf ||
+      !defaultScheduledAt ||
+      !options
+    ) {
+      return;
+    }
+    setPublications((current) => {
+      const emptyScheduledPlaceholder = (publication: PublicationDraft) =>
+        !publication.externalAccountId &&
+        !publication.fileId &&
+        !publication.caption.trim() &&
+        !publication.firstComment.trim() &&
+        !publication.altText.trim() &&
+        publication.scheduledAt === defaultScheduledAt;
+      if (options.accounts.length === 0) {
+        return current.filter(
+          (publication) => !emptyScheduledPlaceholder(publication),
+        );
+      }
+      if (options.accounts.length > 1) return current;
+      const onlyAccountId = options.accounts[0].id;
+      if (current.length === 0) {
+        return [emptyPublication(defaultScheduledAt, onlyAccountId)];
+      }
+      if (
+        current.length === 1 &&
+        emptyScheduledPlaceholder(current[0])
+      ) {
+        return [{ ...current[0], externalAccountId: onlyAccountId }];
+      }
+      return current;
+    });
+  }, [
+    defaultScheduledAt,
+    open,
+    options,
+    post,
+    revisionOf,
+  ]);
+
   const filteredProjects = useMemo(
     () =>
       projects.filter(
@@ -562,17 +608,33 @@ export default function EditorialEditor({
       toast.error("Preencha cliente, projeto e título.");
       return;
     }
+    if (
+      lockTaskId &&
+      (!taskId || taskId !== defaultTaskId)
+    ) {
+      toast.error(
+        "Este conteúdo precisa permanecer vinculado à tarefa de origem.",
+      );
+      return;
+    }
     if (revisionOf && !primaryFileId) {
       toast.error(
         "Selecione a nova versão editável do arquivo para criar a revisão.",
       );
       return;
     }
-    if (
-      publications.some(
-        (publication) => !publication.externalAccountId,
-      )
-    ) {
+    const accountlessPublicationWithContent = publications.some(
+      (publication) =>
+        !publication.externalAccountId &&
+        Boolean(
+          publication.fileId ||
+            publication.caption.trim() ||
+            publication.firstComment.trim() ||
+            publication.altText.trim() ||
+            publication.scheduledAt,
+        ),
+    );
+    if (accountlessPublicationWithContent) {
       toast.error("Escolha uma conta em cada publicação.");
       return;
     }
@@ -580,7 +642,9 @@ export default function EditorialEditor({
     try {
       const mutationId = pendingMutationId || newIdempotencyKey();
       setPendingMutationId(mutationId);
-      const publicationPayload = publications.map((publication) => {
+      const publicationPayload = publications
+        .filter((publication) => publication.externalAccountId)
+        .map((publication) => {
         const scheduledAt = publication.scheduledAt
           ? zonedDateTimeLocalToIso(
               publication.scheduledAt,
@@ -696,7 +760,7 @@ export default function EditorialEditor({
               <Select
                 value={clientId}
                 onValueChange={handleClientChange}
-                disabled={!!post || !!revisionOf}
+                disabled={!!post || !!revisionOf || lockTaskId}
               >
                 <SelectTrigger id="editorial-client">
                   <SelectValue placeholder="Selecione o cliente" />
@@ -715,7 +779,9 @@ export default function EditorialEditor({
               <Select
                 value={projectId}
                 onValueChange={handleProjectChange}
-                disabled={!clientId || !!post || !!revisionOf}
+                disabled={
+                  !clientId || !!post || !!revisionOf || lockTaskId
+                }
               >
                 <SelectTrigger id="editorial-project">
                   <SelectValue placeholder="Selecione o projeto" />
@@ -1011,13 +1077,15 @@ export default function EditorialEditor({
                         markChanged();
                       }
                     }
-                    disabled={!projectId}
+                    disabled={!projectId || lockTaskId}
                   >
                     <SelectTrigger id="editorial-task">
                       <SelectValue placeholder="Vincular tarefa" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Sem tarefa</SelectItem>
+                      {!lockTaskId && (
+                        <SelectItem value="none">Sem tarefa</SelectItem>
+                      )}
                       {selectableTasks.map((task) => (
                         <SelectItem key={task.id} value={task.id}>
                           {task.title}
@@ -1112,8 +1180,9 @@ export default function EditorialEditor({
                   Nenhuma conta de publicação ligada a este projeto.
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Vincule as plataformas no cadastro do cliente antes de montar
-                  o plano.
+                  {defaultScheduledAt
+                    ? "A data escolhida não pode ser agendada sem uma conta. O conteúdo pode ser salvo agora como rascunho no quadro."
+                    : "Vincule as plataformas no cadastro do cliente antes de montar o plano."}
                 </p>
               </div>
             )}

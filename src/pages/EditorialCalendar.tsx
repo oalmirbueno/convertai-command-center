@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   DndContext,
   DragOverlay,
@@ -81,7 +82,14 @@ import {
   moveEditorialInstantToCalendarDate,
   type EditableEditorialStage,
 } from "@/lib/editorialDrag";
-import { isDesignTask } from "@/lib/taskWorkstreams";
+import {
+  canonicalTaskStatus,
+  editorialStageForTaskStatus,
+  isEditorialTask,
+  kanbanStatusForEditorialStage,
+} from "@/lib/taskWorkstreams";
+import { supabase } from "@/integrations/supabase/client";
+import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 
 const validViews: EditorialView[] = ["board", "month", "week", "list"];
 const aggregateStatuses = Object.keys(
@@ -171,16 +179,32 @@ function periodTitle(dateKey: string, view: EditorialView) {
   }).format(date);
 }
 
-function CalendarMetrics({ posts }: { posts: EditorialPostBundle[] }) {
+function CalendarMetrics({
+  posts,
+  taskCount,
+}: {
+  posts: EditorialPostBundle[];
+  taskCount?: number;
+}) {
   const publications = posts.flatMap((post) =>
     post.publications.map(({ publication }) => publication),
   );
   const metrics = [
+    ...(taskCount === undefined
+      ? []
+      : [
+          {
+            label: "Tarefas",
+            value: taskCount,
+            icon: LayoutTemplate,
+            className: "text-violet-500 bg-violet-500/10",
+          },
+        ]),
     {
       label: "Conteúdos",
       value: posts.length,
       icon: CalendarDays,
-      className: "text-violet-500 bg-violet-500/10",
+      className: "text-sky-500 bg-sky-500/10",
     },
     {
       label: "Agendados",
@@ -198,14 +222,18 @@ function CalendarMetrics({ posts }: { posts: EditorialPostBundle[] }) {
       icon: CheckCircle2,
       className: "text-success bg-success/10",
     },
-    {
-      label: "Falhas",
-      value: publications.filter(
-        (publication) => publication.status === "failed",
-      ).length,
-      icon: AlertCircle,
-      className: "text-destructive bg-destructive/10",
-    },
+    ...(taskCount === undefined
+      ? [
+          {
+            label: "Falhas",
+            value: publications.filter(
+              (publication) => publication.status === "failed",
+            ).length,
+            icon: AlertCircle,
+            className: "text-destructive bg-destructive/10",
+          },
+        ]
+      : []),
   ];
 
   return (
@@ -238,11 +266,15 @@ export default function EditorialCalendar() {
   const { profile } = useAuth();
   const { isImpersonating, impersonatedId } = useImpersonation();
   const [searchParams, setSearchParams] = useSearchParams();
+  const queryClient = useQueryClient();
+  const effectiveRole = isImpersonating ? "client" : profile?.role;
   const todayKey = dateKeyInTimeZone(new Date()) || "2026-01-01";
   const requestedView = searchParams.get("view") as EditorialView | null;
   const view = validViews.includes(requestedView || ("" as EditorialView))
     ? (requestedView as EditorialView)
-    : "month";
+    : effectiveRole === "client"
+      ? "month"
+      : "board";
   const dateKey = normalizeEditorialDateParam(
     searchParams.get("date"),
     todayKey,
@@ -260,7 +292,6 @@ export default function EditorialCalendar() {
   const taskScope: EditorialTaskScope =
     searchParams.get("tasks") === "all" ? "all" : "design";
   const contentId = searchParams.get("content");
-  const effectiveRole = isImpersonating ? "client" : profile?.role;
   const permissions = editorialPermissions(effectiveRole);
   const responsibleId =
     permissions.canEdit && !isImpersonating
@@ -463,6 +494,13 @@ export default function EditorialCalendar() {
     };
     return ((tasksQuery.data || []) as EditorialInboxTask[])
       .filter((task) => {
+        if (
+          task.source
+            ?.toLocaleLowerCase("pt-BR")
+            .startsWith("client_request:")
+        ) {
+          return false;
+        }
         if (task.status === "done" || linkedTaskIds.has(task.id)) {
           return false;
         }
@@ -502,13 +540,68 @@ export default function EditorialCalendar() {
     tasksQuery.data,
   ]);
   const inboxTasks = useMemo(
-    () =>
-      taskScope === "design"
-        ? allInboxTasks.filter((task) =>
-            isDesignTask(task, designMemberIds),
-          )
-        : allInboxTasks,
-    [allInboxTasks, designMemberIds, taskScope],
+    () => {
+      const normalizedSearch = search
+        .trim()
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
+        .toLocaleLowerCase("pt-BR");
+      return allInboxTasks.filter((task) => {
+        if (
+          taskScope === "design" &&
+          !isEditorialTask(task, designMemberIds)
+        ) {
+          return false;
+        }
+        if (
+          responsibleId !== "all" &&
+          task.assigned_to !== responsibleId
+        ) {
+          return false;
+        }
+        if (
+          productionStatus !== "all" &&
+          editorialStageForTaskStatus(task.status) !== productionStatus
+        ) {
+          return false;
+        }
+        if (
+          platform !== "all" ||
+          status !== "all" ||
+          approvalStatus !== "all"
+        ) {
+          return false;
+        }
+        if (!normalizedSearch) return true;
+        const searchable = [
+          task.title,
+          task.description,
+          projectScopeNames.get(task.project_id),
+          task.assigned_to
+            ? responsibleNames.get(task.assigned_to)
+            : "Sem responsável",
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .normalize("NFD")
+          .replace(/\p{Diacritic}/gu, "")
+          .toLocaleLowerCase("pt-BR");
+        return searchable.includes(normalizedSearch);
+      });
+    },
+    [
+      allInboxTasks,
+      approvalStatus,
+      designMemberIds,
+      platform,
+      productionStatus,
+      projectScopeNames,
+      responsibleId,
+      responsibleNames,
+      search,
+      status,
+      taskScope,
+    ],
   );
   const filteredProjects = useMemo(
     () =>
@@ -688,10 +781,6 @@ export default function EditorialCalendar() {
       toast.error("O projeto desta tarefa não está disponível.");
       return;
     }
-    const dueDateKey =
-      task.due_date && /^\d{4}-\d{2}-\d{2}/.test(task.due_date)
-        ? task.due_date.slice(0, 10)
-        : null;
     openCreate({
       clientId: project.client_id,
       projectId: task.project_id,
@@ -699,10 +788,123 @@ export default function EditorialCalendar() {
       title: task.title,
       responsibleId: task.assigned_to || undefined,
       productionStatus:
-        targetStage || (task.status === "doing" ? "production" : "draft"),
-      scheduledAt: `${targetDateKey || dueDateKey || dateKey}T09:00`,
+        targetStage ||
+        editorialStageForTaskStatus(task.status) ||
+        "draft",
+      scheduledAt: targetDateKey
+        ? `${targetDateKey}T09:00`
+        : undefined,
     });
   };
+
+  const moveTaskToStage = useCallback(
+    async (
+      task: EditorialInboxTask,
+      targetStage: EditableEditorialStage,
+    ) => {
+      if (!permissions.canEdit || movingEditorial) return;
+      const targetStatus = kanbanStatusForEditorialStage(targetStage);
+      if (!targetStatus) return;
+      if (canonicalTaskStatus(task.status) === targetStatus) return;
+      setMovingEditorial(true);
+      try {
+        const { data, error } = await supabase
+          .from("tasks")
+          .update({ status: targetStatus })
+          .eq("id", task.id)
+          .eq("status", task.status)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          throw new Error(
+            "A tarefa mudou em outra sessão. Atualize e tente novamente.",
+          );
+        }
+        const { notifyOpsTaskUpdated } = await import(
+          "@/lib/opsTaskSync"
+        );
+        notifyOpsTaskUpdated(task.id);
+        await tasksQuery.refetch();
+        toast.success("Tarefa atualizada também no Kanban central.");
+        try {
+          const {
+            data: { user: authUser },
+          } = await supabase.auth.getUser();
+          if (
+            targetStatus === "review" &&
+            task.project_id &&
+            authUser
+          ) {
+            await sendTaskAttachmentsToApproval(
+              task.id,
+              task.project_id,
+              task.title,
+              authUser.id,
+            );
+            await Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["all-files"] }),
+              queryClient.invalidateQueries({ queryKey: ["files"] }),
+            ]);
+          }
+          if (authUser) {
+            const { notifyAdmin, notifyUser } = await import(
+              "@/lib/notifyHelpers"
+            );
+            if (!profile?.role?.includes("admin")) {
+              await notifyAdmin(
+                `${profile?.full_name || "Membro"} moveu "${task.title}" pelo calendário editorial`,
+                "task",
+                "/kanban",
+              );
+            }
+            if (
+              task.assigned_to &&
+              task.assigned_to !== authUser.id
+            ) {
+              await notifyUser(
+                task.assigned_to,
+                `Tarefa "${task.title}" atualizada pelo calendário editorial`,
+                "task",
+                "/kanban",
+              );
+            }
+          }
+          await Promise.all([
+            queryClient.invalidateQueries({ queryKey: ["milestones"] }),
+            queryClient.invalidateQueries({
+              queryKey: ["milestones-all"],
+            }),
+            queryClient.invalidateQueries({ queryKey: ["projects"] }),
+          ]);
+        } catch (sideEffectError) {
+          console.error(
+            "Editorial task move side effects failed",
+            sideEffectError,
+          );
+          toast.warning(
+            "A tarefa foi movida, mas uma etapa auxiliar precisa ser atualizada.",
+          );
+        }
+      } catch (error: unknown) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível mover a tarefa.",
+        );
+      } finally {
+        setMovingEditorial(false);
+      }
+    },
+    [
+      movingEditorial,
+      permissions.canEdit,
+      profile?.full_name,
+      profile?.role,
+      queryClient,
+      tasksQuery,
+    ],
+  );
 
   const movePostToStage = useCallback(
     async (
@@ -869,9 +1071,8 @@ export default function EditorialCalendar() {
         overData.kind === "stage" &&
         overData.productionStatus
       ) {
-        openCreateFromTask(
+        void moveTaskToStage(
           task,
-          undefined,
           overData.productionStatus as EditableEditorialStage,
         );
       }
@@ -916,13 +1117,20 @@ export default function EditorialCalendar() {
     setSearchParams(next, { replace: true });
   };
 
-  const defaultScheduledAt =
-    draftSeed?.scheduledAt || `${dateKey}T09:00`;
+  const defaultScheduledAt = draftSeed?.scheduledAt || "";
   const editorClientId =
     draftSeed?.clientId || selectedEditorClientId;
   const editorProjectId =
     draftSeed?.projectId || selectedEditorProjectId;
   const pageTitle = periodTitle(dateKey, view);
+  const kanbanHref = useMemo(() => {
+    const params = new URLSearchParams({ area: "editorial" });
+    const selectedClientId =
+      requestedClientId === "all" ? "" : requestedClientId;
+    if (selectedClientId) params.set("client", selectedClientId);
+    if (projectId !== "all") params.set("project", projectId);
+    return `/kanban?${params.toString()}`;
+  }, [projectId, requestedClientId]);
 
   return (
     <DndContext
@@ -992,7 +1200,10 @@ export default function EditorialCalendar() {
           </div>
         )}
 
-        <CalendarMetrics posts={filteredPosts} />
+        <CalendarMetrics
+          posts={filteredPosts}
+          taskCount={canUseTeamData ? inboxTasks.length : undefined}
+        />
 
         <EditorialToolbar
           title={pageTitle}
@@ -1055,7 +1266,56 @@ export default function EditorialCalendar() {
           onCreate={() => openCreate()}
         />
 
-        {canUseTeamData && (
+        {canUseTeamData && view === "board" && (
+          <section className="flex flex-col gap-3 rounded-xl border border-border bg-card/60 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-500/10 text-violet-500">
+                <LayoutTemplate className="h-4 w-4" />
+              </span>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold text-foreground">
+                  Tarefas do Kanban no fluxo
+                </p>
+                <p className="truncate text-[10px] text-muted-foreground">
+                  {inboxTasks.length} visíveis com os filtros atuais
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="inline-flex rounded-lg border border-border bg-background p-1">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={taskScope === "design" ? "secondary" : "ghost"}
+                  className="h-7 px-2.5 text-[10px]"
+                  onClick={() => setParam("tasks", "")}
+                >
+                  Design e conteúdo
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={taskScope === "all" ? "secondary" : "ghost"}
+                  className="h-7 px-2.5 text-[10px]"
+                  onClick={() => setParam("tasks", "all")}
+                >
+                  Todas ({allInboxTasks.length})
+                </Button>
+              </div>
+              <Button
+                asChild
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-9 text-[11px]"
+              >
+                <Link to={kanbanHref}>Abrir Kanban central</Link>
+              </Button>
+            </div>
+          </section>
+        )}
+
+        {canUseTeamData && view !== "board" && (
           <EditorialTaskInbox
             tasks={inboxTasks}
             totalTasks={inboxTasks.length}
@@ -1071,11 +1331,7 @@ export default function EditorialCalendar() {
             error={tasksQuery.isError || linkedTaskIdsQuery.isError}
             disabled={!canCreateEditorial || movingEditorial}
             onCreateFromTask={(task) => openCreateFromTask(task)}
-            kanbanHref={
-              projectId === "all"
-                ? "/kanban"
-                : `/kanban?project=${encodeURIComponent(projectId)}`
-            }
+            kanbanHref={kanbanHref}
           />
         )}
 
@@ -1111,13 +1367,17 @@ export default function EditorialCalendar() {
               view={view}
               anchorDate={new Date(`${dateKey}T12:00:00`)}
               posts={filteredPosts}
+              tasks={canUseTeamData ? inboxTasks : []}
               clientNames={clientNames}
               projectNames={projectNames}
+              projectScopeNames={projectScopeNames}
+              responsibleNames={responsibleNames}
               canCreate={canCreateEditorial}
               canEdit={permissions.canEdit}
               canPublish={permissions.canPublish}
               moving={movingEditorial}
               onSelectPost={openDetail}
+              onCreateFromTask={openCreateFromTask}
               onCreateOnDate={openCreateOnDate}
               onShowBacklog={() => setParam("view", "list")}
             />
@@ -1184,6 +1444,7 @@ export default function EditorialCalendar() {
           defaultTitle={draftSeed?.title}
           defaultResponsibleId={draftSeed?.responsibleId}
           defaultProductionStatus={draftSeed?.productionStatus}
+          lockTaskId={Boolean(draftSeed?.taskId)}
           linkedTaskIds={linkedTaskIdsQuery.data || []}
           designMemberIds={designMemberIdList}
           allowAllTasks={taskScope === "all"}

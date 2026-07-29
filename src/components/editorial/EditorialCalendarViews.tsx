@@ -19,8 +19,10 @@ import {
   GripVertical,
   Images,
   Link2,
+  Palette,
   Plus,
   Send,
+  UserRound,
   Video,
 } from "lucide-react";
 import {
@@ -36,6 +38,7 @@ import type {
   EditorialPublicationBundle,
 } from "@/hooks/useEditorialCalendar";
 import type { EditorialView } from "@/components/editorial/EditorialToolbar";
+import type { EditorialInboxTask } from "@/components/editorial/EditorialTaskInbox";
 import { dateKeyInTimeZone } from "@/lib/editorialDate";
 import {
   aggregateEditorialStatus,
@@ -45,18 +48,23 @@ import {
   isEditorialPostPlanMutable,
   isEditorialPublicationDraggable,
 } from "@/lib/editorialDrag";
+import { editorialStageForTaskStatus } from "@/lib/taskWorkstreams";
 
 interface EditorialCalendarViewsProps {
   view: EditorialView;
   anchorDate: Date;
   posts: EditorialPostBundle[];
+  tasks?: EditorialInboxTask[];
   clientNames: Map<string, string>;
   projectNames: Map<string, string>;
+  projectScopeNames?: Map<string, string>;
+  responsibleNames?: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
   canPublish: boolean;
   moving?: boolean;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask?: (task: EditorialInboxTask) => void;
   onCreateOnDate: (dateKey: string) => void;
   onShowBacklog: () => void;
 }
@@ -837,22 +845,155 @@ function BoardPostCard({
   );
 }
 
+function boardTaskDueDate(value?: string | null) {
+  if (!value) return "Sem prazo";
+  const rawDate = value.slice(0, 10);
+  const date = new Date(`${rawDate}T12:00:00`);
+  if (Number.isNaN(date.getTime())) return "Sem prazo";
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+}
+
+function BoardTaskCard({
+  task,
+  projectScopeName,
+  responsibleName,
+  canEdit,
+  moving,
+  onCreate,
+}: {
+  task: EditorialInboxTask;
+  projectScopeName: string;
+  responsibleName: string;
+  canEdit: boolean;
+  moving: boolean;
+  onCreate: () => void;
+}) {
+  const draggable = canEdit && !moving;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    isDragging,
+  } = useDraggable({
+    id: `task:${task.id}`,
+    disabled: !draggable,
+    data: {
+      kind: "task",
+      task,
+      label: task.title,
+    },
+  });
+
+  return (
+    <article
+      ref={setNodeRef}
+      style={
+        transform
+          ? {
+              transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`,
+            }
+          : undefined
+      }
+      className={cn(
+        "group rounded-xl border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-all hover:border-primary/45 hover:-translate-y-px",
+        isDragging && "opacity-30",
+      )}
+    >
+      <div className="flex items-start gap-2.5">
+        <button
+          type="button"
+          onClick={onCreate}
+          disabled={!canEdit || moving}
+          className="min-w-0 flex-1 text-left disabled:cursor-not-allowed"
+        >
+          <div className="mb-2 flex items-center gap-2">
+            <span className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Palette className="h-3.5 w-3.5" />
+            </span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-primary">
+              Tarefa do Kanban
+            </span>
+          </div>
+          <h3 className="line-clamp-2 text-[13px] font-medium leading-5 text-foreground">
+            {task.title}
+          </h3>
+          <p className="mt-1 truncate text-[10px] text-muted-foreground">
+            {projectScopeName}
+          </p>
+        </button>
+        {draggable && (
+          <button
+            type="button"
+            className="inline-flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            aria-label={`Mover tarefa ${task.title}`}
+            {...listeners}
+            {...attributes}
+          >
+            <GripVertical className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+      <div className="mt-3 flex min-w-0 items-center gap-2 text-[10px] text-muted-foreground">
+        {task.status === "blocked" && (
+          <Badge
+            variant="outline"
+            className="h-5 shrink-0 border-warning/30 bg-warning/10 px-1.5 text-[9px] text-warning"
+          >
+            Bloqueada
+          </Badge>
+        )}
+        <span className="inline-flex min-w-0 items-center gap-1 truncate">
+          <UserRound className="h-3 w-3 shrink-0" />
+          <span className="truncate">{responsibleName}</span>
+        </span>
+        <span className="ml-auto inline-flex shrink-0 items-center gap-1">
+          <CalendarClock className="h-3 w-3" />
+          {boardTaskDueDate(task.due_date)}
+        </span>
+      </div>
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        className="mt-3 h-8 w-full text-[11px]"
+        disabled={!canEdit || moving}
+        onClick={onCreate}
+      >
+        <Plus className="mr-1 h-3.5 w-3.5" />
+        Criar e vincular conteúdo
+      </Button>
+    </article>
+  );
+}
+
 function BoardColumn({
   column,
   posts,
+  tasks,
   clientNames,
   projectNames,
+  projectScopeNames,
+  responsibleNames,
   canEdit,
   moving,
   onSelectPost,
+  onCreateFromTask,
 }: {
   column: (typeof boardColumns)[number];
   posts: EditorialPostBundle[];
+  tasks: EditorialInboxTask[];
   clientNames: Map<string, string>;
   projectNames: Map<string, string>;
+  projectScopeNames: Map<string, string>;
+  responsibleNames: Map<string, string>;
   canEdit: boolean;
   moving: boolean;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (task: EditorialInboxTask) => void;
 }) {
   const { active } = useDndContext();
   const activeKind = active?.data.current?.kind;
@@ -873,7 +1014,7 @@ function BoardColumn({
     <section
       ref={setNodeRef}
       className={cn(
-        "flex min-h-[520px] w-[286px] shrink-0 flex-col rounded-2xl border border-border bg-card/65 p-3 transition-colors",
+        "flex h-[min(68vh,720px)] min-h-[520px] min-w-0 flex-col rounded-2xl border border-border bg-card/65 p-3 transition-colors",
         isOver &&
           acceptsActive &&
           "border-primary/60 bg-primary/[0.06] ring-1 ring-primary/30",
@@ -889,7 +1030,7 @@ function BoardColumn({
             variant="secondary"
             className="ml-auto h-5 rounded-md px-1.5 font-mono text-[9px]"
           >
-            {posts.length}
+            {posts.length + tasks.length}
           </Badge>
         </div>
         <p className="mt-1.5 text-[10px] leading-4 text-muted-foreground">
@@ -897,6 +1038,23 @@ function BoardColumn({
         </p>
       </header>
       <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+        {tasks.map((task) => (
+          <BoardTaskCard
+            key={task.id}
+            task={task}
+            projectScopeName={
+              projectScopeNames.get(task.project_id) || "Cliente / Projeto"
+            }
+            responsibleName={
+              task.assigned_to
+                ? responsibleNames.get(task.assigned_to) || "Sem responsável"
+                : "Sem responsável"
+            }
+            canEdit={canEdit}
+            moving={moving}
+            onCreate={() => onCreateFromTask(task)}
+          />
+        ))}
         {posts.map((post) => (
           <BoardPostCard
             key={post.post.id}
@@ -911,7 +1069,7 @@ function BoardColumn({
             onClick={() => onSelectPost(post)}
           />
         ))}
-        {posts.length === 0 && (
+        {posts.length === 0 && tasks.length === 0 && (
           <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-border/80 px-4 text-center">
             <p className="text-[10px] leading-4 text-muted-foreground/70">
               {isWritable
@@ -927,20 +1085,28 @@ function BoardColumn({
 
 function BoardView({
   posts,
+  tasks,
   clientNames,
   projectNames,
+  projectScopeNames,
+  responsibleNames,
   canEdit,
   moving,
   onSelectPost,
+  onCreateFromTask,
 }: {
   posts: EditorialPostBundle[];
+  tasks: EditorialInboxTask[];
   clientNames: Map<string, string>;
   projectNames: Map<string, string>;
+  projectScopeNames: Map<string, string>;
+  responsibleNames: Map<string, string>;
   canEdit: boolean;
   moving: boolean;
   onSelectPost: (post: EditorialPostBundle) => void;
+  onCreateFromTask: (task: EditorialInboxTask) => void;
 }) {
-  const grouped = useMemo(() => {
+  const groupedPosts = useMemo(() => {
     const initial: Record<BoardStage, EditorialPostBundle[]> = {
       draft: [],
       production: [],
@@ -950,20 +1116,37 @@ function BoardView({
     for (const post of posts) initial[boardStage(post)].push(post);
     return initial;
   }, [posts]);
+  const groupedTasks = useMemo(() => {
+    const initial: Record<BoardStage, EditorialInboxTask[]> = {
+      draft: [],
+      production: [],
+      ready: [],
+      delivery: [],
+    };
+    for (const task of tasks) {
+      const stage = editorialStageForTaskStatus(task.status);
+      if (stage) initial[stage].push(task);
+    }
+    return initial;
+  }, [tasks]);
 
   return (
     <div className="overflow-x-auto pb-2">
-      <div className="flex min-w-max gap-3">
+      <div className="grid min-w-[1120px] grid-cols-4 gap-3">
         {boardColumns.map((column) => (
           <BoardColumn
             key={column.id}
             column={column}
-            posts={grouped[column.id]}
+            posts={groupedPosts[column.id]}
+            tasks={groupedTasks[column.id]}
             clientNames={clientNames}
             projectNames={projectNames}
+            projectScopeNames={projectScopeNames}
+            responsibleNames={responsibleNames}
             canEdit={canEdit}
             moving={moving}
             onSelectPost={onSelectPost}
+            onCreateFromTask={onCreateFromTask}
           />
         ))}
       </div>
@@ -1143,13 +1326,17 @@ export default function EditorialCalendarViews({
   view,
   anchorDate,
   posts,
+  tasks = [],
   clientNames,
   projectNames,
+  projectScopeNames = new Map(),
+  responsibleNames = new Map(),
   canCreate,
   canEdit,
   canPublish,
   moving = false,
   onSelectPost,
+  onCreateFromTask = () => undefined,
   onCreateOnDate,
   onShowBacklog,
 }: EditorialCalendarViewsProps) {
@@ -1171,11 +1358,15 @@ export default function EditorialCalendarViews({
     return (
       <BoardView
         posts={posts}
+        tasks={tasks}
         clientNames={clientNames}
         projectNames={projectNames}
+        projectScopeNames={projectScopeNames}
+        responsibleNames={responsibleNames}
         canEdit={canEdit}
         moving={moving}
         onSelectPost={onSelectPost}
+        onCreateFromTask={onCreateFromTask}
       />
     );
   }

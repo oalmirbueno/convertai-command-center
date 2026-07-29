@@ -94,8 +94,9 @@ describe("request task frontend consistency contract", () => {
     expect(kanban).toContain("dropInFlightRef");
     expect(kanban).toContain("setDropSaving(true)");
     expect(kanban).toContain(
-      "draggable={!isClient && !hasFilters && !dropSaving}",
+      "draggable={!isClient && !dragBlockedByFilters && !dropSaving}",
     );
+    expect(kanban).toContain("const dragBlockedByFilters");
     expect(kanban).toContain('.eq("status", task.status)');
   });
 
@@ -111,7 +112,10 @@ describe("request task frontend consistency contract", () => {
     );
 
     expect(orderPersistence).toContain(".update({ task_order:");
-    expect(orderPersistence).toContain('.eq("status", columnId)');
+    expect(orderPersistence).toContain('.eq("status", expectedStatus)');
+    expect(orderPersistence).toContain(
+      "canonicalTaskStatus(expectedStatus) !== columnId",
+    );
     expect(orderPersistence).not.toContain("status: columnId");
     expect(kanban).toContain('.eq("status", taskStatus)');
     expect(kanban).toContain(

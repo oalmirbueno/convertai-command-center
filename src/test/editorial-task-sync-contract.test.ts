@@ -11,6 +11,10 @@ const editor = read("src/components/editorial/EditorialEditor.tsx");
 const inbox = read(
   "src/components/editorial/EditorialTaskInbox.tsx",
 );
+const views = read(
+  "src/components/editorial/EditorialCalendarViews.tsx",
+);
+const workstreams = read("src/lib/taskWorkstreams.ts");
 const layout = read("src/components/AppLayout.tsx");
 const syncMigration = read(
   "supabase/migrations/20260728235000_sync_editorial_tasks_bidirectionally.sql",
@@ -20,13 +24,16 @@ const workstreamMigration = read(
 );
 
 describe("editorial design task workspace contract", () => {
-  it("uses an explicit task workstream instead of title heuristics", () => {
+  it("uses workstream as the canonical area and supports legacy general tasks", () => {
     expect(workstreamMigration).toContain(
       "ADD COLUMN workstream text NOT NULL DEFAULT 'general'",
     );
     expect(workstreamMigration).toContain("'design'");
-    expect(page).toContain("isDesignTask(task, designMemberIds)");
-    expect(page).not.toMatch(/carrossel|criativo|thumbnail/i);
+    expect(page).toContain("isEditorialTask(task, designMemberIds)");
+    expect(workstreams).toContain("EXPLICIT_EDITORIAL_WORKSTREAMS");
+    expect(workstreams).toContain("EXPLICIT_NON_EDITORIAL_WORKSTREAMS");
+    expect(workstreams).toContain("hasStrongEditorialSignal(task)");
+    expect(workstreams).toContain("CLIENT_REQUEST_SOURCE_PREFIX");
   });
 
   it("keeps client and project filters shared with the task tray", () => {
@@ -48,6 +55,11 @@ describe("editorial design task workspace contract", () => {
       'location.pathname === "/calendario"\n            ? "max-w-[1400px]"',
     );
     expect(inbox).toContain("overflow-x-auto");
+    expect(page).toContain('view !== "board"');
+    expect(views).toContain(
+      'className="grid min-w-[1120px] grid-cols-4 gap-3"',
+    );
+    expect(views).not.toContain("w-[286px]");
   });
 
   it("uses a centered editor and keeps the existing upload route guarded", () => {
@@ -68,6 +80,44 @@ describe("editorial design task workspace contract", () => {
     );
     expect(editor).not.toContain("setContentType(nextContentType)");
     expect(page).not.toContain('"responsible",\n      "tasks"');
+  });
+
+  it("renders unlinked Kanban tasks directly in the production board", () => {
+    expect(page).toContain(
+      "tasks={canUseTeamData ? inboxTasks : []}",
+    );
+    expect(views).toContain("function BoardTaskCard");
+    expect(views).toContain("editorialStageForTaskStatus(task.status)");
+    expect(views).toContain("Criar e vincular conteúdo");
+    expect(page).toContain(
+      "Tarefa atualizada também no Kanban central.",
+    );
+    expect(page).toContain("sendTaskAttachmentsToApproval");
+    expect(page).toContain("Editorial task move side effects failed");
+    expect(page).toContain('.startsWith("client_request:")');
+  });
+
+  it("keeps a task link mandatory when creation starts from the Kanban", () => {
+    expect(page).toContain(
+      "lockTaskId={Boolean(draftSeed?.taskId)}",
+    );
+    expect(editor).toContain("disabled={!projectId || lockTaskId}");
+    expect(editor).toContain("!lockTaskId &&");
+    expect(editor).toContain("taskId !== defaultTaskId");
+    expect(editor).toContain("!!revisionOf || lockTaskId");
+  });
+
+  it("allows a linked draft when the project has no social account", () => {
+    expect(editor).toContain("accountlessPublicationWithContent");
+    expect(editor).toContain(
+      ".filter((publication) => publication.externalAccountId)",
+    );
+    expect(editor).toContain("options.accounts.length === 0");
+    expect(editor).toContain(
+      "emptyPublication(defaultScheduledAt, onlyAccountId)",
+    );
+    expect(editor).toContain("options.accounts.length > 1");
+    expect(editor).toContain("publication.scheduledAt");
   });
 });
 
