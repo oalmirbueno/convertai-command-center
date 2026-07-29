@@ -8,6 +8,7 @@ const read = (path: string) =>
 const page = read("src/pages/EditorialCalendar.tsx");
 const hook = read("src/hooks/useEditorialCalendar.ts");
 const editor = read("src/components/editorial/EditorialEditor.tsx");
+const taskModal = read("src/components/admin/CreateTaskModal.tsx");
 const inbox = read(
   "src/components/editorial/EditorialTaskInbox.tsx",
 );
@@ -111,6 +112,32 @@ describe("editorial design task workspace contract", () => {
     expect(views).toContain(
       'posts.length === 0 && !hasVisibleListTask && view === "list"',
     );
+  });
+
+  it("carries the task theme and context into the editorial flow", () => {
+    expect(page).toContain(
+      "context: task.description?.trim() || undefined",
+    );
+    expect(page).toContain(
+      "defaultContext={draftSeed?.context}",
+    );
+    expect(editor).toContain(
+      "setObjective(revisionOf?.post.objective || defaultContext)",
+    );
+    expect(views).not.toContain(
+      "normalizeDirectionText(post.internal?.internal_notes)",
+    );
+    expect(editor).toContain("Direção vinda do Kanban");
+    expect(taskModal).toContain(
+      "isPublishableDeliveryType(deliveryType)",
+    );
+    expect(taskModal).toContain("Contexto do conteúdo");
+    expect(taskModal).toContain(
+      'toast.error("Informe o contexto do conteúdo")',
+    );
+    expect(views).toContain("function ContentDirection");
+    expect(views).toContain("taskContentContext(task)");
+    expect(views).toContain("postContentContext(");
   });
 
   it("renders unlinked Kanban tasks directly in the production board", () => {

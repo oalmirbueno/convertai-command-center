@@ -290,6 +290,74 @@ function boardStage(post: EditorialPostBundle): BoardStage {
   return "draft";
 }
 
+function normalizeDirectionText(value?: string | null) {
+  const normalized = value?.replace(/\s+/g, " ").trim();
+  return normalized || null;
+}
+
+function taskContentContext(task: EditorialInboxTask) {
+  return normalizeDirectionText(task.description);
+}
+
+function postContentContext(
+  post: EditorialPostBundle,
+  publication?: EditorialPublicationBundle | null,
+) {
+  return (
+    normalizeDirectionText(post.post.objective) ||
+    normalizeDirectionText(post.post.default_caption) ||
+    normalizeDirectionText(publication?.publication.caption)
+  );
+}
+
+function ContentDirection({
+  theme,
+  context,
+  compact = false,
+  className,
+}: {
+  theme: string;
+  context?: string | null;
+  compact?: boolean;
+  className?: string;
+}) {
+  const normalizedTheme =
+    normalizeDirectionText(theme) || "Tema não informado";
+  const normalizedContext =
+    normalizeDirectionText(context) || "Não informado";
+
+  return (
+    <div
+      className={cn(
+        "min-w-0 text-current",
+        compact ? "space-y-0.5 text-[10px]" : "space-y-1 text-xs",
+        className,
+      )}
+    >
+      <p
+        className={cn(
+          "font-medium",
+          compact ? "truncate" : "line-clamp-2 leading-4",
+        )}
+        title={`Tema: ${normalizedTheme}`}
+      >
+        <span className="font-semibold opacity-60">Tema:</span>{" "}
+        {normalizedTheme}
+      </p>
+      <p
+        className={cn(
+          "opacity-75",
+          compact ? "truncate" : "line-clamp-2 leading-4",
+        )}
+        title={`Contexto: ${normalizedContext}`}
+      >
+        <span className="font-semibold">Contexto:</span>{" "}
+        {normalizedContext}
+      </p>
+    </div>
+  );
+}
+
 function PublicationPill({
   item,
   compact = false,
@@ -313,6 +381,7 @@ function PublicationPill({
   const platform =
     platformLabels[publication.platform] || publication.platform;
   const status = statusLabels[publication.status] || publication.status;
+  const context = postContentContext(item.post, item.publication);
   const draggable = isEditorialPublicationDraggable(
     item.post,
     item.publication,
@@ -339,7 +408,7 @@ function PublicationPill({
       ref={setNodeRef}
       type="button"
       onClick={onClick}
-      aria-label={`${item.post.post.title}, ${platform}, ${time}, ${status}`}
+      aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
       style={
         transform
           ? {
@@ -356,35 +425,65 @@ function PublicationPill({
           "cursor-grab touch-none active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
+      data-content-density={compact ? "compact" : "comfortable"}
       {...(draggable && !moving ? listeners : {})}
       {...(draggable && !moving ? attributes : {})}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
-        <span
-          className={cn(
-            "h-2 w-2 shrink-0 rounded-full",
-            platformDots[publication.platform] || "bg-muted-foreground",
-          )}
-        />
-        <span className="truncate text-[11px] font-medium">
-          {compact ? time : item.post.post.title}
-        </span>
-        {draggable && !moving && (
-          <GripVertical className="ml-auto h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-        )}
-      </div>
       {compact ? (
-        <p className="mt-0.5 truncate text-[10px] opacity-80">
-          {item.post.post.title}
-        </p>
+        <>
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+            <span
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
+                platformDots[publication.platform] ||
+                  "bg-muted-foreground",
+              )}
+            />
+            <span
+              className="truncate font-medium"
+              title={`Tema: ${item.post.post.title}`}
+            >
+              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              {item.post.post.title}
+            </span>
+            <span className="ml-auto shrink-0 opacity-75">{time}</span>
+            {draggable && !moving && (
+              <GripVertical className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+            )}
+          </div>
+          <p
+            className="mt-0.5 truncate text-[10px] opacity-75"
+            title={`Contexto: ${context || "Não informado"}`}
+          >
+            <span className="font-semibold">Contexto:</span>{" "}
+            {context || "Não informado"}
+          </p>
+        </>
       ) : (
-        <div className="mt-1 flex items-center justify-between gap-2 text-[10px] opacity-80">
-          <span className="truncate">
-            {platform}
-            {account?.handle ? ` · ${account.handle}` : ""}
-          </span>
-          <span className="shrink-0">{time}</span>
-        </div>
+        <>
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px] opacity-80">
+            <span
+              className={cn(
+                "h-2 w-2 shrink-0 rounded-full",
+                platformDots[publication.platform] ||
+                  "bg-muted-foreground",
+              )}
+            />
+            <span className="truncate font-medium">
+              {platform}
+              {account?.handle ? ` · ${account.handle}` : ""}
+            </span>
+            <span className="ml-auto shrink-0">{time}</span>
+            {draggable && !moving && (
+              <GripVertical className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
+            )}
+          </div>
+          <ContentDirection
+            theme={item.post.post.title}
+            context={context}
+            className="mt-1"
+          />
+        </>
       )}
     </button>
   );
@@ -409,30 +508,64 @@ function TaskSchedulePill({
   onClick: () => void;
 }) {
   const deliveryType = taskDeliveryTypeLabel(task);
+  const context = taskContentContext(task);
 
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Abrir tarefa ${task.title}, ${deliveryType}`}
+      aria-label={`Abrir tarefa. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
       className={cn(
         "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
         compact ? "px-2 py-1.5" : "p-2.5",
       )}
+      data-content-density={compact ? "compact" : "comfortable"}
     >
-      <div className="flex min-w-0 items-center gap-1.5">
-        <Palette
-          className="h-3.5 w-3.5 shrink-0 text-violet-500"
-          aria-hidden="true"
-        />
-        <span className="truncate text-[11px] font-medium">
-          {task.title}
-        </span>
-      </div>
-      <p className="mt-0.5 truncate text-[10px] text-muted-foreground">
-        {deliveryType}
-        {projectScopeName ? ` · ${projectScopeName}` : ""}
-      </p>
+      {compact ? (
+        <>
+          <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+            <Palette
+              className="h-3.5 w-3.5 shrink-0 text-violet-500"
+              aria-hidden="true"
+            />
+            <span
+              className="truncate font-medium"
+              title={`Tema: ${task.title}`}
+            >
+              <span className="font-semibold opacity-60">Tema:</span>{" "}
+              {task.title}
+            </span>
+            <span className="ml-auto shrink-0 text-[9px] text-violet-500">
+              {deliveryType}
+            </span>
+          </div>
+          <p
+            className="mt-0.5 truncate text-[10px] text-muted-foreground"
+            title={`Contexto: ${context || "Não informado"}`}
+          >
+            <span className="font-semibold">Contexto:</span>{" "}
+            {context || "Não informado"}
+          </p>
+        </>
+      ) : (
+        <>
+          <div className="flex min-w-0 items-center gap-1.5">
+            <Palette
+              className="h-3.5 w-3.5 shrink-0 text-violet-500"
+              aria-hidden="true"
+            />
+            <span className="truncate text-[10px] font-medium text-violet-500">
+              {deliveryType}
+              {projectScopeName ? ` · ${projectScopeName}` : ""}
+            </span>
+          </div>
+          <ContentDirection
+            theme={task.title}
+            context={context}
+            className="mt-1"
+          />
+        </>
+      )}
     </button>
   );
 }
@@ -1464,9 +1597,11 @@ function ListView({
                   </div>
                   <span className="h-9 w-1 shrink-0 rounded-full bg-violet-500" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {task.title}
-                    </p>
+                    <ContentDirection
+                      theme={task.title}
+                      context={taskContentContext(task)}
+                      className="text-sm text-foreground"
+                    />
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                       {taskDeliveryTypeLabel(task)}
@@ -1524,9 +1659,14 @@ function ListView({
                   )}
                 />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">
-                      {item.post.post.title}
-                    </p>
+                    <ContentDirection
+                      theme={item.post.post.title}
+                      context={postContentContext(
+                        item.post,
+                        item.publication,
+                      )}
+                      className="text-sm text-foreground"
+                    />
                     <p className="mt-1 truncate text-xs text-muted-foreground">
                       {clientNames.get(item.post.post.client_id) || "Cliente"} ·{" "}
                       {projectNames.get(item.post.post.project_id) || "Projeto"} ·{" "}
@@ -1603,9 +1743,12 @@ function ListView({
                 onClick={() => onCreateFromTask(task)}
                 className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
               >
-                <p className="truncate text-xs font-medium text-foreground">
-                  {task.title}
-                </p>
+                <ContentDirection
+                  theme={task.title}
+                  context={taskContentContext(task)}
+                  compact
+                  className="text-foreground"
+                />
                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
                   {projectScopeNames.get(task.project_id) || "Projeto"} ·{" "}
                   {taskDeliveryTypeLabel(task)}
@@ -1623,9 +1766,12 @@ function ListView({
                 onClick={() => onSelectPost(post)}
                 className="rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/35"
               >
-                <p className="truncate text-xs font-medium text-foreground">
-                  {post.post.title}
-                </p>
+                <ContentDirection
+                  theme={post.post.title}
+                  context={postContentContext(post, publication)}
+                  compact
+                  className="text-foreground"
+                />
                 <p className="mt-1 truncate text-[10px] text-muted-foreground">
                   {projectNames.get(post.post.project_id) || "Projeto"} ·{" "}
                   {publication

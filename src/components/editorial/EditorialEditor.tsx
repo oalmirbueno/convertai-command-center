@@ -95,6 +95,7 @@ interface EditorialEditorProps {
   defaultScheduledAt?: string;
   defaultTaskId?: string;
   defaultTitle?: string;
+  defaultContext?: string;
   defaultContentType?: string;
   defaultResponsibleId?: string;
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
@@ -170,6 +171,7 @@ export default function EditorialEditor({
   defaultScheduledAt = "",
   defaultTaskId = "",
   defaultTitle = "",
+  defaultContext = "",
   defaultContentType = "static",
   defaultResponsibleId = "",
   defaultProductionStatus = "draft",
@@ -341,7 +343,7 @@ export default function EditorialEditor({
     setContentType(
       revisionOf?.post.content_type || defaultContentType || "static",
     );
-    setObjective(revisionOf?.post.objective || "");
+    setObjective(revisionOf?.post.objective || defaultContext);
     setDefaultCaption(revisionOf?.post.default_caption || "");
     setProductionStatus(
       revisionOf ? "draft" : defaultProductionStatus,
@@ -385,6 +387,7 @@ export default function EditorialEditor({
     setPendingMutationId(null);
   }, [
     defaultClientId,
+    defaultContext,
     defaultContentType,
     defaultProductionStatus,
     defaultProjectId,
@@ -811,6 +814,23 @@ export default function EditorialEditor({
                 placeholder="Ex.: Lançamento da campanha de agosto"
               />
             </div>
+            {defaultContext && !post && !revisionOf && (
+              <div className="md:col-span-2 rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-violet-500">
+                  Direção vinda do Kanban
+                </p>
+                <p className="mt-2 text-xs font-medium text-foreground">
+                  <span className="text-muted-foreground">Tema:</span>{" "}
+                  {defaultTitle || title}
+                </p>
+                <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
+                  <span className="font-medium text-foreground">
+                    Contexto:
+                  </span>{" "}
+                  {defaultContext}
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="editorial-type">Formato</Label>
               <Select
