@@ -3461,6 +3461,10 @@ export type Database = {
         Args: { _client_id: string; _file_id: string; _project_id: string }
         Returns: boolean
       }
+      editorial_file_is_publishable_media: {
+        Args: { _client_id: string; _file_id: string; _project_id: string }
+        Returns: boolean
+      }
       editorial_lock_task_sync: { Args: never; Returns: undefined }
       editorial_production_status_for_task: {
         Args: { _task_status: string }
@@ -3727,6 +3731,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_approved_editorial_post_unlocked: {
+        Args: { p_expected_version?: number; p_payload: Json }
+        Returns: Json
       }
       save_editorial_post: {
         Args: { p_expected_version?: number; p_payload: Json }
