@@ -7,6 +7,10 @@ import { canInvoke, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
 import { hasScope, type AuthContext } from '../_shared/mcp-auth.ts';
 import { sanitize } from '../_shared/mcp-audit.ts';
 import {
+  createTaskSchema,
+  updateTaskSchema,
+} from '../_shared/mcp-write-services.ts';
+import {
   MCP_PROTOCOL_VERSION,
   prefersSse,
   rpcError,
@@ -301,6 +305,81 @@ Deno.test('create_task rejects too-short idempotency_key', async () => {
     }, writeCtx);
   } catch (e) { threw = true; }
   assert(threw);
+});
+
+Deno.test('task write contracts expose optional delivery_type with unspecified compatibility', () => {
+  const deliveryTypes = [
+    'unspecified',
+    'design',
+    'branding',
+    'static',
+    'carousel',
+    'reel',
+    'story',
+    'video',
+    'short',
+    'article',
+    'google_post',
+    'planning',
+    'copywriting',
+    'website',
+    'landing_page',
+    'automation',
+    'traffic',
+    'seo',
+    'document',
+    'report',
+    'other',
+  ];
+  const createTool = TOOL_MAP.get('aceleriq_create_task')!;
+  const updateTool = TOOL_MAP.get('aceleriq_update_task')!;
+  assertEquals(
+    ((createTool.inputSchema as any).properties.delivery_type as any).enum,
+    deliveryTypes,
+  );
+  assertEquals(
+    ((updateTool.inputSchema as any).properties.delivery_type as any).enum,
+    deliveryTypes,
+  );
+  assert(
+    !(createTool.inputSchema as any).required.includes('delivery_type'),
+  );
+  assert(
+    !(updateTool.inputSchema as any).required.includes('delivery_type'),
+  );
+
+  const createBase = {
+    project_id: '00000000-0000-0000-0000-000000000001',
+    title: 'Tarefa MCP',
+    idempotency_key: 'delivery-type-create',
+  };
+  assert(createTaskSchema.safeParse(createBase).success);
+  assert(
+    createTaskSchema.safeParse({
+      ...createBase,
+      delivery_type: 'unspecified',
+    }).success,
+  );
+  assert(
+    updateTaskSchema.safeParse({
+      task_id: '00000000-0000-0000-0000-000000000002',
+      delivery_type: 'carousel',
+      idempotency_key: 'delivery-type-update',
+    }).success,
+  );
+  assert(
+    !createTaskSchema.safeParse({
+      ...createBase,
+      delivery_type: 'invalid',
+    }).success,
+  );
+  assert(
+    !updateTaskSchema.safeParse({
+      task_id: '00000000-0000-0000-0000-000000000002',
+      delivery_type: 'invalid',
+      idempotency_key: 'delivery-type-update-invalid',
+    }).success,
+  );
 });
 
 Deno.test('update_task requires at least one updatable field', async () => {

@@ -27,6 +27,11 @@ import {
   canonicalTaskStatus,
   isEditorialTask,
 } from "@/lib/taskWorkstreams";
+import {
+  TASK_DELIVERY_TYPE_LABELS,
+  TASK_DELIVERY_TYPE_OPTIONS,
+  type TaskDeliveryType,
+} from "@/lib/taskDeliveryTypes";
 
 const columns = [
   { id: "backlog", title: "Backlog", dotColor: "bg-muted-foreground" },
@@ -64,6 +69,14 @@ interface KanbanProjectOption {
     full_name?: string | null;
     company_name?: string | null;
   } | null;
+}
+
+function taskDeliveryTypeLabel(task: {
+  delivery_type?: string | null;
+}): string | null {
+  const deliveryType = task.delivery_type as TaskDeliveryType | null;
+  if (!deliveryType || deliveryType === "unspecified") return null;
+  return TASK_DELIVERY_TYPE_LABELS[deliveryType] || null;
 }
 
 export default function Kanban() {
@@ -152,6 +165,9 @@ export default function Kanban() {
   const [filterClient, setFilterClient] = useState(searchParams.get("client") || "");
   const [filterProject, setFilterProject] = useState(searchParams.get("project") || "");
   const [filterArea, setFilterArea] = useState(searchParams.get("area") || "");
+  const [filterDeliveryType, setFilterDeliveryType] = useState(
+    searchParams.get("type") || "",
+  );
   const [filterAssignee, setFilterAssignee] = useState("");
   const [filterPriority, setFilterPriority] = useState("");
   const [filterDateFrom, setFilterDateFrom] = useState<Date | undefined>(undefined);
@@ -206,11 +222,12 @@ export default function Kanban() {
   const projectClientById = new Map(
     projectRows.map((project) => [project.id, project.client_id]),
   );
-  const hasFilters = filterClient || filterProject || filterArea || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
+  const hasFilters = filterClient || filterProject || filterArea || filterDeliveryType || filterAssignee || filterPriority || filterDateFrom || filterDateTo || sortBy !== "manual";
   const dragBlockedByFilters = Boolean(
     filterClient ||
       filterProject ||
       filterArea ||
+      filterDeliveryType ||
       filterAssignee ||
       filterPriority ||
       filterDateFrom ||
@@ -236,6 +253,12 @@ export default function Kanban() {
       return false;
     }
     if (filterProject && t.project_id !== filterProject) return false;
+    if (
+      filterDeliveryType
+      && t.delivery_type !== filterDeliveryType
+    ) {
+      return false;
+    }
     if (
       filterArea === "editorial" &&
       !isEditorialTask(t, designMemberIds)
@@ -770,6 +793,21 @@ export default function Kanban() {
         </select>
       )}
       {!isClient && (
+        <select
+          value={filterDeliveryType}
+          onChange={(event) => setFilterDeliveryType(event.target.value)}
+          className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0"
+          title="Filtrar por tipo de entrega"
+        >
+          <option value="">Todos os tipos</option>
+          {TASK_DELIVERY_TYPE_OPTIONS.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      )}
+      {!isClient && (
         <select value={filterAssignee} onChange={(e) => setFilterAssignee(e.target.value)}
           className="bg-secondary border border-border rounded-[10px] px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50 transition-colors flex-shrink-0">
           <option value="">Todos os responsáveis</option>
@@ -816,7 +854,7 @@ export default function Kanban() {
         <option value="priority">Prioridade</option>
       </select>
       {hasFilters && (
-        <button onClick={() => { setFilterClient(""); setFilterProject(""); setFilterArea(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual"); }}
+        <button onClick={() => { setFilterClient(""); setFilterProject(""); setFilterArea(""); setFilterDeliveryType(""); setFilterAssignee(""); setFilterPriority(""); setFilterDateFrom(undefined); setFilterDateTo(undefined); setSortBy("manual"); }}
           className="text-[12px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer bg-transparent border-none shrink-0">
           <X className="w-3 h-3" /> Limpar
         </button>
@@ -965,7 +1003,11 @@ export default function Kanban() {
                           <div>
                             <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
                             <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{task.project?.name}</p>
-                            {isEditorialTask(task, designMemberIds) && (
+                            {taskDeliveryTypeLabel(task) ? (
+                              <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
+                                {taskDeliveryTypeLabel(task)}
+                              </span>
+                            ) : isEditorialTask(task, designMemberIds) && (
                               <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
                                 Design e conteúdo
                               </span>
@@ -1132,7 +1174,11 @@ export default function Kanban() {
                             <div>
                               <p className="text-[13px] font-medium text-foreground leading-snug">{task.title}</p>
                               <p className="text-[11px] text-muted-foreground mt-0.5">{task.project?.name}</p>
-                              {isEditorialTask(task, designMemberIds) && (
+                              {taskDeliveryTypeLabel(task) ? (
+                                <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
+                                  {taskDeliveryTypeLabel(task)}
+                                </span>
+                              ) : isEditorialTask(task, designMemberIds) && (
                                 <span className="mt-1 inline-flex rounded-full bg-violet-500/10 px-1.5 py-0.5 text-[9px] font-medium text-violet-500">
                                   Design e conteúdo
                                 </span>

@@ -15,6 +15,8 @@ const views = read(
   "src/components/editorial/EditorialCalendarViews.tsx",
 );
 const workstreams = read("src/lib/taskWorkstreams.ts");
+const deliveryTypes = read("src/lib/taskDeliveryTypes.ts");
+const taskLinks = read("src/lib/editorialTaskLinks.ts");
 const layout = read("src/components/AppLayout.tsx");
 const syncMigration = read(
   "supabase/migrations/20260728235000_sync_editorial_tasks_bidirectionally.sql",
@@ -22,29 +24,33 @@ const syncMigration = read(
 const workstreamMigration = read(
   "supabase/migrations/20260728234519_add_task_workstreams.sql",
 );
+const deliveryTypeMigration = read(
+  "supabase/migrations/20260729144624_add_task_delivery_type.sql",
+);
 
 describe("editorial design task workspace contract", () => {
-  it("uses workstream as the canonical area and supports legacy general tasks", () => {
+  it("keeps area and delivery type as separate task dimensions", () => {
     expect(workstreamMigration).toContain(
       "ADD COLUMN workstream text NOT NULL DEFAULT 'general'",
     );
+    expect(deliveryTypeMigration).toContain(
+      "ADD COLUMN delivery_type text NOT NULL DEFAULT 'unspecified'",
+    );
     expect(workstreamMigration).toContain("'design'");
-    expect(page).toContain("isEditorialTask(task, designMemberIds)");
+    expect(page).toContain("isPublishableTask(task, designMemberIds)");
+    expect(deliveryTypes).toContain("PUBLISHABLE_DELIVERY_TYPES");
     expect(workstreams).toContain("EXPLICIT_EDITORIAL_WORKSTREAMS");
     expect(workstreams).toContain("EXPLICIT_NON_EDITORIAL_WORKSTREAMS");
     expect(workstreams).toContain("hasStrongEditorialSignal(task)");
     expect(workstreams).toContain("CLIENT_REQUEST_SOURCE_PREFIX");
   });
 
-  it("keeps client and project filters shared with the task tray", () => {
-    expect(page).toContain(
-      'searchParams.get("tasks") === "all" ? "all" : "design"',
-    );
+  it("keeps client and project filters shared with publishable tasks", () => {
     expect(page).toContain("project.client_id !== forcedClientId");
     expect(page).toContain("task.project_id !== projectId");
-    expect(inbox).toContain("Vêm do Kanban central");
-    expect(inbox).toContain("projectScopeNames");
-    expect(inbox).toContain("Criar conteúdo");
+    expect(page).toContain("Fluxo editorial completo");
+    expect(views).toContain("projectScopeNames");
+    expect(views).toContain("Abrir ou preparar");
   });
 
   it("does not compress the calendar with a permanent side rail", () => {
@@ -54,8 +60,7 @@ describe("editorial design task workspace contract", () => {
     expect(layout).toContain(
       'location.pathname === "/calendario"\n            ? "max-w-[1400px]"',
     );
-    expect(inbox).toContain("overflow-x-auto");
-    expect(page).toContain('view !== "board"');
+    expect(page).not.toContain("<EditorialTaskInbox");
     expect(views).toContain(
       'className="grid min-w-[1120px] grid-cols-4 gap-3"',
     );
@@ -83,19 +88,38 @@ describe("editorial design task workspace contract", () => {
     );
   });
 
-  it("keeps task scope and content format explicit in the editor", () => {
-    expect(page).toContain('allowAllTasks={taskScope === "all"}');
+  it("keeps task eligibility and content format explicit in the editor", () => {
     expect(editor).toContain(
-      "(allowAllTasks || isDesignTask(task, designIds))",
+      "isPublishableTask(task, designIds)",
+    );
+    expect(editor).not.toContain("allowAllTasks");
+    expect(page).toContain("contentTypeForDeliveryType(task.delivery_type)");
+    expect(page).toContain(
+      "defaultContentType={draftSeed?.contentType}",
     );
     expect(editor).not.toContain("setContentType(nextContentType)");
     expect(page).not.toContain('"responsible",\n      "tasks"');
   });
 
-  it("renders unlinked Kanban tasks directly in the production board", () => {
-    expect(page).toContain(
-      "tasks={canUseTeamData ? inboxTasks : []}",
+  it("projects task deadlines into month, week and list views", () => {
+    expect(views).toContain("function groupTasksByDate");
+    expect(views).toContain("tasksByDate={tasksByDate}");
+    expect(views).toContain("onCreateFromTask(task, key)");
+    expect(views).toContain("Agenda cronológica");
+    expect(views).toContain("PopoverContent");
+    expect(views).toContain("neste dia");
+    expect(views).toContain(
+      'posts.length === 0 && !hasVisibleListTask && view === "list"',
     );
+  });
+
+  it("renders unlinked Kanban tasks directly in the production board", () => {
+    expect(page).toContain("const productionTasks = useMemo");
+    expect(page).toContain("isEditorialTask(task, designMemberIds)");
+    expect(page).toContain("const calendarTasks = useMemo");
+    expect(page).toContain("isPublishableTask(task, designMemberIds)");
+    expect(page).toContain('view === "board"');
+    expect(page).toContain("tasks={tasksForCurrentView}");
     expect(views).toContain("function BoardTaskCard");
     expect(views).toContain("editorialStageForTaskStatus(task.status)");
     expect(views).toContain("Criar e vincular conteúdo");
@@ -105,6 +129,27 @@ describe("editorial design task workspace contract", () => {
     expect(page).toContain("sendTaskAttachmentsToApproval");
     expect(page).toContain("Editorial task move side effects failed");
     expect(page).toContain('.startsWith("client_request:")');
+  });
+
+  it("opens the current linked content before offering a new draft", () => {
+    expect(taskLinks).toContain("nonTerminalPostIds");
+    expect(taskLinks).toContain("postIdByTaskId");
+    expect(page).toContain("const openTaskItem");
+    expect(page).toContain("linkedPostIdByTaskId[task.id]");
+    expect(page).toContain("openDetailById(linkedPostId)");
+    expect(page).toContain(
+      "openCreateFromTask(task, targetDateKey, targetStage)",
+    );
+    expect(page).toContain("onCreateFromTask={openTaskItem}");
+  });
+
+  it("keeps task loading and failures independent from publication rendering", () => {
+    expect(page).toContain("taskDataLoading");
+    expect(page).toContain("taskDataError");
+    expect(page).toContain(
+      "As publicações continuam visíveis, mas as tarefas do Kanban não puderam ser atualizadas.",
+    );
+    expect(page).toContain("<main className=\"min-w-0\">");
   });
 
   it("keeps a task link mandatory when creation starts from the Kanban", () => {

@@ -34,10 +34,7 @@ import EditorialCalendarViews, {
 } from "@/components/editorial/EditorialCalendarViews";
 import EditorialEditor from "@/components/editorial/EditorialEditor";
 import EditorialDetailSheet from "@/components/editorial/EditorialDetailSheet";
-import EditorialTaskInbox, {
-  type EditorialInboxTask,
-  type EditorialTaskScope,
-} from "@/components/editorial/EditorialTaskInbox";
+import type { EditorialInboxTask } from "@/components/editorial/EditorialTaskInbox";
 import {
   useEditorialClientScope,
   useEditorialCalendar,
@@ -88,6 +85,13 @@ import {
   isEditorialTask,
   kanbanStatusForEditorialStage,
 } from "@/lib/taskWorkstreams";
+import {
+  TASK_DELIVERY_TYPE_LABELS,
+  contentTypeForDeliveryType,
+  isPublishableTask,
+  type TaskDeliveryType,
+} from "@/lib/taskDeliveryTypes";
+import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { sendTaskAttachmentsToApproval } from "@/lib/reviewToApproval";
 
@@ -132,6 +136,7 @@ interface EditorialDraftSeed {
   projectId: string;
   taskId?: string;
   title?: string;
+  contentType?: string;
   responsibleId?: string;
   productionStatus?: EditableEditorialStage | "cancelled";
   scheduledAt?: string;
@@ -289,8 +294,6 @@ export default function EditorialCalendar() {
   const approvalStatus = searchParams.get("approval") || "all";
   const requestedResponsibleId =
     searchParams.get("responsible") || "all";
-  const taskScope: EditorialTaskScope =
-    searchParams.get("tasks") === "all" ? "all" : "design";
   const contentId = searchParams.get("content");
   const permissions = editorialPermissions(effectiveRole);
   const responsibleId =
@@ -475,9 +478,16 @@ export default function EditorialCalendar() {
       ),
     [clientNames, projectRows],
   );
-  const allInboxTasks = useMemo(() => {
+  const linkedTaskIds = useMemo(
+    () => new Set(linkedTaskIdsQuery.data?.taskIds || []),
+    [linkedTaskIdsQuery.data?.taskIds],
+  );
+  const linkedPostIdByTaskId = useMemo(
+    () => linkedTaskIdsQuery.data?.postIdByTaskId || {},
+    [linkedTaskIdsQuery.data?.postIdByTaskId],
+  );
+  const candidateTasks = useMemo(() => {
     if (!canUseTeamData) return [];
-    const linkedTaskIds = new Set(linkedTaskIdsQuery.data || []);
     const statusOrder: Record<string, number> = {
       backlog: 0,
       todo: 0,
@@ -501,7 +511,7 @@ export default function EditorialCalendar() {
         ) {
           return false;
         }
-        if (task.status === "done" || linkedTaskIds.has(task.id)) {
+        if (task.status === "done") {
           return false;
         }
         const project = projectById.get(task.project_id);
@@ -534,75 +544,136 @@ export default function EditorialCalendar() {
   }, [
     canUseTeamData,
     forcedClientId,
-    linkedTaskIdsQuery.data,
     projectById,
     projectId,
     tasksQuery.data,
   ]);
-  const inboxTasks = useMemo(
-    () => {
-      const normalizedSearch = search
+  const normalizedTaskSearch = useMemo(
+    () =>
+      search
         .trim()
         .normalize("NFD")
         .replace(/\p{Diacritic}/gu, "")
+        .toLocaleLowerCase("pt-BR"),
+    [search],
+  );
+  const matchesTaskFilters = useCallback(
+    (task: EditorialInboxTask) => {
+      if (
+        responsibleId !== "all" &&
+        task.assigned_to !== responsibleId
+      ) {
+        return false;
+      }
+      if (
+        productionStatus !== "all" &&
+        editorialStageForTaskStatus(task.status) !== productionStatus
+      ) {
+        return false;
+      }
+      if (
+        platform !== "all" ||
+        status !== "all" ||
+        approvalStatus !== "all"
+      ) {
+        return false;
+      }
+      if (!normalizedTaskSearch) return true;
+      const deliveryType = task.delivery_type as
+        | TaskDeliveryType
+        | null
+        | undefined;
+      const searchable = [
+        task.title,
+        task.description,
+        projectScopeNames.get(task.project_id),
+        deliveryType ? TASK_DELIVERY_TYPE_LABELS[deliveryType] : null,
+        task.assigned_to
+          ? responsibleNames.get(task.assigned_to)
+          : "Sem responsável",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .normalize("NFD")
+        .replace(/\p{Diacritic}/gu, "")
         .toLocaleLowerCase("pt-BR");
-      return allInboxTasks.filter((task) => {
-        if (
-          taskScope === "design" &&
-          !isEditorialTask(task, designMemberIds)
-        ) {
-          return false;
-        }
-        if (
-          responsibleId !== "all" &&
-          task.assigned_to !== responsibleId
-        ) {
-          return false;
-        }
-        if (
-          productionStatus !== "all" &&
-          editorialStageForTaskStatus(task.status) !== productionStatus
-        ) {
-          return false;
-        }
-        if (
-          platform !== "all" ||
-          status !== "all" ||
-          approvalStatus !== "all"
-        ) {
-          return false;
-        }
-        if (!normalizedSearch) return true;
-        const searchable = [
-          task.title,
-          task.description,
-          projectScopeNames.get(task.project_id),
-          task.assigned_to
-            ? responsibleNames.get(task.assigned_to)
-            : "Sem responsável",
-        ]
-          .filter(Boolean)
-          .join(" ")
-          .normalize("NFD")
-          .replace(/\p{Diacritic}/gu, "")
-          .toLocaleLowerCase("pt-BR");
-        return searchable.includes(normalizedSearch);
-      });
+      return searchable.includes(normalizedTaskSearch);
     },
     [
-      allInboxTasks,
       approvalStatus,
-      designMemberIds,
+      normalizedTaskSearch,
       platform,
       productionStatus,
       projectScopeNames,
       responsibleId,
       responsibleNames,
-      search,
       status,
-      taskScope,
     ],
   );
+  const productionTasks = useMemo(
+    () =>
+      candidateTasks.filter(
+        (task) =>
+          !linkedTaskIds.has(task.id) &&
+          isEditorialTask(task, designMemberIds) &&
+          matchesTaskFilters(task),
+      ),
+    [
+      candidateTasks,
+      designMemberIds,
+      linkedTaskIds,
+      matchesTaskFilters,
+    ],
+  );
+  const scheduledPostIds = useMemo(
+    () =>
+      new Set(
+        posts
+          .filter((bundle) =>
+            bundle.publications.some(
+              ({ publication }) => Boolean(publication.scheduled_at),
+            ),
+          )
+          .map((bundle) => bundle.post.id),
+      ),
+    [posts],
+  );
+  const calendarTasks = useMemo(
+    () =>
+      candidateTasks.filter(
+        (task) => {
+          const linkedPostId = linkedPostIdByTaskId[task.id];
+          return (
+            isPublishableTask(task, designMemberIds) &&
+            matchesTaskFilters(task) &&
+            (!linkedPostId || !scheduledPostIds.has(linkedPostId))
+          );
+        },
+      ),
+    [
+      candidateTasks,
+      designMemberIds,
+      linkedPostIdByTaskId,
+      matchesTaskFilters,
+      scheduledPostIds,
+    ],
+  );
+  const taskDataLoading =
+    canUseTeamData &&
+    (tasksQuery.isLoading || linkedTaskIdsQuery.isLoading);
+  const taskDataError =
+    canUseTeamData &&
+    (tasksQuery.isError || linkedTaskIdsQuery.isError);
+  const taskDataReady =
+    !canUseTeamData ||
+    (tasksQuery.data !== undefined &&
+      linkedTaskIdsQuery.data !== undefined);
+  const tasksForCurrentView =
+    !canUseTeamData || !taskDataReady
+      ? []
+      : view === "board"
+        ? productionTasks
+        : calendarTasks;
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -747,10 +818,14 @@ export default function EditorialCalendar() {
     setEditorOpen(true);
   };
 
-  const openDetail = (bundle: EditorialPostBundle) => {
+  const openDetailById = (postId: string) => {
     const next = new URLSearchParams(searchParams);
-    next.set("content", bundle.post.id);
+    next.set("content", postId);
     setSearchParams(next);
+  };
+
+  const openDetail = (bundle: EditorialPostBundle) => {
+    openDetailById(bundle.post.id);
   };
 
   const selectedEditorClientId =
@@ -786,6 +861,8 @@ export default function EditorialCalendar() {
       projectId: task.project_id,
       taskId: task.id,
       title: task.title,
+      contentType:
+        contentTypeForDeliveryType(task.delivery_type) || "static",
       responsibleId: task.assigned_to || undefined,
       productionStatus:
         targetStage ||
@@ -795,6 +872,19 @@ export default function EditorialCalendar() {
         ? `${targetDateKey}T09:00`
         : undefined,
     });
+  };
+
+  const openTaskItem = (
+    task: EditorialInboxTask,
+    targetDateKey?: string,
+    targetStage?: EditableEditorialStage,
+  ) => {
+    const linkedPostId = linkedPostIdByTaskId[task.id];
+    if (linkedPostId) {
+      openDetailById(linkedPostId);
+      return;
+    }
+    openCreateFromTask(task, targetDateKey, targetStage);
   };
 
   const moveTaskToStage = useCallback(
@@ -1202,7 +1292,9 @@ export default function EditorialCalendar() {
 
         <CalendarMetrics
           posts={filteredPosts}
-          taskCount={canUseTeamData ? inboxTasks.length : undefined}
+          taskCount={
+            canUseTeamData ? tasksForCurrentView.length : undefined
+          }
         />
 
         <EditorialToolbar
@@ -1277,31 +1369,14 @@ export default function EditorialCalendar() {
                   Tarefas do Kanban no fluxo
                 </p>
                 <p className="truncate text-[10px] text-muted-foreground">
-                  {inboxTasks.length} visíveis com os filtros atuais
+                  {productionTasks.length} visíveis com os filtros atuais
                 </p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="inline-flex rounded-lg border border-border bg-background p-1">
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={taskScope === "design" ? "secondary" : "ghost"}
-                  className="h-7 px-2.5 text-[10px]"
-                  onClick={() => setParam("tasks", "")}
-                >
-                  Design e conteúdo
-                </Button>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant={taskScope === "all" ? "secondary" : "ghost"}
-                  className="h-7 px-2.5 text-[10px]"
-                  onClick={() => setParam("tasks", "all")}
-                >
-                  Todas ({allInboxTasks.length})
-                </Button>
-              </div>
+              <span className="inline-flex h-8 items-center rounded-lg border border-violet-500/20 bg-violet-500/10 px-2.5 text-[10px] font-medium text-violet-500">
+                Fluxo editorial completo
+              </span>
               <Button
                 asChild
                 type="button"
@@ -1315,24 +1390,46 @@ export default function EditorialCalendar() {
           </section>
         )}
 
-        {canUseTeamData && view !== "board" && (
-          <EditorialTaskInbox
-            tasks={inboxTasks}
-            totalTasks={inboxTasks.length}
-            scope={taskScope}
-            onScopeChange={(nextScope) =>
-              setParam("tasks", nextScope === "all" ? "all" : "")
-            }
-            projectScopeNames={projectScopeNames}
-            responsibleNames={responsibleNames}
-            loading={
-              tasksQuery.isLoading || linkedTaskIdsQuery.isLoading
-            }
-            error={tasksQuery.isError || linkedTaskIdsQuery.isError}
-            disabled={!canCreateEditorial || movingEditorial}
-            onCreateFromTask={(task) => openCreateFromTask(task)}
-            kanbanHref={kanbanHref}
-          />
+        {canUseTeamData && (taskDataLoading || taskDataError) && (
+          <section
+            aria-live="polite"
+            className={cn(
+              "flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-xl border px-3.5 py-2.5",
+              taskDataError
+                ? "border-destructive/25 bg-destructive/5"
+                : "border-border bg-card/55",
+            )}
+          >
+            <div className="flex min-w-0 items-center gap-2.5">
+              {taskDataError ? (
+                <AlertCircle className="h-4 w-4 shrink-0 text-destructive" />
+              ) : (
+                <RefreshCw className="h-4 w-4 shrink-0 animate-spin text-primary motion-reduce:animate-none" />
+              )}
+              <p className="text-xs text-muted-foreground">
+                {taskDataError
+                  ? "As publicações continuam visíveis, mas as tarefas do Kanban não puderam ser atualizadas."
+                  : "Carregando as tarefas do Kanban sem interromper o calendário…"}
+              </p>
+            </div>
+            {taskDataError && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-8 text-[11px]"
+                onClick={() => {
+                  void Promise.all([
+                    tasksQuery.refetch(),
+                    linkedTaskIdsQuery.refetch(),
+                  ]);
+                }}
+              >
+                <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+                Tentar novamente
+              </Button>
+            )}
+          </section>
         )}
 
         <main className="min-w-0">
@@ -1367,7 +1464,7 @@ export default function EditorialCalendar() {
               view={view}
               anchorDate={new Date(`${dateKey}T12:00:00`)}
               posts={filteredPosts}
-              tasks={canUseTeamData ? inboxTasks : []}
+              tasks={tasksForCurrentView}
               clientNames={clientNames}
               projectNames={projectNames}
               projectScopeNames={projectScopeNames}
@@ -1377,7 +1474,7 @@ export default function EditorialCalendar() {
               canPublish={permissions.canPublish}
               moving={movingEditorial}
               onSelectPost={openDetail}
-              onCreateFromTask={openCreateFromTask}
+              onCreateFromTask={openTaskItem}
               onCreateOnDate={openCreateOnDate}
               onShowBacklog={() => setParam("view", "list")}
             />
@@ -1442,12 +1539,12 @@ export default function EditorialCalendar() {
           defaultScheduledAt={defaultScheduledAt}
           defaultTaskId={draftSeed?.taskId}
           defaultTitle={draftSeed?.title}
+          defaultContentType={draftSeed?.contentType}
           defaultResponsibleId={draftSeed?.responsibleId}
           defaultProductionStatus={draftSeed?.productionStatus}
           lockTaskId={Boolean(draftSeed?.taskId)}
-          linkedTaskIds={linkedTaskIdsQuery.data || []}
+          linkedTaskIds={linkedTaskIdsQuery.data?.taskIds || []}
           designMemberIds={designMemberIdList}
-          allowAllTasks={taskScope === "all"}
           onOpenChange={(nextOpen) => {
             setEditorOpen(nextOpen);
             if (!nextOpen) {

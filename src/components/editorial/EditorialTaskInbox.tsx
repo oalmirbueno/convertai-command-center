@@ -29,6 +29,7 @@ export interface EditorialInboxTask {
   priority?: string | null;
   due_date?: string | null;
   workstream?: string | null;
+  delivery_type?: string | null;
   source?: string | null;
 }
 

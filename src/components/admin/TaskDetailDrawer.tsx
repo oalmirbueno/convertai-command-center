@@ -27,6 +27,12 @@ import {
   TASK_WORKSTREAM_OPTIONS,
   type TaskWorkstream,
 } from "@/lib/taskWorkstreams";
+import {
+  TASK_DELIVERY_TYPE_LABELS,
+  TASK_DELIVERY_TYPE_OPTIONS,
+  suggestedWorkstreamForDeliveryType,
+  type TaskDeliveryType,
+} from "@/lib/taskDeliveryTypes";
 
 const priorityLabels: Record<string, string> = {
   low: "Baixa", medium: "Média", high: "Alta", urgent: "Urgente",
@@ -88,6 +94,9 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
   const [description, setDescription] = useState(task.description || "");
   const [priority, setPriority] = useState(task.priority);
   const [status, setStatus] = useState(task.status);
+  const [deliveryType, setDeliveryType] = useState<TaskDeliveryType>(
+    (task.delivery_type as TaskDeliveryType) || "unspecified",
+  );
   const [workstream, setWorkstream] = useState<TaskWorkstream>(
     (task.workstream as TaskWorkstream) || "general",
   );
@@ -105,6 +114,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     description: task.description || "",
     priority: task.priority,
     status: task.status,
+    deliveryType:
+      (task.delivery_type as TaskDeliveryType) || "unspecified",
     workstream: (task.workstream as TaskWorkstream) || "general",
     assignedTo: task.assigned_to || "",
     dueDate: task.due_date || "",
@@ -117,6 +128,8 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
       description: task.description || "",
       priority: task.priority,
       status: task.status,
+      deliveryType:
+        (task.delivery_type as TaskDeliveryType) || "unspecified",
       workstream: (task.workstream as TaskWorkstream) || "general",
       assignedTo: task.assigned_to || "",
       dueDate: task.due_date || "",
@@ -127,6 +140,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     setDescription(next.description);
     setPriority(next.priority);
     setStatus(next.status);
+    setDeliveryType(next.deliveryType);
     setWorkstream(next.workstream);
     setAssignedTo(next.assignedTo);
     setDueDate(next.dueDate);
@@ -287,6 +301,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         title: title.trim(),
         description: description.trim() || null,
         priority, status,
+        delivery_type: deliveryType,
         workstream,
         assigned_to: assignedTo || null,
         due_date: dueDate || null,
@@ -298,6 +313,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
         description: description.trim(),
         priority,
         status,
+        deliveryType,
         workstream,
         assignedTo,
         dueDate,
@@ -752,6 +768,46 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               {editing ? (
                 <>
                   <label
+                    htmlFor="task-detail-delivery-type"
+                    className="text-[10px] uppercase tracking-wider text-muted-foreground"
+                  >
+                    Tipo de entrega
+                  </label>
+                  <select
+                    id="task-detail-delivery-type"
+                    value={deliveryType}
+                    onChange={event => {
+                      const nextType =
+                        event.target.value as TaskDeliveryType;
+                      setDeliveryType(nextType);
+                      setWorkstream(
+                        suggestedWorkstreamForDeliveryType(nextType),
+                      );
+                    }}
+                    className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 cursor-pointer"
+                  >
+                    {TASK_DELIVERY_TYPE_OPTIONS.map(option => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </>
+              ) : (
+                <>
+                  <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                    Tipo de entrega
+                  </p>
+                  <span className="text-[12px] px-2 py-0.5 rounded-full bg-violet-500/10 text-violet-500 inline-block">
+                    {TASK_DELIVERY_TYPE_LABELS[deliveryType]}
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="space-y-1 col-span-2">
+              {editing ? (
+                <>
+                  <label
                     htmlFor="task-detail-workstream"
                     className="text-[10px] uppercase tracking-wider text-muted-foreground"
                   >
@@ -1122,6 +1178,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
               setDescription(saved.description);
               setPriority(saved.priority);
               setStatus(saved.status);
+              setDeliveryType(saved.deliveryType);
               setWorkstream(saved.workstream);
               setAssignedTo(saved.assignedTo);
               setDueDate(saved.dueDate);
