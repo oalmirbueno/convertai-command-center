@@ -2830,8 +2830,8 @@ SELECT is(
     FROM public.editorial_publications
     WHERE status = 'published'
   ),
-  2,
-  'client sees both published records after the double gate'
+  3,
+  'client sees all three published records after the double gate'
 );
 SELECT is(
   (
