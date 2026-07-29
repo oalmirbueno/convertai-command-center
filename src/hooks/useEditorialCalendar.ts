@@ -7,10 +7,7 @@ import {
 } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import {
-  EDITORIAL_PLATFORMS,
-  isFilePublishable,
-} from "@/lib/editorial";
+import { EDITORIAL_PLATFORMS, isFilePublishable } from "@/lib/editorial";
 import {
   buildEditorialTaskLinkIndex,
   type EditorialTaskLinkIndex,
@@ -110,6 +107,14 @@ export interface EditorialFileRow {
   file_name: string;
   file_type?: string | null;
   mime_type?: string | null;
+  extension?: string | null;
+  file_url?: string | null;
+  storage_bucket?: string | null;
+  storage_path?: string | null;
+  size_bytes?: number | null;
+  caption?: string | null;
+  carousel_text?: string | null;
+  description?: string | null;
   approval_status: string;
   agency_approval_status?: string;
   visibility: string;
@@ -117,6 +122,7 @@ export interface EditorialFileRow {
   status: string | null;
   archived_at: string | null;
   parent_file_id: string | null;
+  created_at?: string | null;
 }
 
 export interface EditorialEventRow {
@@ -160,6 +166,7 @@ export interface EditorialCalendarFilters {
 export interface SaveEditorialPostInput {
   payload: Record<string, unknown>;
   expectedVersion?: number | null;
+  deferRefresh?: boolean;
 }
 
 export interface TransitionEditorialPublicationInput {
@@ -173,11 +180,17 @@ export interface TransitionEditorialPublicationInput {
   failureCode?: string | null;
   failureReason?: string | null;
   publishedAt?: string | null;
+  deferRefresh?: boolean;
 }
 
-interface EditorialQueryResult {
+export interface EditorialQueryResult {
   posts: EditorialPostBundle[];
   accounts: EditorialAccountRow[];
+}
+
+export interface EditorialRealtimeGate {
+  pendingCount: number;
+  deferred: boolean;
 }
 
 export function useEditorialClientScope(enabled: boolean) {
@@ -206,7 +219,10 @@ export function useEditorialClientScope(enabled: boolean) {
   });
 }
 
-export function useEditorialLinkedTaskIds(enabled: boolean) {
+export function useEditorialLinkedTaskIds(
+  enabled: boolean,
+  realtimeGate?: { current: EditorialRealtimeGate },
+) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const isEditorialStaff = ["admin", "manager", "design", "traffic"].includes(
@@ -216,14 +232,13 @@ export function useEditorialLinkedTaskIds(enabled: boolean) {
   const query = useQuery({
     queryKey: ["editorial-linked-task-ids", user?.id, profile?.role],
     queryFn: async (): Promise<EditorialTaskLinkIndex> => {
-      const links = await readAllPages<EditorialTaskLinkRow>(
-        (from, to) =>
-          editorialDb
-            .from("editorial_post_internal")
-            .select("post_id, task_id, revision_of_post_id")
-            .not("task_id", "is", null)
-            .order("task_id", { ascending: true })
-            .range(from, to),
+      const links = await readAllPages<EditorialTaskLinkRow>((from, to) =>
+        editorialDb
+          .from("editorial_post_internal")
+          .select("post_id, task_id, revision_of_post_id")
+          .not("task_id", "is", null)
+          .order("task_id", { ascending: true })
+          .range(from, to),
       );
       const postIds = unique(links.map((row) => row.post_id));
       if (postIds.length === 0) {
@@ -253,6 +268,10 @@ export function useEditorialLinkedTaskIds(enabled: boolean) {
     if (!enabled || !user || !isEditorialStaff) return;
 
     const refreshTasks = () => {
+      if (realtimeGate?.current.pendingCount) {
+        realtimeGate.current.deferred = true;
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["tasks"] });
       queryClient.invalidateQueries({
         queryKey: ["editorial-linked-task-ids"],
@@ -275,7 +294,7 @@ export function useEditorialLinkedTaskIds(enabled: boolean) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [enabled, isEditorialStaff, queryClient, user]);
+  }, [enabled, isEditorialStaff, queryClient, realtimeGate, user]);
 
   return query;
 }
@@ -311,10 +330,7 @@ interface EditorialPage<T> {
 }
 
 async function readAllPages<T>(
-  fetchPage: (
-    from: number,
-    to: number,
-  ) => PromiseLike<EditorialPage<T>>,
+  fetchPage: (from: number, to: number) => PromiseLike<EditorialPage<T>>,
 ) {
   const rows: T[] = [];
   let from = 0;
@@ -344,9 +360,7 @@ async function readInChunks<T>(
   for (let index = 0; index < ids.length; index += EDITORIAL_ID_CHUNK_SIZE) {
     const chunk = ids.slice(index, index + EDITORIAL_ID_CHUNK_SIZE);
     rows.push(
-      ...(await readAllPages((from, to) =>
-        fetchChunk(chunk, from, to),
-      )),
+      ...(await readAllPages((from, to) => fetchChunk(chunk, from, to))),
     );
   }
   return rows;
@@ -358,8 +372,7 @@ async function readEditorialCalendar(
   exposeInternal: boolean,
   forceClientView: boolean,
 ): Promise<EditorialQueryResult> {
-  const loadInternal =
-    exposeInternal || (actualStaff && forceClientView);
+  const loadInternal = exposeInternal || (actualStaff && forceClientView);
   const posts = await readAllPages<EditorialPostRow>((from, to) => {
     let query = editorialDb
       .from("editorial_posts")
@@ -387,9 +400,7 @@ async function readEditorialCalendar(
 
   const publicationRows = await readAllPages<EditorialPublicationRow>(
     (from, to) => {
-      let query = editorialDb
-        .from("editorial_publications")
-        .select("*");
+      let query = editorialDb.from("editorial_publications").select("*");
 
       if (filters.clientId) {
         query = query.eq("client_id", filters.clientId);
@@ -432,34 +443,32 @@ async function readEditorialCalendar(
     const presenceRows = await readAllPages<{
       id: string;
       post_id: string;
-    }>(
-      (from, to) => {
-        let query = editorialDb
-          .from("editorial_publications")
-          .select("id, post_id");
+    }>((from, to) => {
+      let query = editorialDb
+        .from("editorial_publications")
+        .select("id, post_id");
 
-        if (filters.clientId) {
-          query = query.eq("client_id", filters.clientId);
-        }
-        if (filters.projectId) {
-          query = query.eq("project_id", filters.projectId);
-        }
-        if (filters.postId) {
-          query = query.eq("post_id", filters.postId);
-        }
-        if (filters.platform) {
-          query = query.eq("platform", filters.platform);
-        }
-        if (forceClientView) {
-          query = query.in("status", ["scheduled", "published"]);
-        }
+      if (filters.clientId) {
+        query = query.eq("client_id", filters.clientId);
+      }
+      if (filters.projectId) {
+        query = query.eq("project_id", filters.projectId);
+      }
+      if (filters.postId) {
+        query = query.eq("post_id", filters.postId);
+      }
+      if (filters.platform) {
+        query = query.eq("platform", filters.platform);
+      }
+      if (forceClientView) {
+        query = query.in("status", ["scheduled", "published"]);
+      }
 
-        return query
-          .order("post_id", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, to);
-      },
-    );
+      return query
+        .order("post_id", { ascending: true })
+        .order("id", { ascending: true })
+        .range(from, to);
+    });
     postIdsWithAnyRelevantPublications = new Set(
       presenceRows
         .map((row) => row.post_id)
@@ -476,48 +485,40 @@ async function readEditorialCalendar(
 
   const [postInternalRows, publicationInternalRows, accountRows, fileRows] =
     await Promise.all([
-    loadInternal
-      ? readInChunks<EditorialPostInternalRow>(
-          postIds,
-          (chunk, from, to) =>
+      loadInternal
+        ? readInChunks<EditorialPostInternalRow>(postIds, (chunk, from, to) =>
             editorialDb
               .from("editorial_post_internal")
               .select("*")
               .in("post_id", chunk)
               .order("post_id", { ascending: true })
               .range(from, to),
-        )
-      : Promise.resolve([]),
-    loadInternal && publications.length > 0
-      ? readInChunks<EditorialPublicationInternalRow>(
-          publications.map((publication) => publication.id),
-          (chunk, from, to) =>
-            editorialDb
-              .from("editorial_publication_internal")
-              .select("*")
-              .in("publication_id", chunk)
-              .order("publication_id", { ascending: true })
-              .range(from, to),
-        )
-      : Promise.resolve([]),
-    accountIds.length > 0
-      ? readInChunks<EditorialAccountRow>(
-          accountIds,
-          (chunk, from, to) =>
+          )
+        : Promise.resolve([]),
+      loadInternal && publications.length > 0
+        ? readInChunks<EditorialPublicationInternalRow>(
+            publications.map((publication) => publication.id),
+            (chunk, from, to) =>
+              editorialDb
+                .from("editorial_publication_internal")
+                .select("*")
+                .in("publication_id", chunk)
+                .order("publication_id", { ascending: true })
+                .range(from, to),
+          )
+        : Promise.resolve([]),
+      accountIds.length > 0
+        ? readInChunks<EditorialAccountRow>(accountIds, (chunk, from, to) =>
             editorialDb
               .from("external_accounts")
-              .select(
-                "id, client_id, platform, display_name, handle, status",
-              )
+              .select("id, client_id, platform, display_name, handle, status")
               .in("id", chunk)
               .order("id", { ascending: true })
               .range(from, to),
-        )
-      : Promise.resolve([]),
-    fileIds.length > 0
-      ? readInChunks<EditorialFileRow>(
-          fileIds,
-          (chunk, from, to) =>
+          )
+        : Promise.resolve([]),
+      fileIds.length > 0
+        ? readInChunks<EditorialFileRow>(fileIds, (chunk, from, to) =>
             editorialDb
               .from(actualStaff ? "staff_files_secure" : "files")
               .select(
@@ -528,9 +529,9 @@ async function readEditorialCalendar(
               .in("id", chunk)
               .order("id", { ascending: true })
               .range(from, to),
-        )
-      : Promise.resolve([]),
-  ]);
+          )
+        : Promise.resolve([]),
+    ]);
 
   const postInternalById = new Map(
     postInternalRows.map((row) => [row.post_id, row]),
@@ -538,19 +539,11 @@ async function readEditorialCalendar(
   const publicationInternalById = new Map(
     publicationInternalRows.map((row) => [row.publication_id, row]),
   );
-  const accountById = new Map(
-    accountRows.map((row) => [row.id, row]),
-  );
-  const fileById = new Map(
-    fileRows.map((row) => [row.id, row]),
-  );
-  const publicationsByPostId = new Map<
-    string,
-    EditorialPublicationRow[]
-  >();
+  const accountById = new Map(accountRows.map((row) => [row.id, row]));
+  const fileById = new Map(fileRows.map((row) => [row.id, row]));
+  const publicationsByPostId = new Map<string, EditorialPublicationRow[]>();
   publications.forEach((publication) => {
-    const current =
-      publicationsByPostId.get(publication.post_id) || [];
+    const current = publicationsByPostId.get(publication.post_id) || [];
     current.push(publication);
     publicationsByPostId.set(publication.post_id, current);
   });
@@ -569,8 +562,7 @@ async function readEditorialCalendar(
       (publication) => ({
         publication,
         internal: publicationInternalById.get(publication.id) || null,
-        account:
-          accountById.get(publication.external_account_id) || null,
+        account: accountById.get(publication.external_account_id) || null,
         file: publication.file_id
           ? fileById.get(publication.file_id) || null
           : null,
@@ -605,23 +597,21 @@ async function readEditorialCalendar(
       .map((bundle) => ({
         ...bundle,
         internal: null,
-        publications: bundle.publications.filter(
-          ({ publication, internal, file }) => {
+        publications: bundle.publications
+          .filter(({ publication, internal, file }) => {
             const effectiveFile = publication.file_id
               ? file
               : bundle.primaryFile;
             return (
-              ["scheduled", "published"].includes(
-                publication.status,
-              ) &&
+              ["scheduled", "published"].includes(publication.status) &&
               internal?.included_in_approval_snapshot === true &&
               isFilePublishable(effectiveFile)
             );
-          },
-        ).map((publication) => ({
-          ...publication,
-          internal: null,
-        })),
+          })
+          .map((publication) => ({
+            ...publication,
+            internal: null,
+          })),
       }))
       .filter(
         (bundle) =>
@@ -668,7 +658,10 @@ export async function loadEditorialPostForMutation(
 
 export function useEditorialCalendar(
   filters: EditorialCalendarFilters,
-  options: { forceClientView?: boolean } = {},
+  options: {
+    forceClientView?: boolean;
+    realtimeGate?: { current: EditorialRealtimeGate };
+  } = {},
 ) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
@@ -695,13 +688,18 @@ export function useEditorialCalendar(
       ),
     placeholderData: keepPreviousData,
     enabled: !!user,
-    refetchInterval: 30_000,
+    refetchInterval: () =>
+      options.realtimeGate?.current.pendingCount ? false : 30_000,
   });
 
   useEffect(() => {
     if (!user) return;
 
     const refresh = () => {
+      if (options.realtimeGate?.current.pendingCount) {
+        options.realtimeGate.current.deferred = true;
+        return;
+      }
       queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
     };
     const channel = supabase
@@ -721,7 +719,7 @@ export function useEditorialCalendar(
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [queryClient, user]);
+  }, [options.realtimeGate, queryClient, user]);
 
   return query;
 }
@@ -758,32 +756,28 @@ export function useEditorialPostDetail(
         exposeInternal,
         forceClientView,
       ),
-    enabled:
-      !!user && !!postId && (!forceClientView || !!clientId),
+    enabled: !!user && !!postId && (!forceClientView || !!clientId),
     refetchInterval: 30_000,
   });
 }
 
-export function useEditorialPostEvents(postId: string | null, enabled: boolean) {
+export function useEditorialPostEvents(
+  postId: string | null,
+  enabled: boolean,
+) {
   const { user, profile } = useAuth();
   const queryClient = useQueryClient();
   const query = useQuery({
-    queryKey: [
-      "editorial-events",
-      user?.id,
-      profile?.role,
-      postId,
-    ],
+    queryKey: ["editorial-events", user?.id, profile?.role, postId],
     queryFn: async () => {
-      const eventRows = await readAllPages<EditorialEventRow>(
-        (from, to) =>
-          editorialDb
-            .from("editorial_events")
-            .select("*")
-            .eq("post_id", postId)
-            .order("created_at", { ascending: false })
-            .order("id", { ascending: false })
-            .range(from, to),
+      const eventRows = await readAllPages<EditorialEventRow>((from, to) =>
+        editorialDb
+          .from("editorial_events")
+          .select("*")
+          .eq("post_id", postId)
+          .order("created_at", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to),
       );
       const actorIds = unique(eventRows.map((event) => event.actor_id));
       const actorRows =
@@ -859,65 +853,103 @@ export function useEditorialEditorOptions(
     ],
     queryFn: async () => {
       if (!clientId || !projectId) {
-        return { accounts: [], files: [], tasks: [], assignments: [] };
+        return {
+          accounts: [],
+          files: [],
+          tasks: [],
+          assignments: [],
+          usedFileIds: [],
+        };
       }
 
-      const [links, files, tasks, assignments] =
-        await Promise.all([
-          readAllPages<{ external_account_id: string }>((from, to) =>
-            editorialDb
-              .from("project_external_accounts")
-              .select("external_account_id")
-              .eq("client_id", clientId)
-              .eq("project_id", projectId)
-              .order("external_account_id", { ascending: true })
-              .range(from, to),
-          ),
-          readAllPages<EditorialFileRow>((from, to) =>
-            editorialDb
-              .from("staff_files_secure")
-              .select(
-                "id, client_id, project_id, file_name, file_type, mime_type, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id",
-              )
-              .eq("client_id", clientId)
-              .eq("project_id", projectId)
-              .is("parent_file_id", null)
-              .is("archived_at", null)
-              .order("created_at", { ascending: false })
-              .order("id", { ascending: true })
-              .range(from, to),
-          ),
-          readAllPages<{
-            id: string;
-            project_id: string;
-            title: string;
-            assigned_to: string | null;
-            status: string;
-            due_date: string | null;
-            workstream: string | null;
-            delivery_type: string | null;
-            source: string | null;
-          }>((from, to) =>
-            editorialDb
-              .from("tasks")
-              .select(
-                "id, project_id, title, assigned_to, status, due_date, workstream, delivery_type, source",
-              )
-              .eq("project_id", projectId)
-              .is("deleted_at", null)
-              .order("updated_at", { ascending: false })
-              .order("id", { ascending: true })
-              .range(from, to),
-          ),
-          readAllPages<{ user_id: string }>((from, to) =>
-            editorialDb
-              .from("team_client_assignments")
-              .select("user_id")
-              .eq("client_id", clientId)
-              .order("user_id", { ascending: true })
-              .range(from, to),
-          ),
-        ]);
+      const [
+        links,
+        files,
+        tasks,
+        assignments,
+        usedPrimaryFiles,
+        usedPublicationFiles,
+      ] = await Promise.all([
+        readAllPages<{ external_account_id: string }>((from, to) =>
+          editorialDb
+            .from("project_external_accounts")
+            .select("external_account_id")
+            .eq("client_id", clientId)
+            .eq("project_id", projectId)
+            .order("external_account_id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<EditorialFileRow>((from, to) =>
+          editorialDb
+            .from("staff_files_secure")
+            .select(
+              "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
+            )
+            .eq("client_id", clientId)
+            .eq("project_id", projectId)
+            .is("archived_at", null)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<{
+          id: string;
+          project_id: string;
+          title: string;
+          assigned_to: string | null;
+          status: string;
+          due_date: string | null;
+          workstream: string | null;
+          delivery_type: string | null;
+          source: string | null;
+        }>((from, to) =>
+          editorialDb
+            .from("tasks")
+            .select(
+              "id, project_id, title, assigned_to, status, due_date, workstream, delivery_type, source",
+            )
+            .eq("project_id", projectId)
+            .is("deleted_at", null)
+            .order("updated_at", { ascending: false })
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<{ user_id: string }>((from, to) =>
+          editorialDb
+            .from("team_client_assignments")
+            .select("user_id")
+            .eq("client_id", clientId)
+            .order("user_id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<{
+          id: string;
+          primary_file_id: string | null;
+        }>((from, to) =>
+          editorialDb
+            .from("editorial_posts")
+            .select("id, primary_file_id")
+            .eq("client_id", clientId)
+            .eq("project_id", projectId)
+            .not("primary_file_id", "is", null)
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<{
+          id: string;
+          file_id: string | null;
+        }>((from, to) =>
+          editorialDb
+            .from("editorial_publications")
+            .select("id, file_id")
+            .eq("client_id", clientId)
+            .eq("project_id", projectId)
+            .neq("status", "cancelled")
+            .not("file_id", "is", null)
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+      ]);
 
       const linkedAccountIds = unique(
         links.map((link) => link.external_account_id),
@@ -929,9 +961,7 @@ export function useEditorialEditorOptions(
           (chunk, from, to) =>
             editorialDb
               .from("external_accounts")
-              .select(
-                "id, client_id, platform, display_name, handle, status",
-              )
+              .select("id, client_id, platform, display_name, handle, status")
               .in("id", chunk)
               .in("platform", [...EDITORIAL_PLATFORMS])
               .eq("status", "active")
@@ -945,6 +975,10 @@ export function useEditorialEditorOptions(
         files,
         tasks,
         assignments: assignments.map((row) => row.user_id),
+        usedFileIds: unique([
+          ...usedPrimaryFiles.map((row) => row.primary_file_id),
+          ...usedPublicationFiles.map((row) => row.file_id),
+        ]),
       };
     },
     enabled: enabled && !!user && !!clientId && !!projectId,
@@ -959,12 +993,7 @@ export function useEditorialApprovalPreview(
   const { user, profile } = useAuth();
 
   return useQuery({
-    queryKey: [
-      "editorial-approval-preview",
-      user?.id,
-      profile?.role,
-      fileId,
-    ],
+    queryKey: ["editorial-approval-preview", user?.id, profile?.role, fileId],
     queryFn: async () => {
       const { data, error } = await editorialDb.rpc(
         "get_editorial_approval_preview",
@@ -1011,7 +1040,8 @@ export function useEditorialMutations() {
         recovered: boolean;
       };
     },
-    onSuccess: refresh,
+    onSuccess: (_data, variables) =>
+      variables.deferRefresh ? undefined : refresh(),
   });
 
   const transitionPublication = useMutation({
@@ -1039,7 +1069,8 @@ export function useEditorialMutations() {
         recovered: boolean;
       };
     },
-    onSuccess: refresh,
+    onSuccess: (_data, variables) =>
+      variables.deferRefresh ? undefined : refresh(),
   });
 
   const archivePost = useMutation({
@@ -1050,13 +1081,10 @@ export function useEditorialMutations() {
       postId: string;
       expectedVersion: number;
     }) => {
-      const { data, error } = await editorialDb.rpc(
-        "archive_editorial_post",
-        {
-          p_post_id: postId,
-          p_expected_version: expectedVersion,
-        },
-      );
+      const { data, error } = await editorialDb.rpc("archive_editorial_post", {
+        p_post_id: postId,
+        p_expected_version: expectedVersion,
+      });
       if (error) throw error;
       return data as {
         post_id: string;

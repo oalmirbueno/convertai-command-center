@@ -1,0 +1,280 @@
+import { useMemo, useState } from "react";
+import {
+  AlertCircle,
+  Check,
+  FileImage,
+  Film,
+  Images,
+  Loader2,
+  RefreshCw,
+  Search,
+} from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import {
+  buildApprovedMediaAssets,
+  filterApprovedMediaAssets,
+  type EditorialApprovedMediaAsset,
+  type EditorialMediaFile,
+} from "@/lib/editorialMedia";
+import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+
+interface ApprovedMediaPickerProps {
+  files: readonly EditorialMediaFile[];
+  usedRootFileIds?: readonly string[];
+  currentRootFileId?: string | null;
+  selectedFileId?: string | null;
+  onSelect: (asset: EditorialApprovedMediaAsset) => void;
+  loading?: boolean;
+  error?: string | null;
+  disabled?: boolean;
+  onRetry?: () => void;
+  className?: string;
+}
+
+const contentTypeLabels = {
+  static: "Post",
+  carousel: "Carrossel",
+  video: "Vídeo",
+} as const;
+const EMPTY_FILE_IDS: readonly string[] = [];
+
+function MediaPreview({
+  file,
+  className,
+}: {
+  file: EditorialMediaFile;
+  className?: string;
+}) {
+  const kind = mediaKindFromFile(
+    file.file_name,
+    file.file_url,
+    file.mime_type || file.file_type,
+    file.extension,
+  );
+  const { url, loading, error } = useResolvedFileUrl({
+    fileUrl: file.file_url,
+    storageBucket: file.storage_bucket,
+    storagePath: file.storage_path,
+    transform:
+      kind === "image" ? { width: 640, quality: 76, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+
+  return (
+    <span
+      className={cn(
+        "relative flex min-h-0 min-w-0 items-center justify-center overflow-hidden bg-secondary",
+        className,
+      )}
+    >
+      {loading ? (
+        <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+      ) : url && kind === "image" ? (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+      ) : url && kind === "video" ? (
+        <>
+          <video
+            src={`${url}#t=0.1`}
+            muted
+            playsInline
+            preload="metadata"
+            aria-hidden="true"
+            className="h-full w-full object-cover"
+          />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <Film className="h-5 w-5 text-white drop-shadow" />
+          </span>
+        </>
+      ) : (
+        <span title={error || undefined}>
+          {kind === "video" ? (
+            <Film className="h-5 w-5 text-muted-foreground" />
+          ) : (
+            <FileImage className="h-5 w-5 text-muted-foreground" />
+          )}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function AssetPreview({ asset }: { asset: EditorialApprovedMediaAsset }) {
+  const visibleFiles = asset.files.slice(0, 3);
+
+  if (visibleFiles.length === 1) {
+    return <MediaPreview file={visibleFiles[0]} className="h-full w-full" />;
+  }
+
+  return (
+    <span className="grid h-full w-full grid-cols-3 gap-px bg-border">
+      {visibleFiles.map((file) => (
+        <MediaPreview key={file.id} file={file} className="h-full" />
+      ))}
+    </span>
+  );
+}
+
+export default function ApprovedMediaPicker({
+  files,
+  usedRootFileIds = EMPTY_FILE_IDS,
+  currentRootFileId = null,
+  selectedFileId = null,
+  onSelect,
+  loading = false,
+  error = null,
+  disabled = false,
+  onRetry,
+  className,
+}: ApprovedMediaPickerProps) {
+  const [search, setSearch] = useState("");
+  const assets = useMemo(
+    () =>
+      buildApprovedMediaAssets(files, {
+        usedRootFileIds,
+        currentRootFileId,
+      }),
+    [currentRootFileId, files, usedRootFileIds],
+  );
+  const visibleAssets = useMemo(
+    () => filterApprovedMediaAssets(assets, search),
+    [assets, search],
+  );
+
+  return (
+    <div className={cn("space-y-3", className)}>
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden="true"
+        />
+        <Input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          disabled={disabled || loading}
+          className="pl-9"
+          aria-label="Buscar mídia aprovada"
+          placeholder="Buscar arte, vídeo ou carrossel aprovado"
+        />
+      </div>
+
+      {loading ? (
+        <div
+          className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+          aria-label="Carregando mídia aprovada"
+        >
+          {[0, 1, 2].map((item) => (
+            <div
+              key={item}
+              className="overflow-hidden rounded-xl border border-border"
+            >
+              <div className="aspect-[4/3] animate-pulse bg-secondary" />
+              <div className="space-y-2 p-3">
+                <div className="h-3 w-2/3 animate-pulse rounded bg-secondary" />
+                <div className="h-2.5 w-1/3 animate-pulse rounded bg-secondary" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : error ? (
+        <div
+          role="alert"
+          className="flex flex-col items-center rounded-xl border border-destructive/25 bg-destructive/5 px-4 py-6 text-center"
+        >
+          <AlertCircle className="h-5 w-5 text-destructive" />
+          <p className="mt-2 text-xs text-muted-foreground">{error}</p>
+          {onRetry && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="mt-3"
+              onClick={onRetry}
+            >
+              <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
+              Tentar novamente
+            </Button>
+          )}
+        </div>
+      ) : visibleAssets.length > 0 ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {visibleAssets.map((asset) => {
+            const selected = selectedFileId === asset.id;
+            const TypeIcon =
+              asset.contentType === "carousel"
+                ? Images
+                : asset.contentType === "video"
+                  ? Film
+                  : FileImage;
+
+            return (
+              <button
+                key={asset.id}
+                type="button"
+                disabled={disabled}
+                aria-pressed={selected}
+                aria-label={`Selecionar ${asset.root.file_name}, ${contentTypeLabels[asset.contentType]}`}
+                onClick={() => onSelect(asset)}
+                className={cn(
+                  "group overflow-hidden rounded-xl border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
+                  selected
+                    ? "border-primary ring-1 ring-primary/30"
+                    : "border-border",
+                )}
+              >
+                <span className="relative block aspect-[4/3] overflow-hidden">
+                  <AssetPreview asset={asset} />
+                  <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/65 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
+                    <TypeIcon className="h-3 w-3" />
+                    {contentTypeLabels[asset.contentType]}
+                    {asset.contentType === "carousel"
+                      ? ` · ${asset.files.length}`
+                      : ""}
+                  </span>
+                  {selected && (
+                    <span className="absolute right-2 top-2 inline-flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
+                      <Check className="h-4 w-4" />
+                    </span>
+                  )}
+                </span>
+                <span className="block min-w-0 p-3">
+                  <span
+                    className="block truncate text-xs font-semibold text-foreground"
+                    title={asset.root.file_name}
+                  >
+                    {asset.root.file_name}
+                  </span>
+                  <span className="mt-1 line-clamp-2 block min-h-8 text-[10px] leading-4 text-muted-foreground">
+                    {asset.root.caption ||
+                      asset.root.description ||
+                      "Mídia aprovada e pronta para publicação"}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="rounded-xl border border-dashed border-border bg-muted/15 px-4 py-8 text-center">
+          <FileImage className="mx-auto h-6 w-6 text-muted-foreground/60" />
+          <p className="mt-2 text-xs font-medium text-foreground">
+            {search
+              ? "Nenhuma mídia aprovada corresponde à busca"
+              : "Nenhuma mídia aprovada disponível"}
+          </p>
+          <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
+            Só aparecem artes e vídeos double-gate aprovados deste projeto que
+            ainda não foram usados.
+          </p>
+        </div>
+      )}
+    </div>
+  );
+}

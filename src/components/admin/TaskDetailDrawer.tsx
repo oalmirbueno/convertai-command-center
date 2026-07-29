@@ -17,6 +17,7 @@ import {
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import TaskChecklistTemplatePicker from "@/components/admin/TaskChecklistTemplatePicker";
+import TaskCommentContent from "@/components/admin/TaskCommentContent";
 import { resolveFileUrl } from "@/lib/fileUrls";
 import {
   requestIdFromTaskSource,
@@ -505,29 +506,6 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
     await supabase.from("task_comments").delete().eq("id", commentId);
     queryClient.invalidateQueries({ queryKey: ["task-comments", task.id] });
     toast.success("Comentário removido");
-  };
-
-  // Render comment with highlighted @mentions
-  const renderCommentWithMentions = (text: string) => {
-    const mentionPattern = /@([A-Za-zÀ-ÿ\s]+?)(?=\s@|\s[^A-Za-zÀ-ÿ]|$)/g;
-    const parts: React.ReactNode[] = [];
-    let lastIndex = 0;
-    let match;
-    while ((match = mentionPattern.exec(text)) !== null) {
-      const name = match[1].trim();
-      const isMember = teamMembers.some((m: any) => m.full_name === name);
-      if (isMember) {
-        if (match.index > lastIndex) parts.push(text.slice(lastIndex, match.index));
-        parts.push(
-          <span key={match.index} className="text-primary font-semibold bg-primary/10 px-0.5 rounded">
-            @{name}
-          </span>
-        );
-        lastIndex = match.index + match[0].length;
-      }
-    }
-    if (lastIndex < text.length) parts.push(text.slice(lastIndex));
-    return parts.length > 0 ? parts : text;
   };
 
   // ── Checklist ──
@@ -1110,7 +1088,12 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                             )}
                           </div>
                           <p className="text-[13px] text-foreground whitespace-pre-wrap leading-relaxed mt-0.5">
-                            {renderCommentWithMentions(c.content)}
+                            <TaskCommentContent
+                              text={c.content}
+                              memberNames={teamMembers.map(
+                                (member: any) => member.full_name,
+                              )}
+                            />
                           </p>
                         </div>
                       </div>

@@ -6,22 +6,15 @@ import {
   useRef,
   useState,
 } from "react";
+import { UNSAFE_NavigationContext, useBeforeUnload } from "react-router-dom";
 import {
-  UNSAFE_NavigationContext,
-  useBeforeUnload,
-} from "react-router-dom";
-import {
-  AlertCircle,
   CalendarClock,
   FileCheck2,
-  FileImage,
-  Film,
   Loader2,
   LockKeyhole,
   Plus,
   RefreshCw,
   Trash2,
-  Upload,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -44,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
   useEditorialEditorOptions,
   useEditorialMutations,
@@ -62,6 +56,7 @@ import {
   isFilePublishable,
   type EditorialPlatform,
 } from "@/lib/editorial";
+import type { EditorialApprovedMediaAsset } from "@/lib/editorialMedia";
 import { isPublishableTask } from "@/lib/taskDeliveryTypes";
 
 interface Option {
@@ -107,6 +102,7 @@ interface EditorialEditorProps {
 }
 
 const EMPTY_ID_LIST: readonly string[] = [];
+const EMPTY_EDITORIAL_FILES: readonly EditorialFileRow[] = [];
 
 const contentTypes = [
   { value: "static", label: "Post estático" },
@@ -198,10 +194,12 @@ export default function EditorialEditor({
     useState(newIdempotencyKey);
   const [publications, setPublications] = useState<PublicationDraft[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
-  const [pendingMutationId, setPendingMutationId] =
-    useState<string | null>(null);
+  const [pendingMutationId, setPendingMutationId] = useState<string | null>(
+    null,
+  );
   const dirtyNavigationRef = useRef(false);
   const savingNavigationRef = useRef(false);
+  const initializedEditorKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     dirtyNavigationRef.current = open && hasChanges;
@@ -270,11 +268,7 @@ export default function EditorialEditor({
     isError: optionsError,
     error: optionsErrorDetail,
     refetch: refetchOptions,
-  } = useEditorialEditorOptions(
-    clientId || null,
-    projectId || null,
-    open,
-  );
+  } = useEditorialEditorOptions(clientId || null, projectId || null, open);
 
   useEffect(() => {
     if (!open || !clientId || !projectId) return;
@@ -290,7 +284,18 @@ export default function EditorialEditor({
   }, [clientId, open, projectId, refetchOptions]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      initializedEditorKeyRef.current = null;
+      return;
+    }
+
+    const editorKey = post
+      ? `post:${post.post.id}`
+      : revisionOf
+        ? `revision:${revisionOf.post.id}`
+        : `new:${defaultTaskId}:${defaultClientId}:${defaultProjectId}:${defaultScheduledAt}`;
+    if (initializedEditorKeyRef.current === editorKey) return;
+    initializedEditorKeyRef.current = editorKey;
 
     if (post) {
       setClientId(post.post.client_id);
@@ -309,13 +314,10 @@ export default function EditorialEditor({
       );
       setPublications(
         post.publications
-          .filter(
-            ({ publication }) => publication.status !== "cancelled",
-          )
+          .filter(({ publication }) => publication.status !== "cancelled")
           .map(({ publication, internal }) => ({
             id: publication.id,
-            idempotencyKey:
-              internal?.idempotency_key || newIdempotencyKey(),
+            idempotencyKey: internal?.idempotency_key || newIdempotencyKey(),
             externalAccountId: publication.external_account_id,
             fileId: publication.file_id || "",
             caption: publication.caption || "",
@@ -328,8 +330,7 @@ export default function EditorialEditor({
                 ) || ""
               : "",
             timezone:
-              publication.scheduled_timezone ||
-              EDITORIAL_DEFAULT_TIME_ZONE,
+              publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
           })),
       );
       setHasChanges(false);
@@ -345,15 +346,9 @@ export default function EditorialEditor({
     );
     setObjective(revisionOf?.post.objective || defaultContext);
     setDefaultCaption(revisionOf?.post.default_caption || "");
-    setProductionStatus(
-      revisionOf ? "draft" : defaultProductionStatus,
-    );
+    setProductionStatus(revisionOf ? "draft" : defaultProductionStatus);
     setPrimaryFileId("");
-    setTaskId(
-      revisionOf
-        ? revisionOf.internal?.task_id || ""
-        : defaultTaskId,
-    );
+    setTaskId(revisionOf ? revisionOf.internal?.task_id || "" : defaultTaskId);
     setResponsibleId(
       revisionOf
         ? revisionOf.internal?.responsible_id || ""
@@ -364,9 +359,7 @@ export default function EditorialEditor({
     setPublications(
       revisionOf
         ? revisionOf.publications
-            .filter(
-              ({ publication }) => publication.status !== "cancelled",
-            )
+            .filter(({ publication }) => publication.status !== "cancelled")
             .map(({ publication }) => ({
               idempotencyKey: newIdempotencyKey(),
               externalAccountId: publication.external_account_id,
@@ -376,8 +369,7 @@ export default function EditorialEditor({
               altText: publication.alt_text || "",
               scheduledAt: "",
               timezone:
-                publication.scheduled_timezone ||
-                EDITORIAL_DEFAULT_TIME_ZONE,
+                publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
             }))
         : defaultScheduledAt
           ? [emptyPublication(defaultScheduledAt)]
@@ -401,13 +393,7 @@ export default function EditorialEditor({
   ]);
 
   useEffect(() => {
-    if (
-      !open ||
-      post ||
-      revisionOf ||
-      !defaultScheduledAt ||
-      !options
-    ) {
+    if (!open || post || revisionOf || !defaultScheduledAt || !options) {
       return;
     }
     setPublications((current) => {
@@ -428,34 +414,22 @@ export default function EditorialEditor({
       if (current.length === 0) {
         return [emptyPublication(defaultScheduledAt, onlyAccountId)];
       }
-      if (
-        current.length === 1 &&
-        emptyScheduledPlaceholder(current[0])
-      ) {
+      if (current.length === 1 && emptyScheduledPlaceholder(current[0])) {
         return [{ ...current[0], externalAccountId: onlyAccountId }];
       }
       return current;
     });
-  }, [
-    defaultScheduledAt,
-    open,
-    options,
-    post,
-    revisionOf,
-  ]);
+  }, [defaultScheduledAt, open, options, post, revisionOf]);
 
   const filteredProjects = useMemo(
     () =>
-      projects.filter(
-        (project) => !clientId || project.client_id === clientId,
-      ),
+      projects.filter((project) => !clientId || project.client_id === clientId),
     [clientId, projects],
   );
   const allowedTeamMembers = useMemo(() => {
     const assignments = new Set(options?.assignments || []);
     return teamMembers.filter(
-      (member) =>
-        member.role === "admin" || assignments.has(member.id),
+      (member) => member.role === "admin" || assignments.has(member.id),
     );
   }, [options?.assignments, teamMembers]);
   const selectableTasks = useMemo(() => {
@@ -464,31 +438,29 @@ export default function EditorialEditor({
     return (options?.tasks || []).filter(
       (task) =>
         task.id === taskId ||
-        (
-          !linkedIds.has(task.id) &&
-          isPublishableTask(task, designIds)
-        ),
+        (!linkedIds.has(task.id) && isPublishableTask(task, designIds)),
     );
-  }, [
-    designMemberIds,
-    linkedTaskIds,
-    options?.tasks,
-    taskId,
-  ]);
+  }, [designMemberIds, linkedTaskIds, options?.tasks, taskId]);
   const selectedFile =
     options?.files.find((file) => file.id === primaryFileId) ||
-    (
-      post?.primaryFile?.id === primaryFileId
-        ? post.primaryFile
-        : undefined
-    );
+    (post?.primaryFile?.id === primaryFileId ? post.primaryFile : undefined);
+  const optionFiles = options?.files || EMPTY_EDITORIAL_FILES;
+  const editableRootFiles = useMemo(
+    () =>
+      optionFiles.filter(
+        (file) => !file.parent_file_id && isFileEditable(file),
+      ),
+    [optionFiles],
+  );
+  const approvedMediaDraft = Boolean(
+    !revisionOf &&
+      selectedFile &&
+      isFilePublishable(selectedFile) &&
+      post?.post.primary_file_id !== selectedFile.id,
+  );
   const primaryContentLocked = Boolean(
     post?.post.primary_file_id &&
-      (
-        loadingOptions ||
-        !selectedFile ||
-        !isFileEditable(selectedFile)
-      ),
+    (loadingOptions || !selectedFile || !isFileEditable(selectedFile)),
   );
   const publicationContentLocked = Boolean(
     post?.publications.some(
@@ -498,41 +470,16 @@ export default function EditorialEditor({
         (!file || !isFileEditable(file)),
     ),
   );
-  const contentLocked =
-    primaryContentLocked || publicationContentLocked;
+  const savedContentLocked = primaryContentLocked || publicationContentLocked;
+  const contentLocked = savedContentLocked || approvedMediaDraft;
   const cancelledAccountIds = useMemo(
     () =>
       new Set(
         (post?.publications || [])
-          .filter(
-            ({ publication }) => publication.status === "cancelled",
-          )
-          .map(
-            ({ publication }) => publication.external_account_id,
-          ),
+          .filter(({ publication }) => publication.status === "cancelled")
+          .map(({ publication }) => publication.external_account_id),
       ),
     [post],
-  );
-  const selectableFiles = useMemo(
-    () => {
-      const candidates =
-        post?.primaryFile &&
-        !(options?.files || []).some(
-          (file) => file.id === post.primaryFile?.id,
-        )
-          ? [post.primaryFile, ...(options?.files || [])]
-          : (options?.files || []);
-      return candidates.filter(
-        (file) =>
-          isFileEditable(file) ||
-          file.id === post?.post.primary_file_id,
-      );
-    },
-    [
-      options?.files,
-      post?.post.primary_file_id,
-      post?.primaryFile,
-    ],
   );
 
   const markChanged = () => {
@@ -553,20 +500,19 @@ export default function EditorialEditor({
   };
 
   const addPublication = () => {
-    const usedAccountIds = new Set(
-      [
-        ...publications.map(
-          (publication) => publication.externalAccountId,
-        ),
-        ...cancelledAccountIds,
-      ],
-    );
+    const usedAccountIds = new Set([
+      ...publications.map((publication) => publication.externalAccountId),
+      ...cancelledAccountIds,
+    ]);
     const firstAvailable = options?.accounts.find(
       (account) => !usedAccountIds.has(account.id),
     );
     setPublications((current) => [
       ...current,
-      emptyPublication(defaultScheduledAt, firstAvailable?.id || ""),
+      {
+        ...emptyPublication(defaultScheduledAt, firstAvailable?.id || ""),
+        caption: contentLocked ? defaultCaption : "",
+      },
     ]);
     markChanged();
   };
@@ -590,22 +536,25 @@ export default function EditorialEditor({
     setPublications([]);
   };
 
-  const openMediaUploader = (
-    mode: "single" | "carousel" | "video_link",
-  ) => {
-    if (!clientId || !projectId || contentLocked) return;
-    const params = new URLSearchParams({
-      client: clientId,
-      project: projectId,
-      folder: "criativos",
-      novo: "1",
-      mode,
-    });
-    window.open(
-      `/arquivos?${params.toString()}`,
-      "_blank",
-      "noopener,noreferrer",
+  const selectApprovedMedia = (asset: EditorialApprovedMediaAsset) => {
+    if (savedContentLocked) return;
+    const approvedCaption = asset.root.caption?.trim() || "";
+    setPrimaryFileId(asset.root.id);
+    setTitle(asset.root.file_name.trim());
+    setContentType(asset.contentType);
+    setProductionStatus("ready");
+    setObjective(asset.root.description?.trim() || "");
+    setDefaultCaption(approvedCaption);
+    setPublications((current) =>
+      current.map((publication) => ({
+        ...publication,
+        fileId: "",
+        caption: approvedCaption,
+        firstComment: "",
+        altText: "",
+      })),
     );
+    markChanged();
   };
 
   const handleSave = async () => {
@@ -613,10 +562,7 @@ export default function EditorialEditor({
       toast.error("Preencha cliente, projeto e título.");
       return;
     }
-    if (
-      lockTaskId &&
-      (!taskId || taskId !== defaultTaskId)
-    ) {
+    if (lockTaskId && (!taskId || taskId !== defaultTaskId)) {
       toast.error(
         "Este conteúdo precisa permanecer vinculado à tarefa de origem.",
       );
@@ -633,10 +579,10 @@ export default function EditorialEditor({
         !publication.externalAccountId &&
         Boolean(
           publication.fileId ||
-            publication.caption.trim() ||
-            publication.firstComment.trim() ||
-            publication.altText.trim() ||
-            publication.scheduledAt,
+          publication.caption.trim() ||
+          publication.firstComment.trim() ||
+          publication.altText.trim() ||
+          publication.scheduledAt,
         ),
     );
     if (accountlessPublicationWithContent) {
@@ -650,29 +596,29 @@ export default function EditorialEditor({
       const publicationPayload = publications
         .filter((publication) => publication.externalAccountId)
         .map((publication) => {
-        const scheduledAt = publication.scheduledAt
-          ? zonedDateTimeLocalToIso(
-              publication.scheduledAt,
-              publication.timezone,
-            )
-          : null;
-        if (publication.scheduledAt && !scheduledAt) {
-          throw new Error(
-            "Um dos horários não existe no fuso selecionado. Ajuste a data.",
-          );
-        }
-        return {
-          id: publication.id || null,
-          idempotency_key: publication.idempotencyKey,
-          external_account_id: publication.externalAccountId,
-          file_id: publication.fileId || null,
-          caption: publication.caption.trim() || null,
-          first_comment: publication.firstComment.trim() || null,
-          alt_text: publication.altText.trim() || null,
-          scheduled_at: scheduledAt,
-          scheduled_timezone: publication.timezone,
-        };
-      });
+          const scheduledAt = publication.scheduledAt
+            ? zonedDateTimeLocalToIso(
+                publication.scheduledAt,
+                publication.timezone,
+              )
+            : null;
+          if (publication.scheduledAt && !scheduledAt) {
+            throw new Error(
+              "Um dos horários não existe no fuso selecionado. Ajuste a data.",
+            );
+          }
+          return {
+            id: publication.id || null,
+            idempotency_key: publication.idempotencyKey,
+            external_account_id: publication.externalAccountId,
+            file_id: publication.fileId || null,
+            caption: publication.caption.trim() || null,
+            first_comment: publication.firstComment.trim() || null,
+            alt_text: publication.altText.trim() || null,
+            scheduled_at: scheduledAt,
+            scheduled_timezone: publication.timezone,
+          };
+        });
 
       savingNavigationRef.current = true;
       const result = await savePost.mutateAsync({
@@ -711,11 +657,24 @@ export default function EditorialEditor({
       onOpenChange(false);
     } catch (error: unknown) {
       savingNavigationRef.current = false;
-      toast.error(
+      const message =
         error instanceof Error
           ? error.message
-          : "Não foi possível salvar o conteúdo.",
-      );
+          : "Não foi possível salvar o conteúdo.";
+      if (
+        approvedMediaDraft &&
+        /already used|already linked|indisponível|unavailable|another content|outro conteúdo/i.test(
+          message,
+        )
+      ) {
+        setPrimaryFileId("");
+        setHasChanges(true);
+        toast.error(
+          "Outra sessão acabou de usar esta mídia. A seleção foi removida, mas o restante do preenchimento foi preservado.",
+        );
+        return;
+      }
+      toast.error(message);
     }
   };
 
@@ -756,8 +715,7 @@ export default function EditorialEditor({
                 Informações principais
               </h3>
               <p className="mt-1 text-xs text-muted-foreground">
-                Defina o conteúdo antes de vincular mídia, tarefa e
-                plataformas.
+                Defina o conteúdo antes de vincular mídia, tarefa e plataformas.
               </p>
             </div>
             <div className="space-y-2">
@@ -784,9 +742,7 @@ export default function EditorialEditor({
               <Select
                 value={projectId}
                 onValueChange={handleProjectChange}
-                disabled={
-                  !clientId || !!post || !!revisionOf || lockTaskId
-                }
+                disabled={!clientId || !!post || !!revisionOf || lockTaskId}
               >
                 <SelectTrigger id="editorial-project">
                   <SelectValue placeholder="Selecione o projeto" />
@@ -824,9 +780,7 @@ export default function EditorialEditor({
                   {defaultTitle || title}
                 </p>
                 <p className="mt-1 whitespace-pre-wrap text-xs leading-5 text-muted-foreground">
-                  <span className="font-medium text-foreground">
-                    Contexto:
-                  </span>{" "}
+                  <span className="font-medium text-foreground">Contexto:</span>{" "}
                   {defaultContext}
                 </p>
               </div>
@@ -863,6 +817,7 @@ export default function EditorialEditor({
                   setProductionStatus(value);
                   markChanged();
                 }}
+                disabled={contentLocked}
               >
                 <SelectTrigger id="editorial-production-status">
                   <SelectValue />
@@ -913,8 +868,8 @@ export default function EditorialEditor({
                   Conteúdo protegido pela aprovação
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Mídia e textos não podem mudar nesta versão. Etapa de
-                  produção, horário, tarefa, responsável e notas internas
+                  Mídia e textos não podem mudar nesta versão. Conta,
+                  horário, fuso, tarefa, responsável e notas internas
                   continuam editáveis.
                 </p>
               </div>
@@ -932,81 +887,16 @@ export default function EditorialEditor({
               </p>
             </div>
             <div className="rounded-xl border border-border bg-muted/20 p-3 sm:p-4">
-              <div>
-                <p className="text-xs font-semibold text-foreground">
-                  Adicionar mídia
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Abra a biblioteca no modo certo sem alterar o formato
-                  escolhido para o conteúdo.
-                </p>
-              </div>
-              <div className="mt-3 grid gap-2 sm:grid-cols-3">
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
-                  disabled={!clientId || !projectId || contentLocked}
-                  onClick={() => openMediaUploader("single")}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Upload className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold">
-                      Arquivo
-                    </span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      Imagem ou peça única
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
-                  disabled={!clientId || !projectId || contentLocked}
-                  onClick={() =>
-                    openMediaUploader("carousel")
-                  }
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <FileImage className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold">
-                      Carrossel
-                    </span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      Sequência de cards
-                    </span>
-                  </span>
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="h-auto min-h-16 justify-start gap-3 whitespace-normal px-3 py-3 text-left hover:border-primary/40 hover:bg-primary/5"
-                  disabled={!clientId || !projectId || contentLocked}
-                  onClick={() => openMediaUploader("video_link")}
-                >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                    <Film className="h-4 w-4" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block text-sm font-semibold">
-                      Vídeo
-                    </span>
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      Upload ou link de vídeo
-                    </span>
-                  </span>
-                </Button>
-              </div>
-              <div className="mt-3 flex flex-col gap-2 border-t border-border/70 pt-3 sm:flex-row sm:items-center sm:justify-between">
-                <p className="text-xs text-muted-foreground">
-                  Ao voltar para esta aba, a biblioteca atualiza
-                  automaticamente.
-                </p>
+              <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Mídia aprovada deste projeto
+                  </p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    Selecione aqui sem sair do editor. PDFs, documentos e
+                    arquivos já usados não aparecem.
+                  </p>
+                </div>
                 <Button
                   type="button"
                   variant="ghost"
@@ -1020,144 +910,131 @@ export default function EditorialEditor({
                       loadingOptions ? "animate-spin" : ""
                     }`}
                   />
-                  Atualizar biblioteca
+                  Atualizar
                 </Button>
               </div>
-            </div>
-            {loadingOptions ? (
-              <div className="flex h-20 items-center justify-center">
-                <Loader2 className="h-5 w-5 animate-spin text-primary" />
-              </div>
-            ) : optionsError ? (
-              <div className="flex min-h-24 flex-col items-center justify-center rounded-lg border border-destructive/25 bg-destructive/5 p-4 text-center">
-                <AlertCircle className="mb-2 h-5 w-5 text-destructive" />
-                <p className="text-xs text-muted-foreground">
-                  {optionsErrorDetail instanceof Error
-                    ? optionsErrorDetail.message
-                    : "Não foi possível carregar Arquivos, tarefas e plataformas."}
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-3"
-                  onClick={() => refetchOptions()}
-                >
-                  <RefreshCw className="mr-1.5 h-3.5 w-3.5" />
-                  Recarregar
-                </Button>
-              </div>
-            ) : (
-              <div className="grid gap-4 md:grid-cols-2">
+              {revisionOf ? (
                 <div className="space-y-2">
-                  <Label htmlFor="editorial-file">Arquivo principal</Label>
+                  <Label htmlFor="editorial-revision-file">
+                    Nova versão editável
+                  </Label>
                   <Select
                     value={primaryFileId || "none"}
-                    onValueChange={(value) =>
-                      {
-                        setPrimaryFileId(
-                          value === "none" ? "" : value,
-                        );
-                        markChanged();
-                      }
-                    }
-                    disabled={!projectId || contentLocked}
+                    onValueChange={(value) => {
+                      setPrimaryFileId(value === "none" ? "" : value);
+                      markChanged();
+                    }}
+                    disabled={!projectId || loadingOptions}
                   >
-                    <SelectTrigger id="editorial-file">
-                      <SelectValue placeholder="Vincular arquivo" />
+                    <SelectTrigger id="editorial-revision-file">
+                      <SelectValue placeholder="Selecionar nova versão" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">Sem arquivo</SelectItem>
-                      {selectableFiles.map((file) => (
+                      <SelectItem value="none">Selecione um arquivo</SelectItem>
+                      {editableRootFiles.map((file) => (
                         <SelectItem key={file.id} value={file.id}>
                           {file.file_name}
                         </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
-                  {selectedFile && (
-                    <Badge
-                      variant="outline"
-                      className={
-                        isFilePublishable(selectedFile)
-                          ? "border-success/30 bg-success/10 text-success"
-                          : "border-warning/30 bg-warning/10 text-warning"
-                      }
-                    >
-                      <FileCheck2 className="mr-1 h-3 w-3" />
-                      {fileGateLabel(selectedFile)}
-                    </Badge>
-                  )}
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="editorial-task">Tarefa do Kanban</Label>
-                  <Select
-                    value={taskId || "none"}
-                    onValueChange={(value) =>
-                      {
-                        setTaskId(value === "none" ? "" : value);
-                        markChanged();
-                      }
-                    }
-                    disabled={!projectId || lockTaskId}
-                  >
-                    <SelectTrigger id="editorial-task">
-                      <SelectValue placeholder="Vincular tarefa" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {!lockTaskId && (
-                        <SelectItem value="none">Sem tarefa</SelectItem>
-                      )}
-                      {selectableTasks.map((task) => (
-                        <SelectItem key={task.id} value={task.id}>
-                          {task.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="editorial-responsible">Responsável</Label>
-                  <Select
-                    value={responsibleId || "none"}
-                    onValueChange={(value) =>
-                      {
-                        setResponsibleId(
-                          value === "none" ? "" : value,
-                        );
-                        markChanged();
-                      }
-                    }
-                    disabled={!clientId}
-                  >
-                    <SelectTrigger id="editorial-responsible">
-                      <SelectValue placeholder="Escolher responsável" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">Sem responsável</SelectItem>
-                      {allowedTeamMembers.map((member) => (
-                        <SelectItem key={member.id} value={member.id}>
-                          {member.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="editorial-notes">Notas internas</Label>
-                  <Textarea
-                    id="editorial-notes"
-                    value={internalNotes}
-                    onChange={(event) => {
-                      setInternalNotes(event.target.value);
-                      markChanged();
-                    }}
-                    rows={3}
-                    placeholder="Nunca visível ao cliente"
-                  />
-                </div>
+              ) : (
+                <ApprovedMediaPicker
+                  files={optionFiles}
+                  usedRootFileIds={options?.usedFileIds || EMPTY_ID_LIST}
+                  currentRootFileId={post?.post.primary_file_id || null}
+                  selectedFileId={primaryFileId || null}
+                  onSelect={selectApprovedMedia}
+                  loading={loadingOptions}
+                  error={
+                    optionsError
+                      ? optionsErrorDetail instanceof Error
+                        ? optionsErrorDetail.message
+                        : "Não foi possível carregar a mídia aprovada."
+                      : null
+                  }
+                  disabled={!clientId || !projectId || savedContentLocked}
+                  onRetry={() => refetchOptions()}
+                />
+              )}
+              {selectedFile && (
+                <Badge
+                  variant="outline"
+                  className={
+                    isFilePublishable(selectedFile)
+                      ? "mt-3 border-success/30 bg-success/10 text-success"
+                      : "mt-3 border-warning/30 bg-warning/10 text-warning"
+                  }
+                >
+                  <FileCheck2 className="mr-1 h-3 w-3" />
+                  {fileGateLabel(selectedFile)}
+                </Badge>
+              )}
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="space-y-2">
+                <Label htmlFor="editorial-task">Tarefa do Kanban</Label>
+                <Select
+                  value={taskId || "none"}
+                  onValueChange={(value) => {
+                    setTaskId(value === "none" ? "" : value);
+                    markChanged();
+                  }}
+                  disabled={!projectId || lockTaskId}
+                >
+                  <SelectTrigger id="editorial-task">
+                    <SelectValue placeholder="Vincular tarefa" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {!lockTaskId && (
+                      <SelectItem value="none">Sem tarefa</SelectItem>
+                    )}
+                    {selectableTasks.map((task) => (
+                      <SelectItem key={task.id} value={task.id}>
+                        {task.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            )}
+              <div className="space-y-2">
+                <Label htmlFor="editorial-responsible">Responsável</Label>
+                <Select
+                  value={responsibleId || "none"}
+                  onValueChange={(value) => {
+                    setResponsibleId(value === "none" ? "" : value);
+                    markChanged();
+                  }}
+                  disabled={!clientId}
+                >
+                  <SelectTrigger id="editorial-responsible">
+                    <SelectValue placeholder="Escolher responsável" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Sem responsável</SelectItem>
+                    {allowedTeamMembers.map((member) => (
+                      <SelectItem key={member.id} value={member.id}>
+                        {member.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="editorial-notes">Notas internas</Label>
+                <Textarea
+                  id="editorial-notes"
+                  value={internalNotes}
+                  onChange={(event) => {
+                    setInternalNotes(event.target.value);
+                    markChanged();
+                  }}
+                  rows={3}
+                  placeholder="Nunca visível ao cliente"
+                />
+              </div>
+            </div>
           </section>
 
           <section className="space-y-4">
@@ -1179,7 +1056,6 @@ export default function EditorialEditor({
                   !projectId ||
                   loadingOptions ||
                   optionsError ||
-                  contentLocked ||
                   !(options?.accounts || []).some(
                     (account) =>
                       !cancelledAccountIds.has(account.id) &&
@@ -1226,20 +1102,18 @@ export default function EditorialEditor({
                   (file) => file.id === currentPublicationFile.id,
                 )
                   ? [currentPublicationFile, ...(options?.files || [])]
-                  : (options?.files || []);
+                  : options?.files || [];
               const selectablePublicationFiles = publicationFiles.filter(
                 (file) =>
-                  isFileEditable(file) ||
-                  file.id === publication.fileId,
+                  !file.parent_file_id &&
+                  (isFileEditable(file) || file.id === publication.fileId),
               );
-              const usedByOthers = new Set(
-                [
-                  ...publications
-                    .filter((_, itemIndex) => itemIndex !== index)
-                    .map((item) => item.externalAccountId),
-                  ...cancelledAccountIds,
-                ],
-              );
+              const usedByOthers = new Set([
+                ...publications
+                  .filter((_, itemIndex) => itemIndex !== index)
+                  .map((item) => item.externalAccountId),
+                ...cancelledAccountIds,
+              ]);
               return (
                 <div
                   key={publication.id || publication.idempotencyKey}
@@ -1261,17 +1135,12 @@ export default function EditorialEditor({
                       variant="ghost"
                       size="icon"
                       className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                      disabled={contentLocked}
-                      onClick={() =>
-                        {
-                          setPublications((current) =>
-                            current.filter(
-                              (_, itemIndex) => itemIndex !== index,
-                            ),
-                          );
-                          markChanged();
-                        }
-                      }
+                      onClick={() => {
+                        setPublications((current) =>
+                          current.filter((_, itemIndex) => itemIndex !== index),
+                        );
+                        markChanged();
+                      }}
                       aria-label="Remover publicação"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -1282,7 +1151,6 @@ export default function EditorialEditor({
                       <Label htmlFor={`${fieldPrefix}-account`}>Conta</Label>
                       <Select
                         value={publication.externalAccountId}
-                        disabled={contentLocked}
                         onValueChange={(value) =>
                           updatePublication(index, {
                             externalAccountId: value,
@@ -1296,8 +1164,7 @@ export default function EditorialEditor({
                           {(options?.accounts || [])
                             .filter(
                               (item) =>
-                                item.id ===
-                                  publication.externalAccountId ||
+                                item.id === publication.externalAccountId ||
                                 !usedByOthers.has(item.id),
                             )
                             .map((item) => (
@@ -1450,9 +1317,7 @@ export default function EditorialEditor({
           <Button
             type="button"
             onClick={handleSave}
-            disabled={
-              savePost.isPending || loadingOptions || optionsError
-            }
+            disabled={savePost.isPending || loadingOptions || optionsError}
           >
             {savePost.isPending && (
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />

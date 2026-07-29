@@ -20,6 +20,20 @@ const detail = read(
 const migration = read(
   "supabase/migrations/20260728161129_create_editorial_calendar.sql",
 );
+const approvedMediaMigration = read(
+  "supabase/migrations/20260730090000_adopt_approved_editorial_media.sql",
+);
+const approvedSaveStart = approvedMediaMigration.indexOf(
+  "CREATE OR REPLACE FUNCTION public.save_approved_editorial_post_unlocked",
+);
+const approvedSaveEnd = approvedMediaMigration.indexOf(
+  "REVOKE ALL ON FUNCTION public.save_approved_editorial_post_unlocked",
+  approvedSaveStart,
+);
+const approvedSave = approvedMediaMigration.slice(
+  approvedSaveStart,
+  approvedSaveEnd,
+);
 
 describe("editorial calendar integration contract", () => {
   it("exposes one protected route in desktop and mobile navigation", () => {
@@ -47,7 +61,9 @@ describe("editorial calendar integration contract", () => {
     expect(hook).toContain(
       '"transition_editorial_publication"',
     );
-    expect(hook).toContain('.rpc(\n        "archive_editorial_post"');
+    expect(hook).toMatch(
+      /\.rpc\(\s*"archive_editorial_post"/,
+    );
     expect(hook).not.toMatch(
       /\.from\(\s*["']editorial_[^"']+["']\s*\)\s*\.(?:insert|update|delete)\s*\(/,
     );
@@ -68,7 +84,7 @@ describe("editorial calendar integration contract", () => {
       /access_token|refresh_token|client_secret|oauth_token/i,
     );
     expect(page).toMatch(
-      /Nenhuma\s+rede social é acionada automaticamente\./,
+      /Nenhuma\s+rede social é acionada\s+automaticamente\./,
     );
     expect(detail).toMatch(
       /Nenhuma\s+plataforma\s+externa\s+é\s+acionada\s+automaticamente\./,
@@ -77,7 +93,7 @@ describe("editorial calendar integration contract", () => {
 
   it("keeps impersonation read-only and strips internal records", () => {
     expect(page).toContain(
-      "{ forceClientView: isImpersonating }",
+      "forceClientView: isImpersonating",
     );
     expect(page).toContain("const canCreateEditorial =");
     expect(page).toContain("permissions.canEdit &&");
@@ -109,6 +125,31 @@ describe("editorial calendar integration contract", () => {
       "const unscheduled = post.publications.filter(",
     );
     expect(detail).toContain('openAction(bundle, "reopen")');
+  });
+
+  it("keeps approved media selection inside the editor", () => {
+    expect(editor).toContain("<ApprovedMediaPicker");
+    expect(editor).toContain(
+      "usedRootFileIds={options?.usedFileIds || EMPTY_ID_LIST}",
+    );
+    expect(editor).toContain("onSelect={selectApprovedMedia}");
+    expect(editor).not.toContain("window.open(");
+    expect(editor).not.toContain('"/arquivos?');
+    expect(hook).toMatch(
+      /file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description/,
+    );
+    expect(hook).toContain("usedFileIds: unique");
+  });
+
+  it("defers realtime refreshes while isolated optimistic moves are pending", () => {
+    expect(page).toContain("beginEditorialMove");
+    expect(page).toContain("finishEditorialMove");
+    expect(page).toContain("updateCachedEditorialPostStage");
+    expect(page).toContain("updateCachedEditorialPublicationDate");
+    expect(page).toContain("updateCachedTaskStatus");
+    expect(hook).toContain("options.realtimeGate?.current.pendingCount");
+    expect(hook).toContain("variables.deferRefresh");
+    expect(page).not.toContain("const [movingEditorial");
   });
 });
 
@@ -218,6 +259,130 @@ describe("editorial migration security contract", () => {
     expect(migration).toContain("'post_version', _post.version");
     expect(migration).toContain(
       "ADD TABLE public.editorial_events",
+    );
+  });
+});
+
+describe("approved editorial media migration contract", () => {
+  it("preserves the public RPC, advisory lock and legacy fallback", () => {
+    expect(approvedMediaMigration).toContain(
+      "CREATE OR REPLACE FUNCTION public.save_editorial_post(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "PERFORM public.editorial_lock_task_sync();",
+    );
+    expect(approvedMediaMigration).toContain(
+      "RETURN public.save_approved_editorial_post_unlocked(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "RETURN public.save_editorial_post_unlocked(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "file_row.client_decided_at <= post.created_at",
+    );
+    expect(approvedMediaMigration).toContain(
+      "IF COALESCE(_approved_before_post, false) THEN",
+    );
+    expect(approvedMediaMigration).toContain(
+      "GRANT EXECUTE ON FUNCTION public.save_editorial_post(jsonb, integer)",
+    );
+  });
+
+  it("accepts only unused approved media and rejects documents", () => {
+    expect(approvedMediaMigration).toContain(
+      "public.editorial_file_is_publishable(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "child.approval_status <> 'none'",
+    );
+    expect(approvedMediaMigration).toMatch(
+      /'application\/pdf'[\s\S]*'docx'[\s\S]*'pptx'[\s\S]*'xlsx'/,
+    );
+    expect(approvedMediaMigration).toContain(
+      "approved editorial media is already linked to another content",
+    );
+    expect(approvedMediaMigration).toContain(
+      "post.primary_file_id = _primary_file_id",
+    );
+    expect(approvedMediaMigration).toContain(
+      "publication.file_id = _primary_file_id",
+    );
+  });
+
+  it("canonicalizes approved public copy and media type in the database", () => {
+    expect(approvedMediaMigration).toContain(
+      "_canonical_title := btrim(_primary_file.file_name)",
+    );
+    expect(approvedMediaMigration).toContain(
+      "NULLIF(btrim(_primary_file.description), '')",
+    );
+    expect(approvedMediaMigration).toContain(
+      "NULLIF(btrim(_primary_file.caption), '')",
+    );
+    expect(approvedMediaMigration).toContain(
+      "_canonical_content_type := CASE",
+    );
+    expect(approvedMediaMigration).toContain(
+      "'content_type', _canonical_content_type",
+    );
+    expect(approvedMediaMigration).toContain(
+      "'first_comment', NULL",
+    );
+    expect(approvedMediaMigration).toContain("'alt_text', NULL");
+  });
+
+  it("schedules atomically without claiming an external publication", () => {
+    expect(approvedMediaMigration).toContain(
+      "public.transition_editorial_publication_unlocked(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "_scheduled.id,\n      'schedule'",
+    );
+    expect(approvedMediaMigration).not.toContain(
+      "_scheduled.id,\n      'publish'",
+    );
+    expect(approvedSave).not.toMatch(/status\s*=\s*'published'/);
+    expect(approvedSave).toContain(
+      "publication.status NOT IN ('planned', 'scheduled')",
+    );
+    expect(approvedSave).toContain(
+      "publication.status IN ('planned', 'scheduled')",
+    );
+  });
+
+  it("records an idempotent permalink receipt after a confirmed publish", () => {
+    expect(approvedMediaMigration).toContain(
+      "CREATE OR REPLACE FUNCTION public.editorial_record_published_receipt()",
+    );
+    expect(approvedMediaMigration).toContain(
+      "AFTER UPDATE OF published_by",
+    );
+    expect(approvedMediaMigration).toContain(
+      "publication.status = 'published'",
+    );
+    expect(approvedMediaMigration).toContain(
+      "INSERT INTO public.task_comments",
+    );
+    expect(approvedMediaMigration).toContain(
+      "INSERT INTO public.notifications",
+    );
+    expect(approvedMediaMigration).toContain(
+      "'/kanban?task=' || _task_id::text",
+    );
+  });
+
+  it("keeps all new implementation helpers private", () => {
+    expect(approvedMediaMigration).toContain(
+      "REVOKE ALL ON FUNCTION public.editorial_file_is_publishable_media(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "REVOKE ALL ON FUNCTION public.save_approved_editorial_post_unlocked(",
+    );
+    expect(approvedMediaMigration).toContain(
+      "REVOKE ALL ON FUNCTION public.editorial_record_published_receipt()",
+    );
+    expect(approvedMediaMigration).not.toContain(
+      "GRANT EXECUTE ON FUNCTION public.save_approved_editorial_post_unlocked",
     );
   });
 });

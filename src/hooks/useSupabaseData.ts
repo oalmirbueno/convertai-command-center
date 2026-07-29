@@ -91,7 +91,10 @@ export function useProjects() {
   });
 }
 
-export function useTasks(projectId?: string) {
+export function useTasks(
+  projectId?: string,
+  options: { refetchInterval?: number | false } = {},
+) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["tasks", user?.id, projectId],
@@ -107,7 +110,7 @@ export function useTasks(projectId?: string) {
       return data;
     },
     enabled: !!user,
-    refetchInterval: 15000,
+    refetchInterval: options.refetchInterval ?? 15000,
   });
 }
 
