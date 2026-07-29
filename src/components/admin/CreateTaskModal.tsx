@@ -18,6 +18,7 @@ import {
 } from "@/lib/taskWorkstreams";
 import {
   TASK_DELIVERY_TYPE_OPTIONS,
+  isPublishableDeliveryType,
   suggestedWorkstreamForDeliveryType,
   type TaskDeliveryType,
 } from "@/lib/taskDeliveryTypes";
@@ -97,6 +98,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
 
   const isEdit = !!editTask;
   const activeProjects = (projects || []).filter((p: any) => p.status !== "done");
+  const isContentTask = isPublishableDeliveryType(deliveryType);
 
   const handleSave = async () => {
     if (!title.trim()) {
@@ -112,6 +114,10 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       && (!deliveryType || deliveryType === "unspecified")
     ) {
       toast.error("Selecione o tipo de entrega");
+      return;
+    }
+    if (!isEdit && isContentTask && !description.trim()) {
+      toast.error("Informe o contexto do conteúdo");
       return;
     }
 
@@ -191,8 +197,10 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
 
         <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
           <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Título *</label>
-            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Nome da tarefa"
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {isContentTask ? "Tema do conteúdo *" : "Título *"}
+            </label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder={isContentTask ? "Tema que será desenvolvido" : "Nome da tarefa"}
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
           </div>
 
@@ -221,8 +229,14 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
           )}
 
           <div className="space-y-1.5">
-            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Descrição</label>
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder="Detalhes da tarefa..."
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">
+              {isContentTask && !isEdit
+                ? "Contexto do conteúdo *"
+                : isContentTask
+                  ? "Contexto do conteúdo"
+                  : "Descrição"}
+            </label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} placeholder={isContentTask ? "Explique o ângulo, objetivo e direção do conteúdo" : "Detalhes da tarefa..."}
               className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors resize-none" />
           </div>
 
