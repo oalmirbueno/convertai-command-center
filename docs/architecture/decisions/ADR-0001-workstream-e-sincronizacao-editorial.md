@@ -12,9 +12,10 @@ O calendário editorial precisa consumir as tarefas de Design do Kanban central 
 
 1. `tasks.workstream` passa a ser a classificação canônica da área da tarefa.
 2. Os valores aceitos são `general`, `design`, `content`, `video`, `traffic`, `development` e `operations`. O padrão é `general`.
-3. A bandeja editorial usa `workstream = 'design'` como escopo padrão. O responsável só serve como fallback para registros legados sem área.
-4. Cada tarefa pode possuir uma única cadeia editorial ativa. Uma revisão mantém a tarefa da origem e só pode partir da revisão ativa atual.
-5. Mudanças de etapa são sincronizadas nos dois sentidos:
+3. O quadro editorial usa `design`, `content` e `video` como escopo criativo padrão.
+4. Enquanto a base legada continuar preenchida como `general`, a interface aplica um fallback conservador por responsável de Design ou sinais editoriais fortes no título e na descrição. Áreas explícitas de Tráfego, Desenvolvimento e Operações nunca entram nesse fallback.
+5. Cada tarefa pode possuir uma única cadeia editorial ativa. Uma revisão mantém a tarefa da origem e só pode partir da revisão ativa atual.
+6. Mudanças de etapa são sincronizadas nos dois sentidos:
 
 | Kanban | Editorial |
 |---|---|
@@ -43,7 +44,8 @@ O calendário editorial precisa consumir as tarefas de Design do Kanban central 
 
 ## Consequências
 
-- Cliente e projeto continuam sendo filtros compartilhados entre calendário e bandeja.
+- Cliente, projeto, busca, responsável e etapa são filtros compartilhados entre conteúdos e tarefas.
+- Tarefas criativas sem conteúdo aparecem diretamente nas colunas editoriais, sem uma faixa paralela comprimindo o quadro.
 - Alterar uma etapa no Kanban atualiza o conteúdo ativo; alterar o conteúdo atualiza o Kanban.
 - O lock transacional é global para este sincronizador. As mutações críticas são curtas, mas mudanças simultâneas de etapa serão processadas em sequência.
 - A aplicação da migration reconcilia uma vez os vínculos ativos já existentes.

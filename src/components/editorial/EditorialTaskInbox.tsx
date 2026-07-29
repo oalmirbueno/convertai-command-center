@@ -144,7 +144,7 @@ function TaskCard({
           : undefined
       }
       className={cn(
-        "relative flex min-h-64 w-[min(86vw,22rem)] shrink-0 snap-start flex-col rounded-xl border border-border bg-background p-4 shadow-sm transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none sm:w-[22rem]",
+        "relative flex min-h-52 w-[min(82vw,19rem)] shrink-0 snap-start flex-col rounded-xl border border-border bg-background p-3.5 shadow-sm transition-[border-color,box-shadow] duration-200 motion-reduce:transition-none sm:w-[19rem]",
         "hover:border-primary/30 hover:shadow-md",
         isDragging && "z-20 border-primary/45 opacity-55 shadow-lg",
       )}
@@ -268,10 +268,10 @@ export default function EditorialTaskInbox({
   const contentId = useId();
   const searchId = useId();
   const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState(true);
+  const [expanded, setExpanded] = useState(false);
   const isDesignScope = scope === "design";
   const scopeTitle = isDesignScope
-    ? "Tarefas de design"
+    ? "Tarefas criativas"
     : "Tarefas do Kanban";
   const filteredTasks = useMemo(() => {
     const normalized = search.trim().toLocaleLowerCase("pt-BR");
