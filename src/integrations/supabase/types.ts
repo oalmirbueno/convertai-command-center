@@ -3441,11 +3441,27 @@ export type Database = {
         Args: { _post_id: string }
         Returns: string
       }
+      editorial_content_type_for_delivery_type: {
+        Args: { _delivery_type: string }
+        Returns: string
+      }
       editorial_current_post_id_for_task: {
         Args: { _task_id: string }
         Returns: string
       }
+      editorial_delivery_type_for_content_type: {
+        Args: { _content_type: string }
+        Returns: string
+      }
+      editorial_delivery_type_is_publishable: {
+        Args: { _delivery_type: string }
+        Returns: boolean
+      }
       editorial_file_is_publishable: {
+        Args: { _client_id: string; _file_id: string; _project_id: string }
+        Returns: boolean
+      }
+      editorial_file_is_publishable_media: {
         Args: { _client_id: string; _file_id: string; _project_id: string }
         Returns: boolean
       }
@@ -3454,6 +3470,7 @@ export type Database = {
         Args: { _task_status: string }
         Returns: string
       }
+      editorial_reconcile_task_delivery_types: { Args: never; Returns: number }
       editorial_staff_can_access_client: {
         Args: { _client_id: string }
         Returns: boolean
@@ -3714,6 +3731,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_approved_editorial_post_unlocked: {
+        Args: { p_expected_version?: number; p_payload: Json }
+        Returns: Json
       }
       save_editorial_post: {
         Args: { p_expected_version?: number; p_payload: Json }
