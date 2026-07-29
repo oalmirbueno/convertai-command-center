@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import {
+  keepPreviousData,
   useMutation,
   useQuery,
   useQueryClient,
@@ -692,6 +693,7 @@ export function useEditorialCalendar(
         exposeInternal,
         forceClientView,
       ),
+    placeholderData: keepPreviousData,
     enabled: !!user,
     refetchInterval: 30_000,
   });

@@ -62,6 +62,16 @@ describe("editorial design task workspace contract", () => {
     expect(views).not.toContain("w-[286px]");
   });
 
+  it("keeps filter refreshes and selectable cards visually stable", () => {
+    expect(hook).toContain("placeholderData: keepPreviousData");
+    expect(views).not.toContain("hover:-translate-y-px");
+    expect(views).toContain(
+      "transition-[border-color,box-shadow]",
+    );
+    expect(views).toContain("motion-reduce:transition-none");
+    expect(views).toContain("[scrollbar-gutter:stable]");
+  });
+
   it("uses a centered editor and keeps the existing upload route guarded", () => {
     expect(editor).toContain("<Dialog open={open}");
     expect(editor).toContain("max-w-5xl");
