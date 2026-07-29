@@ -774,7 +774,7 @@ function BoardPostCard({
           : undefined
       }
       className={cn(
-        "group rounded-xl border border-border bg-background/90 p-3.5 shadow-sm transition-all hover:border-primary/35 hover:-translate-y-px",
+        "group rounded-xl border border-border bg-background/90 p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow-md motion-reduce:transition-none",
         isDragging && "opacity-30",
       )}
     >
@@ -899,7 +899,7 @@ function BoardTaskCard({
           : undefined
       }
       className={cn(
-        "group rounded-xl border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-all hover:border-primary/45 hover:-translate-y-px",
+        "group rounded-xl border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-md motion-reduce:transition-none",
         isDragging && "opacity-30",
       )}
     >
@@ -1037,7 +1037,7 @@ function BoardColumn({
           {column.description}
         </p>
       </header>
-      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5">
+      <div className="min-h-0 flex-1 space-y-2.5 overflow-y-auto pr-0.5 [scrollbar-gutter:stable]">
         {tasks.map((task) => (
           <BoardTaskCard
             key={task.id}
