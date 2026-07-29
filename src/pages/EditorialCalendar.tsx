@@ -35,6 +35,7 @@ import EditorialEditor from "@/components/editorial/EditorialEditor";
 import EditorialDetailSheet from "@/components/editorial/EditorialDetailSheet";
 import EditorialTaskInbox, {
   type EditorialInboxTask,
+  type EditorialTaskScope,
 } from "@/components/editorial/EditorialTaskInbox";
 import {
   useEditorialClientScope,
@@ -80,6 +81,7 @@ import {
   moveEditorialInstantToCalendarDate,
   type EditableEditorialStage,
 } from "@/lib/editorialDrag";
+import { isDesignTask } from "@/lib/taskWorkstreams";
 
 const validViews: EditorialView[] = ["board", "month", "week", "list"];
 const aggregateStatuses = Object.keys(
@@ -255,6 +257,8 @@ export default function EditorialCalendar() {
   const approvalStatus = searchParams.get("approval") || "all";
   const requestedResponsibleId =
     searchParams.get("responsible") || "all";
+  const taskScope: EditorialTaskScope =
+    searchParams.get("tasks") === "all" ? "all" : "design";
   const contentId = searchParams.get("content");
   const effectiveRole = isImpersonating ? "client" : profile?.role;
   const permissions = editorialPermissions(effectiveRole);
@@ -405,16 +409,57 @@ export default function EditorialCalendar() {
       ),
     [editorialProjectRows],
   );
-  const inboxTasks = useMemo(() => {
+  const designMemberIds = useMemo(
+    () =>
+      new Set(
+        teamRows
+          .filter((member) => member.role === "design")
+          .map((member) => member.id),
+      ),
+    [teamRows],
+  );
+  const designMemberIdList = useMemo(
+    () => [...designMemberIds],
+    [designMemberIds],
+  );
+  const responsibleNames = useMemo(
+    () =>
+      new Map(
+        teamRows.map((member) => [
+          member.id,
+          member.full_name || "Membro da equipe",
+        ]),
+      ),
+    [teamRows],
+  );
+  const projectScopeNames = useMemo(
+    () =>
+      new Map(
+        projectRows.map((project) => [
+          project.id,
+          `${clientNames.get(project.client_id) || "Cliente"} / ${
+            project.name || "Projeto"
+          }`,
+        ]),
+      ),
+    [clientNames, projectRows],
+  );
+  const allInboxTasks = useMemo(() => {
     if (!canUseTeamData) return [];
     const linkedTaskIds = new Set(linkedTaskIdsQuery.data || []);
     const statusOrder: Record<string, number> = {
-      review: 0,
-      approved: 0,
+      backlog: 0,
+      todo: 0,
       doing: 1,
-      backlog: 2,
-      todo: 2,
+      review: 2,
+      approved: 2,
       blocked: 3,
+    };
+    const priorityOrder: Record<string, number> = {
+      urgent: 0,
+      high: 1,
+      medium: 2,
+      low: 3,
     };
     return ((tasksQuery.data || []) as EditorialInboxTask[])
       .filter((task) => {
@@ -432,6 +477,10 @@ export default function EditorialCalendar() {
         return true;
       })
       .sort((left, right) => {
+        const priorityDifference =
+          (priorityOrder[left.priority || ""] ?? 9) -
+          (priorityOrder[right.priority || ""] ?? 9);
+        if (priorityDifference !== 0) return priorityDifference;
         const statusDifference =
           (statusOrder[left.status] ?? 9) -
           (statusOrder[right.status] ?? 9);
@@ -452,6 +501,15 @@ export default function EditorialCalendar() {
     projectId,
     tasksQuery.data,
   ]);
+  const inboxTasks = useMemo(
+    () =>
+      taskScope === "design"
+        ? allInboxTasks.filter((task) =>
+            isDesignTask(task, designMemberIds),
+          )
+        : allInboxTasks,
+    [allInboxTasks, designMemberIds, taskScope],
+  );
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -874,7 +932,7 @@ export default function EditorialCalendar() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDragSummary(null)}
     >
-      <div className="space-y-5 pb-8">
+      <div className="space-y-4 pb-8">
         <header className="relative overflow-hidden rounded-2xl border border-border bg-card/75 px-4 py-4 sm:px-5">
           <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -894,7 +952,7 @@ export default function EditorialCalendar() {
                 </p>
               </div>
             </div>
-            <div className="flex max-w-xl items-start gap-2 rounded-xl border border-primary/15 bg-primary/[0.05] px-3.5 py-2.5 text-[11px] leading-5 text-muted-foreground">
+            <div className="flex max-w-xl items-start gap-2 rounded-xl border border-primary/15 bg-primary/[0.05] px-3.5 py-2.5 text-xs leading-5 text-muted-foreground">
               <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <p>
                 Arrastar organiza o trabalho. Publicar continua protegido pelos
@@ -997,71 +1055,74 @@ export default function EditorialCalendar() {
           onCreate={() => openCreate()}
         />
 
-        <div
-          className={
-            canUseTeamData
-              ? "grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]"
-              : ""
-          }
-        >
-          <main className="min-w-0">
-            {calendarQuery.isLoading ? (
-              <div className="space-y-3">
-                <Skeleton className="h-12 w-full rounded-xl" />
-                <Skeleton className="h-[480px] w-full rounded-2xl" />
-              </div>
-            ) : calendarQuery.isError ? (
-              <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/5 p-6 text-center">
-                <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
-                <p className="text-sm font-medium text-foreground">
-                  Não foi possível carregar o calendário
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  Tente novamente. Se o problema continuar, avise a equipe
-                  responsável pelo painel.
-                </p>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  className="mt-4"
-                  onClick={() => calendarQuery.refetch()}
-                >
-                  <RefreshCw className="mr-1.5 h-4 w-4" />
-                  Recarregar
-                </Button>
-              </div>
-            ) : (
-              <EditorialCalendarViews
-                view={view}
-                anchorDate={new Date(`${dateKey}T12:00:00`)}
-                posts={filteredPosts}
-                clientNames={clientNames}
-                projectNames={projectNames}
-                canCreate={canCreateEditorial}
-                canEdit={permissions.canEdit}
-                canPublish={permissions.canPublish}
-                moving={movingEditorial}
-                onSelectPost={openDetail}
-                onCreateOnDate={openCreateOnDate}
-                onShowBacklog={() => setParam("view", "list")}
-              />
-            )}
-          </main>
+        {canUseTeamData && (
+          <EditorialTaskInbox
+            tasks={inboxTasks}
+            totalTasks={inboxTasks.length}
+            scope={taskScope}
+            onScopeChange={(nextScope) =>
+              setParam("tasks", nextScope === "all" ? "all" : "")
+            }
+            projectScopeNames={projectScopeNames}
+            responsibleNames={responsibleNames}
+            loading={
+              tasksQuery.isLoading || linkedTaskIdsQuery.isLoading
+            }
+            error={tasksQuery.isError || linkedTaskIdsQuery.isError}
+            disabled={!canCreateEditorial || movingEditorial}
+            onCreateFromTask={(task) => openCreateFromTask(task)}
+            kanbanHref={
+              projectId === "all"
+                ? "/kanban"
+                : `/kanban?project=${encodeURIComponent(projectId)}`
+            }
+          />
+        )}
 
-          {canUseTeamData && (
-            <EditorialTaskInbox
-              tasks={inboxTasks}
+        <main className="min-w-0">
+          {calendarQuery.isLoading ? (
+            <div className="space-y-3">
+              <Skeleton className="h-12 w-full rounded-xl" />
+              <Skeleton className="h-[480px] w-full rounded-2xl" />
+            </div>
+          ) : calendarQuery.isError ? (
+            <div className="flex min-h-[320px] flex-col items-center justify-center rounded-2xl border border-destructive/25 bg-destructive/5 p-6 text-center">
+              <AlertCircle className="mb-3 h-8 w-8 text-destructive" />
+              <p className="text-sm font-medium text-foreground">
+                Não foi possível carregar o calendário
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Tente novamente. Se o problema continuar, avise a equipe
+                responsável pelo painel.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-4"
+                onClick={() => calendarQuery.refetch()}
+              >
+                <RefreshCw className="mr-1.5 h-4 w-4" />
+                Recarregar
+              </Button>
+            </div>
+          ) : (
+            <EditorialCalendarViews
+              view={view}
+              anchorDate={new Date(`${dateKey}T12:00:00`)}
+              posts={filteredPosts}
+              clientNames={clientNames}
               projectNames={projectNames}
-              loading={
-                tasksQuery.isLoading || linkedTaskIdsQuery.isLoading
-              }
-              error={tasksQuery.isError || linkedTaskIdsQuery.isError}
-              disabled={!canCreateEditorial || movingEditorial}
-              onCreateFromTask={(task) => openCreateFromTask(task)}
+              canCreate={canCreateEditorial}
+              canEdit={permissions.canEdit}
+              canPublish={permissions.canPublish}
+              moving={movingEditorial}
+              onSelectPost={openDetail}
+              onCreateOnDate={openCreateOnDate}
+              onShowBacklog={() => setParam("view", "list")}
             />
           )}
-        </div>
+        </main>
 
         <p className="sr-only" aria-live="polite">
           {movingEditorial
@@ -1123,6 +1184,9 @@ export default function EditorialCalendar() {
           defaultTitle={draftSeed?.title}
           defaultResponsibleId={draftSeed?.responsibleId}
           defaultProductionStatus={draftSeed?.productionStatus}
+          linkedTaskIds={linkedTaskIdsQuery.data || []}
+          designMemberIds={designMemberIdList}
+          allowAllTasks={taskScope === "all"}
           onOpenChange={(nextOpen) => {
             setEditorOpen(nextOpen);
             if (!nextOpen) {

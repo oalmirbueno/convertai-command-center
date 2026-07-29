@@ -12,6 +12,10 @@ import { format } from "date-fns";
 import { Calendar } from "@/components/ui/calendar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import {
+  TASK_WORKSTREAM_OPTIONS,
+  type TaskWorkstream,
+} from "@/lib/taskWorkstreams";
 
 const PRIORITIES = [
   { value: "low", label: "Baixa" },
@@ -39,6 +43,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
   const [milestoneId, setMilestoneId] = useState("");
   const [description, setDescription] = useState("");
   const [priority, setPriority] = useState("medium");
+  const [workstream, setWorkstream] = useState<TaskWorkstream>("general");
   const [assignedTo, setAssignedTo] = useState("");
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -62,6 +67,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       setMilestoneId(editTask.milestone_id || "");
       setDescription(editTask.description || "");
       setPriority(editTask.priority || "medium");
+      setWorkstream((editTask.workstream as TaskWorkstream) || "general");
       setAssignedTo(editTask.assigned_to || "");
       setDueDate(editTask.due_date ? new Date(editTask.due_date) : undefined);
     } else {
@@ -70,6 +76,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
       setMilestoneId("");
       setDescription("");
       setPriority("medium");
+      setWorkstream("general");
       setAssignedTo("");
       setDueDate(undefined);
     }
@@ -98,6 +105,7 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
         milestone_id: milestoneId || null,
         description: description.trim() || null,
         priority,
+        workstream,
         assigned_to: assignedTo || null,
         due_date: dueDate ? format(dueDate, "yyyy-MM-dd") : null,
         ...(isEdit ? {} : { status: defaultStatus }),
@@ -210,15 +218,33 @@ export default function CreateTaskModal({ open, onClose, defaultStatus = "backlo
               </select>
             </div>
             <div className="space-y-1.5">
-              <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Responsável</label>
-              <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
+              <label
+                htmlFor="task-workstream"
+                className="text-[11px] uppercase tracking-wider text-muted-foreground"
+              >
+                Área
+              </label>
+              <select
+                id="task-workstream"
+                value={workstream}
+                onChange={(e) => setWorkstream(e.target.value as TaskWorkstream)}
                 className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
-                <option value="">Nenhum</option>
-                {teamMembers.map((m: any) => (
-                  <option key={m.id} value={m.id}>{m.full_name}</option>
+                {TASK_WORKSTREAM_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
                 ))}
               </select>
             </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Responsável</label>
+            <select value={assignedTo} onChange={(e) => setAssignedTo(e.target.value)}
+              className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors">
+              <option value="">Nenhum</option>
+              {teamMembers.map((m: any) => (
+                <option key={m.id} value={m.id}>{m.full_name}</option>
+              ))}
+            </select>
           </div>
 
           <div className="space-y-1.5">
