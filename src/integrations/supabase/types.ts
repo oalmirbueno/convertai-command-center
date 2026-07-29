@@ -3441,9 +3441,21 @@ export type Database = {
         Args: { _post_id: string }
         Returns: string
       }
+      editorial_content_type_for_delivery_type: {
+        Args: { _delivery_type: string }
+        Returns: string
+      }
       editorial_current_post_id_for_task: {
         Args: { _task_id: string }
         Returns: string
+      }
+      editorial_delivery_type_for_content_type: {
+        Args: { _content_type: string }
+        Returns: string
+      }
+      editorial_delivery_type_is_publishable: {
+        Args: { _delivery_type: string }
+        Returns: boolean
       }
       editorial_file_is_publishable: {
         Args: { _client_id: string; _file_id: string; _project_id: string }
@@ -3454,6 +3466,7 @@ export type Database = {
         Args: { _task_status: string }
         Returns: string
       }
+      editorial_reconcile_task_delivery_types: { Args: never; Returns: number }
       editorial_staff_can_access_client: {
         Args: { _client_id: string }
         Returns: boolean
