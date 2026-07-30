@@ -124,6 +124,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["external-accounts", clientId] });
     qc.invalidateQueries({ queryKey: ["project-external-accounts", clientId] });
+    qc.invalidateQueries({ queryKey: ["editorial-editor-options"] });
   };
 
   const resetForm = () => {
