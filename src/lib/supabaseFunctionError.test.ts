@@ -31,4 +31,27 @@ describe("Supabase function error messages", () => {
 
     expect(message).toBe("Falha segura");
   });
+
+  it("preserves a PostgREST message from a plain error object", async () => {
+    const message = await getSupabaseFunctionErrorMessage(
+      {
+        message:
+          "the editorial primary file is already under review; create a revision",
+      },
+      "Não foi possível salvar o conteúdo.",
+    );
+
+    expect(message).toBe(
+      "the editorial primary file is already under review; create a revision",
+    );
+  });
+
+  it("uses the safe fallback for an unknown error value", async () => {
+    const message = await getSupabaseFunctionErrorMessage(
+      null,
+      "Não foi possível salvar o conteúdo.",
+    );
+
+    expect(message).toBe("Não foi possível salvar o conteúdo.");
+  });
 });

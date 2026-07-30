@@ -7,12 +7,17 @@ import {
 } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
-import { EDITORIAL_PLATFORMS, isFilePublishable } from "@/lib/editorial";
+import {
+  EDITORIAL_PLATFORMS,
+  isFilePublishable,
+  type EditorialPlatform,
+} from "@/lib/editorial";
 import {
   buildEditorialTaskLinkIndex,
   type EditorialTaskLinkIndex,
   type EditorialTaskLinkRow,
 } from "@/lib/editorialTaskLinks";
+import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 
 // The generated Database type is updated only after this unapplied migration
 // reaches a Supabase branch. Keep the escape hatch local to the new schema.
@@ -98,6 +103,16 @@ export interface EditorialAccountRow {
   display_name: string;
   handle: string | null;
   status: string;
+}
+
+export interface CreateAndLinkEditorialAccountInput {
+  platform: EditorialPlatform;
+  displayName: string;
+  handle?: string | null;
+}
+
+export interface LinkEditorialAccountInput {
+  accountId: string;
 }
 
 export interface EditorialFileRow {
@@ -855,6 +870,9 @@ export function useEditorialEditorOptions(
       if (!clientId || !projectId) {
         return {
           accounts: [],
+          availableAccounts: [],
+          canManageAccounts: false,
+          accountPermissionUnavailable: false,
           files: [],
           tasks: [],
           assignments: [],
@@ -864,6 +882,8 @@ export function useEditorialEditorOptions(
 
       const [
         links,
+        allAccounts,
+        accountPermission,
         files,
         tasks,
         assignments,
@@ -879,6 +899,26 @@ export function useEditorialEditorOptions(
             .order("external_account_id", { ascending: true })
             .range(from, to),
         ),
+        readAllPages<EditorialAccountRow>((from, to) =>
+          editorialDb
+            .from("external_accounts")
+            .select("id, client_id, platform, display_name, handle, status")
+            .eq("client_id", clientId)
+            .in("platform", [...EDITORIAL_PLATFORMS])
+            .eq("status", "active")
+            .order("display_name", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to),
+        ),
+        (async () => {
+          const { data, error } = await editorialDb.rpc("can_manage_client", {
+            _client_id: clientId,
+          });
+          return {
+            canManage: !error && data === true,
+            unavailable: Boolean(error),
+          };
+        })(),
         readAllPages<EditorialFileRow>((from, to) =>
           editorialDb
             .from("staff_files_secure")
@@ -954,24 +994,19 @@ export function useEditorialEditorOptions(
       const linkedAccountIds = unique(
         links.map((link) => link.external_account_id),
       );
-      let accounts: EditorialAccountRow[] = [];
-      if (linkedAccountIds.length > 0) {
-        accounts = await readInChunks<EditorialAccountRow>(
-          linkedAccountIds,
-          (chunk, from, to) =>
-            editorialDb
-              .from("external_accounts")
-              .select("id, client_id, platform, display_name, handle, status")
-              .in("id", chunk)
-              .in("platform", [...EDITORIAL_PLATFORMS])
-              .eq("status", "active")
-              .order("id", { ascending: true })
-              .range(from, to),
-        );
-      }
+      const linkedAccountIdSet = new Set(linkedAccountIds);
+      const accounts = allAccounts.filter((account) =>
+        linkedAccountIdSet.has(account.id),
+      );
+      const availableAccounts = allAccounts.filter(
+        (account) => !linkedAccountIdSet.has(account.id),
+      );
 
       return {
         accounts,
+        availableAccounts,
+        canManageAccounts: accountPermission.canManage,
+        accountPermissionUnavailable: accountPermission.unavailable,
         files,
         tasks,
         assignments: assignments.map((row) => row.user_id),
@@ -984,6 +1019,93 @@ export function useEditorialEditorOptions(
     enabled: enabled && !!user && !!clientId && !!projectId,
     refetchInterval: 30_000,
   });
+}
+
+export function useEditorialAccountMutations(
+  clientId: string | null,
+  projectId: string | null,
+) {
+  const queryClient = useQueryClient();
+
+  const refreshAccounts = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: ["editorial-editor-options"],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["external-accounts", clientId],
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["project-external-accounts", clientId],
+      }),
+    ]);
+  };
+
+  const createAndLinkAccount = useMutation({
+    mutationFn: async ({
+      platform,
+      displayName,
+      handle = null,
+    }: CreateAndLinkEditorialAccountInput) => {
+      if (!clientId || !projectId) {
+        throw new Error("Selecione o cliente e o projeto antes de cadastrar.");
+      }
+
+      const { data, error } = await editorialDb.rpc(
+        "create_and_link_editorial_account",
+        {
+          p_client_id: clientId,
+          p_project_id: projectId,
+          p_platform: platform,
+          p_display_name: displayName,
+          p_handle: handle,
+        },
+      );
+      if (error) {
+        throw new Error(
+          await getSupabaseFunctionErrorMessage(
+            error,
+            "Não foi possível cadastrar e vincular a conta.",
+          ),
+        );
+      }
+      if (typeof data !== "string" || !data) {
+        throw new Error(
+          "A conta foi processada, mas a plataforma não confirmou o vínculo.",
+        );
+      }
+      await refreshAccounts();
+      return data;
+    },
+  });
+
+  const linkAccount = useMutation({
+    mutationFn: async ({ accountId }: LinkEditorialAccountInput) => {
+      if (!clientId || !projectId) {
+        throw new Error("Selecione o cliente e o projeto antes de vincular.");
+      }
+
+      const { error } = await editorialDb
+        .from("project_external_accounts")
+        .insert({
+          client_id: clientId,
+          project_id: projectId,
+          external_account_id: accountId,
+        });
+      if (error) {
+        throw new Error(
+          await getSupabaseFunctionErrorMessage(
+            error,
+            "Não foi possível vincular a conta ao projeto.",
+          ),
+        );
+      }
+      await refreshAccounts();
+      return accountId;
+    },
+  });
+
+  return { createAndLinkAccount, linkAccount };
 }
 
 export function useEditorialApprovalPreview(
@@ -1033,7 +1155,14 @@ export function useEditorialMutations() {
         p_payload: payload,
         p_expected_version: expectedVersion,
       });
-      if (error) throw error;
+      if (error) {
+        throw new Error(
+          await getSupabaseFunctionErrorMessage(
+            error,
+            "Não foi possível salvar o conteúdo.",
+          ),
+        );
+      }
       return data as {
         post_id: string;
         version: number;

@@ -37,6 +37,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
   useEditorialEditorOptions,
@@ -514,6 +515,38 @@ export default function EditorialEditor({
         caption: contentLocked ? defaultCaption : "",
       },
     ]);
+    markChanged();
+  };
+
+  const selectAccountForPublication = (accountId: string) => {
+    setPublications((current) => {
+      if (
+        current.some(
+          (publication) => publication.externalAccountId === accountId,
+        )
+      ) {
+        return current;
+      }
+
+      const accountlessIndex = current.findIndex(
+        (publication) => !publication.externalAccountId,
+      );
+      if (accountlessIndex >= 0) {
+        return current.map((publication, index) =>
+          index === accountlessIndex
+            ? { ...publication, externalAccountId: accountId }
+            : publication,
+        );
+      }
+
+      return [
+        ...current,
+        {
+          ...emptyPublication(defaultScheduledAt, accountId),
+          caption: contentLocked ? defaultCaption : "",
+        },
+      ];
+    });
     markChanged();
   };
 
@@ -1072,17 +1105,16 @@ export default function EditorialEditor({
               </Button>
             </div>
 
-            {projectId && !loadingOptions && options?.accounts.length === 0 && (
-              <div className="rounded-xl border border-dashed border-border bg-muted/20 p-5 text-center">
-                <p className="text-sm text-foreground">
-                  Nenhuma conta de publicação ligada a este projeto.
-                </p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {defaultScheduledAt
-                    ? "A data escolhida não pode ser agendada sem uma conta. O conteúdo pode ser salvo agora como rascunho no quadro."
-                    : "Vincule as plataformas no cadastro do cliente antes de montar o plano."}
-                </p>
-              </div>
+            {projectId && !loadingOptions && options && !optionsError && (
+              <EditorialAccountSetup
+                clientId={clientId}
+                projectId={projectId}
+                linkedAccountCount={options.accounts.length}
+                availableAccounts={options.availableAccounts}
+                canManage={options.canManageAccounts}
+                permissionUnavailable={options.accountPermissionUnavailable}
+                onAccountReady={selectAccountForPublication}
+              />
             )}
 
             {publications.map((publication, index) => {

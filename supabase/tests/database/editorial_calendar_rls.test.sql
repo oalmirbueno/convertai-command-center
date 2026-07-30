@@ -377,10 +377,23 @@ SELECT ok(
     WHERE procedure_row.oid IN (
       'public.save_editorial_post(jsonb,integer)'::regprocedure,
       'public.transition_editorial_publication(uuid,text,integer,timestamptz,text,text,text,text,text,timestamptz)'::regprocedure,
-      'public.archive_editorial_post(uuid,integer)'::regprocedure
+      'public.archive_editorial_post(uuid,integer)'::regprocedure,
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)'::regprocedure
     )
   ),
-  'editorial mutation RPCs are SECURITY DEFINER'
+  'editorial and account mutation RPCs are SECURITY DEFINER'
+);
+
+SELECT ok(
+  (
+    SELECT
+      procedure_row.prosecdef
+      AND procedure_row.proconfig @> ARRAY['search_path=""']::text[]
+    FROM pg_proc AS procedure_row
+    WHERE procedure_row.oid =
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)'::regprocedure
+  ),
+  'atomic account setup is SECURITY DEFINER with an empty search_path'
 );
 
 SELECT ok(
@@ -403,8 +416,13 @@ SELECT ok(
       'authenticated',
       'public.get_editorial_approval_preview(uuid)',
       'EXECUTE'
+    )
+    AND has_function_privilege(
+      'authenticated',
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)',
+      'EXECUTE'
     ),
-  'authenticated can invoke guarded mutations and the public-safe preview'
+  'authenticated can invoke guarded mutations, account setup and the public-safe preview'
 );
 
 SELECT ok(
@@ -459,8 +477,21 @@ SELECT ok(
     )
     AND NOT pg_temp.public_has_execute(
       'public.get_editorial_approval_preview(uuid)'::regprocedure
+    )
+    AND NOT has_function_privilege(
+      'anon',
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'service_role',
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)',
+      'EXECUTE'
+    )
+    AND NOT pg_temp.public_has_execute(
+      'public.create_and_link_editorial_account(uuid,uuid,text,text,text)'::regprocedure
     ),
-  'anon, PUBLIC and service_role cannot mutate or inspect approval previews'
+  'anon, PUBLIC and service_role cannot mutate, set up accounts or inspect approval previews'
 );
 
 SELECT ok(
@@ -484,6 +515,24 @@ SELECT ok(
     )
     AND NOT has_function_privilege(
       'authenticated',
+      'public.editorial_file_is_publishable_media(uuid,uuid,uuid)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'service_role',
+      'public.editorial_file_is_publishable_media(uuid,uuid,uuid)',
+      'EXECUTE'
+    )
+    AND NOT has_function_privilege(
+      'anon',
+      'public.editorial_file_is_publishable_media(uuid,uuid,uuid)',
+      'EXECUTE'
+    )
+    AND NOT pg_temp.public_has_execute(
+      'public.editorial_file_is_publishable_media(uuid,uuid,uuid)'::regprocedure
+    )
+    AND NOT has_function_privilege(
+      'authenticated',
       'public.editorial_compute_approval_fingerprint(uuid)',
       'EXECUTE'
     )
@@ -500,7 +549,7 @@ SELECT ok(
     AND NOT pg_temp.public_has_execute(
       'public.editorial_compute_approval_fingerprint(uuid)'::regprocedure
     ),
-  'publishability and approval fingerprint helpers stay private'
+  'publishability, media and approval fingerprint helpers stay private'
 );
 
 SELECT ok(
@@ -822,6 +871,126 @@ VALUES
     '93000000-0000-0000-0000-00000000000b',
     '91000000-0000-0000-0000-000000000001'
   );
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT lives_ok(
+  $sql$
+    SELECT public.create_and_link_editorial_account(
+      '91000000-0000-0000-0000-00000000000a',
+      '92000000-0000-0000-0000-00000000000a',
+      ' FACEBOOK ',
+      ' Client A Facebook ',
+      ' @editorial-a-facebook '
+    )
+  $sql$,
+  'assigned manager creates and links a supported editorial account atomically'
+);
+
+SELECT pg_temp.act_as_owner();
+SELECT ok(
+  (
+    SELECT
+      account.platform = 'facebook'
+      AND account.display_name = 'Client A Facebook'
+      AND account.handle = '@editorial-a-facebook'
+      AND account.status = 'active'
+      AND account.created_by =
+        '91000000-0000-0000-0000-000000000002'::uuid
+      AND link.client_id = account.client_id
+      AND link.project_id =
+        '92000000-0000-0000-0000-00000000000a'::uuid
+      AND link.created_by =
+        '91000000-0000-0000-0000-000000000002'::uuid
+    FROM public.external_accounts AS account
+    JOIN public.project_external_accounts AS link
+      ON link.external_account_id = account.id
+    WHERE account.client_id =
+        '91000000-0000-0000-0000-00000000000a'::uuid
+      AND account.handle = '@editorial-a-facebook'
+  ),
+  'atomic account setup normalizes fields and preserves actor and project scope'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000003'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      SELECT public.create_and_link_editorial_account(
+        '91000000-0000-0000-0000-00000000000a',
+        '92000000-0000-0000-0000-00000000000a',
+        'youtube',
+        'Design must not create accounts',
+        '@must-not-persist-design'
+      )
+    $sql$
+  ),
+  'assigned design cannot create or link an editorial account'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-000000000002'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      SELECT public.create_and_link_editorial_account(
+        '91000000-0000-0000-0000-00000000000a',
+        '92000000-0000-0000-0000-00000000000b',
+        'instagram',
+        'Wrong project scope',
+        '@must-not-persist-scope'
+      )
+    $sql$
+  ),
+  'account setup rejects a project from another client'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      SELECT public.create_and_link_editorial_account(
+        '91000000-0000-0000-0000-00000000000a',
+        '92000000-0000-0000-0000-00000000000a',
+        'whatsapp',
+        'Unsupported platform',
+        '@must-not-persist-platform'
+      )
+    $sql$
+  ),
+  'account setup rejects platforms outside the six publication channels'
+);
+
+SELECT pg_temp.act_as(
+  '91000000-0000-0000-0000-00000000000e'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      SELECT public.create_and_link_editorial_account(
+        '91000000-0000-0000-0000-00000000000a',
+        '92000000-0000-0000-0000-00000000000a',
+        'tiktok',
+        'Unassigned manager',
+        '@must-not-persist-unassigned'
+      )
+    $sql$
+  ),
+  'unassigned manager cannot create or link an editorial account'
+);
+
+SELECT pg_temp.act_as_owner();
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.external_accounts
+    WHERE handle LIKE '@must-not-persist-%'
+  ),
+  0,
+  'failed account setup leaves no orphan external account'
+);
 
 INSERT INTO public.files (
   id,
@@ -2276,12 +2445,73 @@ SELECT pg_temp.act_as_owner();
 
 UPDATE public.files
 SET
-  file_name = 'Approved launch asset.png',
+  file_name = 'Approved launch asset',
   caption = 'Approved launch caption',
   description = 'Approved launch context',
-  mime_type = 'image/png',
-  extension = 'png'
+  file_type = 'binary',
+  mime_type = NULL,
+  extension = NULL
 WHERE id = '94000000-0000-0000-0000-00000000000e';
+
+INSERT INTO public.files (
+  id,
+  project_id,
+  client_id,
+  uploaded_by,
+  file_name,
+  file_url,
+  file_type,
+  folder,
+  status,
+  storage_bucket,
+  storage_path,
+  parent_file_id,
+  mime_type,
+  extension
+) VALUES
+  (
+    '94000000-0000-0000-0000-00000000010e',
+    '92000000-0000-0000-0000-00000000000a',
+    '91000000-0000-0000-0000-00000000000a',
+    '91000000-0000-0000-0000-000000000003',
+    'Approved launch asset.png (2/6)',
+    'files://91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000010e/1/approved-launch-card-2',
+    'binary',
+    'entregas',
+    'ready',
+    'files',
+    '91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000010e/1/approved-launch-card-2',
+    '94000000-0000-0000-0000-00000000000e',
+    NULL,
+    NULL
+  ),
+  (
+    '94000000-0000-0000-0000-00000000020e',
+    '92000000-0000-0000-0000-00000000000a',
+    '91000000-0000-0000-0000-00000000000a',
+    '91000000-0000-0000-0000-000000000003',
+    'Approved launch asset card 3',
+    'files://91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000020e/1/approved-launch-card-3.png',
+    'binary',
+    'entregas',
+    'ready',
+    'files',
+    '91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000020e/1/approved-launch-card-3.png',
+    '94000000-0000-0000-0000-00000000000e',
+    NULL,
+    NULL
+  );
+
+INSERT INTO storage.objects (bucket_id, name)
+VALUES
+  (
+    'files',
+    '91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000010e/1/approved-launch-card-2'
+  ),
+  (
+    'files',
+    '91000000-0000-0000-0000-00000000000a/94000000-0000-0000-0000-00000000020e/1/approved-launch-card-3.png'
+  );
 
 UPDATE public.files
 SET
@@ -2383,6 +2613,33 @@ SELECT lives_ok(
   'client approves the exact media and document versions'
 );
 
+SELECT pg_temp.act_as_owner();
+SELECT is(
+  (
+    SELECT bool_and(
+      child.requires_approval
+      AND child.approval_status = 'none'
+      AND child.agency_approval_status = 'approved'
+      AND child.visibility = 'approval'
+      AND child.locked_at IS NOT NULL
+    )
+    FROM public.files AS child
+    WHERE child.parent_file_id =
+      '94000000-0000-0000-0000-00000000000e'::uuid
+  ),
+  true,
+  'approved carousel children retain the root-owned approval flag and terminal gates'
+);
+SELECT is(
+  public.editorial_file_is_publishable_media(
+    '94000000-0000-0000-0000-00000000000e',
+    '91000000-0000-0000-0000-00000000000a',
+    '92000000-0000-0000-0000-00000000000a'
+  ),
+  true,
+  'approved carousel is publishable with inherited child approval and historical media paths'
+);
+
 SELECT pg_temp.act_as(
   '91000000-0000-0000-0000-000000000002'
 );
@@ -2427,9 +2684,10 @@ SELECT ok(
     SELECT
       post.primary_file_id =
         '94000000-0000-0000-0000-00000000000e'::uuid
-      AND post.title = 'Approved launch asset.png'
+      AND post.title = 'Approved launch asset'
       AND post.objective = 'Approved launch context'
       AND post.default_caption = 'Approved launch caption'
+      AND post.content_type = 'carousel'
       AND post.production_status = 'ready'
       AND internal.internal_notes = 'Internal scheduling note'
       AND internal.approval_fingerprint =
