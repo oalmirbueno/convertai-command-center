@@ -2829,7 +2829,7 @@ SELECT lives_ok(
 SELECT ok(
   (
     SELECT
-      post.title = 'Approved launch asset.png'
+      post.title = 'Approved launch asset'
       AND post.objective = 'Approved launch context'
       AND post.default_caption = 'Approved launch caption'
       AND publication.file_id =
