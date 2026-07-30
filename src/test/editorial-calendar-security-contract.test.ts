@@ -21,7 +21,7 @@ const migration = read(
   "supabase/migrations/20260728161129_create_editorial_calendar.sql",
 );
 const approvedMediaMigration = read(
-  "supabase/migrations/20260730090000_adopt_approved_editorial_media.sql",
+  "supabase/migrations/20260729233930_fb88e549-12f5-4470-83e2-53115d155764.sql",
 );
 const approvedSaveStart = approvedMediaMigration.indexOf(
   "CREATE OR REPLACE FUNCTION public.save_approved_editorial_post_unlocked",
