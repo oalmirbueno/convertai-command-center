@@ -70,6 +70,8 @@ const scheduledPost: EditorialPostBundle = {
         display_name: "Instagram",
         handle: "@cliente",
         status: "active",
+        connection_status: "connected",
+        automation_enabled: false,
       },
       file: null,
     },

@@ -57,7 +57,10 @@ import {
   isFilePublishable,
   type EditorialPlatform,
 } from "@/lib/editorial";
-import type { EditorialApprovedMediaAsset } from "@/lib/editorialMedia";
+import {
+  buildApprovedMediaAssets,
+  type EditorialApprovedMediaAsset,
+} from "@/lib/editorialMedia";
 import { isPublishableTask } from "@/lib/taskDeliveryTypes";
 
 interface Option {
@@ -519,6 +522,13 @@ export default function EditorialEditor({
   };
 
   const selectAccountForPublication = (accountId: string) => {
+    if (
+      publications.some(
+        (publication) => publication.externalAccountId === accountId,
+      )
+    ) {
+      return;
+    }
     setPublications((current) => {
       if (
         current.some(
@@ -626,6 +636,12 @@ export default function EditorialEditor({
     try {
       const mutationId = pendingMutationId || newIdempotencyKey();
       setPendingMutationId(mutationId);
+      const approvedAssetFileIds = new Map(
+        buildApprovedMediaAssets(optionFiles).map((asset) => [
+          asset.id,
+          asset.files.map((file) => file.id),
+        ]),
+      );
       const publicationPayload = publications
         .filter((publication) => publication.externalAccountId)
         .map((publication) => {
@@ -648,6 +664,10 @@ export default function EditorialEditor({
             caption: publication.caption.trim() || null,
             first_comment: publication.firstComment.trim() || null,
             alt_text: publication.altText.trim() || null,
+            asset_file_ids:
+              approvedAssetFileIds.get(
+                publication.fileId || primaryFileId,
+              ) || [],
             scheduled_at: scheduledAt,
             scheduled_timezone: publication.timezone,
           };
@@ -1109,7 +1129,7 @@ export default function EditorialEditor({
               <EditorialAccountSetup
                 clientId={clientId}
                 projectId={projectId}
-                linkedAccountCount={options.accounts.length}
+                linkedAccounts={options.accounts}
                 availableAccounts={options.availableAccounts}
                 canManage={options.canManageAccounts}
                 permissionUnavailable={options.accountPermissionUnavailable}

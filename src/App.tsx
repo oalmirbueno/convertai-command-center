@@ -45,6 +45,7 @@ import EditorialCalendar from "@/pages/EditorialCalendar";
 import ContractPublic from "@/pages/ContractPublic";
 import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
 import OAuthConsent from "@/pages/OAuthConsent";
+import MetaOAuthCallback from "@/pages/MetaOAuthCallback";
 import MCPConnect from "@/pages/MCPConnect";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -106,6 +107,7 @@ function AppRoutes() {
       <Route path="/unsubscribe" element={<UnsubscribePage />} />
       <Route path="/conectar-mcp" element={<MCPConnect />} />
       <Route path="/primeiro-acesso" element={<FirstAccess />} />
+      <Route path="/oauth/meta/callback" element={<ProtectedRoute><MetaOAuthCallback /></ProtectedRoute>} />
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
