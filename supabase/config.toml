@@ -57,6 +57,8 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.request-task-workflow]
     verify_jwt = true
+  [functions.social-meta-oauth]
+    verify_jwt = true
   [functions.handle-email-unsubscribe]
     verify_jwt = false
   [functions.handle-email-suppression]

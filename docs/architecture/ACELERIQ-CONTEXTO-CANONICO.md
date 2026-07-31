@@ -48,6 +48,15 @@ A Aceleriq é uma operação de Engenharia de Crescimento apoiada no Método A.C
 
 Documentos estratégicos e técnicos podem ser apenas disponibilizados ao cliente, sem Gate 2, conforme regra do contrato e do tipo de entrega. Aprovação formal acontece no painel, não por mensagem de WhatsApp.
 
+## Conexões oficiais e publicação externa
+
+- Redes sociais são conectadas apenas por OAuth oficial. Senhas de clientes nunca são solicitadas ou armazenadas.
+- Metadados sanitizados da conexão podem ficar no schema público com RLS; tokens e referências operacionais permanecem em schema privado e Vault.
+- Descobrir ou conectar uma conta não ativa publicação automática. A ativação depende de um lote posterior com worker determinístico, kill switch, idempotência, retry e auditoria.
+- O calendário congela a ordem e a integridade dos arquivos aprovados. O worker futuro só poderá consumir esse snapshot depois dos dois gates humanos.
+- Sessões abandonadas, reconexões, expiração e desconexão devem revogar credenciais que não estejam servindo uma conexão ativa.
+- A fundação inicial para Meta está descrita no [`ADR-0002`](decisions/ADR-0002-meta-oauth-e-fundacao-de-publicacao.md).
+
 ## Produção de ativos
 
 - Carrosséis, artes e criativos: GPT Work com o melhor modelo visual disponível, seguindo manual do cliente e banco de referências.

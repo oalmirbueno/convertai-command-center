@@ -103,6 +103,14 @@ export interface EditorialAccountRow {
   display_name: string;
   handle: string | null;
   status: string;
+  connection_status: "connected" | "expired" | "revoked" | "manual";
+  automation_enabled: boolean;
+}
+
+interface EditorialAccountConnectionRow {
+  external_account_id: string;
+  connection_status: string;
+  automation_enabled: boolean;
 }
 
 export interface CreateAndLinkEditorialAccountInput {
@@ -882,7 +890,8 @@ export function useEditorialEditorOptions(
 
       const [
         links,
-        allAccounts,
+        rawAccounts,
+        accountConnections,
         accountPermission,
         files,
         tasks,
@@ -908,6 +917,16 @@ export function useEditorialEditorOptions(
             .eq("status", "active")
             .order("display_name", { ascending: true })
             .order("id", { ascending: true })
+            .range(from, to),
+        ),
+        readAllPages<EditorialAccountConnectionRow>((from, to) =>
+          editorialDb
+            .from("external_account_connections")
+            .select(
+              "external_account_id, connection_status, automation_enabled",
+            )
+            .eq("client_id", clientId)
+            .order("external_account_id", { ascending: true })
             .range(from, to),
         ),
         (async () => {
@@ -994,6 +1013,26 @@ export function useEditorialEditorOptions(
       const linkedAccountIds = unique(
         links.map((link) => link.external_account_id),
       );
+      const connectionByAccountId = new Map(
+        accountConnections.map((connection) => [
+          connection.external_account_id,
+          connection,
+        ]),
+      );
+      const allAccounts = rawAccounts.map((account) => {
+        const connection = connectionByAccountId.get(account.id);
+        return {
+          ...account,
+          connection_status: !connection
+            ? ("manual" as const)
+            : connection.connection_status === "connected"
+              ? ("connected" as const)
+              : connection.connection_status === "revoked"
+                ? ("revoked" as const)
+                : ("expired" as const),
+          automation_enabled: connection?.automation_enabled === true,
+        };
+      });
       const linkedAccountIdSet = new Set(linkedAccountIds);
       const accounts = allAccounts.filter((account) =>
         linkedAccountIdSet.has(account.id),
