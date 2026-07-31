@@ -798,6 +798,7 @@ export type Database = {
           caption: string | null
           client_id: string
           created_at: string
+          delivery_mode: string
           external_account_id: string
           external_post_id: string | null
           file_id: string | null
@@ -819,6 +820,7 @@ export type Database = {
           caption?: string | null
           client_id: string
           created_at?: string
+          delivery_mode?: string
           external_account_id: string
           external_post_id?: string | null
           file_id?: string | null
@@ -840,6 +842,7 @@ export type Database = {
           caption?: string | null
           client_id?: string
           created_at?: string
+          delivery_mode?: string
           external_account_id?: string
           external_post_id?: string | null
           file_id?: string | null
@@ -1030,6 +1033,92 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      external_account_connections: {
+        Row: {
+          automation_enabled: boolean
+          client_id: string
+          connected_at: string | null
+          connected_by: string | null
+          connection_status: string
+          created_at: string
+          data_access_expires_at: string | null
+          disconnected_at: string | null
+          disconnected_by: string | null
+          expires_at: string | null
+          external_account_id: string
+          last_error_code: string | null
+          last_verified_at: string | null
+          provider: string
+          scopes: string[]
+          updated_at: string
+        }
+        Insert: {
+          automation_enabled?: boolean
+          client_id: string
+          connected_at?: string | null
+          connected_by?: string | null
+          connection_status?: string
+          created_at?: string
+          data_access_expires_at?: string | null
+          disconnected_at?: string | null
+          disconnected_by?: string | null
+          expires_at?: string | null
+          external_account_id: string
+          last_error_code?: string | null
+          last_verified_at?: string | null
+          provider?: string
+          scopes?: string[]
+          updated_at?: string
+        }
+        Update: {
+          automation_enabled?: boolean
+          client_id?: string
+          connected_at?: string | null
+          connected_by?: string | null
+          connection_status?: string
+          created_at?: string
+          data_access_expires_at?: string | null
+          disconnected_at?: string | null
+          disconnected_by?: string | null
+          expires_at?: string | null
+          external_account_id?: string
+          last_error_code?: string | null
+          last_verified_at?: string | null
+          provider?: string
+          scopes?: string[]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "external_account_connections_account_fk"
+            columns: ["external_account_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id", "client_id"]
+          },
+          {
+            foreignKeyName: "external_account_connections_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_account_connections_connected_by_fkey"
+            columns: ["connected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "external_account_connections_disconnected_by_fkey"
+            columns: ["disconnected_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       external_accounts: {
         Row: {
@@ -3355,6 +3444,16 @@ export type Database = {
         }
         Returns: string
       }
+      create_and_link_editorial_account: {
+        Args: {
+          p_client_id: string
+          p_display_name: string
+          p_handle?: string
+          p_platform: string
+          p_project_id: string
+        }
+        Returns: string
+      }
       create_file_record: {
         Args: { p_file: Json }
         Returns: {
@@ -3746,6 +3845,50 @@ export type Database = {
       }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
+      social_meta_connect_resource: {
+        Args: {
+          _candidate_id: string
+          _client_id: string
+          _oauth_session_id: string
+          _project_id: string
+        }
+        Returns: Json
+      }
+      social_meta_disconnect_account: {
+        Args: { _external_account_id: string }
+        Returns: Json
+      }
+      social_meta_oauth_consume_session: {
+        Args: { _state: string }
+        Returns: Json
+      }
+      social_meta_oauth_create_session: {
+        Args: { _client_id: string; _project_id: string; _redirect_uri: string }
+        Returns: Json
+      }
+      social_meta_oauth_finish_session: {
+        Args: {
+          _client_id: string
+          _oauth_session_id: string
+          _project_id: string
+        }
+        Returns: Json
+      }
+      social_meta_oauth_store_resources: {
+        Args: {
+          _actor_id: string
+          _data_access_expires_at: string
+          _declined_scopes: string[]
+          _granted_scopes: string[]
+          _graph_version: string
+          _meta_user_id: string
+          _oauth_session_id: string
+          _resources: Json
+          _user_access_token: string
+          _user_access_token_expires_at: string
+        }
+        Returns: Json
+      }
       storage_client_from_path: { Args: { _name: string }; Returns: string }
       storage_object_read_allowed: {
         Args: { _bucket: string; _name: string }
