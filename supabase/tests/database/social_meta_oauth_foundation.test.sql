@@ -267,7 +267,7 @@ SELECT ok(
 SELECT ok(
   (
     SELECT bool_and(
-      procedure_row.proconfig @> ARRAY['search_path=']::text[]
+      procedure_row.proconfig @> ARRAY['search_path=""']::text[]
     )
     FROM pg_proc AS procedure_row
     WHERE procedure_row.oid IN (
@@ -409,6 +409,9 @@ CREATE TEMP TABLE social_foundation_state (
   publication_id uuid,
   external_account_id uuid
 );
+
+GRANT SELECT, INSERT, UPDATE ON pg_temp.social_foundation_state
+  TO authenticated;
 
 SELECT pg_temp.act_as('a1000000-0000-4000-8000-000000000001');
 INSERT INTO pg_temp.social_foundation_state (label, result)
