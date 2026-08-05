@@ -430,6 +430,12 @@ export default function EditorialEditor({
       projects.filter((project) => !clientId || project.client_id === clientId),
     [clientId, projects],
   );
+  const selectedClientName =
+    clients.find((client) => client.id === clientId)?.name ||
+    "Cliente selecionado";
+  const selectedProjectName =
+    projects.find((project) => project.id === projectId)?.name ||
+    "Projeto selecionado";
   const allowedTeamMembers = useMemo(() => {
     const assignments = new Set(options?.assignments || []);
     return teamMembers.filter(
@@ -1128,7 +1134,9 @@ export default function EditorialEditor({
             {projectId && !loadingOptions && options && !optionsError && (
               <EditorialAccountSetup
                 clientId={clientId}
+                clientName={selectedClientName}
                 projectId={projectId}
+                projectName={selectedProjectName}
                 linkedAccounts={options.accounts}
                 availableAccounts={options.availableAccounts}
                 canManage={options.canManageAccounts}

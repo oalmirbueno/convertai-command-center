@@ -173,8 +173,36 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain("event.origin !== window.location.origin");
     expect(accountSetup).toContain("event.source !== popup");
     expect(accountSetup).toContain("parseMetaOAuthPopupMessage(event.data)");
-    expect(accountSetup).toContain("Conectar Instagram + Facebook");
+    expect(accountSetup).toContain("Entrar com Facebook/Meta");
     expect(accountSetup).toContain("onAccountReady(accountId)");
+  });
+
+  it("makes the target client and project explicit and provides account search", () => {
+    expect(editor).toContain("clientName={selectedClientName}");
+    expect(editor).toContain("projectName={selectedProjectName}");
+    expect(accountSetup).toContain("Destino obrigatório do vínculo");
+    expect(accountSetup).toContain("{clientName}");
+    expect(accountSetup).toContain("{projectName}");
+    expect(accountSetup).toContain("filterMetaOAuthResources");
+    expect(accountSetup).toContain("Pesquisar por nome, @ ou plataforma");
+    expect(accountSetup).toContain("Nenhuma conta encontrada");
+    expect(accountSetup).toContain("Vincular");
+    expect(accountSetup).not.toMatch(
+      /type=["']password["']|name=["']password["']/i,
+    );
+  });
+
+  it("marks official Meta accounts and protects their provider identity", () => {
+    expect(clientConnections).toContain(
+      '.from("external_account_connections")',
+    );
+    expect(clientConnections).toContain("officialAccountIds");
+    expect(clientConnections).toContain("Oficial Meta");
+    expect(clientConnections).toContain("disabled={editingOfficial}");
+    expect(clientConnections).toContain("readOnly={editingOfficial}");
+    expect(clientConnections).toContain(
+      "plataforma e ID são protegidos",
+    );
   });
 
   it("protects the callback, strips its URL and messages only a same-origin opener", () => {

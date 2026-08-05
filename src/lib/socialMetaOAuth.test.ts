@@ -10,7 +10,9 @@ import {
   completeMetaOAuth,
   connectMetaOAuth,
   disconnectMetaOAuth,
+  filterMetaOAuthResources,
   finishMetaOAuth,
+  MAX_META_OAUTH_RESOURCES,
   META_OAUTH_MESSAGE_TYPE,
   metaAuthorizationUrl,
   parseMetaOAuthPopupMessage,
@@ -82,6 +84,33 @@ describe("social Meta OAuth client", () => {
         handle: "@loja",
       },
     ]);
+  });
+
+  it("keeps the complete discovered list and searches name, handle and platform", () => {
+    const discovered = Array.from(
+      { length: MAX_META_OAUTH_RESOURCES + 1 },
+      (_, index) => ({
+        candidate_id: `candidate-${index}`,
+        platform: index === 12 ? "instagram" : "facebook",
+        display_name: index === 12 ? "Café São José" : `Página ${index}`,
+        handle: index === 12 ? "cafe.saojose" : null,
+      }),
+    );
+    const sanitized = sanitizeMetaOAuthResources(discovered);
+
+    expect(sanitized).toHaveLength(MAX_META_OAUTH_RESOURCES);
+    expect(filterMetaOAuthResources(sanitized, "CAFE sao jose")).toEqual([
+      sanitized[12],
+    ]);
+    expect(filterMetaOAuthResources(sanitized, "@cafe.saojose")).toEqual([
+      sanitized[12],
+    ]);
+    expect(filterMetaOAuthResources(sanitized, "insta profissional")).toEqual([
+      sanitized[12],
+    ]);
+    expect(filterMetaOAuthResources(sanitized, "conta inexistente")).toEqual(
+      [],
+    );
   });
 
   it("completes, connects and disconnects with their exact action bodies", async () => {
