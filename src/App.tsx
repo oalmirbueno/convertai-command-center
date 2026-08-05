@@ -1,4 +1,5 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { lazy, Suspense } from "react";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -49,6 +50,8 @@ import MetaOAuthCallback from "@/pages/MetaOAuthCallback";
 import MCPConnect from "@/pages/MCPConnect";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
+
+const Analytics = lazy(() => import("@/pages/Analytics"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -114,6 +117,27 @@ function AppRoutes() {
       <Route path="/briefings" element={<ProtectedRoute><AppLayout><AdminBriefings /></AppLayout></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute>
+            <AppLayout>
+              <Suspense
+                fallback={
+                  <div
+                    role="status"
+                    className="flex min-h-[50vh] items-center justify-center text-sm text-muted-foreground"
+                  >
+                    Carregando Analytics...
+                  </div>
+                }
+              >
+                <Analytics />
+              </Suspense>
+            </AppLayout>
+          </ProtectedRoute>
+        }
+      />
       <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
       <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />

@@ -49,6 +49,465 @@ export type Database = {
           },
         ]
       }
+      analytics_campaigns: {
+        Row: {
+          archived_at: string | null
+          budget: number
+          channel: string
+          client_id: string
+          created_at: string
+          created_by: string
+          currency: string
+          end_date: string | null
+          id: string
+          name: string
+          objective: string
+          project_id: string
+          start_date: string | null
+          status: string
+          updated_at: string
+          utm_campaign: string
+        }
+        Insert: {
+          archived_at?: string | null
+          budget?: number
+          channel: string
+          client_id: string
+          created_at?: string
+          created_by: string
+          currency?: string
+          end_date?: string | null
+          id?: string
+          name: string
+          objective?: string
+          project_id: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          utm_campaign: string
+        }
+        Update: {
+          archived_at?: string | null
+          budget?: number
+          channel?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          currency?: string
+          end_date?: string | null
+          id?: string
+          name?: string
+          objective?: string
+          project_id?: string
+          start_date?: string | null
+          status?: string
+          updated_at?: string
+          utm_campaign?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_campaigns_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_campaigns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_campaigns_project_client_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      analytics_conversion_definitions: {
+        Row: {
+          active: boolean
+          archived_at: string | null
+          client_id: string
+          conversion_type: string
+          counts_as_revenue: boolean
+          created_at: string
+          created_by: string
+          currency: string
+          default_value: number | null
+          event_key: string
+          funnel_order: number
+          id: string
+          is_primary: boolean
+          name: string
+          project_id: string
+          updated_at: string
+        }
+        Insert: {
+          active?: boolean
+          archived_at?: string | null
+          client_id: string
+          conversion_type: string
+          counts_as_revenue?: boolean
+          created_at?: string
+          created_by: string
+          currency?: string
+          default_value?: number | null
+          event_key: string
+          funnel_order?: number
+          id?: string
+          is_primary?: boolean
+          name: string
+          project_id: string
+          updated_at?: string
+        }
+        Update: {
+          active?: boolean
+          archived_at?: string | null
+          client_id?: string
+          conversion_type?: string
+          counts_as_revenue?: boolean
+          created_at?: string
+          created_by?: string
+          currency?: string
+          default_value?: number | null
+          event_key?: string
+          funnel_order?: number
+          id?: string
+          is_primary?: boolean
+          name?: string
+          project_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_conversion_definitions_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_definitions_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_defs_project_client_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      analytics_conversion_events: {
+        Row: {
+          archived_at: string | null
+          archived_by: string | null
+          campaign_id: string | null
+          client_id: string
+          conversion_type: string
+          counts_as_revenue: boolean
+          created_at: string
+          created_by: string
+          currency: string
+          definition_id: string
+          definition_name: string
+          event_key: string
+          external_id: string
+          id: string
+          is_primary: boolean
+          occurred_at: string
+          project_id: string
+          source: string
+          updated_at: string
+          utm_link_id: string | null
+          value: number | null
+        }
+        Insert: {
+          archived_at?: string | null
+          archived_by?: string | null
+          campaign_id?: string | null
+          client_id: string
+          conversion_type?: string
+          counts_as_revenue?: boolean
+          created_at?: string
+          created_by: string
+          currency?: string
+          definition_id: string
+          definition_name?: string
+          event_key?: string
+          external_id: string
+          id?: string
+          is_primary?: boolean
+          occurred_at: string
+          project_id: string
+          source?: string
+          updated_at?: string
+          utm_link_id?: string | null
+          value?: number | null
+        }
+        Update: {
+          archived_at?: string | null
+          archived_by?: string | null
+          campaign_id?: string | null
+          client_id?: string
+          conversion_type?: string
+          counts_as_revenue?: boolean
+          created_at?: string
+          created_by?: string
+          currency?: string
+          definition_id?: string
+          definition_name?: string
+          event_key?: string
+          external_id?: string
+          id?: string
+          is_primary?: boolean
+          occurred_at?: string
+          project_id?: string
+          source?: string
+          updated_at?: string
+          utm_link_id?: string | null
+          value?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_conversion_events_archived_by_fkey"
+            columns: ["archived_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_campaign_scope_fk"
+            columns: ["campaign_id", "client_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_campaigns"
+            referencedColumns: ["id", "client_id", "project_id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_definition_scope_fk"
+            columns: ["definition_id", "client_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_conversion_definitions"
+            referencedColumns: ["id", "client_id", "project_id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_link_scope_fk"
+            columns: ["utm_link_id", "client_id", "project_id", "campaign_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_utm_links"
+            referencedColumns: ["id", "client_id", "project_id", "campaign_id"]
+          },
+          {
+            foreignKeyName: "analytics_conversion_events_project_client_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      analytics_metric_entries: {
+        Row: {
+          campaign_id: string | null
+          captured_at: string
+          client_id: string
+          created_at: string
+          created_by: string
+          currency: string
+          external_id: string
+          id: string
+          metric_key: string
+          metric_value: number
+          period_end: string
+          period_start: string
+          project_id: string
+          source: string
+          updated_at: string
+          utm_link_id: string | null
+        }
+        Insert: {
+          campaign_id?: string | null
+          captured_at?: string
+          client_id: string
+          created_at?: string
+          created_by: string
+          currency?: string
+          external_id: string
+          id?: string
+          metric_key: string
+          metric_value: number
+          period_end: string
+          period_start: string
+          project_id: string
+          source?: string
+          updated_at?: string
+          utm_link_id?: string | null
+        }
+        Update: {
+          campaign_id?: string | null
+          captured_at?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          currency?: string
+          external_id?: string
+          id?: string
+          metric_key?: string
+          metric_value?: number
+          period_end?: string
+          period_start?: string
+          project_id?: string
+          source?: string
+          updated_at?: string
+          utm_link_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_metric_entries_campaign_scope_fk"
+            columns: ["campaign_id", "client_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_campaigns"
+            referencedColumns: ["id", "client_id", "project_id"]
+          },
+          {
+            foreignKeyName: "analytics_metric_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_metric_entries_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_metric_entries_link_scope_fk"
+            columns: ["utm_link_id", "client_id", "project_id", "campaign_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_utm_links"
+            referencedColumns: ["id", "client_id", "project_id", "campaign_id"]
+          },
+          {
+            foreignKeyName: "analytics_metric_entries_project_client_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
+      analytics_utm_links: {
+        Row: {
+          active: boolean
+          archived_at: string | null
+          campaign_id: string
+          client_id: string
+          created_at: string
+          created_by: string
+          destination_url: string
+          id: string
+          name: string
+          project_id: string
+          updated_at: string
+          utm_campaign: string
+          utm_content: string | null
+          utm_medium: string
+          utm_source: string
+          utm_term: string | null
+        }
+        Insert: {
+          active?: boolean
+          archived_at?: string | null
+          campaign_id: string
+          client_id: string
+          created_at?: string
+          created_by: string
+          destination_url: string
+          id?: string
+          name: string
+          project_id: string
+          updated_at?: string
+          utm_campaign: string
+          utm_content?: string | null
+          utm_medium: string
+          utm_source: string
+          utm_term?: string | null
+        }
+        Update: {
+          active?: boolean
+          archived_at?: string | null
+          campaign_id?: string
+          client_id?: string
+          created_at?: string
+          created_by?: string
+          destination_url?: string
+          id?: string
+          name?: string
+          project_id?: string
+          updated_at?: string
+          utm_campaign?: string
+          utm_content?: string | null
+          utm_medium?: string
+          utm_source?: string
+          utm_term?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "analytics_utm_links_campaign_scope_fk"
+            columns: ["campaign_id", "client_id", "project_id"]
+            isOneToOne: false
+            referencedRelation: "analytics_campaigns"
+            referencedColumns: ["id", "client_id", "project_id"]
+          },
+          {
+            foreignKeyName: "analytics_utm_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_utm_links_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "analytics_utm_links_project_client_fk"
+            columns: ["project_id", "client_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id", "client_id"]
+          },
+        ]
+      }
       api_audit_log: {
         Row: {
           action: string
@@ -3403,6 +3862,10 @@ export type Database = {
       }
     }
     Functions: {
+      analytics_can_write_client: {
+        Args: { _client_id: string }
+        Returns: boolean
+      }
       archive_editorial_post: {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json

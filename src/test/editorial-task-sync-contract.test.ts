@@ -58,8 +58,9 @@ describe("editorial design task workspace contract", () => {
     expect(page).not.toContain(
       "xl:grid-cols-[minmax(0,1fr)_300px]",
     );
+    expect(layout).toContain('location.pathname === "/calendario"');
     expect(layout).toContain(
-      'location.pathname === "/calendario"\n            ? "max-w-[1400px]"',
+      'location.pathname === "/analytics"\n            ? "max-w-[1400px]"',
     );
     expect(page).not.toContain("<EditorialTaskInbox");
     expect(views).toContain(
