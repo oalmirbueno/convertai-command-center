@@ -5,6 +5,7 @@
 
 import { z } from 'https://esm.sh/zod@3.23.8';
 import type { AuthContext } from './mcp-auth.ts';
+import { dataScopeAllowsTool } from './mcp-security.ts';
 import {
   ALLOWED_ENTITY_TYPES,
   fetchEntity,
@@ -16,11 +17,13 @@ import {
   getWorkspaceNode,
   listBriefings,
   listClients,
+  listEditorialCalendar,
   listFiles,
   listProjects,
   listReports,
   listTasks,
   listWorkspaceNodes,
+  PUBLISHABLE_DELIVERY_TYPES,
   search,
 } from './aceleriq-read-services.ts';
 import {
@@ -39,10 +42,13 @@ import {
 import {
   completeTask,
   completeTaskSchema,
+  createEditorialItem,
+  createEditorialItemSchema,
   createReportDraft,
   createReportDraftSchema,
   createTask,
   createTaskSchema,
+  EDITORIAL_DELIVERY_TYPE_VALUES,
   TASK_DELIVERY_TYPE_VALUES,
   updateProject,
   updateProjectSchema,
@@ -74,6 +80,8 @@ export type ToolScope =
   | 'projects:write'
   | 'tasks:read'
   | 'tasks:write'
+  | 'editorial:read'
+  | 'editorial:write'
   | 'reports:read'
   | 'reports:write'
   | 'briefings:read'
@@ -97,6 +105,8 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'projects:write',
   'tasks:read',
   'tasks:write',
+  'editorial:read',
+  'editorial:write',
   'reports:read',
   'reports:write',
   'briefings:read',
@@ -122,6 +132,8 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'projects:write': { title: 'Projetos — escrita', description: 'Atualizar prazo, status, progresso, escopo e objetivos de projetos.', sensitive: true },
   'tasks:read': { title: 'Tarefas — leitura', description: 'Listar tarefas do Kanban.' },
   'tasks:write': { title: 'Tarefas — escrita', description: 'Criar, editar e concluir tarefas.', sensitive: true },
+  'editorial:read': { title: 'Calendário editorial — leitura', description: 'Ler somente entregas publicáveis e seus planos editoriais dentro dos clientes autorizados.' },
+  'editorial:write': { title: 'Linha editorial — criação', description: 'Criar tarefas de produção publicáveis vinculadas a cliente e projeto. Não aprova, agenda nem publica.', sensitive: true },
   'reports:read': { title: 'Relatórios — leitura', description: 'Listar e ler relatórios publicados.' },
   'reports:write': { title: 'Relatórios — escrita', description: 'Criar rascunhos de relatórios.', sensitive: true },
   'briefings:read': { title: 'Briefings — leitura', description: 'Listar e ler briefings enviados.' },
@@ -144,10 +156,11 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
   'aceleriq:read': [
     'clients:read', 'projects:read', 'tasks:read',
     'reports:read', 'briefings:read', 'files:read',
-    'workspace:read', 'contracts:read',
+    'workspace:read', 'contracts:read', 'editorial:read',
   ],
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
+    'editorial:write',
   ],
 };
 
@@ -170,6 +183,8 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_project: 'projects:read',
   aceleriq_update_project: 'projects:write',
   aceleriq_list_tasks: 'tasks:read',
+  aceleriq_list_editorial_calendar: 'editorial:read',
+  aceleriq_create_editorial_item: 'editorial:write',
   aceleriq_create_task: 'tasks:write',
   aceleriq_update_task: 'tasks:write',
   aceleriq_complete_task: 'tasks:write',
@@ -200,7 +215,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.7.2',
+  version: '1.8.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -239,6 +254,11 @@ function makeRead(
 
 const UUID = z.string().uuid();
 
+function isRealToolDate(value: string): boolean {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value;
+}
+
 // ─── Foundation tools (round 2) ───────────────────────────────
 const healthTool: ToolDefinition = {
   name: 'aceleriq_health',
@@ -274,7 +294,7 @@ const capabilitiesTool: ToolDefinition = {
   annotations: READ_ANNOTATIONS,
   handler: (_input, ctx) => {
     const visible = TOOLS
-      .filter(t => canInvoke(ctx, t))
+      .filter(t => canInvoke(ctx, t) && canUseToolWithDataScope(ctx, t))
       .map(t => ({ name: t.name, description: t.description, requiredScopes: t.scopes }));
     const counts = {
       total: TOOLS.length,
@@ -285,6 +305,8 @@ const capabilitiesTool: ToolDefinition = {
       contracts_write: TOOLS.filter(t => t.scopes.includes('contracts:write')).length,
       memory_read: TOOLS.filter(t => t.scopes.includes('memory:read')).length,
       memory_propose: TOOLS.filter(t => t.scopes.includes('memory:propose')).length,
+      editorial_read: TOOLS.filter(t => t.scopes.includes('editorial:read')).length,
+      editorial_write: TOOLS.filter(t => t.scopes.includes('editorial:write')).length,
       public: TOOLS.filter(t => t.scopes.length === 0).length,
     };
     return Promise.resolve({
@@ -318,7 +340,7 @@ const listClientsTool = makeRead(
     },
     additionalProperties: false,
   },
-  (input) => listClients(input),
+  (input, ctx) => listClients(input, ctx),
 );
 
 const getClientContextTool = makeRead(
@@ -332,7 +354,7 @@ const getClientContextTool = makeRead(
     required: ['client_id'],
     additionalProperties: false,
   },
-  (input) => getClientContext(input),
+  (input, ctx) => getClientContext(input, ctx),
 );
 
 const listProjectsTool = makeRead(
@@ -357,7 +379,7 @@ const listProjectsTool = makeRead(
     },
     additionalProperties: false,
   },
-  (input) => listProjects(input),
+  (input, ctx) => listProjects(input, ctx),
 );
 
 const getProjectTool = makeRead(
@@ -371,18 +393,20 @@ const getProjectTool = makeRead(
     required: ['project_id'],
     additionalProperties: false,
   },
-  (input) => getProject(input),
+  (input, ctx) => getProject(input, ctx),
 );
 
 const listTasksTool = makeRead(
   'aceleriq_list_tasks',
   'Listar tarefas',
-  'Lista tarefas com filtros por projeto, cliente (via projetos), status, responsável ou apenas abertas.',
+  'Lista tarefas dentro do escopo de clientes da credencial, com client_id derivado do projeto, paginação completa e filtros por projeto, cliente, status, responsável, tipo de entrega, área ou apenas abertas.',
   z.object({
     project_id: UUID.optional(),
     client_id: UUID.optional(),
     status: z.string().max(64).optional(),
     assigned_to: UUID.optional(),
+    delivery_type: z.string().max(64).optional(),
+    workstream: z.enum(['general', 'design', 'content', 'video', 'traffic', 'development', 'operations']).optional(),
     only_open: z.boolean().optional(),
     limit: z.number().int().min(1).max(500).optional(),
     offset: z.number().int().min(0).optional(),
@@ -394,13 +418,63 @@ const listTasksTool = makeRead(
       client_id: { type: 'string', format: 'uuid' },
       status: { type: 'string' },
       assigned_to: { type: 'string', format: 'uuid' },
+      delivery_type: { type: 'string', enum: [...TASK_DELIVERY_TYPE_VALUES] },
+      workstream: { type: 'string', enum: ['general', 'design', 'content', 'video', 'traffic', 'development', 'operations'] },
       only_open: { type: 'boolean' },
       limit: { type: 'integer', minimum: 1, maximum: 500 },
       offset: { type: 'integer', minimum: 0 },
     },
     additionalProperties: false,
   },
-  (input) => listTasks(input),
+  (input, ctx) => listTasks(input, ctx),
+);
+
+const listEditorialCalendarTool = makeRead(
+  'aceleriq_list_editorial_calendar',
+  'Listar calendário editorial',
+  'Lista o calendário editorial completo e deduplicado para um client_id autorizado: posts ativos (inclusive standalone) e tarefas publicáveis ainda sem post. Período usa tasks.due_date para tarefas e editorial_publications.scheduled_at para posts; use include_unscheduled para incluir backlog sem agenda no recorte. Anexa conta social e metadados seguros do arquivo ou carrossel, sem tokens, URLs de Storage, caminhos privados, hashes ou notas internas.',
+  z.object({
+    client_id: UUID,
+    project_id: UUID.optional(),
+    date_from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealToolDate, { message: 'date_from must be a real calendar date' }).optional(),
+    date_to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine(isRealToolDate, { message: 'date_to must be a real calendar date' }).optional(),
+    format: z.enum(PUBLISHABLE_DELIVERY_TYPES).optional(),
+    delivery_type: z.enum(PUBLISHABLE_DELIVERY_TYPES).optional(),
+    status: z.enum(['backlog', 'todo', 'doing', 'review', 'approved', 'blocked']).optional(),
+    production_status: z.enum(['draft', 'production', 'ready']).optional(),
+    publication_status: z.enum(['planned', 'scheduled', 'published', 'failed', 'cancelled']).optional(),
+    include_unscheduled: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict()
+    .refine(
+      value => !value.date_from || !value.date_to || value.date_to >= value.date_from,
+      { message: 'date_to must be on or after date_from' },
+    )
+    .refine(
+      value => !value.format || !value.delivery_type || value.format === value.delivery_type,
+      { message: 'format and delivery_type cannot conflict' },
+    ),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid', description: 'Cliente obrigatório. O servidor aplica o escopo de dados da credencial.' },
+      project_id: { type: 'string', format: 'uuid' },
+      date_from: { type: 'string', format: 'date', description: 'Data inicial inclusiva. Filtra task.due_date e publication.scheduled_at.' },
+      date_to: { type: 'string', format: 'date', description: 'Data final inclusiva. Filtra task.due_date e publication.scheduled_at.' },
+      format: { type: 'string', enum: [...EDITORIAL_DELIVERY_TYPE_VALUES], description: 'Formato canônico. design e static cobrem arte estática.' },
+      delivery_type: { type: 'string', enum: [...EDITORIAL_DELIVERY_TYPE_VALUES], deprecated: true, description: 'Alias temporário de format.' },
+      status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review', 'approved', 'blocked'], description: 'Status das tarefas publicáveis ainda sem post. done, archived e cancelled nunca entram no calendário.' },
+      production_status: { type: 'string', enum: ['draft', 'production', 'ready'], description: 'Etapa dos posts editoriais ativos. Quando informado, tarefas sem post ficam fora.' },
+      publication_status: { type: 'string', enum: ['planned', 'scheduled', 'published', 'failed', 'cancelled'], description: 'Status dos planos/publicações ligados ao post. Quando informado, itens sem publicação ficam fora.' },
+      include_unscheduled: { type: 'boolean', description: 'Inclui posts ainda sem scheduled_at. Padrão false quando há período e true sem período.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  (input, ctx) => listEditorialCalendar(input, ctx),
 );
 
 const listReportsTool = makeRead(
@@ -801,9 +875,9 @@ const memoryProposeTool: ToolDefinition = {
   },
 };
 
-// ─── Write tools (round 5) ────────────────────────────────────
-// Only four: create_task, update_task, complete_task, create_report_draft.
-// All require aceleriq:write. Fields are on a strict allowlist (Zod .strict()).
+// ─── Write tools (round 5+) ───────────────────────────────────
+// Generic operational writes require aceleriq:write; editorial creation has
+// its own editorial:write scope. Every input uses a strict allowlist.
 const WRITE: readonly ToolScope[] = ['aceleriq:write'];
 const WRITE_ANNOTATIONS = {
   readOnlyHint: false,
@@ -825,6 +899,7 @@ function ensureWriteCtx(ctx: AuthContext) {
     keyId: ctx.keyId,
     origin: ctx.origin,
     correlationId: ctx.correlationId,
+    dataScope: ctx.dataScope,
     resultRefHolder: ctx.resultRefHolder,
   };
 }
@@ -860,6 +935,45 @@ const createTaskTool: ToolDefinition = {
     const parsed = createTaskSchema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
     try { return await createTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const createEditorialItemTool: ToolDefinition = {
+  name: 'aceleriq_create_editorial_item',
+  title: 'Adicionar item à linha editorial',
+  description:
+    'Cria uma tarefa de produção publicável no cliente e projeto informados, com data e formato explícitos. O item entra no Kanban e no calendário editorial como backlog. Não cria post, não aprova, não agenda, não publica e não conecta conta social.',
+  scopes: ['editorial:write'],
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      title: { type: 'string', minLength: 1, maxLength: 200 },
+      description: { type: 'string', minLength: 3, maxLength: 4000 },
+      context: { type: 'string', minLength: 3, maxLength: 4000 },
+      format: { type: 'string', enum: [...EDITORIAL_DELIVERY_TYPE_VALUES], description: 'Formato canônico da pauta.' },
+      delivery_type: { type: 'string', enum: [...EDITORIAL_DELIVERY_TYPE_VALUES], deprecated: true, description: 'Alias temporário de format.' },
+      due_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      priority: { type: 'string', enum: ['low', 'medium', 'high', 'urgent'] },
+      assigned_to: { type: 'string', format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['client_id', 'project_id', 'title', 'due_date', 'idempotency_key'],
+    allOf: [
+      { anyOf: [{ required: ['format'] }, { required: ['delivery_type'] }] },
+      { anyOf: [{ required: ['description'] }, { required: ['context'] }] },
+    ],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = createEditorialItemSchema.safeParse(input ?? {});
+    if (!parsed.success) {
+      throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    }
+    try { return await createEditorialItem(parsed.data, ensureWriteCtx(ctx)); }
     catch (e) { throw writeError(e); }
   },
 };
@@ -1418,6 +1532,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   listProjectsTool,
   getProjectTool,
   listTasksTool,
+  listEditorialCalendarTool,
   listReportsTool,
   getReportTool,
   listBriefingsTool,
@@ -1436,6 +1551,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   memoryProposeTool,
   // Write tools (round 5) — controlled operational writes
   createTaskTool,
+  createEditorialItemTool,
   updateTaskTool,
   completeTaskTool,
   createReportDraftTool,
@@ -1476,6 +1592,10 @@ export function canInvoke(ctx: AuthContext, tool: ToolDefinition): boolean {
   const expanded = expandScopes(ctx.scopes);
   if (expanded.has('admin')) return true;
   return tool.scopes.some(s => expanded.has(s));
+}
+
+export function canUseToolWithDataScope(ctx: AuthContext, tool: ToolDefinition): boolean {
+  return dataScopeAllowsTool(ctx.dataScope, tool.name, tool.scopes.length === 0);
 }
 
 export function describeTool(t: ToolDefinition) {

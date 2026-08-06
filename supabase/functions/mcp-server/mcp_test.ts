@@ -3,11 +3,15 @@
 // synthetic AuthResult objects, so we don't need Supabase credentials.
 
 import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
-import { canInvoke, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
+import { canInvoke, canUseToolWithDataScope, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
 import { hasScope, type AuthContext } from '../_shared/mcp-auth.ts';
 import { sanitize } from '../_shared/mcp-audit.ts';
 import {
+  canonicalizeEditorialIdempotencyInput,
+  createEditorialItemSchema,
   createTaskSchema,
+  deterministicEditorialTaskId,
+  editorialPayloadFingerprint,
   updateTaskSchema,
 } from '../_shared/mcp-write-services.ts';
 import {
@@ -31,9 +35,24 @@ const readCtx: AuthContext = {
   keyName: 'test-key',
   scopes: ['aceleriq:read'],
   origin: 'test',
+  dataScope: {
+    unrestricted: true,
+    clientIds: [],
+    principalUserId: '00000000-0000-0000-0000-000000000001',
+    source: 'api_key',
+  },
 };
 const emptyCtx: AuthContext = { ...readCtx, scopes: [] };
 const adminCtx: AuthContext = { ...readCtx, scopes: ['admin'] };
+const restrictedCtx: AuthContext = {
+  ...readCtx,
+  dataScope: {
+    unrestricted: false,
+    clientIds: ['00000000-0000-0000-0000-0000000000aa'],
+    principalUserId: '00000000-0000-0000-0000-000000000001',
+    source: 'oauth',
+  },
+};
 
 Deno.test('registry exposes foundation + read + memory + write + contracts tools', () => {
   const names = TOOLS.map(t => t.name).sort();
@@ -42,6 +61,7 @@ Deno.test('registry exposes foundation + read + memory + write + contracts tools
     'aceleriq_capabilities',
     'aceleriq_complete_task',
     'aceleriq_create_contract',
+    'aceleriq_create_editorial_item',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
     'aceleriq_fetch',
@@ -56,6 +76,7 @@ Deno.test('registry exposes foundation + read + memory + write + contracts tools
     'aceleriq_list_briefings',
     'aceleriq_list_clients',
     'aceleriq_list_contracts',
+    'aceleriq_list_editorial_calendar',
     'aceleriq_list_files',
     'aceleriq_list_projects',
     'aceleriq_list_reports',
@@ -85,10 +106,22 @@ Deno.test('foundation tools are open to any authenticated key; gated tools requi
     assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
     assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
     if (t.name.startsWith('memory_')) continue; // memory scopes tested separately
+    if (t.scopes.includes('editorial:write' as any)) continue;
     if (t.scopes.includes('aceleriq:write' as any)) continue; // write scopes tested separately
     if (t.scopes.includes('contracts:write' as any)) continue; // contracts write scope tested separately
     assert(canInvoke(readCtx, t), `${t.name} should allow aceleriq:read`);
   }
+});
+
+Deno.test('restricted service-role principals only see explicitly client-scoped handlers', () => {
+  assert(canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_list_clients')!));
+  assert(canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_list_tasks')!));
+  assert(canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_list_editorial_calendar')!));
+  assert(!canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_list_reports')!));
+  assert(!canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('aceleriq_list_contracts')!));
+  assert(canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('memory_get_context')!));
+  assert(canUseToolWithDataScope(restrictedCtx, TOOL_MAP.get('memory_propose_update')!));
+  assert(canUseToolWithDataScope(adminCtx, TOOL_MAP.get('aceleriq_list_reports')!));
 });
 
 Deno.test('read tools reject invalid input via Zod', async () => {
@@ -137,6 +170,16 @@ Deno.test('aceleriq_capabilities lists only tools the key can invoke', async () 
   assertEquals((outEmpty.tools as any[]).map(t => t.name).sort(), ['aceleriq_capabilities', 'aceleriq_health']);
   const outRead = await tool.handler({}, readCtx) as Record<string, unknown>;
   assert((outRead.tools as any[]).length > 2);
+  const outRestricted = await tool.handler({}, {
+    ...restrictedCtx,
+    scopes: ['aceleriq:read', 'aceleriq:write', 'memory:read', 'memory:propose'],
+  }) as Record<string, unknown>;
+  const restrictedNames = (outRestricted.tools as any[]).map(t => t.name);
+  assert(restrictedNames.includes('aceleriq_list_clients'));
+  assert(restrictedNames.includes('aceleriq_list_editorial_calendar'));
+  assert(restrictedNames.includes('memory_get_context'));
+  assert(!restrictedNames.includes('aceleriq_list_reports'));
+  assert(!restrictedNames.includes('aceleriq_list_contracts'));
 });
 
 Deno.test('sanitize redacts secret-like keys and preserves shape', () => {
@@ -382,6 +425,76 @@ Deno.test('task write contracts expose optional delivery_type with unspecified c
   );
 });
 
+Deno.test('editorial tools expose safe, strict contracts and dedicated scopes', () => {
+  const list = TOOL_MAP.get('aceleriq_list_editorial_calendar')!;
+  const create = TOOL_MAP.get('aceleriq_create_editorial_item')!;
+  assert(list.scopes.includes('editorial:read' as any));
+  assert(create.scopes.includes('editorial:write' as any));
+  assert(!canInvoke(readCtx, create));
+  assert(canInvoke({ ...readCtx, scopes: ['editorial:write'] }, create));
+  assertEquals((list.inputSchema as any).required, ['client_id']);
+  assertEquals((create.inputSchema as any).additionalProperties, false);
+  assert(!(create.inputSchema as any).properties.status, 'create must not approve or complete');
+  assert(!(create.inputSchema as any).properties.scheduled_at, 'create must not schedule');
+  assert(!(create.inputSchema as any).properties.external_account_id, 'create must not publish');
+
+  const base = {
+    client_id: '00000000-0000-0000-0000-000000000001',
+    project_id: '00000000-0000-0000-0000-000000000002',
+    title: 'Carrossel educativo',
+    description: 'Briefing editorial completo.',
+    delivery_type: 'carousel',
+    due_date: '2026-08-20',
+    idempotency_key: 'editorial-create-001',
+  };
+  assert(createEditorialItemSchema.safeParse(base).success);
+  assert(!createEditorialItemSchema.safeParse({ ...base, delivery_type: 'planning' }).success);
+  assert(!createEditorialItemSchema.safeParse({ ...base, due_date: '2026-02-31' }).success);
+  assert(!createEditorialItemSchema.safeParse({ ...base, description: undefined, context: undefined }).success);
+});
+
+Deno.test('editorial idempotency canonicalizes aliases and ignores later task state', async () => {
+  const original = canonicalizeEditorialIdempotencyInput({
+    client_id: '00000000-0000-0000-0000-000000000001',
+    project_id: '00000000-0000-0000-0000-000000000002',
+    title: '  Carrossel educativo  ',
+    description: ' Briefing editorial completo. ',
+    delivery_type: 'carousel',
+    due_date: '2026-08-20',
+  });
+  const replay = canonicalizeEditorialIdempotencyInput({
+    client_id: '00000000-0000-0000-0000-000000000001',
+    project_id: '00000000-0000-0000-0000-000000000002',
+    title: 'Carrossel educativo',
+    description: 'Briefing editorial completo.',
+    format: 'carousel',
+    due_date: '2026-08-20',
+    status: 'doing',
+  });
+  assertEquals(replay, original);
+  const changed = canonicalizeEditorialIdempotencyInput({
+    ...replay,
+    title: 'Outro conteúdo',
+  });
+  assert(JSON.stringify(changed) !== JSON.stringify(original));
+
+  const taskId = await deterministicEditorialTaskId('oauth:user-a', 'editorial-create-001');
+  assertEquals(
+    taskId,
+    await deterministicEditorialTaskId('oauth:user-a', 'editorial-create-001'),
+  );
+  assert(taskId !== await deterministicEditorialTaskId('oauth:user-b', 'editorial-create-001'));
+  assert(/^[0-9a-f]{8}-[0-9a-f]{4}-8[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(taskId));
+  assertEquals(
+    await editorialPayloadFingerprint(original),
+    await editorialPayloadFingerprint(replay),
+  );
+  assert(
+    await editorialPayloadFingerprint(changed)
+      !== await editorialPayloadFingerprint(original),
+  );
+});
+
 Deno.test('update_task requires at least one updatable field', async () => {
   const tool = TOOL_MAP.get('aceleriq_update_task')!;
   let threw = false;
@@ -508,10 +621,17 @@ Deno.test('every scope has a human-readable description', () => {
 
 Deno.test('aggregate aceleriq:read expands to all granular reads', () => {
   const exp = expandScopes(['aceleriq:read']);
-  for (const s of ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read']) {
+  for (const s of ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read','editorial:read']) {
     assert(exp.has(s), `expected expansion to include ${s}`);
   }
   assert(!exp.has('projects:write'), 'read must not grant writes');
+});
+
+Deno.test('aggregate aceleriq:write grants editorial creation but never through read scope', () => {
+  const write = expandScopes(['aceleriq:write']);
+  const read = expandScopes(['aceleriq:read']);
+  assert(write.has('editorial:write'));
+  assert(!read.has('editorial:write'));
 });
 
 Deno.test('granular scope alone authorizes only its own tools', () => {

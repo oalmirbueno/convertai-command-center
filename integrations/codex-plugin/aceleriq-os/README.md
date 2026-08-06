@@ -40,6 +40,7 @@ Consulte [`docs/security.md`](docs/security.md) para rotação e revogação.
 | --- | --- |
 | [`client-context`](skills/client-context.md)   | Dossiê consolidado de cliente antes de qualquer ação. |
 | [`task-management`](skills/task-management.md) | Criar / atualizar / concluir tarefas com allowlist rígida. |
+| [`editorial-calendar`](skills/editorial-calendar.md) | Consultar o calendário filtrado e adicionar pautas publicáveis sem agendar ou publicar. |
 | [`reports`](skills/reports.md)                 | Listar relatórios e gerar **rascunhos** (nunca publicar). |
 | [`second-brain`](skills/second-brain.md)       | Consultar OpenClaw (memory_get_context / search / fetch). |
 | [`memory-proposals`](skills/memory-proposals.md) | Propor updates de memória no inbox do agente. |
@@ -50,7 +51,9 @@ Consulte [`docs/security.md`](docs/security.md) para rotação e revogação.
 O painel `/api-docs → MCP` permite emitir credenciais com um subconjunto de:
 
 - `aceleriq:read` — leitura de clientes, projetos, tarefas, relatórios, workspace.
-- `aceleriq:write` — apenas 4 tools (create/update/complete task + create report draft).
+- `aceleriq:write` — escrita operacional controlada; inclui o granular `editorial:write` por compatibilidade.
+- `editorial:read` — calendário editorial completo do cliente autorizado.
+- `editorial:write` — cria somente a tarefa publicável da linha editorial; não aprova, agenda ou publica.
 - `memory:read` — leitura do Segundo Cérebro.
 - `memory:propose` — proposta em `memory/inbox/chatgpt/`.
 
@@ -91,6 +94,7 @@ Ver [`examples/`](examples/) — inclui:
 - `03-create-task.md` — criação de tarefa idempotente
 - `04-report-draft.md` — rascunho de relatório
 - `05-memory-proposal.md` — proposta no inbox
+- `06-editorial-calendar.md` — calendário filtrado e criação idempotente de pauta
 
 ## Validação
 
@@ -98,4 +102,6 @@ Ver [`examples/`](examples/) — inclui:
 node scripts/validate.mjs
 ```
 
-Verifica JSON schemas, presença de env vars e handshake HTTP contra o MCP.
+Verifica manifests, skills, docs, exemplos, ausência de token real no exemplo
+de ambiente e, quando `ACELERIQ_MCP_URL` estiver definida, o `initialize`
+público do MCP.

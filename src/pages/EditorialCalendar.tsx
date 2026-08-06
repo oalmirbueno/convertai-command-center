@@ -84,7 +84,6 @@ import {
 import {
   canonicalTaskStatus,
   editorialStageForTaskStatus,
-  isEditorialTask,
   kanbanStatusForEditorialStage,
 } from "@/lib/taskWorkstreams";
 import {
@@ -95,6 +94,7 @@ import {
 import {
   TASK_DELIVERY_TYPE_LABELS,
   contentTypeForDeliveryType,
+  isPublishableTask,
   type TaskDeliveryType,
 } from "@/lib/taskDeliveryTypes";
 import { cn } from "@/lib/utils";
@@ -116,6 +116,19 @@ const approvalStatuses = [
   { value: "approved", label: "Double-gate aprovado" },
   { value: "changes", label: "Ajustes solicitados" },
 ];
+const editorialFormats = [
+  { value: "static", label: "Arte / post estático" },
+  { value: "carousel", label: "Carrossel" },
+  { value: "reel", label: "Reels" },
+  { value: "story", label: "Stories" },
+  { value: "video", label: "Vídeo" },
+  { value: "short", label: "Short" },
+  { value: "article", label: "Artigo" },
+  { value: "google_post", label: "Post Google" },
+];
+const editorialFormatValues = new Set(
+  editorialFormats.map(({ value }) => value),
+);
 
 interface CalendarClientRow {
   id: string;
@@ -294,6 +307,11 @@ export default function EditorialCalendar() {
   const search = searchParams.get("q") || "";
   const requestedClientId = searchParams.get("client") || "all";
   const projectId = searchParams.get("project") || "all";
+  const requestedFormat = searchParams.get("format") || "all";
+  const format =
+    requestedFormat === "all" || editorialFormatValues.has(requestedFormat)
+      ? requestedFormat
+      : "all";
   const platform = searchParams.get("platform") || "all";
   const status = searchParams.get("status") || "all";
   const productionStatus = searchParams.get("production") || "all";
@@ -325,6 +343,7 @@ export default function EditorialCalendar() {
   );
   const teamMembersQuery = useTeamMembers(canUseTeamData);
   const tasksQuery = useTasks(undefined, {
+    enabled: canUseTeamData,
     refetchInterval: pendingMoveKeys.size > 0 ? false : 15_000,
   });
   const teamMembers = useMemo(
@@ -443,19 +462,6 @@ export default function EditorialCalendar() {
     () => new Map(editorialProjectRows.map((project) => [project.id, project])),
     [editorialProjectRows],
   );
-  const designMemberIds = useMemo(
-    () =>
-      new Set(
-        teamRows
-          .filter((member) => member.role === "design")
-          .map((member) => member.id),
-      ),
-    [teamRows],
-  );
-  const designMemberIdList = useMemo(
-    () => [...designMemberIds],
-    [designMemberIds],
-  );
   const responsibleNames = useMemo(
     () =>
       new Map(
@@ -550,6 +556,12 @@ export default function EditorialCalendar() {
   );
   const matchesTaskFilters = useCallback(
     (task: EditorialInboxTask) => {
+      if (
+        format !== "all" &&
+        contentTypeForDeliveryType(task.delivery_type) !== format
+      ) {
+        return false;
+      }
       if (responsibleId !== "all" && task.assigned_to !== responsibleId) {
         return false;
       }
@@ -583,6 +595,7 @@ export default function EditorialCalendar() {
     },
     [
       approvalStatus,
+      format,
       normalizedTaskSearch,
       platform,
       productionStatus,
@@ -592,15 +605,19 @@ export default function EditorialCalendar() {
       status,
     ],
   );
-  const productionTasks = useMemo(
+  const editorialDeadlineTasks = useMemo(
     () =>
       candidateTasks.filter(
         (task) =>
-          !linkedTaskIds.has(task.id) &&
-          isEditorialTask(task, designMemberIds) &&
+          isPublishableTask(task) &&
           matchesTaskFilters(task),
       ),
-    [candidateTasks, designMemberIds, linkedTaskIds, matchesTaskFilters],
+    [candidateTasks, matchesTaskFilters],
+  );
+  const productionTasks = useMemo(
+    () =>
+      editorialDeadlineTasks.filter((task) => !linkedTaskIds.has(task.id)),
+    [editorialDeadlineTasks, linkedTaskIds],
   );
   const taskDataLoading =
     canUseTeamData && (tasksQuery.isLoading || linkedTaskIdsQuery.isLoading);
@@ -614,7 +631,7 @@ export default function EditorialCalendar() {
       ? []
       : view === "board"
         ? productionTasks
-        : [];
+        : editorialDeadlineTasks;
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -625,6 +642,12 @@ export default function EditorialCalendar() {
   const filteredPosts = useMemo(
     () =>
       posts.filter((bundle) => {
+        if (!editorialFormatValues.has(bundle.post.content_type)) {
+          return false;
+        }
+        if (format !== "all" && bundle.post.content_type !== format) {
+          return false;
+        }
         if (
           productionStatus !== "all" &&
           bundle.post.production_status !== productionStatus
@@ -670,6 +693,7 @@ export default function EditorialCalendar() {
       }),
     [
       clientNames,
+      format,
       platform,
       posts,
       productionStatus,
@@ -1201,6 +1225,7 @@ export default function EditorialCalendar() {
       "q",
       "client",
       "project",
+      "format",
       "platform",
       "status",
       "production",
@@ -1243,7 +1268,7 @@ export default function EditorialCalendar() {
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
                   {view === "board"
                     ? "Conteúdos em produção"
-                    : "Agenda de publicações"}
+                    : "Agenda editorial"}
                 </p>
                 <h1 className="mt-0.5 text-xl font-semibold text-foreground">
                   {view === "board"
@@ -1253,7 +1278,7 @@ export default function EditorialCalendar() {
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
                   {view === "board"
                     ? "Prepare o conteúdo e leve até a aprovação"
-                    : "Encontre o material aprovado, escolha a conta e agende"}
+                    : "Veja prazos de produção e publicações agendadas sem misturar outras tarefas"}
                 </p>
               </div>
             </div>
@@ -1261,8 +1286,8 @@ export default function EditorialCalendar() {
               <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <p>
                 {view === "board"
-                  ? "Aqui ficam rascunho, produção e aprovação. O agendamento acontece na Agenda."
-                  : "O painel registra e rastreia o processo. Nenhuma rede social é acionada automaticamente."}
+                  ? "Aqui ficam rascunho, produção e aprovação. O agendamento acontece na Agenda. Nenhuma rede social é acionada automaticamente."
+                  : "Prazos do Kanban aparecem em roxo. Publicações mostram plataforma e horário. Nenhuma rede social é acionada automaticamente."}
               </p>
             </div>
           </div>
@@ -1313,6 +1338,7 @@ export default function EditorialCalendar() {
           search={search}
           clientId={requestedClientId}
           projectId={projectId}
+          format={format}
           platform={platform}
           status={status}
           productionStatus={productionStatus}
@@ -1330,6 +1356,7 @@ export default function EditorialCalendar() {
             value: project.id,
             label: project.name,
           }))}
+          formats={editorialFormats}
           platforms={EDITORIAL_PLATFORMS.map((item) => ({
             value: item,
             label: PLATFORM_LABELS[item],
@@ -1350,6 +1377,7 @@ export default function EditorialCalendar() {
           onSearchChange={(value) => setParam("q", value)}
           onClientChange={handleClientChange}
           onProjectChange={(value) => setParam("project", value)}
+          onFormatChange={(value) => setParam("format", value)}
           onPlatformChange={(value) => setParam("platform", value)}
           onStatusChange={(value) => setParam("status", value)}
           onProductionStatusChange={(value) => setParam("production", value)}
@@ -1374,7 +1402,7 @@ export default function EditorialCalendar() {
               </span>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-foreground">
-                  Tarefas do Kanban no fluxo
+                  Entregas editoriais do Kanban
                 </p>
                 <p className="truncate text-[10px] text-muted-foreground">
                   {productionTasks.length} visíveis com os filtros atuais
@@ -1555,7 +1583,6 @@ export default function EditorialCalendar() {
           defaultProductionStatus={draftSeed?.productionStatus}
           lockTaskId={Boolean(draftSeed?.taskId)}
           linkedTaskIds={linkedTaskIdsQuery.data?.taskIds || []}
-          designMemberIds={designMemberIdList}
           onOpenChange={(nextOpen) => {
             setEditorOpen(nextOpen);
             if (!nextOpen) {
@@ -1599,6 +1626,7 @@ export default function EditorialCalendar() {
             next.set("content", postId);
             [
               "q",
+              "format",
               "platform",
               "status",
               "production",

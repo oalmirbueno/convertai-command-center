@@ -25,8 +25,10 @@ const PRM_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-oauth-metada
 const CONNECT_URL = "https://aceleriq.online/conectar-mcp";
 
 const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = [
-  { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios." },
-  { id: "aceleriq:write", label: "aceleriq:write", hint: "Criar/atualizar tarefas e rascunhos de relatório. Nunca cria cliente, cobrança ou publica.", danger: true },
+  { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios e calendário editorial." },
+  { id: "aceleriq:write", label: "aceleriq:write", hint: "Criar/atualizar tarefas, itens editoriais e rascunhos de relatório. Nunca aprova, agenda ou publica.", danger: true },
+  { id: "editorial:read", label: "editorial:read", hint: "Ler apenas o calendário editorial dos clientes autorizados." },
+  { id: "editorial:write", label: "editorial:write", hint: "Adicionar pautas com cliente, projeto, formato e data. Nunca aprova, agenda ou publica.", danger: true },
   { id: "aceleriq:finance", label: "aceleriq:finance", hint: "Leitura de indicadores financeiros agregados." },
   { id: "memory:read", label: "memory:read", hint: "Consulta ao Segundo Cérebro (GitHub, somente leitura)." },
   { id: "memory:propose", label: "memory:propose", hint: "Propor arquivos em memory/inbox/chatgpt/ (nunca sobrescreve).", danger: true },

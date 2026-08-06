@@ -1,7 +1,4 @@
-import {
-  isEditorialTask,
-  type TaskWorkstream,
-} from "@/lib/taskWorkstreams";
+import type { TaskWorkstream } from "@/lib/taskWorkstreams";
 
 export const TASK_DELIVERY_TYPE_VALUES = [
   "unspecified",
@@ -85,7 +82,7 @@ const SUGGESTED_WORKSTREAMS: Record<TaskDeliveryType, TaskWorkstream> = {
   other: "general",
 };
 
-const PUBLISHABLE_DELIVERY_TYPES = new Set<TaskDeliveryType>([
+export const PUBLISHABLE_DELIVERY_TYPE_VALUES = [
   "design",
   "static",
   "carousel",
@@ -95,7 +92,11 @@ const PUBLISHABLE_DELIVERY_TYPES = new Set<TaskDeliveryType>([
   "short",
   "article",
   "google_post",
-]);
+] as const satisfies readonly TaskDeliveryType[];
+
+const PUBLISHABLE_DELIVERY_TYPES = new Set<TaskDeliveryType>(
+  PUBLISHABLE_DELIVERY_TYPE_VALUES,
+);
 
 const EDITORIAL_CONTENT_TYPES: Partial<Record<TaskDeliveryType, string>> = {
   design: "static",
@@ -109,15 +110,6 @@ const EDITORIAL_CONTENT_TYPES: Partial<Record<TaskDeliveryType, string>> = {
   google_post: "google_post",
 };
 
-const LEGACY_NON_PUBLISHABLE_SIGNALS = [
-  /\b(?:branding|brandbook|identidade visual|logotipo|logo)\b/,
-  /\b(?:planejamento|plano editorial|calendario editorial)\b/,
-  /\b(?:site|website|landing page|pagina de captura)\b/,
-  /\b(?:automacao|integracao|workflow)\b/,
-  /\b(?:trafego|campanha paga|google ads|meta ads)\b/,
-  /\b(?:seo|relatorio|dashboard|documento|contrato)\b/,
-] as const;
-
 interface PublishableTaskCandidate {
   delivery_type?: string | null;
   workstream?: string | null;
@@ -129,18 +121,6 @@ interface PublishableTaskCandidate {
 
 function isTaskDeliveryType(value?: string | null): value is TaskDeliveryType {
   return TASK_DELIVERY_TYPE_VALUES.includes(value as TaskDeliveryType);
-}
-
-function hasLegacyNonPublishableSignal(task: PublishableTaskCandidate) {
-  const text = [task.title, task.description]
-    .filter(Boolean)
-    .join(" ")
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLocaleLowerCase("pt-BR");
-  return LEGACY_NON_PUBLISHABLE_SIGNALS.some((signal) =>
-    signal.test(text),
-  );
 }
 
 export function suggestedWorkstreamForDeliveryType(
@@ -170,16 +150,12 @@ export function contentTypeForDeliveryType(
 
 export function isPublishableTask(
   task: PublishableTaskCandidate,
-  designMemberIds: ReadonlySet<string>,
 ): boolean {
   const source = task.source?.toLocaleLowerCase("pt-BR") || "";
-  if (source.startsWith("client_request:")) return false;
+  if (source === "client_request" || source.startsWith("client_request:")) {
+    return false;
+  }
 
   const deliveryType = task.delivery_type?.toLocaleLowerCase("pt-BR");
-  if (deliveryType && deliveryType !== "unspecified") {
-    return isPublishableDeliveryType(deliveryType);
-  }
-  if (hasLegacyNonPublishableSignal(task)) return false;
-
-  return isEditorialTask(task, designMemberIds);
+  return isPublishableDeliveryType(deliveryType);
 }

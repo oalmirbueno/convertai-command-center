@@ -7,6 +7,11 @@ tools: [aceleriq_list_reports, aceleriq_get_report, aceleriq_create_report_draft
 
 # Relatórios
 
+No endpoint legado, leitura de relatórios requer credencial admin/unrestricted
+até o serviço receber recorte próprio por cliente. Para credenciais restritas,
+`create_report_draft` continua disponível em projetos atribuídos, mas não
+presuma que `list_reports` ou `get_report` aparecerão em `tools/list`.
+
 ## Leitura
 - `aceleriq_list_reports` aceita filtros por `client_id` ou `project_id`.
 - `aceleriq_get_report` devolve métricas, highlights e próximos passos.
@@ -22,7 +27,7 @@ Se o usuário pedir "publicar" ou "enviar para o cliente", responda que essa
 operação não está disponível via MCP e precisa ser feita pelo painel.
 
 ## Boas práticas
-- Sempre gerar `correlation_id` estável para permitir replay seguro.
+- Sempre gerar `idempotency_key` estável para permitir replay seguro.
 - Preencher `metrics`, `highlights` e `next_steps` com dados reais extraídos
   de `aceleriq_get_project` / `aceleriq_list_tasks` — nunca fabricados.
 - Nunca chamar `create_report_draft` sem antes checar

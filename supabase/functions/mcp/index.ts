@@ -55,6 +55,273 @@ function sanitizeProfileSearch(search) {
   return (search ?? "").trim().replace(/[,%()]/g, " ").replace(/\s+/g, " ").trim().slice(0, 100);
 }
 
+// src/lib/mcp/editorial.ts
+var TASK_WORKSTREAM_VALUES = [
+  "general",
+  "design",
+  "content",
+  "video",
+  "traffic",
+  "development",
+  "operations"
+];
+var TASK_DELIVERY_TYPE_VALUES = [
+  "unspecified",
+  "design",
+  "branding",
+  "static",
+  "carousel",
+  "reel",
+  "story",
+  "video",
+  "short",
+  "article",
+  "google_post",
+  "planning",
+  "copywriting",
+  "website",
+  "landing_page",
+  "automation",
+  "traffic",
+  "seo",
+  "document",
+  "report",
+  "other"
+];
+var EDITORIAL_DELIVERY_TYPE_VALUES = [
+  "design",
+  "static",
+  "carousel",
+  "reel",
+  "story",
+  "video",
+  "short",
+  "article",
+  "google_post"
+];
+var EDITORIAL_CONTENT_TYPE_VALUES = [
+  "static",
+  "carousel",
+  "reel",
+  "story",
+  "video",
+  "short",
+  "article",
+  "google_post"
+];
+var EDITORIAL_PRODUCTION_STATUS_VALUES = [
+  "draft",
+  "production",
+  "ready",
+  "cancelled"
+];
+var EDITORIAL_PUBLICATION_STATUS_VALUES = [
+  "planned",
+  "scheduled",
+  "published",
+  "failed",
+  "cancelled"
+];
+var EDITORIAL_CREATE_STATUS_VALUES = [
+  "backlog",
+  "todo",
+  "doing",
+  "review",
+  "blocked"
+];
+var EDITORIAL_TASK_STATUS_VALUES = [
+  "backlog",
+  "todo",
+  "doing",
+  "review",
+  "approved",
+  "blocked"
+];
+var WORKSTREAM_BY_DELIVERY_TYPE = {
+  design: "design",
+  static: "design",
+  carousel: "design",
+  reel: "video",
+  story: "content",
+  video: "video",
+  short: "video",
+  article: "content",
+  google_post: "content"
+};
+var CONTENT_TYPE_BY_DELIVERY_TYPE = {
+  design: "static",
+  static: "static",
+  carousel: "carousel",
+  reel: "reel",
+  story: "story",
+  video: "video",
+  short: "short",
+  article: "article",
+  google_post: "google_post"
+};
+var ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+function isValidIsoDate(value) {
+  if (!ISO_DATE_PATTERN.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day));
+  return parsed.getUTCFullYear() === year && parsed.getUTCMonth() === month - 1 && parsed.getUTCDate() === day;
+}
+function nextIsoDate(value) {
+  const [year, month, day] = value.split("-").map(Number);
+  const parsed = new Date(Date.UTC(year, month - 1, day + 1));
+  return parsed.toISOString().slice(0, 10);
+}
+function publicationRangeBoundary(value) {
+  return `${value}T00:00:00-03:00`;
+}
+function editorialWorkstreamFor(deliveryType) {
+  return WORKSTREAM_BY_DELIVERY_TYPE[deliveryType];
+}
+function contentTypeForEditorialFormat(format) {
+  return CONTENT_TYPE_BY_DELIVERY_TYPE[format];
+}
+function deliveryTypesForEditorialFormat(format) {
+  return format === "design" || format === "static" ? ["design", "static"] : [format];
+}
+function buildPageMeta(total, returned, offset, limit) {
+  const hasMore = offset + returned < total;
+  return {
+    total,
+    returned,
+    has_more: hasMore,
+    next_offset: hasMore ? offset + returned : null,
+    offset,
+    limit
+  };
+}
+function numericOrder(value) {
+  if (!value) return null;
+  const lastSegment = value.split(/[\\/]/).filter(Boolean).at(-1) || value;
+  const fraction = lastSegment.match(/\((\d+)\s*\/\s*\d+\)/);
+  if (fraction) return Number(fraction[1]);
+  const labelled = lastSegment.match(
+    /(?:card|slide|p[aá]gina|page)[\s._-]*(\d+)/i
+  );
+  if (labelled) return Number(labelled[1]);
+  const leading = lastSegment.match(/^(\d+)(?=[\s._-])/);
+  return leading ? Number(leading[1]) : null;
+}
+function compareCarouselChildren(left, right) {
+  const leftOrder = numericOrder(left.storage_path) ?? numericOrder(left.file_name);
+  const rightOrder = numericOrder(right.storage_path) ?? numericOrder(right.file_name);
+  if (leftOrder != null && rightOrder != null && leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+  if (leftOrder != null && rightOrder == null) return -1;
+  if (leftOrder == null && rightOrder != null) return 1;
+  return Date.parse(left.created_at) - Date.parse(right.created_at) || left.id.localeCompare(right.id);
+}
+function toSafeEditorialFile(file) {
+  return {
+    id: file.id,
+    client_id: file.client_id,
+    project_id: file.project_id,
+    file_name: file.file_name,
+    file_type: file.file_type,
+    mime_type: file.mime_type,
+    extension: file.extension,
+    file_url: file.file_url,
+    size_bytes: file.size_bytes,
+    caption: file.caption,
+    carousel_text: file.carousel_text,
+    description: file.description,
+    approval_status: file.approval_status,
+    visibility: file.visibility,
+    status: file.status,
+    parent_file_id: file.parent_file_id,
+    created_at: file.created_at,
+    updated_at: file.updated_at
+  };
+}
+function orderEditorialFiles(root, children) {
+  const orderedChildren = [...children].filter((child) => child.parent_file_id === root.id && child.client_id === root.client_id && child.project_id === root.project_id && child.archived_at == null).sort(compareCarouselChildren);
+  return [root, ...orderedChildren].map(toSafeEditorialFile);
+}
+function compareCalendarEntries(left, right) {
+  if (left.calendar_at && right.calendar_at) {
+    const calendarOrder = left.calendar_at.localeCompare(right.calendar_at);
+    if (calendarOrder !== 0) return calendarOrder;
+  } else if (left.calendar_at) {
+    return -1;
+  } else if (right.calendar_at) {
+    return 1;
+  }
+  return right.updated_at.localeCompare(left.updated_at) || left.kind.localeCompare(right.kind) || left.id.localeCompare(right.id);
+}
+function stableCanonicalValue(value) {
+  if (Array.isArray(value)) return value.map(stableCanonicalValue);
+  if (!value || typeof value !== "object") return value;
+  return Object.fromEntries(
+    Object.entries(value).filter(([, entry]) => entry !== void 0).sort(([left], [right]) => left.localeCompare(right)).map(([key, entry]) => [key, stableCanonicalValue(entry)])
+  );
+}
+async function editorialRequestFingerprint(value) {
+  const canonical = JSON.stringify(stableCanonicalValue(value));
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    new TextEncoder().encode(canonical)
+  );
+  return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+// src/lib/mcp/client-scope.ts
+var ASSIGNMENT_PAGE_SIZE = 500;
+var EDITORIAL_STAFF_ROLES = /* @__PURE__ */ new Set([
+  "manager",
+  "design",
+  "traffic"
+]);
+async function resolveMcpClientScope(sb, userId) {
+  if (!userId) {
+    return { scope: null, error: { code: "missing_user" } };
+  }
+  const { data: roleRow, error: roleError } = await sb.from("user_roles").select("role").eq("user_id", userId).maybeSingle();
+  if (roleError) return { scope: null, error: roleError };
+  const role = typeof roleRow?.role === "string" ? roleRow.role : null;
+  if (role === "admin") {
+    return {
+      scope: { unrestricted: true, clientIds: [], role },
+      error: null
+    };
+  }
+  if (role === "client") {
+    return {
+      scope: { unrestricted: false, clientIds: [userId], role },
+      error: null
+    };
+  }
+  if (!role || !EDITORIAL_STAFF_ROLES.has(role)) {
+    return {
+      scope: { unrestricted: false, clientIds: [], role },
+      error: null
+    };
+  }
+  const clientIds = [];
+  for (let from = 0; ; from += ASSIGNMENT_PAGE_SIZE) {
+    const { data, error } = await sb.from("team_client_assignments").select("client_id").eq("user_id", userId).order("client_id", { ascending: true }).range(from, from + ASSIGNMENT_PAGE_SIZE - 1);
+    if (error) return { scope: null, error };
+    const page = data ?? [];
+    clientIds.push(...page.map((row) => row.client_id));
+    if (page.length < ASSIGNMENT_PAGE_SIZE) break;
+  }
+  return {
+    scope: {
+      unrestricted: false,
+      clientIds: [...new Set(clientIds)],
+      role
+    },
+    error: null
+  };
+}
+function mcpScopeAllowsClient(scope, clientId) {
+  return scope.unrestricted || scope.clientIds.includes(clientId);
+}
+
 // src/lib/mcp/supabase.ts
 import { createClient } from "npm:@supabase/supabase-js@^2.97.0";
 function supabaseForUser(ctx) {
@@ -81,41 +348,60 @@ var list_clients_default = defineTool2({
   title: "Listar clientes",
   description: "Lista clientes vis\xEDveis ao usu\xE1rio autenticado (RLS aplicado).",
   inputSchema: {
-    limit: z.number().int().min(1).max(200).optional().describe("M\xE1ximo de registros (padr\xE3o 50)."),
+    limit: z.number().int().min(1).max(500).optional().describe("M\xE1ximo de registros (padr\xE3o 50)."),
+    offset: z.number().int().min(0).optional().describe("Deslocamento da p\xE1gina (padr\xE3o 0)."),
     search: z.string().optional().describe("Filtro por nome ou empresa.")
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ limit, search }, ctx) => {
+  handler: async ({ limit, offset, search }, ctx) => {
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    const { data: clientRoles, error: rolesError } = await sb.from("user_roles").select("user_id").eq("role", "client").limit(1e3);
-    if (rolesError) {
-      return { content: [{ type: "text", text: rolesError.message }], isError: true };
-    }
-    const clientIds = [...new Set((clientRoles ?? []).map((row) => row.user_id))];
-    if (clientIds.length === 0) {
+    const pageLimit = limit ?? 50;
+    const pageOffset = offset ?? 0;
+    const scopeResult = await resolveMcpClientScope(sb, ctx.getUserId());
+    if (scopeResult.error) {
       return {
-        content: [{ type: "text", text: "0 clientes." }],
-        structuredContent: { clients: [] }
+        content: [{ type: "text", text: "N\xE3o foi poss\xEDvel resolver os clientes autorizados." }],
+        isError: true
       };
     }
-    let q = sb.from("profiles").select("id, full_name, email, company_name, plan_status, plan_name, client_type, created_at").in("id", clientIds).is("deleted_at", null).limit(limit ?? 50).order("created_at", { ascending: false });
+    const scope = scopeResult.scope;
+    if (!scope.unrestricted && scope.clientIds.length === 0) {
+      return {
+        content: [{ type: "text", text: "0 clientes." }],
+        structuredContent: {
+          clients: [],
+          meta: buildPageMeta(0, 0, pageOffset, pageLimit)
+        }
+      };
+    }
+    let q = sb.from("profiles").select(
+      "id, full_name, company_name, plan_status, plan_name, client_type, created_at, client_roles:user_roles!inner(role)",
+      { count: "exact" }
+    ).eq("client_roles.role", "client").is("deleted_at", null).order("created_at", { ascending: false }).order("id", { ascending: true }).range(pageOffset, pageOffset + pageLimit - 1);
+    if (!scope.unrestricted) q = q.in("id", scope.clientIds);
     const safeSearch = sanitizeProfileSearch(search);
     if (safeSearch) {
       q = q.or(
         `full_name.ilike.%${safeSearch}%,company_name.ilike.%${safeSearch}%,email.ilike.%${safeSearch}%`
       );
     }
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
-    const clients = (data ?? []).map((client) => ({
-      ...client,
-      status: client.plan_status
-    }));
+    const clients = (data ?? []).map((client) => {
+      const { client_roles: _roles, ...profile } = client;
+      return { ...profile, status: client.plan_status };
+    });
+    const meta = buildPageMeta(
+      count ?? clients.length,
+      clients.length,
+      pageOffset,
+      pageLimit
+    );
     return {
       content: [{ type: "text", text: `${clients.length} clientes.` }],
-      structuredContent: { clients }
+      structuredContent: { clients, meta }
     };
   }
 });
@@ -130,21 +416,58 @@ var list_projects_default = defineTool3({
   inputSchema: {
     client_id: z2.string().uuid().optional().describe("Filtrar por cliente."),
     status: z2.string().optional().describe("Filtrar por status do projeto."),
-    limit: z2.number().int().min(1).max(200).optional()
+    limit: z2.number().int().min(1).max(500).optional(),
+    offset: z2.number().int().min(0).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ client_id, status, limit }, ctx) => {
+  handler: async ({ client_id, status, limit, offset }, ctx) => {
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("projects").select("id, name, status, progress, client_id, created_at, updated_at").is("deleted_at", null).order("updated_at", { ascending: false }).limit(limit ?? 50);
+    const pageLimit = limit ?? 50;
+    const pageOffset = offset ?? 0;
+    const scopeResult = await resolveMcpClientScope(sb, ctx.getUserId());
+    if (scopeResult.error) {
+      return {
+        content: [{ type: "text", text: "N\xE3o foi poss\xEDvel resolver os projetos autorizados." }],
+        isError: true
+      };
+    }
+    const scope = scopeResult.scope;
+    if (client_id && !mcpScopeAllowsClient(scope, client_id)) {
+      return {
+        content: [{ type: "text", text: "Cliente n\xE3o encontrado no acesso atual." }],
+        isError: true
+      };
+    }
+    if (!scope.unrestricted && scope.clientIds.length === 0) {
+      return {
+        content: [{ type: "text", text: "0 projetos." }],
+        structuredContent: {
+          projects: [],
+          meta: buildPageMeta(0, 0, pageOffset, pageLimit)
+        }
+      };
+    }
+    let q = sb.from("projects").select(
+      "id, name, status, progress, client_id, created_at, updated_at",
+      { count: "exact" }
+    ).is("deleted_at", null).order("updated_at", { ascending: false }).order("id", { ascending: true }).range(pageOffset, pageOffset + pageLimit - 1);
     if (client_id) q = q.eq("client_id", client_id);
+    else if (!scope.unrestricted) q = q.in("client_id", scope.clientIds);
     if (status) q = q.eq("status", status);
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const projects = data ?? [];
+    const meta = buildPageMeta(
+      count ?? projects.length,
+      projects.length,
+      pageOffset,
+      pageLimit
+    );
     return {
-      content: [{ type: "text", text: `${data?.length ?? 0} projetos.` }],
-      structuredContent: { projects: data ?? [] }
+      content: [{ type: "text", text: `${projects.length} projetos.` }],
+      structuredContent: { projects, meta }
     };
   }
 });
@@ -157,26 +480,81 @@ var list_tasks_default = defineTool4({
   title: "Listar tarefas",
   description: "Lista tarefas do Kanban vis\xEDveis ao usu\xE1rio autenticado (RLS aplicado).",
   inputSchema: {
+    client_id: z3.string().uuid().optional(),
     project_id: z3.string().uuid().optional(),
     status: z3.enum(TASK_STATUS_VALUES).optional(),
-    limit: z3.number().int().min(1).max(200).optional()
+    workstream: z3.enum(TASK_WORKSTREAM_VALUES).optional(),
+    delivery_type: z3.enum(TASK_DELIVERY_TYPE_VALUES).optional(),
+    source: z3.string().trim().min(1).max(200).optional().describe("Correspond\xEAncia exata da origem da tarefa."),
+    only_open: z3.boolean().optional().describe("Exclui tarefas done, archived e cancelled."),
+    limit: z3.number().int().min(1).max(500).optional(),
+    offset: z3.number().int().min(0).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
-  handler: async ({ project_id, status, limit }, ctx) => {
+  handler: async (input, ctx) => {
     const guard = requireAuth(ctx);
     if (guard) return guard;
     const sb = supabaseForUser(ctx);
-    let q = sb.from("tasks").select("id, title, description, status, priority, due_date, project_id, assigned_to, created_at").is("deleted_at", null).order("created_at", { ascending: false }).limit(limit ?? 100);
-    if (project_id) q = q.eq("project_id", project_id);
-    if (status) {
-      const statuses = taskStatusFilter(status);
+    const pageLimit = input.limit ?? 100;
+    const pageOffset = input.offset ?? 0;
+    const scopeResult = await resolveMcpClientScope(sb, ctx.getUserId());
+    if (scopeResult.error) {
+      return {
+        content: [{ type: "text", text: "N\xE3o foi poss\xEDvel resolver as tarefas autorizadas." }],
+        isError: true
+      };
+    }
+    const scope = scopeResult.scope;
+    if (input.client_id && !mcpScopeAllowsClient(scope, input.client_id)) {
+      return {
+        content: [{ type: "text", text: "Cliente n\xE3o encontrado no acesso atual." }],
+        isError: true
+      };
+    }
+    if (!scope.unrestricted && scope.clientIds.length === 0) {
+      return {
+        content: [{ type: "text", text: "0 tarefas." }],
+        structuredContent: {
+          tasks: [],
+          meta: buildPageMeta(0, 0, pageOffset, pageLimit)
+        }
+      };
+    }
+    let q = sb.from("tasks").select(
+      "id, title, description, status, priority, due_date, project_id, assigned_to, workstream, delivery_type, source, created_at, updated_at, projects!inner(client_id)",
+      { count: "exact" }
+    ).is("deleted_at", null).order("updated_at", { ascending: false }).order("id", { ascending: true }).range(pageOffset, pageOffset + pageLimit - 1);
+    if (input.client_id) q = q.eq("projects.client_id", input.client_id);
+    else if (!scope.unrestricted) {
+      q = q.in("projects.client_id", scope.clientIds);
+    }
+    if (input.project_id) q = q.eq("project_id", input.project_id);
+    if (input.status) {
+      const statuses = taskStatusFilter(input.status);
       q = statuses.length === 1 ? q.eq("status", statuses[0]) : q.in("status", statuses);
     }
-    const { data, error } = await q;
+    if (input.workstream) q = q.eq("workstream", input.workstream);
+    if (input.delivery_type) q = q.eq("delivery_type", input.delivery_type);
+    if (input.source) q = q.eq("source", input.source);
+    if (input.only_open) {
+      q = q.not("status", "in", "(done,archived,cancelled)");
+    }
+    const { data, error, count } = await q;
     if (error) return { content: [{ type: "text", text: error.message }], isError: true };
+    const tasks = (data ?? []).map((row) => {
+      const { projects: _projects, ...task } = row;
+      const projectScope = Array.isArray(_projects) ? _projects[0] : _projects;
+      return { ...task, client_id: projectScope?.client_id ?? null };
+    });
+    const meta = buildPageMeta(
+      count ?? tasks.length,
+      tasks.length,
+      pageOffset,
+      pageLimit
+    );
     return {
-      content: [{ type: "text", text: `${data?.length ?? 0} tarefas.` }],
-      structuredContent: { tasks: data ?? [] }
+      content: [{ type: "text", text: `${tasks.length} tarefas.` }],
+      structuredContent: { tasks, meta }
     };
   }
 });
@@ -184,29 +562,6 @@ var list_tasks_default = defineTool4({
 // src/lib/mcp/tools/create-task.ts
 import { defineTool as defineTool5 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z as z4 } from "npm:zod@^3.25.76";
-var TASK_DELIVERY_TYPES = [
-  "unspecified",
-  "design",
-  "branding",
-  "static",
-  "carousel",
-  "reel",
-  "story",
-  "video",
-  "short",
-  "article",
-  "google_post",
-  "planning",
-  "copywriting",
-  "website",
-  "landing_page",
-  "automation",
-  "traffic",
-  "seo",
-  "document",
-  "report",
-  "other"
-];
 var create_task_default = defineTool5({
   name: "create_task",
   title: "Criar tarefa",
@@ -217,7 +572,7 @@ var create_task_default = defineTool5({
     description: z4.string().optional(),
     status: z4.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
     priority: z4.enum(["low", "medium", "high", "urgent"]).optional(),
-    delivery_type: z4.enum(TASK_DELIVERY_TYPES).optional(),
+    delivery_type: z4.enum(TASK_DELIVERY_TYPE_VALUES).optional(),
     due_date: z4.string().optional().describe("ISO date (YYYY-MM-DD).")
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
@@ -244,17 +599,707 @@ var create_task_default = defineTool5({
   }
 });
 
-// src/lib/mcp/tools/list-contracts.ts
+// src/lib/mcp/tools/create-editorial-item.ts
 import { defineTool as defineTool6 } from "npm:@lovable.dev/mcp-js@0.23.0";
 import { z as z5 } from "npm:zod@^3.25.76";
-var list_contracts_default = defineTool6({
+var RETURN_FIELDS = [
+  "id",
+  "project_id",
+  "title",
+  "description",
+  "status",
+  "priority",
+  "due_date",
+  "assigned_to",
+  "workstream",
+  "delivery_type",
+  "source",
+  "created_at",
+  "updated_at"
+].join(", ");
+function databaseError(code) {
+  const reference = code ? ` (${code})` : "";
+  return {
+    content: [{
+      type: "text",
+      text: `N\xE3o foi poss\xEDvel criar o item editorial com o acesso atual${reference}.`
+    }],
+    isError: true
+  };
+}
+function replayResult(task) {
+  return {
+    content: [{
+      type: "text",
+      text: `Item editorial j\xE1 existia: ${task.id}`
+    }],
+    structuredContent: { task, replayed: true }
+  };
+}
+var create_editorial_item_default = defineTool6({
+  name: "create_editorial_item",
+  title: "Criar item editorial",
+  description: "Cria uma entrega public\xE1vel no Kanban editorial do cliente. N\xE3o aprova, n\xE3o agenda e n\xE3o publica. Usa a sess\xE3o OAuth, valida cliente/projeto e respeita RLS.",
+  inputSchema: {
+    client_id: z5.string().uuid().describe("Cliente obrigat\xF3rio."),
+    project_id: z5.string().uuid().describe("Projeto pertencente ao cliente."),
+    title: z5.string().trim().min(1).max(200),
+    description: z5.string().trim().min(1).max(4e3).describe("Briefing, objetivo e contexto necess\xE1rio para produzir a pe\xE7a."),
+    format: z5.enum(EDITORIAL_DELIVERY_TYPE_VALUES).describe("Formato public\xE1vel: arte, carrossel, v\xEDdeo ou equivalente editorial."),
+    due_date: z5.string().refine(isValidIsoDate).describe("Data editorial obrigat\xF3ria (YYYY-MM-DD)."),
+    priority: z5.enum(["low", "medium", "high", "urgent"]).optional(),
+    status: z5.enum(EDITORIAL_CREATE_STATUS_VALUES).optional().describe("Estado de produ\xE7\xE3o. approved/done n\xE3o s\xE3o aceitos por esta ferramenta."),
+    assigned_to: z5.string().uuid().optional(),
+    idempotency_key: z5.string().uuid().describe("UUID est\xE1vel e \xFAnico da opera\xE7\xE3o. Repetir o mesmo UUID n\xE3o duplica a tarefa.")
+  },
+  annotations: {
+    readOnlyHint: false,
+    destructiveHint: false,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: async (input, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    const actorId = ctx.getUserId();
+    const scopeResult = await resolveMcpClientScope(sb, actorId);
+    if (scopeResult.error) return databaseError(scopeResult.error.code);
+    if (!mcpScopeAllowsClient(scopeResult.scope, input.client_id)) {
+      return {
+        content: [{
+          type: "text",
+          text: "Cliente n\xE3o encontrado no acesso editorial atual."
+        }],
+        isError: true
+      };
+    }
+    if (input.assigned_to && input.assigned_to !== actorId) {
+      return {
+        content: [{
+          type: "text",
+          text: "assigned_to s\xF3 pode ser o pr\xF3prio usu\xE1rio autenticado nesta ferramenta."
+        }],
+        isError: true
+      };
+    }
+    const { data: project, error: projectError } = await sb.from("projects").select("id").eq("id", input.project_id).eq("client_id", input.client_id).is("deleted_at", null).maybeSingle();
+    if (projectError) return databaseError(projectError.code);
+    if (!project) {
+      return {
+        content: [{
+          type: "text",
+          text: "Projeto n\xE3o encontrado neste cliente ou sem acesso pela sess\xE3o atual."
+        }],
+        isError: true
+      };
+    }
+    const deliveryType = input.format;
+    const status = normalizeTaskStatus(input.status);
+    const initialTaskFields = {
+      project_id: input.project_id,
+      title: input.title,
+      description: input.description,
+      status,
+      priority: input.priority ?? "medium",
+      due_date: input.due_date,
+      assigned_to: input.assigned_to ?? null,
+      workstream: editorialWorkstreamFor(deliveryType),
+      delivery_type: deliveryType
+    };
+    const fingerprint = await editorialRequestFingerprint({
+      client_id: input.client_id,
+      ...initialTaskFields
+    });
+    const source = `mcp:editorial:${input.idempotency_key}:${fingerprint}`;
+    const expected = {
+      ...initialTaskFields,
+      source
+    };
+    const findExisting = () => sb.from("tasks").select(RETURN_FIELDS).eq("id", input.idempotency_key).maybeSingle();
+    const { data: existing, error: existingError } = await findExisting();
+    if (existingError) return databaseError(existingError.code);
+    if (existing) {
+      const task = existing;
+      if (task.project_id === input.project_id && task.source === source) {
+        return replayResult(task);
+      }
+      return {
+        content: [{
+          type: "text",
+          text: "idempotency_key j\xE1 foi usada por outra opera\xE7\xE3o."
+        }],
+        isError: true
+      };
+    }
+    const { data, error } = await sb.from("tasks").insert({
+      id: input.idempotency_key,
+      ...expected,
+      kanban_status: status
+    }).select(RETURN_FIELDS).single();
+    if (error) {
+      if (error.code === "23505") {
+        const { data: replay, error: replayError } = await findExisting();
+        if (!replayError && replay) {
+          const task = replay;
+          if (task.project_id === input.project_id && task.source === source) {
+            return replayResult(task);
+          }
+        }
+      }
+      return databaseError(error.code);
+    }
+    return {
+      content: [{ type: "text", text: `Item editorial criado: ${data.id}` }],
+      structuredContent: { task: data, replayed: false }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-editorial-calendar.ts
+import { defineTool as defineTool7 } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as z6 } from "npm:zod@^3.25.76";
+var PAGE_SIZE = 500;
+var ID_CHUNK_SIZE = 100;
+var TASK_FIELDS = [
+  "id",
+  "project_id",
+  "title",
+  "description",
+  "status",
+  "priority",
+  "due_date",
+  "assigned_to",
+  "workstream",
+  "delivery_type",
+  "source",
+  "created_at",
+  "updated_at"
+].join(", ");
+var POST_FIELDS = [
+  "id",
+  "client_id",
+  "project_id",
+  "primary_file_id",
+  "title",
+  "content_type",
+  "objective",
+  "default_caption",
+  "production_status",
+  "version",
+  "created_at",
+  "updated_at"
+].join(", ");
+var PUBLICATION_FIELDS = [
+  "id",
+  "post_id",
+  "client_id",
+  "project_id",
+  "external_account_id",
+  "file_id",
+  "platform",
+  "caption",
+  "first_comment",
+  "alt_text",
+  "scheduled_at",
+  "scheduled_timezone",
+  "status",
+  "published_at",
+  "permalink",
+  "version",
+  "created_at",
+  "updated_at"
+].join(", ");
+var ACCOUNT_FIELDS = [
+  "id",
+  "client_id",
+  "platform",
+  "display_name",
+  "handle",
+  "status"
+].join(", ");
+var FILE_QUERY_FIELDS = [
+  "id",
+  "client_id",
+  "project_id",
+  "file_name",
+  "file_type",
+  "mime_type",
+  "extension",
+  "file_url",
+  "size_bytes",
+  "caption",
+  "carousel_text",
+  "description",
+  "approval_status",
+  "visibility",
+  "status",
+  "archived_at",
+  "parent_file_id",
+  "storage_path",
+  "created_at",
+  "updated_at"
+].join(", ");
+function unique(values) {
+  return [...new Set(values.filter(Boolean))];
+}
+function safeDatabaseError(resource, error) {
+  const reference = error?.code ? ` (${error.code})` : "";
+  return {
+    content: [{
+      type: "text",
+      text: `N\xE3o foi poss\xEDvel consultar ${resource} com o acesso atual${reference}.`
+    }],
+    isError: true
+  };
+}
+async function readAllPages(fetchPage) {
+  const rows = [];
+  let from = 0;
+  while (true) {
+    const { data, error } = await fetchPage(from, from + PAGE_SIZE - 1);
+    if (error) return { rows: [], error };
+    const page = data ?? [];
+    rows.push(...page);
+    if (page.length < PAGE_SIZE) return { rows, error: null };
+    from += PAGE_SIZE;
+  }
+}
+async function readInChunks(ids, fetchChunk) {
+  const rows = [];
+  for (let index = 0; index < ids.length; index += ID_CHUNK_SIZE) {
+    const chunk = ids.slice(index, index + ID_CHUNK_SIZE);
+    const pageResult = await readAllPages((from, to) => fetchChunk(chunk, from, to));
+    if (pageResult.error) return { rows: [], error: pageResult.error };
+    rows.push(...pageResult.rows);
+  }
+  return { rows, error: null };
+}
+function stripTaskRelation(row) {
+  const { projects: _projects, ...task } = row;
+  return task;
+}
+function stripPostFilter(row) {
+  const { filter_publications: _filter, ...post } = row;
+  return post;
+}
+function safePublication(row, account) {
+  return {
+    id: row.id,
+    post_id: row.post_id,
+    client_id: row.client_id,
+    project_id: row.project_id,
+    platform: row.platform,
+    caption: row.caption,
+    first_comment: row.first_comment,
+    alt_text: row.alt_text,
+    scheduled_at: row.scheduled_at,
+    scheduled_timezone: row.scheduled_timezone,
+    status: row.status,
+    published_at: row.published_at,
+    permalink: row.permalink,
+    version: row.version,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    account
+  };
+}
+var list_editorial_calendar_default = defineTool7({
+  name: "list_editorial_calendar",
+  title: "Listar calend\xE1rio editorial",
+  description: "Lista somente entregas public\xE1veis do cliente, em ordem cronol\xF3gica est\xE1vel (calendar_at, atualiza\xE7\xE3o, tipo e ID), com posts, planos de publica\xE7\xE3o, conta segura e todos os arquivos ordenados de cada carrossel. Usa a sess\xE3o OAuth e respeita RLS.",
+  inputSchema: {
+    client_id: z6.string().uuid().describe("Cliente obrigat\xF3rio para isolar o calend\xE1rio."),
+    project_id: z6.string().uuid().optional().describe("Projeto do mesmo cliente."),
+    date_from: z6.string().refine(isValidIsoDate).optional().describe("Data inicial inclusiva (YYYY-MM-DD). Com per\xEDodo, posts ainda sem publica\xE7\xE3o agendada ficam fora."),
+    date_to: z6.string().refine(isValidIsoDate).optional().describe("Data final inclusiva (YYYY-MM-DD). Com per\xEDodo, posts ainda sem publica\xE7\xE3o agendada ficam fora."),
+    format: z6.enum(EDITORIAL_DELIVERY_TYPE_VALUES).optional().describe("Formato public\xE1vel. design e static representam arte est\xE1tica."),
+    status: z6.enum(EDITORIAL_TASK_STATUS_VALUES).optional().describe("Status das tarefas public\xE1veis ainda sem post."),
+    production_status: z6.enum(EDITORIAL_PRODUCTION_STATUS_VALUES).optional().describe("Etapa dos posts; quando informado, tarefas sem post ficam fora."),
+    publication_status: z6.enum(EDITORIAL_PUBLICATION_STATUS_VALUES).optional().describe("Status das publica\xE7\xF5es; quando informado, tarefas sem post ficam fora."),
+    limit: z6.number().int().min(1).max(500).optional(),
+    offset: z6.number().int().min(0).optional()
+  },
+  annotations: {
+    readOnlyHint: true,
+    idempotentHint: true,
+    openWorldHint: false
+  },
+  handler: async (input, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    if (input.date_from && input.date_to && input.date_from > input.date_to) {
+      return {
+        content: [{
+          type: "text",
+          text: "date_from deve ser anterior ou igual a date_to."
+        }],
+        isError: true
+      };
+    }
+    const sb = supabaseForUser(ctx);
+    const limit = input.limit ?? 100;
+    const offset = input.offset ?? 0;
+    const scopeResult = await resolveMcpClientScope(sb, ctx.getUserId());
+    if (scopeResult.error) {
+      return safeDatabaseError("os clientes autorizados", scopeResult.error);
+    }
+    if (!mcpScopeAllowsClient(scopeResult.scope, input.client_id)) {
+      return {
+        content: [{
+          type: "text",
+          text: "Cliente n\xE3o encontrado no acesso editorial atual."
+        }],
+        isError: true
+      };
+    }
+    if (input.project_id) {
+      const { data: project, error: projectError } = await sb.from("projects").select("id").eq("id", input.project_id).eq("client_id", input.client_id).is("deleted_at", null).maybeSingle();
+      if (projectError) return safeDatabaseError("o projeto", projectError);
+      if (!project) {
+        return {
+          content: [{
+            type: "text",
+            text: "Projeto n\xE3o encontrado neste cliente ou sem acesso pela sess\xE3o atual."
+          }],
+          isError: true
+        };
+      }
+    }
+    const hasPublicationFilter = Boolean(
+      input.publication_status || input.date_from || input.date_to
+    );
+    const postSelect = hasPublicationFilter ? `${POST_FIELDS}, filter_publications:editorial_publications!inner(id)` : POST_FIELDS;
+    const includeTasks = !input.production_status && !input.publication_status;
+    const taskRequest = includeTasks ? readAllPages((from, to) => {
+      let query = sb.from("tasks").select(`${TASK_FIELDS}, projects!inner(client_id)`).eq("projects.client_id", input.client_id).is("deleted_at", null).in("delivery_type", [...EDITORIAL_DELIVERY_TYPE_VALUES]).not("status", "in", "(done,archived,cancelled)").or(
+        "source.is.null,and(source.not.ilike.client_request,source.not.ilike.client_request:*)"
+      );
+      if (input.project_id) {
+        query = query.eq("project_id", input.project_id);
+      }
+      if (input.date_from) query = query.gte("due_date", input.date_from);
+      if (input.date_to) query = query.lte("due_date", input.date_to);
+      if (input.status) query = query.eq("status", input.status);
+      if (input.format) {
+        query = query.in(
+          "delivery_type",
+          deliveryTypesForEditorialFormat(
+            input.format
+          )
+        );
+      }
+      return query.order("updated_at", { ascending: false }).order("id", { ascending: true }).range(from, to);
+    }) : Promise.resolve({ rows: [], error: null });
+    const [taskResult, postResult] = await Promise.all([
+      taskRequest,
+      readAllPages((from, to) => {
+        let query = sb.from("editorial_posts").select(postSelect).eq("client_id", input.client_id).is("archived_at", null).in("content_type", [...EDITORIAL_CONTENT_TYPE_VALUES]);
+        if (input.project_id) {
+          query = query.eq("project_id", input.project_id);
+        }
+        if (input.format) {
+          query = query.eq(
+            "content_type",
+            contentTypeForEditorialFormat(
+              input.format
+            )
+          );
+        }
+        if (input.production_status) {
+          query = query.eq("production_status", input.production_status);
+        } else {
+          query = query.in("production_status", [
+            "draft",
+            "production",
+            "ready"
+          ]);
+        }
+        if (input.publication_status) {
+          query = query.eq(
+            "filter_publications.status",
+            input.publication_status
+          );
+        }
+        if (input.date_from) {
+          query = query.gte(
+            "filter_publications.scheduled_at",
+            publicationRangeBoundary(input.date_from)
+          );
+        }
+        if (input.date_to) {
+          query = query.lt(
+            "filter_publications.scheduled_at",
+            publicationRangeBoundary(nextIsoDate(input.date_to))
+          );
+        }
+        return query.order("updated_at", { ascending: false }).order("id", { ascending: true }).range(from, to);
+      })
+    ]);
+    if (taskResult.error) {
+      return safeDatabaseError("as tarefas editoriais", taskResult.error);
+    }
+    if (postResult.error) {
+      return safeDatabaseError("os conte\xFAdos editoriais", postResult.error);
+    }
+    const taskRows = taskResult.rows.map(stripTaskRelation);
+    const postRows = postResult.rows.map(stripPostFilter);
+    const activePostIds = postRows.filter((post) => ["draft", "production", "ready"].includes(
+      post.production_status
+    )).map((post) => post.id);
+    const [
+      visiblePostLinkResult,
+      taskLinkCandidateResult,
+      publicationScheduleResult
+    ] = await Promise.all([
+      readInChunks(activePostIds, (chunk, from, to) => sb.from("editorial_post_internal").select("post_id, task_id").in("post_id", chunk).not("task_id", "is", null).order("post_id", { ascending: true }).range(from, to)),
+      readInChunks(
+        taskRows.map((task) => task.id),
+        (chunk, from, to) => sb.from("editorial_post_internal").select("post_id, task_id").in("task_id", chunk).order("post_id", { ascending: true }).range(from, to)
+      ),
+      readInChunks(
+        postRows.map((post) => post.id),
+        (chunk, from, to) => {
+          let query = sb.from("editorial_publications").select("id, post_id, scheduled_at").eq("client_id", input.client_id).in("post_id", chunk);
+          if (input.project_id) {
+            query = query.eq("project_id", input.project_id);
+          }
+          if (input.publication_status) {
+            query = query.eq("status", input.publication_status);
+          }
+          if (input.date_from) {
+            query = query.gte(
+              "scheduled_at",
+              publicationRangeBoundary(input.date_from)
+            );
+          }
+          if (input.date_to) {
+            query = query.lt(
+              "scheduled_at",
+              publicationRangeBoundary(nextIsoDate(input.date_to))
+            );
+          }
+          return query.order("post_id", { ascending: true }).order("scheduled_at", { ascending: true, nullsFirst: false }).order("id", { ascending: true }).range(from, to);
+        }
+      )
+    ]);
+    if (visiblePostLinkResult.error || taskLinkCandidateResult.error || publicationScheduleResult.error) {
+      return safeDatabaseError(
+        "os v\xEDnculos e datas editoriais",
+        visiblePostLinkResult.error ?? taskLinkCandidateResult.error ?? publicationScheduleResult.error
+      );
+    }
+    const candidateLinkedPostIds = unique(
+      taskLinkCandidateResult.rows.map((link) => link.post_id)
+    );
+    const activeLinkedPostResult = await readInChunks(
+      candidateLinkedPostIds,
+      (chunk, from, to) => {
+        let query = sb.from("editorial_posts").select("id").eq("client_id", input.client_id).in("id", chunk).in("production_status", ["draft", "production", "ready"]).is("archived_at", null);
+        if (input.project_id) {
+          query = query.eq("project_id", input.project_id);
+        }
+        return query.order("id", { ascending: true }).range(from, to);
+      }
+    );
+    if (activeLinkedPostResult.error) {
+      return safeDatabaseError(
+        "o estado dos conte\xFAdos vinculados",
+        activeLinkedPostResult.error
+      );
+    }
+    const activeLinkedPostIds = new Set(
+      activeLinkedPostResult.rows.map((post) => post.id)
+    );
+    const taskIdByPostId = new Map(
+      visiblePostLinkResult.rows.map((link) => [link.post_id, link.task_id])
+    );
+    const linkedTaskIds = new Set(
+      taskLinkCandidateResult.rows.flatMap((link) => link.task_id && activeLinkedPostIds.has(link.post_id) ? [link.task_id] : [])
+    );
+    const unlinkedTaskRows = taskRows.filter((task) => !linkedTaskIds.has(task.id));
+    const calendarAtByPostId = /* @__PURE__ */ new Map();
+    publicationScheduleResult.rows.forEach((publication) => {
+      if (!publication.scheduled_at) return;
+      const current = calendarAtByPostId.get(publication.post_id);
+      if (!current || publication.scheduled_at < current) {
+        calendarAtByPostId.set(publication.post_id, publication.scheduled_at);
+      }
+    });
+    const total = unlinkedTaskRows.length + postRows.length;
+    const entries = [
+      ...unlinkedTaskRows.map((task) => ({
+        kind: "task",
+        id: task.id,
+        calendar_at: task.due_date,
+        updated_at: task.updated_at,
+        task
+      })),
+      ...postRows.map((post) => ({
+        kind: "post",
+        id: post.id,
+        calendar_at: calendarAtByPostId.get(post.id) ?? null,
+        updated_at: post.updated_at,
+        post
+      }))
+    ];
+    const selectedEntries = entries.sort(compareCalendarEntries).slice(offset, offset + limit);
+    const selectedPosts = selectedEntries.flatMap((entry) => entry.kind === "post" ? [entry.post] : []);
+    const selectedPostIds = selectedPosts.map((post) => post.id);
+    let publications = [];
+    if (selectedPostIds.length > 0) {
+      const publicationResult = await readInChunks(
+        selectedPostIds,
+        (chunk, from, to) => {
+          let query = sb.from("editorial_publications").select(PUBLICATION_FIELDS).eq("client_id", input.client_id).in("post_id", chunk);
+          if (input.project_id) {
+            query = query.eq("project_id", input.project_id);
+          }
+          if (input.publication_status) {
+            query = query.eq("status", input.publication_status);
+          }
+          if (input.date_from) {
+            query = query.gte(
+              "scheduled_at",
+              publicationRangeBoundary(input.date_from)
+            );
+          }
+          if (input.date_to) {
+            query = query.lt(
+              "scheduled_at",
+              publicationRangeBoundary(nextIsoDate(input.date_to))
+            );
+          }
+          return query.order("scheduled_at", { ascending: true, nullsFirst: false }).order("id", { ascending: true }).range(from, to);
+        }
+      );
+      if (publicationResult.error) {
+        return safeDatabaseError(
+          "os planos de publica\xE7\xE3o",
+          publicationResult.error
+        );
+      }
+      publications = publicationResult.rows;
+    }
+    const accountIds = unique(
+      publications.map((publication) => publication.external_account_id)
+    );
+    const rootFileIds = unique([
+      ...selectedPosts.map((post) => post.primary_file_id),
+      ...publications.map((publication) => publication.file_id)
+    ]);
+    const [accountResult, rootFileResult, childFileResult] = await Promise.all([
+      readInChunks(accountIds, (chunk, from, to) => sb.from("external_accounts").select(ACCOUNT_FIELDS).eq("client_id", input.client_id).in("id", chunk).order("id", { ascending: true }).range(from, to)),
+      readInChunks(
+        rootFileIds,
+        (chunk, from, to) => {
+          let query = sb.from("files").select(FILE_QUERY_FIELDS).eq("client_id", input.client_id).in("id", chunk).is("archived_at", null);
+          if (input.project_id) query = query.eq("project_id", input.project_id);
+          return query.order("id", { ascending: true }).range(from, to);
+        }
+      ),
+      readInChunks(
+        rootFileIds,
+        (chunk, from, to) => {
+          let query = sb.from("files").select(FILE_QUERY_FIELDS).eq("client_id", input.client_id).in("parent_file_id", chunk).is("archived_at", null);
+          if (input.project_id) query = query.eq("project_id", input.project_id);
+          return query.order("created_at", { ascending: true }).order("id", { ascending: true }).range(from, to);
+        }
+      )
+    ]);
+    if (accountResult.error) {
+      return safeDatabaseError("as contas de publica\xE7\xE3o", accountResult.error);
+    }
+    if (rootFileResult.error || childFileResult.error) {
+      return safeDatabaseError(
+        "os arquivos editoriais",
+        rootFileResult.error ?? childFileResult.error
+      );
+    }
+    const accountById = new Map(
+      accountResult.rows.map((account) => [account.id, account])
+    );
+    const rootFileById = new Map(
+      rootFileResult.rows.map((file) => [file.id, file])
+    );
+    const childrenByRootId = /* @__PURE__ */ new Map();
+    childFileResult.rows.forEach((file) => {
+      if (!file.parent_file_id) return;
+      const current = childrenByRootId.get(file.parent_file_id) ?? [];
+      current.push(file);
+      childrenByRootId.set(file.parent_file_id, current);
+    });
+    const publicationsByPostId = /* @__PURE__ */ new Map();
+    publications.forEach((publication) => {
+      const current = publicationsByPostId.get(publication.post_id) ?? [];
+      current.push(publication);
+      publicationsByPostId.set(publication.post_id, current);
+    });
+    const mediaFor = (rootId) => {
+      if (!rootId) return null;
+      const root = rootFileById.get(rootId);
+      if (!root) return null;
+      return {
+        root_id: root.id,
+        files: orderEditorialFiles(root, childrenByRootId.get(root.id) ?? [])
+      };
+    };
+    const items = selectedEntries.map((entry) => {
+      if (entry.kind === "task") {
+        return {
+          kind: "task",
+          calendar_at: entry.calendar_at,
+          task: { ...entry.task, client_id: input.client_id }
+        };
+      }
+      const postPublications = publicationsByPostId.get(entry.post.id) ?? [];
+      return {
+        kind: "post",
+        calendar_at: entry.calendar_at,
+        linked_task_id: taskIdByPostId.get(entry.post.id) ?? null,
+        post: entry.post,
+        media: mediaFor(entry.post.primary_file_id),
+        publications: postPublications.map((publication) => ({
+          ...safePublication(
+            publication,
+            accountById.get(publication.external_account_id) ?? null
+          ),
+          media: mediaFor(
+            publication.file_id ?? entry.post.primary_file_id
+          )
+        }))
+      };
+    });
+    const meta = {
+      ...buildPageMeta(total, items.length, offset, limit),
+      ordering: "calendar_at_asc_nulls_last,updated_at_desc,kind_asc,id_asc"
+    };
+    return {
+      content: [{
+        type: "text",
+        text: `${items.length} de ${total} itens editoriais.`
+      }],
+      structuredContent: {
+        client_id: input.client_id,
+        project_id: input.project_id ?? null,
+        items,
+        meta
+      }
+    };
+  }
+});
+
+// src/lib/mcp/tools/list-contracts.ts
+import { defineTool as defineTool8 } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as z7 } from "npm:zod@^3.25.76";
+var list_contracts_default = defineTool8({
   name: "list_contracts",
   title: "Listar contratos",
   description: "Lista contratos vis\xEDveis ao usu\xE1rio autenticado (RLS aplicado).",
   inputSchema: {
-    client_id: z5.string().uuid().optional(),
-    status: z5.string().optional(),
-    limit: z5.number().int().min(1).max(200).optional()
+    client_id: z7.string().uuid().optional(),
+    status: z7.string().optional(),
+    limit: z7.number().int().min(1).max(200).optional()
   },
   annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
   handler: async ({ client_id, status, limit }, ctx) => {
@@ -278,8 +1323,8 @@ var projectRef = "gicbrgagstyvbaaumprj";
 var mcp_default = defineMcp({
   name: "aceleriq-os",
   title: "Aceleriq OS",
-  version: "1.0.0",
-  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto e `create_task` para inserir trabalho no Kanban.",
+  version: "1.1.0",
+  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban.",
   auth: auth.oauth.issuer({
     issuer: `https://${projectRef}.supabase.co/auth/v1`,
     acceptedAudiences: "authenticated"
@@ -289,8 +1334,10 @@ var mcp_default = defineMcp({
     list_clients_default,
     list_projects_default,
     list_tasks_default,
+    list_editorial_calendar_default,
     list_contracts_default,
-    create_task_default
+    create_task_default,
+    create_editorial_item_default
   ]
 });
 

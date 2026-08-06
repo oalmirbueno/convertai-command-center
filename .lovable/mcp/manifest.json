@@ -12,7 +12,7 @@
   "mcp": {
     "server": {
       "name": "aceleriq-os",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "title": "Aceleriq OS"
     },
     "tools": [
@@ -47,8 +47,13 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 200,
+              "maximum": 500,
               "description": "Máximo de registros (padrão 50)."
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "Deslocamento da página (padrão 0)."
             },
             "search": {
               "type": "string",
@@ -84,7 +89,11 @@
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 500
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
             }
           },
           "additionalProperties": false,
@@ -104,6 +113,10 @@
         "inputSchema": {
           "type": "object",
           "properties": {
+            "client_id": {
+              "type": "string",
+              "format": "uuid"
+            },
             "project_id": {
               "type": "string",
               "format": "uuid"
@@ -120,12 +133,160 @@
                 "done"
               ]
             },
+            "workstream": {
+              "type": "string",
+              "enum": [
+                "general",
+                "design",
+                "content",
+                "video",
+                "traffic",
+                "development",
+                "operations"
+              ]
+            },
+            "delivery_type": {
+              "type": "string",
+              "enum": [
+                "unspecified",
+                "design",
+                "branding",
+                "static",
+                "carousel",
+                "reel",
+                "story",
+                "video",
+                "short",
+                "article",
+                "google_post",
+                "planning",
+                "copywriting",
+                "website",
+                "landing_page",
+                "automation",
+                "traffic",
+                "seo",
+                "document",
+                "report",
+                "other"
+              ]
+            },
+            "source": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
+              "description": "Correspondência exata da origem da tarefa."
+            },
+            "only_open": {
+              "type": "boolean",
+              "description": "Exclui tarefas done, archived e cancelled."
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,
-              "maximum": 200
+              "maximum": 500
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
             }
           },
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "list_editorial_calendar",
+        "title": "Listar calendário editorial",
+        "description": "Lista somente entregas publicáveis do cliente, em ordem cronológica estável (calendar_at, atualização, tipo e ID), com posts, planos de publicação, conta segura e todos os arquivos ordenados de cada carrossel. Usa a sessão OAuth e respeita RLS.",
+        "annotations": {
+          "readOnlyHint": true,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Cliente obrigatório para isolar o calendário."
+            },
+            "project_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Projeto do mesmo cliente."
+            },
+            "date_from": {
+              "type": "string",
+              "description": "Data inicial inclusiva (YYYY-MM-DD). Com período, posts ainda sem publicação agendada ficam fora."
+            },
+            "date_to": {
+              "type": "string",
+              "description": "Data final inclusiva (YYYY-MM-DD). Com período, posts ainda sem publicação agendada ficam fora."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "design",
+                "static",
+                "carousel",
+                "reel",
+                "story",
+                "video",
+                "short",
+                "article",
+                "google_post"
+              ],
+              "description": "Formato publicável. design e static representam arte estática."
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "backlog",
+                "todo",
+                "doing",
+                "review",
+                "approved",
+                "blocked"
+              ],
+              "description": "Status das tarefas publicáveis ainda sem post."
+            },
+            "production_status": {
+              "type": "string",
+              "enum": [
+                "draft",
+                "production",
+                "ready",
+                "cancelled"
+              ],
+              "description": "Etapa dos posts; quando informado, tarefas sem post ficam fora."
+            },
+            "publication_status": {
+              "type": "string",
+              "enum": [
+                "planned",
+                "scheduled",
+                "published",
+                "failed",
+                "cancelled"
+              ],
+              "description": "Status das publicações; quando informado, tarefas sem post ficam fora."
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "offset": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          "required": [
+            "client_id"
+          ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"
         },
@@ -240,6 +401,103 @@
           "required": [
             "project_id",
             "title"
+          ],
+          "additionalProperties": false,
+          "$schema": "http://json-schema.org/draft-07/schema#"
+        },
+        "outputSchema": null
+      },
+      {
+        "name": "create_editorial_item",
+        "title": "Criar item editorial",
+        "description": "Cria uma entrega publicável no Kanban editorial do cliente. Não aprova, não agenda e não publica. Usa a sessão OAuth, valida cliente/projeto e respeita RLS.",
+        "annotations": {
+          "readOnlyHint": false,
+          "destructiveHint": false,
+          "idempotentHint": true,
+          "openWorldHint": false
+        },
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "client_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Cliente obrigatório."
+            },
+            "project_id": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Projeto pertencente ao cliente."
+            },
+            "title": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 4000,
+              "description": "Briefing, objetivo e contexto necessário para produzir a peça."
+            },
+            "format": {
+              "type": "string",
+              "enum": [
+                "design",
+                "static",
+                "carousel",
+                "reel",
+                "story",
+                "video",
+                "short",
+                "article",
+                "google_post"
+              ],
+              "description": "Formato publicável: arte, carrossel, vídeo ou equivalente editorial."
+            },
+            "due_date": {
+              "type": "string",
+              "description": "Data editorial obrigatória (YYYY-MM-DD)."
+            },
+            "priority": {
+              "type": "string",
+              "enum": [
+                "low",
+                "medium",
+                "high",
+                "urgent"
+              ]
+            },
+            "status": {
+              "type": "string",
+              "enum": [
+                "backlog",
+                "todo",
+                "doing",
+                "review",
+                "blocked"
+              ],
+              "description": "Estado de produção. approved/done não são aceitos por esta ferramenta."
+            },
+            "assigned_to": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "idempotency_key": {
+              "type": "string",
+              "format": "uuid",
+              "description": "UUID estável e único da operação. Repetir o mesmo UUID não duplica a tarefa."
+            }
+          },
+          "required": [
+            "client_id",
+            "project_id",
+            "title",
+            "description",
+            "format",
+            "due_date",
+            "idempotency_key"
           ],
           "additionalProperties": false,
           "$schema": "http://json-schema.org/draft-07/schema#"

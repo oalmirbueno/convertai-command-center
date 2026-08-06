@@ -39,6 +39,7 @@ interface EditorialToolbarProps {
   search: string;
   clientId: string;
   projectId: string;
+  format: string;
   platform: string;
   status: string;
   productionStatus: string;
@@ -46,6 +47,7 @@ interface EditorialToolbarProps {
   responsibleId: string;
   clients: SelectOption[];
   projects: SelectOption[];
+  formats: SelectOption[];
   platforms: SelectOption[];
   statuses: SelectOption[];
   productionStatuses: SelectOption[];
@@ -57,6 +59,7 @@ interface EditorialToolbarProps {
   onSearchChange: (value: string) => void;
   onClientChange: (value: string) => void;
   onProjectChange: (value: string) => void;
+  onFormatChange: (value: string) => void;
   onPlatformChange: (value: string) => void;
   onStatusChange: (value: string) => void;
   onProductionStatusChange: (value: string) => void;
@@ -122,6 +125,7 @@ export default function EditorialToolbar({
   search,
   clientId,
   projectId,
+  format,
   platform,
   status,
   productionStatus,
@@ -129,6 +133,7 @@ export default function EditorialToolbar({
   responsibleId,
   clients,
   projects,
+  formats,
   platforms,
   statuses,
   productionStatuses,
@@ -140,6 +145,7 @@ export default function EditorialToolbar({
   onSearchChange,
   onClientChange,
   onProjectChange,
+  onFormatChange,
   onPlatformChange,
   onStatusChange,
   onProductionStatusChange,
@@ -166,6 +172,7 @@ export default function EditorialToolbar({
     [
       clientId,
       projectId,
+      format,
       platform,
       status,
       productionStatus,
@@ -328,6 +335,13 @@ export default function EditorialToolbar({
           label="Todos os projetos"
           options={projects}
           onChange={onProjectChange}
+          className="xl:w-[170px]"
+        />
+        <FilterSelect
+          value={format}
+          label="Todos os formatos"
+          options={formats}
+          onChange={onFormatChange}
           className="xl:w-[170px]"
         />
         <Popover>

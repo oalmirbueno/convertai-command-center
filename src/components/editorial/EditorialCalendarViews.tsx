@@ -586,23 +586,30 @@ function taskDeliveryTypeLabel(task: EditorialInboxTask) {
 
 function TaskSchedulePill({
   task,
+  dateKey,
   compact = false,
   projectScopeName,
   onClick,
 }: {
   task: EditorialInboxTask;
+  dateKey: string;
   compact?: boolean;
   projectScopeName?: string;
   onClick: () => void;
 }) {
   const deliveryType = taskDeliveryTypeLabel(task);
   const context = taskContentContext(task);
+  const dueDateLabel = format(
+    new Date(`${dateKey}T12:00:00`),
+    "dd 'de' MMMM 'de' yyyy",
+    { locale: ptBR },
+  );
 
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Abrir tarefa. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
+      aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
       className={cn(
         "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
         compact ? "px-2 py-1.5" : "p-2.5",
@@ -623,8 +630,11 @@ function TaskSchedulePill({
               <span className="font-semibold opacity-60">Tema:</span>{" "}
               {task.title}
             </span>
-            <span className="ml-auto shrink-0 text-[9px] text-violet-500">
-              {deliveryType}
+            <span
+              className="ml-auto shrink-0 text-[9px] text-violet-500"
+              title={`Prazo do Kanban · ${deliveryType}`}
+            >
+              Prazo · {deliveryType}
             </span>
           </div>
           <p
@@ -643,7 +653,7 @@ function TaskSchedulePill({
               aria-hidden="true"
             />
             <span className="truncate text-[10px] font-medium text-violet-500">
-              {deliveryType}
+              Prazo Kanban · {deliveryType}
               {projectScopeName ? ` · ${projectScopeName}` : ""}
             </span>
           </div>
@@ -781,6 +791,7 @@ function MobileAgenda({
                 <TaskSchedulePill
                   key={task.id}
                   task={task}
+                  dateKey={key}
                   projectScopeName={projectScopeNames.get(task.project_id)}
                   onClick={() => onCreateFromTask(task, key)}
                 />
@@ -879,10 +890,10 @@ function MonthView({
               const key = localDateKey(day);
               const dayItems = itemsByDate.get(key) || [];
               const dayTasks = tasksByDate.get(key) || [];
-              const visibleTasks = dayTasks.slice(0, 3);
-              const visibleItems = dayItems.slice(
+              const visibleItems = dayItems.slice(0, 3);
+              const visibleTasks = dayTasks.slice(
                 0,
-                Math.max(0, 3 - visibleTasks.length),
+                Math.max(0, 3 - visibleItems.length),
               );
               const hiddenTasks = dayTasks.slice(visibleTasks.length);
               const hiddenItems = dayItems.slice(visibleItems.length);
@@ -931,17 +942,6 @@ function MonthView({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {visibleTasks.map((task) => (
-                      <TaskSchedulePill
-                        key={task.id}
-                        task={task}
-                        compact
-                        projectScopeName={projectScopeNames.get(
-                          task.project_id,
-                        )}
-                        onClick={() => onCreateFromTask(task, key)}
-                      />
-                    ))}
                     {visibleItems.map((item) => (
                       <PublicationPill
                         key={item.publication.publication.id}
@@ -951,6 +951,18 @@ function MonthView({
                         canPublish={canPublish}
                         moving={moving}
                         onClick={() => onSelectPost(item.post)}
+                      />
+                    ))}
+                    {visibleTasks.map((task) => (
+                      <TaskSchedulePill
+                        key={task.id}
+                        task={task}
+                        dateKey={key}
+                        compact
+                        projectScopeName={projectScopeNames.get(
+                          task.project_id,
+                        )}
+                        onClick={() => onCreateFromTask(task, key)}
                       />
                     ))}
                     {dayCount > visibleCount && (
@@ -974,16 +986,6 @@ function MonthView({
                             })}
                           </p>
                           <div className="space-y-2">
-                            {hiddenTasks.map((task) => (
-                              <TaskSchedulePill
-                                key={task.id}
-                                task={task}
-                                projectScopeName={projectScopeNames.get(
-                                  task.project_id,
-                                )}
-                                onClick={() => onCreateFromTask(task, key)}
-                              />
-                            ))}
                             {hiddenItems.map((item) => (
                               <PublicationPill
                                 key={item.publication.publication.id}
@@ -992,6 +994,17 @@ function MonthView({
                                 canPublish={canPublish}
                                 moving={moving}
                                 onClick={() => onSelectPost(item.post)}
+                              />
+                            ))}
+                            {hiddenTasks.map((task) => (
+                              <TaskSchedulePill
+                                key={task.id}
+                                task={task}
+                                dateKey={key}
+                                projectScopeName={projectScopeNames.get(
+                                  task.project_id,
+                                )}
+                                onClick={() => onCreateFromTask(task, key)}
                               />
                             ))}
                           </div>
@@ -1106,6 +1119,7 @@ function WeekView({
                     <TaskSchedulePill
                       key={task.id}
                       task={task}
+                      dateKey={key}
                       projectScopeName={projectScopeNames.get(
                         task.project_id,
                       )}
@@ -1688,7 +1702,7 @@ function ListView({
                       }).format(new Date(`${dateKey}T12:00:00`))}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Prazo da tarefa
+                      Prazo editorial
                     </p>
                   </div>
                   <span className="h-9 w-1 shrink-0 rounded-full bg-violet-500" />
@@ -1830,7 +1844,7 @@ function ListView({
           <div className="mb-3 flex items-center gap-2">
             <CircleDashed className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-foreground">
-              Sem agendamento
+              Sem prazo ou agendamento
             </h3>
             <Badge variant="secondary">
               {backlogItems.length + undatedTasks.length}
@@ -1842,6 +1856,7 @@ function ListView({
                 key={task.id}
                 type="button"
                 onClick={() => onCreateFromTask(task)}
+                aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}`}
                 className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
               >
                 <ContentDirection
@@ -1915,12 +1930,15 @@ export default function EditorialCalendarViews({
     () => groupTasksByDate(tasks),
     [tasks],
   );
-  const backlogCount = useMemo(
-    () =>
-      flattenBacklog(posts).length +
-      tasks.filter((task) => !taskDateKey(task)).length,
+  const backlogSummary = useMemo(
+    () => ({
+      publicationCount: flattenBacklog(posts).length,
+      taskCount: tasks.filter((task) => !taskDateKey(task)).length,
+    }),
     [posts, tasks],
   );
+  const backlogCount =
+    backlogSummary.publicationCount + backlogSummary.taskCount;
   const listMonthStartKey = localDateKey(startOfMonth(anchorDate));
   const listMonthEndKey = localDateKey(endOfMonth(anchorDate));
   const hasVisibleListTask = tasks.some((task) => {
@@ -1957,10 +1975,24 @@ export default function EditorialCalendarViews({
         className="mb-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-left text-xs text-foreground transition-colors hover:border-violet-500/40"
       >
         <span>
-          {backlogCount}{" "}
-          {backlogCount === 1
-            ? "publicação sem agendamento"
-            : "publicações sem agendamento"}
+          {[
+            backlogSummary.publicationCount > 0
+              ? `${backlogSummary.publicationCount} ${
+                  backlogSummary.publicationCount === 1
+                    ? "publicação sem agendamento"
+                    : "publicações sem agendamento"
+                }`
+              : null,
+            backlogSummary.taskCount > 0
+              ? `${backlogSummary.taskCount} ${
+                  backlogSummary.taskCount === 1
+                    ? "tarefa do Kanban sem prazo"
+                    : "tarefas do Kanban sem prazo"
+                }`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
         <span className="inline-flex items-center gap-1 font-medium text-violet-500">
           Ver na lista

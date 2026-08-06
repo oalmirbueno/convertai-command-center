@@ -26,8 +26,8 @@ if (plugin) {
     if (!plugin[k]) fail(`plugin.json missing "${k}"`);
   }
   if (plugin?.name === "aceleriq-os") ok("plugin.json name");
-  if (Array.isArray(plugin?.skills) && plugin.skills.length === 6) ok("6 skills declared");
-  else fail(`expected 6 skills, got ${plugin?.skills?.length}`);
+  if (Array.isArray(plugin?.skills) && plugin.skills.length === 7) ok("7 skills declared");
+  else fail(`expected 7 skills, got ${plugin?.skills?.length}`);
 }
 
 // 2. .mcp.json
@@ -50,7 +50,7 @@ const docs = [
 for (const d of docs) existsSync(resolve(ROOT,d)) ? ok(`doc ${d}`) : fail(`missing ${d}`);
 
 // 5. examples
-for (const e of ["01-health-check.md","02-client-dossier.md","03-create-task.md","04-report-draft.md","05-memory-proposal.md"]) {
+for (const e of ["01-health-check.md","02-client-dossier.md","03-create-task.md","04-report-draft.md","05-memory-proposal.md","06-editorial-calendar.md"]) {
   existsSync(resolve(ROOT,"examples",e)) ? ok(`example ${e}`) : fail(`missing example ${e}`);
 }
 
@@ -59,16 +59,30 @@ const env = readFileSync(resolve(ROOT,".env.example"),"utf8");
 if (/mcp_live_[A-Za-z0-9]{20,}/.test(env)) fail(".env.example contains what looks like a real token");
 else ok(".env.example has no real token");
 
-// 7. Optional live handshake — public discovery é sanitizado (sem lista de tools).
+// 7. Optional live handshake — initialize is public; unauthenticated GET is an
+// OAuth discovery challenge (401) by design.
 const url = process.env.ACELERIQ_MCP_URL;
 if (url) {
   try {
-    const r = await fetch(url, { headers: { Accept: "application/json" } });
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0",
+        id: "plugin-validator",
+        method: "initialize",
+        params: {
+          protocolVersion: "2025-06-18",
+          capabilities: {},
+          clientInfo: { name: "aceleriq-plugin-validator", version: "0.2.0" },
+        },
+      }),
+    });
     const j = await r.json();
-    if (j?.name && typeof j?.toolCount === "number" && j?.status === "ok") {
-      ok(`live MCP reachable (${j.name} v${j.version}, ${j.toolCount} tools, secondBrain.configured=${j.secondBrain?.configured})`);
+    if (r.ok && j?.result?.serverInfo?.name && j?.result?.capabilities?.tools?.listChanged === true) {
+      ok(`live MCP initialize (${j.result.serverInfo.name} v${j.result.serverInfo.version})`);
     } else {
-      fail("live MCP responded but payload unexpected");
+      fail(`live MCP initialize failed (${r.status}) or payload unexpected`);
     }
   } catch (e) { fail(`live MCP fetch failed: ${e.message}`); }
 } else {

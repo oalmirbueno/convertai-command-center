@@ -3,14 +3,16 @@
 export type MCPScopeInfo = { title: string; description: string; sensitive?: boolean };
 
 export const MCP_SCOPE_DESCRIPTIONS: Record<string, MCPScopeInfo> = {
-  'aceleriq:read': { title: 'Leitura ampla', description: 'Ler todos os dados operacionais (clientes, projetos, tarefas, relatórios, briefings, arquivos).' },
-  'aceleriq:write': { title: 'Escrita operacional', description: 'Criar/atualizar tarefas, rascunhos de relatórios e ajustes de projetos.', sensitive: true },
+  'aceleriq:read': { title: 'Leitura ampla', description: 'Ler dados operacionais e o calendário editorial dos clientes autorizados.' },
+  'aceleriq:write': { title: 'Escrita operacional', description: 'Criar/atualizar tarefas, itens editoriais, rascunhos de relatórios e ajustes de projetos.', sensitive: true },
   'aceleriq:finance': { title: 'Financeiro', description: 'Acessar informações financeiras agregadas.', sensitive: true },
   'clients:read': { title: 'Clientes — leitura', description: 'Listar e visualizar contextos de clientes.' },
   'projects:read': { title: 'Projetos — leitura', description: 'Listar e detalhar projetos.' },
   'projects:write': { title: 'Projetos — escrita', description: 'Atualizar prazo, status, progresso, escopo e objetivos.', sensitive: true },
   'tasks:read': { title: 'Tarefas — leitura', description: 'Listar tarefas do Kanban.' },
   'tasks:write': { title: 'Tarefas — escrita', description: 'Criar, editar e concluir tarefas.', sensitive: true },
+  'editorial:read': { title: 'Calendário editorial — leitura', description: 'Ler entregas publicáveis e seus planos dentro dos clientes autorizados.' },
+  'editorial:write': { title: 'Linha editorial — criação', description: 'Adicionar pautas publicáveis com cliente, projeto, formato e data, sem aprovar, agendar ou publicar.', sensitive: true },
   'reports:read': { title: 'Relatórios — leitura', description: 'Listar e ler relatórios publicados.' },
   'reports:write': { title: 'Relatórios — escrita', description: 'Criar rascunhos de relatórios.', sensitive: true },
   'briefings:read': { title: 'Briefings — leitura', description: 'Listar e ler briefings enviados.' },

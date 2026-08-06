@@ -99,7 +99,6 @@ interface EditorialEditorProps {
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
   lockTaskId?: boolean;
   linkedTaskIds?: readonly string[];
-  designMemberIds?: readonly string[];
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
 }
@@ -116,8 +115,8 @@ const contentTypes = [
   { value: "short", label: "Short" },
   { value: "article", label: "Artigo" },
   { value: "google_post", label: "Post Google" },
-  { value: "other", label: "Outro" },
 ];
+const contentTypeValues = new Set(contentTypes.map(({ value }) => value));
 
 const editableProductionStatuses = [
   "draft",
@@ -176,7 +175,6 @@ export default function EditorialEditor({
   defaultProductionStatus = "draft",
   lockTaskId = false,
   linkedTaskIds = EMPTY_ID_LIST,
-  designMemberIds = EMPTY_ID_LIST,
   onOpenChange,
   onSaved,
 }: EditorialEditorProps) {
@@ -390,13 +388,12 @@ export default function EditorialEditor({
   }, [options?.assignments, teamMembers]);
   const selectableTasks = useMemo(() => {
     const linkedIds = new Set(linkedTaskIds);
-    const designIds = new Set(designMemberIds);
     return (options?.tasks || []).filter(
       (task) =>
         task.id === taskId ||
-        (!linkedIds.has(task.id) && isPublishableTask(task, designIds)),
+        (!linkedIds.has(task.id) && isPublishableTask(task)),
     );
-  }, [designMemberIds, linkedTaskIds, options?.tasks, taskId]);
+  }, [linkedTaskIds, options?.tasks, taskId]);
   const selectedFile =
     options?.files.find((file) => file.id === primaryFileId) ||
     (post?.primaryFile?.id === primaryFileId ? post.primaryFile : undefined);
@@ -521,6 +518,14 @@ export default function EditorialEditor({
   const handleSave = async () => {
     if (!clientId || !projectId || !title.trim()) {
       toast.error("Preencha cliente, projeto e título.");
+      return;
+    }
+    const hasPublishableContentType = contentTypeValues.has(contentType);
+    const preservesExistingLegacyType = Boolean(
+      post?.post.content_type === contentType && !hasPublishableContentType,
+    );
+    if (!hasPublishableContentType && !preservesExistingLegacyType) {
+      toast.error("Escolha um formato editorial publicável.");
       return;
     }
     if (lockTaskId && (!taskId || taskId !== defaultTaskId)) {
@@ -770,6 +775,11 @@ export default function EditorialEditor({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {!contentTypeValues.has(contentType) && (
+                    <SelectItem value={contentType} disabled>
+                      Formato legado: {contentType}
+                    </SelectItem>
+                  )}
                   {contentTypes.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       {type.label}

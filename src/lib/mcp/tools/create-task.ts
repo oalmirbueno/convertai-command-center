@@ -1,31 +1,8 @@
 import { defineTool } from "@lovable.dev/mcp-js";
 import { z } from "zod";
 import { normalizeTaskStatus } from "../compat";
+import { TASK_DELIVERY_TYPE_VALUES } from "../editorial";
 import { requireAuth, supabaseForUser } from "../supabase";
-
-const TASK_DELIVERY_TYPES = [
-  "unspecified",
-  "design",
-  "branding",
-  "static",
-  "carousel",
-  "reel",
-  "story",
-  "video",
-  "short",
-  "article",
-  "google_post",
-  "planning",
-  "copywriting",
-  "website",
-  "landing_page",
-  "automation",
-  "traffic",
-  "seo",
-  "document",
-  "report",
-  "other",
-] as const;
 
 export default defineTool({
   name: "create_task",
@@ -37,7 +14,7 @@ export default defineTool({
     description: z.string().optional(),
     status: z.enum(["backlog", "todo", "doing", "review", "done"]).optional(),
     priority: z.enum(["low", "medium", "high", "urgent"]).optional(),
-    delivery_type: z.enum(TASK_DELIVERY_TYPES).optional(),
+    delivery_type: z.enum(TASK_DELIVERY_TYPE_VALUES).optional(),
     due_date: z.string().optional().describe("ISO date (YYYY-MM-DD)."),
   },
   annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },

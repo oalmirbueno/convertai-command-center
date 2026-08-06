@@ -32,7 +32,11 @@ describe("editorial scheduling UX contract", () => {
     expect(toolbar).toContain("Conteúdos");
     expect(toolbar).toContain("Agendar publicação");
     expect(toolbar).toContain("Criar conteúdo");
-    expect(page).toMatch(/view === "board"\s*\? productionTasks\s*:\s*\[\]/);
+    expect(toolbar).toContain("Todos os formatos");
+    expect(page).toContain("isPublishableTask(task)");
+    expect(page).toMatch(
+      /view === "board"\s*\? productionTasks\s*:\s*editorialDeadlineTasks/,
+    );
   });
 
   it("schedules an approved asset atomically and preserves the complete plan", () => {
@@ -54,6 +58,12 @@ describe("editorial scheduling UX contract", () => {
     expect(scheduler).toContain("editorialSchedulePlanMatchesSnapshot");
     expect(scheduler).toContain("const stalePlan =");
     expect(scheduler).toContain("setSelectedExistingPlan(null)");
+  });
+
+  it("clears an incompatible format filter after scheduling", () => {
+    expect(page).toMatch(
+      /onScheduled=\{\([\s\S]*?\[\s*"q",\s*"format",\s*"platform"/,
+    );
   });
 
   it("finds, filters and previews the complete carousel before selection", () => {
