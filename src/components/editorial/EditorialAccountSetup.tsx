@@ -74,6 +74,7 @@ interface EditorialAccountSetupProps {
   canManage: boolean;
   permissionUnavailable: boolean;
   onAccountReady: (accountId: string) => void;
+  showManualOptions?: boolean;
 }
 
 const MAX_VISIBLE_META_RESOURCES = 100;
@@ -138,6 +139,7 @@ export default function EditorialAccountSetup({
   canManage,
   permissionUnavailable,
   onAccountReady,
+  showManualOptions = true,
 }: EditorialAccountSetupProps) {
   const { createAndLinkAccount, linkAccount } = useEditorialAccountMutations(
     clientId,
@@ -175,7 +177,10 @@ export default function EditorialAccountSetup({
     finishSession.isPending ||
     disconnectAccount.isPending;
   const linkedAccountCount = linkedAccounts.length;
-  const showForm = linkedAccountCount === 0 || expanded;
+  const canShowAlternatives =
+    showManualOptions || availableAccounts.length > 0;
+  const showForm =
+    canShowAlternatives && (linkedAccountCount === 0 || expanded);
   const filteredMetaResources = useMemo(
     () => filterMetaOAuthResources(metaResources, metaSearch),
     [metaResources, metaSearch],
@@ -480,7 +485,7 @@ export default function EditorialAccountSetup({
       setExistingAccountId("");
       setExpanded(false);
       onAccountReady(accountId);
-      toast.success("Conta vinculada e selecionada nesta publicação.");
+      toast.success("Conta vinculada a este projeto.");
     } catch (error: unknown) {
       const message = errorMessage(
         error,
@@ -516,7 +521,7 @@ export default function EditorialAccountSetup({
       setHandle("");
       setExpanded(false);
       onAccountReady(accountId);
-      toast.success("Conta manual cadastrada e selecionada nesta publicação.");
+      toast.success("Conta manual cadastrada e vinculada ao projeto.");
     } catch (error: unknown) {
       const message = errorMessage(
         error,
@@ -545,11 +550,12 @@ export default function EditorialAccountSetup({
                 : "Contas de publicação"}
             </p>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-              Conecte a Meta oficialmente ou mantenha um cadastro manual. O
-              conteúdo atual permanece aberto.
+              {showManualOptions
+                ? "Conecte a Meta oficialmente ou mantenha um cadastro manual."
+                : "Conecte a Meta oficialmente ou vincule uma conta já cadastrada neste cliente."}
             </p>
           </div>
-          {canManage && linkedAccountCount > 0 && (
+          {canManage && canShowAlternatives && linkedAccountCount > 0 && (
             <Button
               type="button"
               variant="outline"
@@ -562,7 +568,11 @@ export default function EditorialAccountSetup({
               ) : (
                 <Plus className="mr-1.5 h-4 w-4" />
               )}
-              {showForm ? "Fechar cadastro manual" : "Cadastro manual"}
+              {showForm
+                ? "Fechar opções"
+                : showManualOptions
+                  ? "Adicionar ou vincular"
+                  : "Vincular conta"}
             </Button>
           )}
         </div>
@@ -664,8 +674,9 @@ export default function EditorialAccountSetup({
                 Alternativas de cadastro
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Vincule uma conta já existente ou registre uma referência
-                manual, sem login oficial e somente para planejamento.
+                {showManualOptions
+                  ? "Vincule uma conta já existente ou registre uma referência manual, sem login oficial e somente para planejamento."
+                  : "Escolha uma conta deste cliente para vinculá-la ao projeto certo."}
               </p>
             </div>
 
@@ -717,6 +728,7 @@ export default function EditorialAccountSetup({
               </div>
             )}
 
+            {showManualOptions && (
             <div className="grid gap-3 border-t border-border pt-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="editorial-new-account-platform">
@@ -768,6 +780,7 @@ export default function EditorialAccountSetup({
                 />
               </div>
             </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] leading-4 text-muted-foreground">
                 Cadastro manual: libera somente planejamento e agendamento

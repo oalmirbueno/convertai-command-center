@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -69,6 +69,7 @@ function normalizeSearch(value: string) {
 export default function Clients() {
   const { profile } = useAuth();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading, isError, refetch } = useClients();
   const [createOpen, setCreateOpen] = useState(false);
@@ -77,6 +78,27 @@ export default function Clients() {
   const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    const requestedClientId = searchParams.get("client");
+    if (!requestedClientId || !clients?.length) return;
+    const requestedClient = clients.find((client) => client.id === requestedClientId);
+    if (requestedClient) setEditClient(requestedClient);
+  }, [clients, searchParams]);
+
+  const closeClientDrawer = () => {
+    setEditClient(null);
+    if (
+      !searchParams.has("client") &&
+      !searchParams.has("project") &&
+      !searchParams.has("section")
+    ) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete("client");
+    next.delete("project");
+    next.delete("section");
+    setSearchParams(next, { replace: true });
+  };
 
   const searchTerm = normalizeSearch(search);
   const searching = searchTerm.length > 0;
@@ -336,7 +358,13 @@ export default function Clients() {
       </div>
 
       {isAdmin && <CreateClientModal open={createOpen} onClose={() => setCreateOpen(false)} />}
-      <EditClientDrawer open={!!editClient} onClose={() => setEditClient(null)} client={editClient} />
+      <EditClientDrawer
+        open={!!editClient}
+        onClose={closeClientDrawer}
+        client={editClient}
+        initialSection={searchParams.get("section") === "accounts" ? "accounts" : null}
+        initialProjectId={searchParams.get("project")}
+      />
       {isAdmin && <BriefingLinkModal open={briefingOpen} onClose={() => setBriefingOpen(false)} />}
     </div>
   );

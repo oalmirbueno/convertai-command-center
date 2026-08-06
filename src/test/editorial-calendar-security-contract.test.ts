@@ -39,7 +39,7 @@ describe("editorial calendar integration contract", () => {
   it("exposes one protected route in desktop and mobile navigation", () => {
     expect(app).toContain('path="/calendario"');
     expect(layout).toContain(
-      '{ title: "Calendário", url: "/calendario"',
+      '{ title: "Agenda", url: "/calendario"',
     );
     expect(mobileNav).toContain('to="/calendario"');
   });
@@ -84,7 +84,7 @@ describe("editorial calendar integration contract", () => {
       /access_token|refresh_token|client_secret|oauth_token/i,
     );
     expect(page).toMatch(
-      /Nenhuma\s+rede social é acionada\s+automaticamente\./,
+      /Nenhuma\s+rede\s+social\s+é\s+acionada\s+automaticamente\./,
     );
     expect(detail).toMatch(
       /Nenhuma\s+plataforma\s+externa\s+é\s+acionada\s+automaticamente\./,
@@ -100,7 +100,9 @@ describe("editorial calendar integration contract", () => {
     expect(page).toContain("!isImpersonating &&");
     expect(page).toContain("!editorialOptionsLoading &&");
     expect(page).toContain("!editorialOptionsError");
-    expect(page).toContain("canCreate={canCreateEditorial}");
+    expect(page).toContain(
+      'view === "board" ? canCreateEditorial : canScheduleEditorial',
+    );
     expect(hook).toContain("const exposeInternal = actualStaff && !forceClientView");
     expect(hook).toContain("internal: null");
     expect(hook).toContain(

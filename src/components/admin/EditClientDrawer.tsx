@@ -47,9 +47,17 @@ interface Props {
   open: boolean;
   onClose: () => void;
   client: any;
+  initialSection?: "accounts" | null;
+  initialProjectId?: string | null;
 }
 
-export default function EditClientDrawer({ open, onClose, client }: Props) {
+export default function EditClientDrawer({
+  open,
+  onClose,
+  client,
+  initialSection = null,
+  initialProjectId = null,
+}: Props) {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const navigate = useNavigate();
@@ -73,7 +81,19 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const avatarInputRef = useRef<HTMLInputElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const accountsSectionRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!open || initialSection !== "accounts") return;
+    const frame = window.requestAnimationFrame(() => {
+      accountsSectionRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [client?.id, initialSection, open]);
 
   // Payment management state
   const [payCreateForProject, setPayCreateForProject] = useState<string | null>(null);
@@ -542,7 +562,16 @@ export default function EditClientDrawer({ open, onClose, client }: Props) {
             </div>
 
             {/* Contas e canais cadastrados manualmente, sem credenciais */}
-            <ClientConnectionsPanel key={client.id} clientId={client.id} />
+            <div ref={accountsSectionRef} className="scroll-mt-4">
+              <ClientConnectionsPanel
+                key={client.id}
+                clientId={client.id}
+                clientName={
+                  client.company_name || client.full_name || "Cliente"
+                }
+                initialProjectId={initialProjectId}
+              />
+            </div>
 
             {/* Status do Cliente */}
             <div className="space-y-1.5">

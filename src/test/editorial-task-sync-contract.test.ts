@@ -38,8 +38,8 @@ describe("editorial design task workspace contract", () => {
       "ADD COLUMN delivery_type text NOT NULL DEFAULT 'unspecified'",
     );
     expect(workstreamMigration).toContain("'design'");
-    expect(page).toContain("isPublishableTask(task, designMemberIds)");
     expect(deliveryTypes).toContain("PUBLISHABLE_DELIVERY_TYPES");
+    expect(deliveryTypes).toContain("isPublishableTask");
     expect(workstreams).toContain("EXPLICIT_EDITORIAL_WORKSTREAMS");
     expect(workstreams).toContain("EXPLICIT_NON_EDITORIAL_WORKSTREAMS");
     expect(workstreams).toContain("hasStrongEditorialSignal(task)");
@@ -63,8 +63,9 @@ describe("editorial design task workspace contract", () => {
     );
     expect(page).not.toContain("<EditorialTaskInbox");
     expect(views).toContain(
-      'className="grid min-w-[1120px] grid-cols-4 gap-3"',
+      'className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"',
     );
+    expect(views).not.toContain("min-w-[1120px]");
     expect(views).not.toContain("w-[286px]");
   });
 
@@ -103,16 +104,12 @@ describe("editorial design task workspace contract", () => {
     expect(page).not.toContain('"responsible",\n      "tasks"');
   });
 
-  it("projects task deadlines into month, week and list views", () => {
-    expect(views).toContain("function groupTasksByDate");
-    expect(views).toContain("tasksByDate={tasksByDate}");
-    expect(views).toContain("onCreateFromTask(task, key)");
-    expect(views).toContain("Agenda cronológica");
-    expect(views).toContain("PopoverContent");
-    expect(views).toContain("neste dia");
-    expect(views).toContain(
-      'posts.length === 0 && !hasVisibleListTask && view === "list"',
+  it("keeps Kanban deadlines in Contents instead of mixing them into Agenda", () => {
+    expect(page).toMatch(
+      /const tasksForCurrentView\s*=\s*[\s\S]*?view === "board"\s*\? productionTasks\s*:\s*\[\]/,
     );
+    expect(page).toContain("tasks={tasksForCurrentView}");
+    expect(views).toContain("Agenda cronológica");
   });
 
   it("carries the task theme and context into the editorial flow", () => {
@@ -144,8 +141,7 @@ describe("editorial design task workspace contract", () => {
   it("renders unlinked Kanban tasks directly in the production board", () => {
     expect(page).toContain("const productionTasks = useMemo");
     expect(page).toContain("isEditorialTask(task, designMemberIds)");
-    expect(page).toContain("const calendarTasks = useMemo");
-    expect(page).toContain("isPublishableTask(task, designMemberIds)");
+    expect(page).not.toContain("const calendarTasks = useMemo");
     expect(page).toContain('view === "board"');
     expect(page).toContain("tasks={tasksForCurrentView}");
     expect(views).toContain("function BoardTaskCard");
@@ -191,16 +187,13 @@ describe("editorial design task workspace contract", () => {
   });
 
   it("allows a linked draft when the project has no social account", () => {
-    expect(editor).toContain("accountlessPublicationWithContent");
+    expect(editor).toContain("setPublications([])");
+    expect(editor).toContain("showExistingPublicationPlan");
     expect(editor).toContain(
       ".filter((publication) => publication.externalAccountId)",
     );
-    expect(editor).toContain("options.accounts.length === 0");
-    expect(editor).toContain(
-      "emptyPublication(defaultScheduledAt, onlyAccountId)",
-    );
-    expect(editor).toContain("options.accounts.length > 1");
-    expect(editor).toContain("publication.scheduledAt");
+    expect(editor).toContain("Plano de publicação existente");
+    expect(editor).not.toContain("<EditorialAccountSetup");
   });
 });
 

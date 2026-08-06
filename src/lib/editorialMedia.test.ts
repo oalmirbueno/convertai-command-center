@@ -207,4 +207,35 @@ describe("approved editorial media", () => {
       filterApprovedMediaAssets(assets, "bacacheri").map((asset) => asset.id),
     ).toEqual(["campaign"]);
   });
+
+  it("filters the approved library by complete content type", () => {
+    const staticImage = file("static");
+    const carouselRoot = file("carousel-root");
+    const carouselChild = file("carousel-child", {
+      parent_file_id: carouselRoot.id,
+    });
+    const video = file("video", {
+      file_name: "reel.mp4",
+      file_url: "files://client-1/reel.mp4",
+      mime_type: "video/mp4",
+    });
+    const assets = buildApprovedMediaAssets([
+      staticImage,
+      carouselRoot,
+      carouselChild,
+      video,
+    ]);
+
+    expect(
+      filterApprovedMediaAssets(assets, "", "carousel").map(
+        (asset) => asset.id,
+      ),
+    ).toEqual(["carousel-root"]);
+    expect(
+      filterApprovedMediaAssets(assets, "reel", "video").map(
+        (asset) => asset.id,
+      ),
+    ).toEqual(["video"]);
+    expect(filterApprovedMediaAssets(assets, "", "all")).toHaveLength(3);
+  });
 });

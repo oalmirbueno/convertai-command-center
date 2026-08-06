@@ -37,7 +37,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
   useEditorialEditorOptions,
@@ -195,7 +194,7 @@ export default function EditorialEditor({
   const [responsibleId, setResponsibleId] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [postIdempotencyKey, setPostIdempotencyKey] =
-    useState(newIdempotencyKey);
+    useState<string>(newIdempotencyKey);
   const [publications, setPublications] = useState<PublicationDraft[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [pendingMutationId, setPendingMutationId] = useState<string | null>(
@@ -360,25 +359,7 @@ export default function EditorialEditor({
     );
     setInternalNotes(revisionOf?.internal?.internal_notes || "");
     setPostIdempotencyKey(newIdempotencyKey());
-    setPublications(
-      revisionOf
-        ? revisionOf.publications
-            .filter(({ publication }) => publication.status !== "cancelled")
-            .map(({ publication }) => ({
-              idempotencyKey: newIdempotencyKey(),
-              externalAccountId: publication.external_account_id,
-              fileId: "",
-              caption: publication.caption || "",
-              firstComment: publication.first_comment || "",
-              altText: publication.alt_text || "",
-              scheduledAt: "",
-              timezone:
-                publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
-            }))
-        : defaultScheduledAt
-          ? [emptyPublication(defaultScheduledAt)]
-          : [],
-    );
+    setPublications([]);
     setHasChanges(false);
     setPendingMutationId(null);
   }, [
@@ -396,46 +377,11 @@ export default function EditorialEditor({
     revisionOf,
   ]);
 
-  useEffect(() => {
-    if (!open || post || revisionOf || !defaultScheduledAt || !options) {
-      return;
-    }
-    setPublications((current) => {
-      const emptyScheduledPlaceholder = (publication: PublicationDraft) =>
-        !publication.externalAccountId &&
-        !publication.fileId &&
-        !publication.caption.trim() &&
-        !publication.firstComment.trim() &&
-        !publication.altText.trim() &&
-        publication.scheduledAt === defaultScheduledAt;
-      if (options.accounts.length === 0) {
-        return current.filter(
-          (publication) => !emptyScheduledPlaceholder(publication),
-        );
-      }
-      if (options.accounts.length > 1) return current;
-      const onlyAccountId = options.accounts[0].id;
-      if (current.length === 0) {
-        return [emptyPublication(defaultScheduledAt, onlyAccountId)];
-      }
-      if (current.length === 1 && emptyScheduledPlaceholder(current[0])) {
-        return [{ ...current[0], externalAccountId: onlyAccountId }];
-      }
-      return current;
-    });
-  }, [defaultScheduledAt, open, options, post, revisionOf]);
-
   const filteredProjects = useMemo(
     () =>
       projects.filter((project) => !clientId || project.client_id === clientId),
     [clientId, projects],
   );
-  const selectedClientName =
-    clients.find((client) => client.id === clientId)?.name ||
-    "Cliente selecionado";
-  const selectedProjectName =
-    projects.find((project) => project.id === projectId)?.name ||
-    "Projeto selecionado";
   const allowedTeamMembers = useMemo(() => {
     const assignments = new Set(options?.assignments || []);
     return teamMembers.filter(
@@ -482,6 +428,11 @@ export default function EditorialEditor({
   );
   const savedContentLocked = primaryContentLocked || publicationContentLocked;
   const contentLocked = savedContentLocked || approvedMediaDraft;
+  const showExistingPublicationPlan = Boolean(
+    post?.publications.some(
+      ({ publication }) => publication.status !== "cancelled",
+    ),
+  );
   const cancelledAccountIds = useMemo(
     () =>
       new Set(
@@ -524,45 +475,6 @@ export default function EditorialEditor({
         caption: contentLocked ? defaultCaption : "",
       },
     ]);
-    markChanged();
-  };
-
-  const selectAccountForPublication = (accountId: string) => {
-    if (
-      publications.some(
-        (publication) => publication.externalAccountId === accountId,
-      )
-    ) {
-      return;
-    }
-    setPublications((current) => {
-      if (
-        current.some(
-          (publication) => publication.externalAccountId === accountId,
-        )
-      ) {
-        return current;
-      }
-
-      const accountlessIndex = current.findIndex(
-        (publication) => !publication.externalAccountId,
-      );
-      if (accountlessIndex >= 0) {
-        return current.map((publication, index) =>
-          index === accountlessIndex
-            ? { ...publication, externalAccountId: accountId }
-            : publication,
-        );
-      }
-
-      return [
-        ...current,
-        {
-          ...emptyPublication(defaultScheduledAt, accountId),
-          caption: contentLocked ? defaultCaption : "",
-        },
-      ];
-    });
     markChanged();
   };
 
@@ -1096,14 +1008,16 @@ export default function EditorialEditor({
             </div>
           </section>
 
+          {showExistingPublicationPlan && (
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">
-                  Publicações por plataforma
+                  Plano de publicação existente
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Cada conta pode ter horário, legenda e arquivo próprios.
+                  Edite apenas este plano já criado. Para um novo plano, use
+                  Agendar publicação na Agenda.
                 </p>
               </div>
               <Button
@@ -1130,20 +1044,6 @@ export default function EditorialEditor({
                 Plataforma
               </Button>
             </div>
-
-            {projectId && !loadingOptions && options && !optionsError && (
-              <EditorialAccountSetup
-                clientId={clientId}
-                clientName={selectedClientName}
-                projectId={projectId}
-                projectName={selectedProjectName}
-                linkedAccounts={options.accounts}
-                availableAccounts={options.availableAccounts}
-                canManage={options.canManageAccounts}
-                permissionUnavailable={options.accountPermissionUnavailable}
-                onAccountReady={selectAccountForPublication}
-              />
-            )}
 
             {publications.map((publication, index) => {
               const fieldPrefix = `editorial-publication-${
@@ -1363,6 +1263,7 @@ export default function EditorialEditor({
               </div>
             )}
           </section>
+          )}
         </div>
 
         <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background px-4 py-3 sm:px-6 sm:py-4 sm:space-x-0">

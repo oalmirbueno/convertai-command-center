@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   AlertCircle,
   Check,
+  Eye,
   FileImage,
   Film,
   Images,
@@ -11,11 +12,13 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import EditorialAssetPreviewDialog from "@/components/editorial/EditorialAssetPreviewDialog";
 import { cn } from "@/lib/utils";
 import {
   buildApprovedMediaAssets,
   filterApprovedMediaAssets,
   type EditorialApprovedMediaAsset,
+  type EditorialMediaContentType,
   type EditorialMediaFile,
 } from "@/lib/editorialMedia";
 import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
@@ -39,6 +42,15 @@ const contentTypeLabels = {
   video: "Vídeo",
 } as const;
 const EMPTY_FILE_IDS: readonly string[] = [];
+const mediaFilters: Array<{
+  value: EditorialMediaContentType | "all";
+  label: string;
+}> = [
+  { value: "all", label: "Todos" },
+  { value: "carousel", label: "Carrosséis" },
+  { value: "static", label: "Posts" },
+  { value: "video", label: "Vídeos" },
+];
 
 function MediaPreview({
   file,
@@ -135,6 +147,11 @@ export default function ApprovedMediaPicker({
   className,
 }: ApprovedMediaPickerProps) {
   const [search, setSearch] = useState("");
+  const [contentType, setContentType] = useState<
+    EditorialMediaContentType | "all"
+  >("all");
+  const [previewAsset, setPreviewAsset] =
+    useState<EditorialApprovedMediaAsset | null>(null);
   const assets = useMemo(
     () =>
       buildApprovedMediaAssets(files, {
@@ -144,25 +161,50 @@ export default function ApprovedMediaPicker({
     [currentRootFileId, files, usedRootFileIds],
   );
   const visibleAssets = useMemo(
-    () => filterApprovedMediaAssets(assets, search),
-    [assets, search],
+    () => filterApprovedMediaAssets(assets, search, contentType),
+    [assets, contentType, search],
   );
 
   return (
     <div className={cn("space-y-3", className)}>
-      <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-          aria-hidden="true"
-        />
-        <Input
-          value={search}
-          onChange={(event) => setSearch(event.target.value)}
-          disabled={disabled || loading}
-          className="pl-9"
-          aria-label="Buscar mídia aprovada"
-          placeholder="Buscar arte, vídeo ou carrossel aprovado"
-        />
+      <div className="space-y-2.5">
+        <div className="relative">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            disabled={disabled || loading}
+            className="h-11 pl-9"
+            aria-label="Buscar mídia aprovada"
+            placeholder="Buscar por título, legenda ou slide"
+          />
+        </div>
+        <div
+          className="flex gap-2 overflow-x-auto pb-1"
+          role="group"
+          aria-label="Filtrar conteúdo por formato"
+        >
+          {mediaFilters.map((filter) => (
+            <button
+              key={filter.value}
+              type="button"
+              disabled={disabled || loading}
+              aria-pressed={contentType === filter.value}
+              onClick={() => setContentType(filter.value)}
+              className={cn(
+                "inline-flex h-10 shrink-0 items-center rounded-lg border px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
+                contentType === filter.value
+                  ? "border-primary bg-primary text-primary-foreground"
+                  : "border-border bg-background text-muted-foreground hover:border-primary/35 hover:text-foreground",
+              )}
+            >
+              {filter.label}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading ? (
@@ -215,21 +257,22 @@ export default function ApprovedMediaPicker({
                   : FileImage;
 
             return (
-              <button
+              <article
                 key={asset.id}
-                type="button"
-                disabled={disabled}
-                aria-pressed={selected}
-                aria-label={`Selecionar ${asset.root.file_name}, ${contentTypeLabels[asset.contentType]}`}
-                onClick={() => onSelect(asset)}
                 className={cn(
-                  "group overflow-hidden rounded-xl border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:cursor-not-allowed disabled:opacity-60",
+                  "group overflow-hidden rounded-xl border bg-card text-left [content-visibility:auto] transition-[border-color,box-shadow] hover:border-primary/45 hover:shadow-md",
                   selected
                     ? "border-primary ring-1 ring-primary/30"
                     : "border-border",
                 )}
               >
-                <span className="relative block aspect-[4/3] overflow-hidden">
+                <button
+                  type="button"
+                  disabled={disabled}
+                  aria-label={`Ver ${asset.root.file_name} completo`}
+                  onClick={() => setPreviewAsset(asset)}
+                  className="relative block aspect-[4/3] w-full overflow-hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/60 disabled:cursor-not-allowed disabled:opacity-60"
+                >
                   <AssetPreview asset={asset} />
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md border border-white/15 bg-black/65 px-2 py-1 text-[10px] font-medium text-white backdrop-blur-sm">
                     <TypeIcon className="h-3 w-3" />
@@ -243,8 +286,12 @@ export default function ApprovedMediaPicker({
                       <Check className="h-4 w-4" />
                     </span>
                   )}
-                </span>
-                <span className="block min-w-0 p-3">
+                  <span className="absolute bottom-2 right-2 inline-flex min-h-8 items-center gap-1.5 rounded-lg border border-white/20 bg-black/70 px-2.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                    <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                    Ver completo
+                  </span>
+                </button>
+                <div className="block min-w-0 p-3">
                   <span
                     className="block truncate text-xs font-semibold text-foreground"
                     title={asset.root.file_name}
@@ -256,8 +303,19 @@ export default function ApprovedMediaPicker({
                       asset.root.description ||
                       "Mídia aprovada e pronta para publicação"}
                   </span>
-                </span>
-              </button>
+                  <Button
+                    type="button"
+                    variant={selected ? "secondary" : "outline"}
+                    size="sm"
+                    disabled={disabled || selected}
+                    className="mt-3 h-10 w-full"
+                    onClick={() => onSelect(asset)}
+                  >
+                    {selected && <Check className="mr-1.5 h-4 w-4" />}
+                    {selected ? "Selecionado" : "Selecionar"}
+                  </Button>
+                </div>
+              </article>
             );
           })}
         </div>
@@ -270,11 +328,28 @@ export default function ApprovedMediaPicker({
               : "Nenhuma mídia aprovada disponível"}
           </p>
           <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-            Só aparecem artes e vídeos double-gate aprovados deste projeto que
-            ainda não foram usados.
+            {search || contentType !== "all"
+              ? "Limpe a busca ou troque o filtro para ver outros conteúdos."
+              : "Só aparecem conteúdos com aprovação interna e do cliente."}
           </p>
         </div>
       )}
+
+      <p className="sr-only" aria-live="polite">
+        {visibleAssets.length} conteúdo
+        {visibleAssets.length === 1 ? " encontrado" : "s encontrados"}
+      </p>
+
+      <EditorialAssetPreviewDialog
+        asset={previewAsset}
+        open={!!previewAsset}
+        selected={previewAsset?.id === selectedFileId}
+        disabled={disabled}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) setPreviewAsset(null);
+        }}
+        onSelect={onSelect}
+      />
     </div>
   );
 }

@@ -24,7 +24,7 @@ import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 const clientTabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "aprovacoes", label: "Aprovações", icon: CheckSquare },
-  { id: "calendario", label: "Calendário", icon: CalendarDays },
+  { id: "calendario", label: "Agenda", icon: CalendarDays },
   { id: "documentos", label: "Documentos", icon: FileText },
   { id: "relatorios", label: "Relatórios", icon: BarChart3 },
   { id: "pedidos", label: "Pedidos", icon: ShoppingBag },

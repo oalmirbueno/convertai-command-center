@@ -1,10 +1,10 @@
 import {
   CalendarDays,
+  CalendarPlus2,
   ChevronLeft,
   ChevronRight,
   Columns3,
   List,
-  Plus,
   Rows3,
   Search,
   SlidersHorizontal,
@@ -52,6 +52,7 @@ interface EditorialToolbarProps {
   approvalStatuses: SelectOption[];
   responsibles: SelectOption[];
   canCreate: boolean;
+  canSchedule: boolean;
   onViewChange: (view: EditorialView) => void;
   onSearchChange: (value: string) => void;
   onClientChange: (value: string) => void;
@@ -66,14 +67,14 @@ interface EditorialToolbarProps {
   onToday: () => void;
   onNext: () => void;
   onCreate: () => void;
+  onSchedule: () => void;
 }
 
-const viewOptions: Array<{
+const agendaViewOptions: Array<{
   value: EditorialView;
   label: string;
   icon: typeof CalendarDays;
 }> = [
-  { value: "board", label: "Produção", icon: Columns3 },
   { value: "month", label: "Mês", icon: CalendarDays },
   { value: "week", label: "Semana", icon: Rows3 },
   { value: "list", label: "Lista", icon: List },
@@ -134,6 +135,7 @@ export default function EditorialToolbar({
   approvalStatuses,
   responsibles,
   canCreate,
+  canSchedule,
   onViewChange,
   onSearchChange,
   onClientChange,
@@ -148,6 +150,7 @@ export default function EditorialToolbar({
   onToday,
   onNext,
   onCreate,
+  onSchedule,
 }: EditorialToolbarProps) {
   const isActiveFilter = (value: string) =>
     Boolean(value && value !== "all");
@@ -211,43 +214,90 @@ export default function EditorialToolbar({
           </h2>
         </div>
 
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end">
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:justify-end">
           <div
-            className="grid h-11 grid-cols-4 rounded-lg border border-border bg-background p-1 sm:h-auto"
+            className="grid h-11 grid-cols-2 rounded-lg border border-border bg-background p-1 sm:h-auto"
             role="group"
-            aria-label="Visualização do calendário"
+            aria-label="Área editorial"
           >
-            {viewOptions.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                onClick={() => onViewChange(option.value)}
-                className={cn(
-                  "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
-                  view === option.value
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-                aria-pressed={view === option.value}
-                aria-label={`Visualização: ${option.label}`}
-              >
-                <option.icon className="h-3.5 w-3.5" />
-                <span className="hidden min-[520px]:inline">
-                  {option.label}
-                </span>
-              </button>
-            ))}
+            <button
+              type="button"
+              onClick={() => onViewChange("month")}
+              className={cn(
+                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                view !== "board"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={view !== "board"}
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Agenda
+            </button>
+            <button
+              type="button"
+              onClick={() => onViewChange("board")}
+              className={cn(
+                "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-3 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                view === "board"
+                  ? "bg-primary text-primary-foreground"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+              aria-pressed={view === "board"}
+            >
+              <Columns3 className="h-3.5 w-3.5" />
+              Conteúdos
+            </button>
           </div>
 
-          {canCreate && (
+          {view !== "board" && (
+            <div
+              className="grid h-11 grid-cols-3 rounded-lg border border-border bg-background p-1 sm:h-auto"
+              role="group"
+              aria-label="Visualização da agenda"
+            >
+              {agendaViewOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => onViewChange(option.value)}
+                  className={cn(
+                    "inline-flex h-9 min-w-0 items-center justify-center gap-1.5 rounded-md px-2 text-xs transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-1",
+                    view === option.value
+                      ? "bg-secondary text-foreground"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                  aria-pressed={view === option.value}
+                  aria-label={`Visualização: ${option.label}`}
+                >
+                  <option.icon className="h-3.5 w-3.5" />
+                  <span>{option.label}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
+          {view === "board" && canCreate && (
             <Button
               type="button"
               size="sm"
               className="h-11 w-full px-4 sm:h-9 sm:w-auto"
               onClick={onCreate}
             >
-              <Plus className="mr-1.5 h-4 w-4" />
-              Novo conteúdo
+              <Columns3 className="mr-1.5 h-4 w-4" />
+              Criar conteúdo
+            </Button>
+          )}
+
+          {view !== "board" && canSchedule && (
+            <Button
+              type="button"
+              size="sm"
+              className="h-11 w-full px-4 sm:h-9 sm:w-auto"
+              onClick={onSchedule}
+            >
+              <CalendarPlus2 className="mr-1.5 h-4 w-4" />
+              Agendar publicação
             </Button>
           )}
         </div>
