@@ -4,6 +4,7 @@ import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 export const META_OAUTH_FUNCTION_NAME = "social-meta-oauth";
 export const META_OAUTH_CALLBACK_PATH = "/oauth/meta/callback";
 export const META_OAUTH_MESSAGE_TYPE = "aceleriq:meta-oauth-complete";
+export const MAX_META_OAUTH_RESOURCES = 1_000;
 
 export type MetaOAuthPlatform = "facebook" | "instagram";
 
@@ -122,7 +123,38 @@ export function sanitizeMetaOAuthResources(
     });
   }
 
-  return resources.slice(0, 100);
+  return resources.slice(0, MAX_META_OAUTH_RESOURCES);
+}
+
+function normalizeMetaResourceSearch(value: string) {
+  return withoutControlCharacters(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .toLocaleLowerCase("pt-BR");
+}
+
+export function filterMetaOAuthResources(
+  resources: MetaOAuthResource[],
+  query: string,
+) {
+  const terms = normalizeMetaResourceSearch(query)
+    .split(" ")
+    .map((term) => term.replace(/^@+/, ""))
+    .filter(Boolean);
+  if (terms.length === 0) return resources;
+
+  return resources.filter((resource) => {
+    const platformTerms =
+      resource.platform === "instagram"
+        ? "instagram insta profissional"
+        : "facebook meta pagina page";
+    const haystack = normalizeMetaResourceSearch(
+      `${resource.display_name} ${resource.handle || ""} ${platformTerms}`,
+    );
+    return terms.every((term) => haystack.includes(term));
+  });
 }
 
 export function safeMetaOAuthError(value: unknown) {

@@ -3,13 +3,12 @@ import {
   TASK_DELIVERY_TYPE_LABELS,
   TASK_DELIVERY_TYPE_OPTIONS,
   TASK_DELIVERY_TYPE_VALUES,
+  PUBLISHABLE_DELIVERY_TYPE_VALUES,
   contentTypeForDeliveryType,
   isPublishableDeliveryType,
   isPublishableTask,
   suggestedWorkstreamForDeliveryType,
 } from "@/lib/taskDeliveryTypes";
-
-const designMemberIds = new Set(["designer-1"]);
 
 describe("task delivery types", () => {
   it("exports one labelled option for every accepted value", () => {
@@ -74,91 +73,78 @@ describe("task delivery types", () => {
     expect(contentTypeForDeliveryType(deliveryType)).toBeNull();
   });
 
-  it("uses explicit delivery type before the legacy editorial fallback", () => {
-    expect(
-      isPublishableTask(
-        {
-          delivery_type: "carousel",
+  it.each(PUBLISHABLE_DELIVERY_TYPE_VALUES)(
+    "admits only the explicit publishable whitelist: %s",
+    (deliveryType) => {
+      expect(
+        isPublishableTask({
+          delivery_type: deliveryType,
           workstream: "general",
           assigned_to: null,
           source: "panel",
-        },
-        designMemberIds,
-      ),
-    ).toBe(true);
-    expect(
-      isPublishableTask(
-        {
-          delivery_type: "branding",
+        }),
+      ).toBe(true);
+    },
+  );
+
+  it.each([
+    "unspecified",
+    "branding",
+    "planning",
+    "copywriting",
+    "website",
+    "landing_page",
+    "automation",
+    "traffic",
+    "seo",
+    "document",
+    "report",
+    "other",
+    "unknown",
+  ])(
+    "rejects every type outside the publishable whitelist: %s",
+    (deliveryType) => {
+      expect(
+        isPublishableTask({
+          delivery_type: deliveryType,
           workstream: "design",
           assigned_to: "designer-1",
           source: "panel",
-        },
-        designMemberIds,
-      ),
-    ).toBe(false);
-  });
+          title: "Carrossel para o feed",
+        }),
+      ).toBe(false);
+    },
+  );
 
-  it("preserves the legacy fallback only for missing or unspecified types", () => {
-    expect(
-      isPublishableTask(
-        {
-          delivery_type: "unspecified",
-          workstream: "general",
+  it.each([null, undefined])(
+    "fails closed without an explicit delivery type: %s",
+    (deliveryType) => {
+      expect(
+        isPublishableTask({
+          delivery_type: deliveryType,
+          workstream: "content",
           assigned_to: "designer-1",
           source: "panel",
-        },
-        designMemberIds,
-      ),
-    ).toBe(true);
-    expect(
-      isPublishableTask(
-        {
-          delivery_type: null,
-          workstream: "content",
-          assigned_to: null,
-          source: "panel",
-        },
-        designMemberIds,
-      ),
-    ).toBe(true);
-  });
-
-  it.each([
-    "Branding e identidade visual",
-    "Planejamento editorial do mês",
-    "Criar landing page",
-    "Automação de atendimento",
-    "Relatório de tráfego pago",
-  ])(
-    "keeps an obvious legacy non-publishable task out of the calendar: %s",
-    (title) => {
-      expect(
-        isPublishableTask(
-          {
-            delivery_type: "unspecified",
-            workstream: "design",
-            assigned_to: "designer-1",
-            source: "panel",
-            title,
-          },
-          designMemberIds,
-        ),
+          title: "Criar vídeo e arte",
+        }),
       ).toBe(false);
     },
   );
 
   it("always excludes tasks originating from client requests", () => {
     expect(
-      isPublishableTask(
-        {
-          delivery_type: "reel",
-          workstream: "video",
-          assigned_to: "designer-1",
-          source: "CLIENT_REQUEST:request-id:signature",
-        },
-        designMemberIds,
-      ),
+      isPublishableTask({
+        delivery_type: "reel",
+        workstream: "video",
+        assigned_to: "designer-1",
+        source: "CLIENT_REQUEST:request-id:signature",
+      }),
+    ).toBe(false);
+    expect(
+      isPublishableTask({
+        delivery_type: "static",
+        source: "client_request",
+      }),
     ).toBe(false);
   });
 });

@@ -17,6 +17,7 @@ import {
   type EditorialTaskLinkIndex,
   type EditorialTaskLinkRow,
 } from "@/lib/editorialTaskLinks";
+import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import { getSupabaseFunctionErrorMessage } from "@/lib/supabaseFunctionError";
 
 // The generated Database type is updated only after this unapplied migration
@@ -167,12 +168,14 @@ export interface EditorialPublicationBundle {
   internal: EditorialPublicationInternalRow | null;
   account: EditorialAccountRow | null;
   file: EditorialFileRow | null;
+  fileChildren?: EditorialFileRow[];
 }
 
 export interface EditorialPostBundle {
   post: EditorialPostRow;
   internal: EditorialPostInternalRow | null;
   primaryFile: EditorialFileRow | null;
+  primaryFileChildren?: EditorialFileRow[];
   publications: EditorialPublicationBundle[];
   publicationSetComplete: boolean;
 }
@@ -184,6 +187,7 @@ export interface EditorialCalendarFilters {
   rangeStart?: string;
   rangeEnd?: string;
   postId?: string;
+  productionStatus?: string;
 }
 
 export interface SaveEditorialPostInput {
@@ -394,6 +398,7 @@ async function readEditorialCalendar(
   actualStaff: boolean,
   exposeInternal: boolean,
   forceClientView: boolean,
+  fileChildrenMode: "none" | "scheduled" | "all" = "none",
 ): Promise<EditorialQueryResult> {
   const loadInternal = exposeInternal || (actualStaff && forceClientView);
   const posts = await readAllPages<EditorialPostRow>((from, to) => {
@@ -410,6 +415,9 @@ async function readEditorialCalendar(
     }
     if (filters.postId) {
       query = query.eq("id", filters.postId);
+    }
+    if (filters.productionStatus) {
+      query = query.eq("production_status", filters.productionStatus);
     }
 
     return query
@@ -505,6 +513,23 @@ async function readEditorialCalendar(
     ...posts.map((post) => post.primary_file_id),
     ...publications.map((publication) => publication.file_id),
   ]);
+  const primaryFileIdByPostId = new Map(
+    posts.map((post) => [post.id, post.primary_file_id]),
+  );
+  const childRootIds =
+    fileChildrenMode === "all"
+      ? fileIds
+      : fileChildrenMode === "scheduled"
+        ? unique(
+            publications
+              .filter((publication) => Boolean(publication.scheduled_at))
+              .map(
+                (publication) =>
+                  publication.file_id ||
+                  primaryFileIdByPostId.get(publication.post_id),
+              ),
+          )
+        : [];
 
   const [postInternalRows, publicationInternalRows, accountRows, fileRows] =
     await Promise.all([
@@ -546,8 +571,8 @@ async function readEditorialCalendar(
               .from(actualStaff ? "staff_files_secure" : "files")
               .select(
                 actualStaff
-                  ? "id, client_id, project_id, file_name, file_type, mime_type, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id"
-                  : "id, client_id, project_id, file_name, file_type, mime_type, approval_status, visibility, locked_at, status, archived_at, parent_file_id",
+                  ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
+                  : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
               )
               .in("id", chunk)
               .order("id", { ascending: true })
@@ -555,6 +580,24 @@ async function readEditorialCalendar(
           )
         : Promise.resolve([]),
     ]);
+
+  const childFileRows =
+    childRootIds.length > 0
+      ? await readInChunks<EditorialFileRow>(childRootIds, (chunk, from, to) =>
+          editorialDb
+            .from(actualStaff ? "staff_files_secure" : "files")
+            .select(
+              actualStaff
+                ? "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at"
+                : "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
+            )
+            .in("parent_file_id", chunk)
+            .is("archived_at", null)
+            .order("created_at", { ascending: true })
+            .order("id", { ascending: true })
+            .range(from, to),
+        )
+      : [];
 
   const postInternalById = new Map(
     postInternalRows.map((row) => [row.post_id, row]),
@@ -564,6 +607,20 @@ async function readEditorialCalendar(
   );
   const accountById = new Map(accountRows.map((row) => [row.id, row]));
   const fileById = new Map(fileRows.map((row) => [row.id, row]));
+  const childrenByParentId = new Map<string, EditorialFileRow[]>();
+  childFileRows.forEach((file) => {
+    if (!file.parent_file_id) return;
+    const current = childrenByParentId.get(file.parent_file_id) || [];
+    current.push(file);
+    childrenByParentId.set(file.parent_file_id, current);
+  });
+  const orderedChildren = (root: EditorialFileRow | null) =>
+    root
+      ? orderEditorialCarouselFiles(
+          root,
+          childrenByParentId.get(root.id) || [],
+        ).slice(1) as EditorialFileRow[]
+      : [];
   const publicationsByPostId = new Map<string, EditorialPublicationRow[]>();
   publications.forEach((publication) => {
     const current = publicationsByPostId.get(publication.post_id) || [];
@@ -575,24 +632,32 @@ async function readEditorialCalendar(
     !forceClientView &&
     !filters.platform &&
     !(filters.rangeStart && filters.rangeEnd);
-  let bundledPosts = posts.map((post) => ({
-    post,
-    internal: postInternalById.get(post.id) || null,
-    primaryFile: post.primary_file_id
+  let bundledPosts = posts.map((post) => {
+    const primaryFile = post.primary_file_id
       ? fileById.get(post.primary_file_id) || null
-      : null,
-    publications: (publicationsByPostId.get(post.id) || []).map(
-      (publication) => ({
-        publication,
-        internal: publicationInternalById.get(publication.id) || null,
-        account: accountById.get(publication.external_account_id) || null,
-        file: publication.file_id
-          ? fileById.get(publication.file_id) || null
-          : null,
-      }),
-    ),
-    publicationSetComplete,
-  }));
+      : null;
+    return {
+      post,
+      internal: postInternalById.get(post.id) || null,
+      primaryFile,
+      primaryFileChildren: orderedChildren(primaryFile),
+      publications: (publicationsByPostId.get(post.id) || []).map(
+        (publication) => {
+          const file = publication.file_id
+            ? fileById.get(publication.file_id) || null
+            : null;
+          return {
+            publication,
+            internal: publicationInternalById.get(publication.id) || null,
+            account: accountById.get(publication.external_account_id) || null,
+            file,
+            fileChildren: orderedChildren(file),
+          };
+        },
+      ),
+      publicationSetComplete,
+    };
+  });
 
   if (!actualStaff) {
     bundledPosts = bundledPosts.map((bundle) => ({
@@ -603,6 +668,10 @@ async function readEditorialCalendar(
             agency_approval_status: "approved",
           }
         : null,
+      primaryFileChildren: (bundle.primaryFileChildren || []).map((file) => ({
+        ...file,
+        agency_approval_status: "approved",
+      })),
       publications: bundle.publications.map((publication) => ({
         ...publication,
         file: publication.file
@@ -611,6 +680,10 @@ async function readEditorialCalendar(
               agency_approval_status: "approved",
             }
           : null,
+        fileChildren: (publication.fileChildren || []).map((file) => ({
+          ...file,
+          agency_approval_status: "approved",
+        })),
       })),
     }));
   }
@@ -708,6 +781,7 @@ export function useEditorialCalendar(
         actualStaff,
         exposeInternal,
         forceClientView,
+        "scheduled",
       ),
     placeholderData: keepPreviousData,
     enabled: !!user,
@@ -747,6 +821,40 @@ export function useEditorialCalendar(
   return query;
 }
 
+export function useEditorialSchedulingPosts(
+  clientId: string | null,
+  projectId: string | null,
+  enabled: boolean,
+) {
+  const { user, profile } = useAuth();
+  const actualStaff =
+    profile?.role === "admin" ||
+    ["manager", "design", "traffic"].includes(profile?.role || "");
+
+  return useQuery({
+    queryKey: [
+      "editorial-scheduling-posts",
+      user?.id,
+      profile?.role,
+      clientId,
+      projectId,
+    ],
+    queryFn: async () => {
+      if (!clientId || !projectId || !actualStaff) return [];
+      const result = await readEditorialCalendar(
+        { clientId, projectId, productionStatus: "ready" },
+        true,
+        true,
+        false,
+      );
+      return result.posts;
+    },
+    enabled:
+      enabled && actualStaff && !!user && !!clientId && !!projectId,
+    staleTime: 15_000,
+  });
+}
+
 export function useEditorialPostDetail(
   postId: string | null,
   clientId: string | null,
@@ -778,6 +886,7 @@ export function useEditorialPostDetail(
         actualStaff,
         exposeInternal,
         forceClientView,
+        "all",
       ),
     enabled: !!user && !!postId && (!forceClientView || !!clientId),
     refetchInterval: 30_000,
@@ -864,6 +973,7 @@ export function useEditorialEditorOptions(
   clientId: string | null,
   projectId: string | null,
   enabled: boolean,
+  mode: "full" | "schedule" = "full",
 ) {
   const { user, profile } = useAuth();
   return useQuery({
@@ -873,6 +983,7 @@ export function useEditorialEditorOptions(
       profile?.role,
       clientId,
       projectId,
+      mode,
     ],
     queryFn: async () => {
       if (!clientId || !projectId) {
@@ -929,15 +1040,18 @@ export function useEditorialEditorOptions(
             .order("external_account_id", { ascending: true })
             .range(from, to),
         ),
-        (async () => {
-          const { data, error } = await editorialDb.rpc("can_manage_client", {
-            _client_id: clientId,
-          });
-          return {
-            canManage: !error && data === true,
-            unavailable: Boolean(error),
-          };
-        })(),
+        mode === "full"
+          ? (async () => {
+              const { data, error } = await editorialDb.rpc(
+                "can_manage_client",
+                { _client_id: clientId },
+              );
+              return {
+                canManage: !error && data === true,
+                unavailable: Boolean(error),
+              };
+            })()
+          : Promise.resolve({ canManage: false, unavailable: false }),
         readAllPages<EditorialFileRow>((from, to) =>
           editorialDb
             .from("staff_files_secure")
@@ -951,7 +1065,7 @@ export function useEditorialEditorOptions(
             .order("id", { ascending: true })
             .range(from, to),
         ),
-        readAllPages<{
+        mode === "full" ? readAllPages<{
           id: string;
           project_id: string;
           title: string;
@@ -972,15 +1086,15 @@ export function useEditorialEditorOptions(
             .order("updated_at", { ascending: false })
             .order("id", { ascending: true })
             .range(from, to),
-        ),
-        readAllPages<{ user_id: string }>((from, to) =>
+        ) : Promise.resolve([]),
+        mode === "full" ? readAllPages<{ user_id: string }>((from, to) =>
           editorialDb
             .from("team_client_assignments")
             .select("user_id")
             .eq("client_id", clientId)
             .order("user_id", { ascending: true })
             .range(from, to),
-        ),
+        ) : Promise.resolve([]),
         readAllPages<{
           id: string;
           primary_file_id: string | null;
@@ -1174,6 +1288,7 @@ export function useEditorialMutations() {
   const refresh = async () => {
     await Promise.all([
       queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] }),
+      queryClient.invalidateQueries({ queryKey: ["editorial-scheduling-posts"] }),
       queryClient.invalidateQueries({ queryKey: ["editorial-events"] }),
       queryClient.invalidateQueries({ queryKey: ["tasks"] }),
       queryClient.invalidateQueries({

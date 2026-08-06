@@ -56,7 +56,7 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
           className={({ isActive }) => cn(tabBase, isActive ? "text-primary" : "text-muted-foreground")}
         >
           <CalendarDays className="w-5 h-5" />
-          <span>Calendário</span>
+          <span>Agenda</span>
         </NavLink>
 
         {isStaff ? (

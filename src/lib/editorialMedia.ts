@@ -207,11 +207,16 @@ function normalizeSearch(value?: string | null) {
 export function filterApprovedMediaAssets(
   assets: readonly EditorialApprovedMediaAsset[],
   query: string,
+  contentType: EditorialMediaContentType | "all" = "all",
 ) {
   const normalizedQuery = normalizeSearch(query);
-  if (!normalizedQuery) return [...assets];
 
   return assets.filter((asset) => {
+    if (contentType !== "all" && asset.contentType !== contentType) {
+      return false;
+    }
+    if (!normalizedQuery) return true;
+
     const searchable = normalizeSearch(
       [
         asset.root.file_name,

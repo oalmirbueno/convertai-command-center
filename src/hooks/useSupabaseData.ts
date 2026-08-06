@@ -43,6 +43,8 @@ const CLIENT_SAFE_FILE_SELECT = `
   client:profiles!files_client_id_fkey(full_name, company_name)
 `;
 
+const TASK_PAGE_SIZE = 1_000;
+
 export function useProjects() {
   const { user, profile } = useAuth();
   const isClient = profile?.role === "client";
@@ -93,23 +95,49 @@ export function useProjects() {
 
 export function useTasks(
   projectId?: string,
-  options: { refetchInterval?: number | false } = {},
+  options: { enabled?: boolean; refetchInterval?: number | false } = {},
 ) {
   const { user } = useAuth();
   return useQuery({
     queryKey: ["tasks", user?.id, projectId],
     queryFn: async () => {
-      let query = supabase
-        .from("tasks")
-        .select("*, project:projects(name), assignee:profiles!tasks_assigned_to_fkey(id, full_name), milestone:milestones!tasks_milestone_id_fkey(id, title)")
-        .is("deleted_at", null)
-        .order("task_order", { ascending: true });
-      if (projectId) query = query.eq("project_id", projectId);
-      const { data, error } = await query;
-      if (error) throw error;
-      return data;
+      const fetchTaskPage = async (afterId: string | null) => {
+        let query = supabase
+          .from("tasks")
+          .select("*, project:projects(name), assignee:profiles!tasks_assigned_to_fkey(id, full_name), milestone:milestones!tasks_milestone_id_fkey(id, title)")
+          .is("deleted_at", null)
+          .order("id", { ascending: true })
+          .limit(TASK_PAGE_SIZE);
+        if (projectId) query = query.eq("project_id", projectId);
+        if (afterId) query = query.gt("id", afterId);
+        const { data, error } = await query;
+        if (error) throw error;
+        return data || [];
+      };
+
+      const tasksById = new Map<
+        string,
+        Awaited<ReturnType<typeof fetchTaskPage>>[number]
+      >();
+      let afterId: string | null = null;
+
+      while (true) {
+        const page = await fetchTaskPage(afterId);
+        for (const task of page) tasksById.set(task.id, task);
+        if (page.length < TASK_PAGE_SIZE) break;
+
+        const nextAfterId = page[page.length - 1]?.id || null;
+        if (!nextAfterId || nextAfterId === afterId) break;
+        afterId = nextAfterId;
+      }
+
+      return [...tasksById.values()].sort((left, right) => {
+        const leftOrder = left.task_order ?? Number.MAX_SAFE_INTEGER;
+        const rightOrder = right.task_order ?? Number.MAX_SAFE_INTEGER;
+        return leftOrder - rightOrder || left.id.localeCompare(right.id);
+      });
     },
-    enabled: !!user,
+    enabled: (options.enabled ?? true) && !!user,
     refetchInterval: options.refetchInterval ?? 15000,
   });
 }

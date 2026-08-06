@@ -25,7 +25,9 @@ describe("editorial account setup contract", () => {
     expect(hook).toContain('.eq("status", "active")');
     expect(hook).toContain("const linkedAccountIdSet = new Set");
     expect(hook).toContain("availableAccounts");
-    expect(editor).toContain("availableAccounts={options.availableAccounts}");
+    expect(clientConnections).toContain(
+      "availableAccounts={availablePublishingAccounts}",
+    );
   });
 
   it("creates and links an account atomically through the guarded RPC", () => {
@@ -47,20 +49,21 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain("Vincular e usar");
   });
 
-  it("refreshes account options immediately and selects the new account", () => {
+  it("refreshes account options immediately inside the selected client project", () => {
     expect(hook).toContain(
       'queryKey: ["editorial-editor-options"]',
     );
     expect(hook).toContain("await refreshAccounts()");
-    expect(editor).toContain("onAccountReady={selectAccountForPublication}");
-    expect(editor).toContain("externalAccountId: accountId");
+    expect(clientConnections).toContain("linkedPublishingAccounts");
+    expect(clientConnections).toContain("availablePublishingAccounts");
+    expect(clientConnections).toContain("onAccountReady={() => undefined}");
     expect(clientConnections).toContain(
       'queryKey: ["editorial-editor-options"]',
     );
   });
 
   it("does not offer account writes without confirmed permission", () => {
-    expect(hook).toContain('.rpc("can_manage_client"');
+    expect(clientConnections).toContain('.rpc("can_manage_client"');
     expect(hook).toContain("accountPermissionUnavailable");
     expect(accountSetup).toContain("Somente administradores e responsáveis");
     expect(accountSetup).toContain("{canManage && showForm &&");
@@ -149,16 +152,12 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain("handleFinishMetaConnection");
   });
 
-  it("keeps revoked state distinct and reconnects without dirtying a duplicate draft", () => {
+  it("keeps revoked state distinct and account setup outside content creation", () => {
     expect(hook).toContain('connection.connection_status === "revoked"');
     expect(accountSetup).toContain('return "Desconectada"');
-    const selectorStart = editor.indexOf("const selectAccountForPublication");
-    const selectorEnd = editor.indexOf("const handleClientChange", selectorStart);
-    const selector = editor.slice(selectorStart, selectorEnd);
-    expect(selector.indexOf("publications.some")).toBeLessThan(
-      selector.indexOf("markChanged()"),
-    );
-    expect(selector).toMatch(/publications\.some[\s\S]*return;[\s\S]*markChanged\(\)/);
+    expect(editor).not.toContain("selectAccountForPublication");
+    expect(editor).not.toContain("<EditorialAccountSetup");
+    expect(clientConnections).toContain("<EditorialAccountSetup");
   });
 
   it("opens the popup synchronously and accepts only its same-origin result", () => {
@@ -173,8 +172,36 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain("event.origin !== window.location.origin");
     expect(accountSetup).toContain("event.source !== popup");
     expect(accountSetup).toContain("parseMetaOAuthPopupMessage(event.data)");
-    expect(accountSetup).toContain("Conectar Instagram + Facebook");
+    expect(accountSetup).toContain("Entrar com Facebook/Meta");
     expect(accountSetup).toContain("onAccountReady(accountId)");
+  });
+
+  it("makes the target client and project explicit and provides account search", () => {
+    expect(clientConnections).toContain("clientName={clientName}");
+    expect(clientConnections).toContain("projectName={publishingProject.name");
+    expect(accountSetup).toContain("Destino obrigatório do vínculo");
+    expect(accountSetup).toContain("{clientName}");
+    expect(accountSetup).toContain("{projectName}");
+    expect(accountSetup).toContain("filterMetaOAuthResources");
+    expect(accountSetup).toContain("Pesquisar por nome, @ ou plataforma");
+    expect(accountSetup).toContain("Nenhuma conta encontrada");
+    expect(accountSetup).toContain("Vincular");
+    expect(accountSetup).not.toMatch(
+      /type=["']password["']|name=["']password["']/i,
+    );
+  });
+
+  it("marks official Meta accounts and protects their provider identity", () => {
+    expect(clientConnections).toContain(
+      '.from("external_account_connections")',
+    );
+    expect(clientConnections).toContain("officialAccountIds");
+    expect(clientConnections).toContain("Oficial Meta");
+    expect(clientConnections).toContain("disabled={editingOfficial}");
+    expect(clientConnections).toContain("readOnly={editingOfficial}");
+    expect(clientConnections).toContain(
+      "plataforma e ID são protegidos",
+    );
   });
 
   it("protects the callback, strips its URL and messages only a same-origin opener", () => {

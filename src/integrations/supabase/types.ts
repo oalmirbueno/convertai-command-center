@@ -2578,6 +2578,54 @@ export type Database = {
         }
         Relationships: []
       }
+      social_account_events: {
+        Row: {
+          actor_id: string | null
+          actor_kind: string
+          client_id: string
+          created_at: string
+          event_type: string
+          external_account_id: string | null
+          id: string
+          metadata: Json
+          operation_id: string
+          project_id: string | null
+          provider: string
+          reason: string | null
+          source: string
+        }
+        Insert: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id: string
+          created_at?: string
+          event_type: string
+          external_account_id?: string | null
+          id?: string
+          metadata?: Json
+          operation_id?: string
+          project_id?: string | null
+          provider?: string
+          reason?: string | null
+          source: string
+        }
+        Update: {
+          actor_id?: string | null
+          actor_kind?: string
+          client_id?: string
+          created_at?: string
+          event_type?: string
+          external_account_id?: string | null
+          id?: string
+          metadata?: Json
+          operation_id?: string
+          project_id?: string | null
+          provider?: string
+          reason?: string | null
+          source?: string
+        }
+        Relationships: []
+      }
       studio_docs: {
         Row: {
           created_at: string

@@ -40,6 +40,45 @@ SELECT ok(
 );
 
 SELECT ok(
+  to_regclass('public.social_account_events') IS NOT NULL,
+  'immutable social account event table exists'
+);
+
+SELECT ok(
+  (
+    SELECT relrowsecurity
+    FROM pg_class
+    WHERE oid = 'public.social_account_events'::regclass
+  ),
+  'RLS is enabled on social account events'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM information_schema.role_table_grants
+    WHERE table_schema = 'public'
+      AND table_name = 'social_account_events'
+      AND grantee = 'authenticated'
+      AND privilege_type <> 'SELECT'
+  ),
+  0,
+  'authenticated has no write grant on social account events'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM information_schema.columns
+    WHERE table_schema = 'public'
+      AND table_name = 'social_account_events'
+      AND column_name ~* '(access|refresh).*token|secret|password|credential'
+  ),
+  0,
+  'social account events contain no credential column'
+);
+
+SELECT ok(
   (
     SELECT relrowsecurity
     FROM pg_class
@@ -331,6 +370,10 @@ VALUES
     'social-foundation-admin@test.local'
   ),
   (
+    'a1000000-0000-4000-8000-000000000002',
+    'social-foundation-manager-b@test.local'
+  ),
+  (
     'a1000000-0000-4000-8000-00000000000a',
     'social-foundation-client-a@test.local'
   ),
@@ -348,6 +391,10 @@ FROM (
       'Social Foundation Admin'
     ),
     (
+      'a1000000-0000-4000-8000-000000000002'::uuid,
+      'Social Foundation Manager B'
+    ),
+    (
       'a1000000-0000-4000-8000-00000000000a'::uuid,
       'Social Foundation Client A'
     ),
@@ -359,9 +406,24 @@ FROM (
 WHERE profile.id = fixture.id;
 
 DELETE FROM public.user_roles
-WHERE user_id = 'a1000000-0000-4000-8000-000000000001';
+WHERE user_id IN (
+  'a1000000-0000-4000-8000-000000000001',
+  'a1000000-0000-4000-8000-000000000002'
+);
 INSERT INTO public.user_roles (user_id, role)
-VALUES ('a1000000-0000-4000-8000-000000000001', 'admin');
+VALUES
+  ('a1000000-0000-4000-8000-000000000001', 'admin'),
+  ('a1000000-0000-4000-8000-000000000002', 'manager');
+
+INSERT INTO public.team_client_assignments (
+  user_id,
+  client_id,
+  created_by
+) VALUES (
+  'a1000000-0000-4000-8000-000000000002',
+  'a1000000-0000-4000-8000-00000000000b',
+  'a1000000-0000-4000-8000-000000000001'
+);
 
 INSERT INTO public.projects (
   id,
@@ -628,6 +690,115 @@ SELECT ok(
   'a connected account remains manual with automation disabled by default'
 );
 
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events AS event_row
+    JOIN pg_temp.social_foundation_state AS state
+      ON state.external_account_id = event_row.external_account_id
+    WHERE state.label = 'oauth_state'
+      AND event_row.event_type = 'connected'
+  ),
+  1,
+  'the first official connection is recorded once'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events AS event_row
+    JOIN pg_temp.social_foundation_state AS state
+      ON state.external_account_id = event_row.external_account_id
+    WHERE state.label = 'oauth_state'
+      AND event_row.event_type = 'reconnected'
+  ),
+  0,
+  'an idempotent OAuth retry does not invent a reconnection event'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events AS event_row
+    JOIN pg_temp.social_foundation_state AS state
+      ON state.external_account_id = event_row.external_account_id
+    WHERE state.label = 'oauth_state'
+      AND event_row.event_type = 'project_linked'
+      AND event_row.project_id =
+        'a2000000-0000-4000-8000-00000000000a'::uuid
+  ),
+  1,
+  'the account destination project is recorded once'
+);
+
+SELECT throws_like(
+  $sql$
+    UPDATE public.external_accounts AS account
+    SET external_id = 'tampered-provider-identity'
+    FROM pg_temp.social_foundation_state AS state
+    WHERE state.label = 'oauth_state'
+      AND account.id = state.external_account_id
+  $sql$,
+  '%platform and external_id are immutable for connected accounts%',
+  'provider identity cannot be edited after an official connection'
+);
+
+INSERT INTO public.external_accounts (
+  id,
+  client_id,
+  platform,
+  external_id,
+  display_name,
+  handle,
+  status
+) VALUES (
+  'a9000000-0000-4000-8000-00000000000b',
+  'a1000000-0000-4000-8000-00000000000b',
+  'instagram',
+  'other-client-account',
+  'Other Client Instagram',
+  '@other_client_instagram',
+  'active'
+);
+
+INSERT INTO public.project_external_accounts (
+  client_id,
+  project_id,
+  external_account_id
+) VALUES (
+  'a1000000-0000-4000-8000-00000000000b',
+  'a2000000-0000-4000-8000-00000000000b',
+  'a9000000-0000-4000-8000-00000000000b'
+);
+
+SELECT throws_like(
+  $sql$
+    INSERT INTO social_private.external_account_grants (
+      external_account_id,
+      client_id,
+      grant_id,
+      candidate_id,
+      provider,
+      platform,
+      provider_resource_id,
+      resource_access_token_secret_id,
+      connected_by
+    ) VALUES (
+      'a9000000-0000-4000-8000-00000000000b',
+      'a1000000-0000-4000-8000-00000000000b',
+      'a4000000-0000-4000-8000-000000000001',
+      'a5000000-0000-4000-8000-000000000001',
+      'meta',
+      'instagram',
+      'ig-test-resource',
+      'a6000000-0000-4000-8000-000000000003',
+      'a1000000-0000-4000-8000-000000000001'
+    )
+  $sql$,
+  '%this Meta account is already connected; disconnect it before reassignment%',
+  'the same Meta resource cannot silently route into another client'
+);
+
 SELECT pg_temp.act_as('a1000000-0000-4000-8000-00000000000b');
 SELECT is(
   (
@@ -639,6 +810,41 @@ SELECT is(
   ),
   0,
   'connection metadata is isolated from another client through RLS'
+);
+
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events AS event_row
+    JOIN pg_temp.social_foundation_state AS state
+      ON state.external_account_id = event_row.external_account_id
+    WHERE state.label = 'oauth_state'
+  ),
+  0,
+  'social account history is isolated from another client through RLS'
+);
+
+SELECT pg_temp.act_as('a1000000-0000-4000-8000-000000000002');
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events
+    WHERE client_id = 'a1000000-0000-4000-8000-00000000000a'
+  ),
+  0,
+  'a manager assigned to client B cannot read client A social history'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.social_account_events
+    WHERE client_id = 'a1000000-0000-4000-8000-00000000000b'
+      AND external_account_id =
+        'a9000000-0000-4000-8000-00000000000b'::uuid
+      AND event_type = 'project_linked'
+  ),
+  1,
+  'a manager assigned to client B can read client B social history'
 );
 
 SELECT pg_temp.act_as('a1000000-0000-4000-8000-000000000001');
@@ -987,6 +1193,62 @@ SELECT ok(
     WHERE state.label = 'legacy_manual'
   ),
   'legacy manual save keeps its scheduled behavior and does not invent assets'
+);
+
+SELECT pg_temp.act_as_owner();
+SELECT throws_like(
+  $sql$
+    UPDATE public.social_account_events
+    SET reason = 'tampered'
+    WHERE client_id = 'a1000000-0000-4000-8000-00000000000a'
+  $sql$,
+  '%social account events are immutable%',
+  'recorded social account events cannot be changed'
+);
+
+SELECT throws_like(
+  $sql$
+    DELETE FROM public.social_account_events
+    WHERE client_id = 'a1000000-0000-4000-8000-00000000000a'
+  $sql$,
+  '%social account events are immutable%',
+  'recorded social account events cannot be deleted'
+);
+
+SELECT throws_like(
+  $sql$
+    SELECT social_private.record_social_account_event(
+      gen_random_uuid(),
+      'a1000000-0000-4000-8000-00000000000a',
+      'a2000000-0000-4000-8000-00000000000a',
+      NULL,
+      'a1000000-0000-4000-8000-000000000001',
+      'connection_status_changed',
+      'system',
+      NULL,
+      jsonb_build_object('access_token', 'forbidden')
+    )
+  $sql$,
+  '%sensitive fields are forbidden in social account events%',
+  'credential-shaped metadata is rejected from the audit trail'
+);
+
+SELECT throws_like(
+  $sql$
+    SELECT social_private.record_social_account_event(
+      gen_random_uuid(),
+      'a1000000-0000-4000-8000-00000000000a',
+      'a2000000-0000-4000-8000-00000000000a',
+      NULL,
+      'a1000000-0000-4000-8000-000000000001',
+      'connection_status_changed',
+      'system',
+      'access_token=forbidden',
+      '{}'::jsonb
+    )
+  $sql$,
+  '%invalid social account event reason%',
+  'free-form or credential-shaped event reasons are rejected'
 );
 
 SELECT * FROM finish();

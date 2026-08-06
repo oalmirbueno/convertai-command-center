@@ -1,26 +1,32 @@
 # Exemplo 01 — Health check
 
-Discovery público (sanitizado — nomes/escopos de tools e config do
-Segundo Cérebro exigem Bearer + `aceleriq_capabilities`):
+Handshake público MCP (sem acessar dados nem listar tools privadas):
 
 ```bash
-curl -sS "$ACELERIQ_MCP_URL" | jq '{name, version, status, protocolVersion, toolCount, secondBrain}'
+curl -sS -X POST "$ACELERIQ_MCP_URL" \
+  -H "Content-Type: application/json" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"health-check","version":"1.0.0"}}}' \
+  | jq '.result | {protocolVersion, serverInfo, capabilities}'
 ```
 
 Resposta esperada:
 
 ```json
 {
-  "name": "aceleriq-mcp",
-  "version": "1.2.0",
-  "status": "ok",
   "protocolVersion": "2025-06-18",
-  "toolCount": 25,
-  "secondBrain": { "configured": true }
+  "serverInfo": {
+    "name": "aceleriq-mcp",
+    "title": "Aceleriq OS MCP",
+    "version": "1.8.0"
+  },
+  "capabilities": { "tools": { "listChanged": true } }
 }
 ```
 
-Handshake autenticado + descoberta detalhada:
+Um `GET` sem Bearer responde `401` com o desafio OAuth de propósito; não use
+esse GET como health check.
+
+Descoberta autenticada e filtrada pela credencial:
 
 ```bash
 curl -sS -X POST "$ACELERIQ_MCP_URL" \

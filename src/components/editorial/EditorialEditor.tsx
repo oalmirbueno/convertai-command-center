@@ -37,7 +37,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
-import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
   useEditorialEditorOptions,
@@ -100,7 +99,6 @@ interface EditorialEditorProps {
   defaultProductionStatus?: "draft" | "production" | "ready" | "cancelled";
   lockTaskId?: boolean;
   linkedTaskIds?: readonly string[];
-  designMemberIds?: readonly string[];
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
 }
@@ -117,8 +115,8 @@ const contentTypes = [
   { value: "short", label: "Short" },
   { value: "article", label: "Artigo" },
   { value: "google_post", label: "Post Google" },
-  { value: "other", label: "Outro" },
 ];
+const contentTypeValues = new Set(contentTypes.map(({ value }) => value));
 
 const editableProductionStatuses = [
   "draft",
@@ -177,7 +175,6 @@ export default function EditorialEditor({
   defaultProductionStatus = "draft",
   lockTaskId = false,
   linkedTaskIds = EMPTY_ID_LIST,
-  designMemberIds = EMPTY_ID_LIST,
   onOpenChange,
   onSaved,
 }: EditorialEditorProps) {
@@ -195,7 +192,7 @@ export default function EditorialEditor({
   const [responsibleId, setResponsibleId] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
   const [postIdempotencyKey, setPostIdempotencyKey] =
-    useState(newIdempotencyKey);
+    useState<string>(newIdempotencyKey);
   const [publications, setPublications] = useState<PublicationDraft[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   const [pendingMutationId, setPendingMutationId] = useState<string | null>(
@@ -360,25 +357,7 @@ export default function EditorialEditor({
     );
     setInternalNotes(revisionOf?.internal?.internal_notes || "");
     setPostIdempotencyKey(newIdempotencyKey());
-    setPublications(
-      revisionOf
-        ? revisionOf.publications
-            .filter(({ publication }) => publication.status !== "cancelled")
-            .map(({ publication }) => ({
-              idempotencyKey: newIdempotencyKey(),
-              externalAccountId: publication.external_account_id,
-              fileId: "",
-              caption: publication.caption || "",
-              firstComment: publication.first_comment || "",
-              altText: publication.alt_text || "",
-              scheduledAt: "",
-              timezone:
-                publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
-            }))
-        : defaultScheduledAt
-          ? [emptyPublication(defaultScheduledAt)]
-          : [],
-    );
+    setPublications([]);
     setHasChanges(false);
     setPendingMutationId(null);
   }, [
@@ -396,35 +375,6 @@ export default function EditorialEditor({
     revisionOf,
   ]);
 
-  useEffect(() => {
-    if (!open || post || revisionOf || !defaultScheduledAt || !options) {
-      return;
-    }
-    setPublications((current) => {
-      const emptyScheduledPlaceholder = (publication: PublicationDraft) =>
-        !publication.externalAccountId &&
-        !publication.fileId &&
-        !publication.caption.trim() &&
-        !publication.firstComment.trim() &&
-        !publication.altText.trim() &&
-        publication.scheduledAt === defaultScheduledAt;
-      if (options.accounts.length === 0) {
-        return current.filter(
-          (publication) => !emptyScheduledPlaceholder(publication),
-        );
-      }
-      if (options.accounts.length > 1) return current;
-      const onlyAccountId = options.accounts[0].id;
-      if (current.length === 0) {
-        return [emptyPublication(defaultScheduledAt, onlyAccountId)];
-      }
-      if (current.length === 1 && emptyScheduledPlaceholder(current[0])) {
-        return [{ ...current[0], externalAccountId: onlyAccountId }];
-      }
-      return current;
-    });
-  }, [defaultScheduledAt, open, options, post, revisionOf]);
-
   const filteredProjects = useMemo(
     () =>
       projects.filter((project) => !clientId || project.client_id === clientId),
@@ -438,13 +388,12 @@ export default function EditorialEditor({
   }, [options?.assignments, teamMembers]);
   const selectableTasks = useMemo(() => {
     const linkedIds = new Set(linkedTaskIds);
-    const designIds = new Set(designMemberIds);
     return (options?.tasks || []).filter(
       (task) =>
         task.id === taskId ||
-        (!linkedIds.has(task.id) && isPublishableTask(task, designIds)),
+        (!linkedIds.has(task.id) && isPublishableTask(task)),
     );
-  }, [designMemberIds, linkedTaskIds, options?.tasks, taskId]);
+  }, [linkedTaskIds, options?.tasks, taskId]);
   const selectedFile =
     options?.files.find((file) => file.id === primaryFileId) ||
     (post?.primaryFile?.id === primaryFileId ? post.primaryFile : undefined);
@@ -476,6 +425,11 @@ export default function EditorialEditor({
   );
   const savedContentLocked = primaryContentLocked || publicationContentLocked;
   const contentLocked = savedContentLocked || approvedMediaDraft;
+  const showExistingPublicationPlan = Boolean(
+    post?.publications.some(
+      ({ publication }) => publication.status !== "cancelled",
+    ),
+  );
   const cancelledAccountIds = useMemo(
     () =>
       new Set(
@@ -518,45 +472,6 @@ export default function EditorialEditor({
         caption: contentLocked ? defaultCaption : "",
       },
     ]);
-    markChanged();
-  };
-
-  const selectAccountForPublication = (accountId: string) => {
-    if (
-      publications.some(
-        (publication) => publication.externalAccountId === accountId,
-      )
-    ) {
-      return;
-    }
-    setPublications((current) => {
-      if (
-        current.some(
-          (publication) => publication.externalAccountId === accountId,
-        )
-      ) {
-        return current;
-      }
-
-      const accountlessIndex = current.findIndex(
-        (publication) => !publication.externalAccountId,
-      );
-      if (accountlessIndex >= 0) {
-        return current.map((publication, index) =>
-          index === accountlessIndex
-            ? { ...publication, externalAccountId: accountId }
-            : publication,
-        );
-      }
-
-      return [
-        ...current,
-        {
-          ...emptyPublication(defaultScheduledAt, accountId),
-          caption: contentLocked ? defaultCaption : "",
-        },
-      ];
-    });
     markChanged();
   };
 
@@ -603,6 +518,14 @@ export default function EditorialEditor({
   const handleSave = async () => {
     if (!clientId || !projectId || !title.trim()) {
       toast.error("Preencha cliente, projeto e título.");
+      return;
+    }
+    const hasPublishableContentType = contentTypeValues.has(contentType);
+    const preservesExistingLegacyType = Boolean(
+      post?.post.content_type === contentType && !hasPublishableContentType,
+    );
+    if (!hasPublishableContentType && !preservesExistingLegacyType) {
+      toast.error("Escolha um formato editorial publicável.");
       return;
     }
     if (lockTaskId && (!taskId || taskId !== defaultTaskId)) {
@@ -852,6 +775,11 @@ export default function EditorialEditor({
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
+                  {!contentTypeValues.has(contentType) && (
+                    <SelectItem value={contentType} disabled>
+                      Formato legado: {contentType}
+                    </SelectItem>
+                  )}
                   {contentTypes.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       {type.label}
@@ -1090,14 +1018,16 @@ export default function EditorialEditor({
             </div>
           </section>
 
+          {showExistingPublicationPlan && (
           <section className="space-y-4">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-sm font-semibold text-foreground">
-                  Publicações por plataforma
+                  Plano de publicação existente
                 </h3>
                 <p className="mt-1 text-xs text-muted-foreground">
-                  Cada conta pode ter horário, legenda e arquivo próprios.
+                  Edite apenas este plano já criado. Para um novo plano, use
+                  Agendar publicação na Agenda.
                 </p>
               </div>
               <Button
@@ -1124,18 +1054,6 @@ export default function EditorialEditor({
                 Plataforma
               </Button>
             </div>
-
-            {projectId && !loadingOptions && options && !optionsError && (
-              <EditorialAccountSetup
-                clientId={clientId}
-                projectId={projectId}
-                linkedAccounts={options.accounts}
-                availableAccounts={options.availableAccounts}
-                canManage={options.canManageAccounts}
-                permissionUnavailable={options.accountPermissionUnavailable}
-                onAccountReady={selectAccountForPublication}
-              />
-            )}
 
             {publications.map((publication, index) => {
               const fieldPrefix = `editorial-publication-${
@@ -1355,6 +1273,7 @@ export default function EditorialEditor({
               </div>
             )}
           </section>
+          )}
         </div>
 
         <DialogFooter className="shrink-0 gap-2 border-t border-border bg-background px-4 py-3 sm:px-6 sm:py-4 sm:space-x-0">

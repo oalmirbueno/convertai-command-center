@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { DndContext } from "@dnd-kit/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import EditorialCalendarViews from "@/components/editorial/EditorialCalendarViews";
@@ -194,6 +194,75 @@ describe("editorial calendar content direction", () => {
     compactCards.forEach((card) => {
       expect(card.childElementCount).toBe(2);
     });
+  });
+
+  it("keeps a scheduled publication visible when the day also has many deadlines", () => {
+    const crowdedTasks = Array.from({ length: 3 }, (_, index) => ({
+      ...task,
+      id: `task-${index + 1}`,
+      title: `Tarefa ${index + 1}`,
+    }));
+    const { container } = renderView({
+      view: "month",
+      tasks: crowdedTasks,
+      posts: [scheduledPost],
+    });
+    const calendarGrid = container.querySelector('[role="grid"]');
+    const dayCell = calendarGrid?.querySelector(
+      '[aria-label="Dia 2026-07-15"]',
+    );
+
+    expect(dayCell).not.toBeNull();
+    const day = within(dayCell as HTMLElement);
+    const publicationButton = day.getByRole("button", {
+      name: /^Tema: Bastidores que geram confiança\./,
+    });
+    const taskButtons = day.getAllByRole("button", {
+      name: /Abrir ou preparar conteúdo da tarefa do Kanban/,
+    });
+    const dayButtons = Array.from(
+      (dayCell as HTMLElement).querySelectorAll("button"),
+    );
+
+    expect(publicationButton).toBeVisible();
+    expect(taskButtons).toHaveLength(2);
+    expect(dayButtons.indexOf(publicationButton)).toBeLessThan(
+      dayButtons.indexOf(taskButtons[0]),
+    );
+  });
+
+  it("describes a Kanban deadline with its date and real action", () => {
+    renderView({ view: "week" });
+
+    expect(
+      screen.getAllByRole("button", {
+        name: /Abrir ou preparar conteúdo da tarefa do Kanban\. Prazo em 15 de julho de 2026/,
+      }).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("distinguishes unscheduled publications from undated Kanban tasks", () => {
+    renderView({
+      view: "month",
+      tasks: [{ ...task, due_date: null }],
+      posts: [{ ...scheduledPost, publications: [] }],
+    });
+
+    expect(
+      screen.getByText(
+        "1 publicação sem agendamento · 1 tarefa do Kanban sem prazo",
+      ),
+    ).toBeVisible();
+  });
+
+  it("labels a mixed list backlog without calling tasks publications", () => {
+    renderView({
+      view: "list",
+      tasks: [{ ...task, due_date: null }],
+      posts: [{ ...scheduledPost, publications: [] }],
+    });
+
+    expect(screen.getByText("Sem prazo ou agendamento")).toBeVisible();
   });
 
   it("never exposes internal notes as public content context", () => {

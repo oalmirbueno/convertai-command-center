@@ -3,16 +3,27 @@
 // which already filters revoked_at + expires_at. Does NOT touch api-gateway.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { oauthScopesForStaff } from './mcp-security.ts';
+import { dataScopeAllowsClient, oauthScopesForStaff } from './mcp-security.ts';
 
 export interface AuthContext {
   keyId: string;
   keyName: string;
   scopes: string[];
   origin: string | null;
+  // The legacy MCP uses service_role-backed handlers, so every data query
+  // must also apply this explicit client boundary. `unrestricted` is granted
+  // only to admins (role or scope). Empty clientIds means fail closed.
+  dataScope: ClientDataScope;
   // Optional per-call fields, populated by the dispatcher for write tools.
   correlationId?: string;
   resultRefHolder?: { value?: string };
+}
+
+export interface ClientDataScope {
+  unrestricted: boolean;
+  clientIds: string[];
+  principalUserId: string | null;
+  source: 'oauth' | 'api_key' | 'public';
 }
 
 export type AuthError =
@@ -23,6 +34,10 @@ export type AuthError =
 export type AuthResult =
   | { ok: true; ctx: AuthContext }
   | { ok: false; error: AuthError };
+
+export class DataScopeError extends Error {
+  readonly code = 'data_scope_denied';
+}
 
 let cached: SupabaseClient | null = null;
 function admin(): SupabaseClient {
@@ -175,6 +190,71 @@ async function isStaffUser(userId: string): Promise<boolean> {
   }
 }
 
+const INTERNAL_ROLES = new Set(['admin', 'manager', 'design', 'traffic']);
+
+async function assignedClientIds(userId: string): Promise<string[] | null> {
+  const pageSize = 500;
+  const maxAssignments = 10_000;
+  const ids: string[] = [];
+  for (let from = 0; ; from += pageSize) {
+    const { data, error } = await admin()
+      .from('team_client_assignments')
+      .select('client_id')
+      .eq('user_id', userId)
+      .order('client_id', { ascending: true })
+      .range(from, from + pageSize - 1);
+    if (error) return null;
+    const page = data ?? [];
+    ids.push(...page.map((row: any) => String(row.client_id ?? '')).filter(Boolean));
+    if (ids.length > maxAssignments) return null;
+    if (page.length < pageSize) break;
+  }
+  return [...new Set(ids)];
+}
+
+async function dataScopeForUser(
+  userId: string | null,
+  source: ClientDataScope['source'],
+): Promise<ClientDataScope> {
+  const failClosed: ClientDataScope = {
+    unrestricted: false,
+    clientIds: [],
+    principalUserId: userId,
+    source,
+  };
+  if (!userId) return failClosed;
+
+  const { data: roleRows, error: rolesError } = await admin()
+    .from('user_roles')
+    .select('role')
+    .eq('user_id', userId);
+  if (rolesError) return failClosed;
+
+  const roles = new Set((roleRows ?? []).map((row: any) => String(row.role)));
+  if (roles.has('admin')) {
+    return { ...failClosed, unrestricted: true };
+  }
+  if (![...roles].some(role => INTERNAL_ROLES.has(role))) return failClosed;
+
+  const clientIds = await assignedClientIds(userId);
+  if (!clientIds) return failClosed;
+
+  return {
+    ...failClosed,
+    clientIds,
+  };
+}
+
+export function canAccessClient(ctx: AuthContext, clientId: string): boolean {
+  return dataScopeAllowsClient(ctx.dataScope, clientId);
+}
+
+export function assertClientAccess(ctx: AuthContext, clientId: string): void {
+  if (!canAccessClient(ctx, clientId)) {
+    throw new DataScopeError('resource is outside this MCP principal data scope');
+  }
+}
+
 export async function authenticate(req: Request): Promise<AuthResult> {
   const token = extractBearer(req);
   if (!token) return { ok: false, error: { kind: 'missing' } };
@@ -185,13 +265,37 @@ export async function authenticate(req: Request): Promise<AuthResult> {
   if (!error) {
     const row = Array.isArray(data) ? data[0] : data;
     if (row) {
+      const scopes = Array.isArray(row.scopes) ? row.scopes : [];
+      let dataScope: ClientDataScope;
+      if (scopes.includes('admin')) {
+        dataScope = {
+          unrestricted: true,
+          clientIds: [],
+          principalUserId: null,
+          source: 'api_key',
+        };
+      } else {
+        // API keys are owned by the user who created them. A legacy key with
+        // no owner is authenticated but receives an empty, fail-closed data
+        // scope instead of inheriting service_role visibility.
+        const { data: keyOwner } = await admin()
+          .from('api_keys')
+          .select('created_by')
+          .eq('id', row.id)
+          .maybeSingle();
+        dataScope = await dataScopeForUser(
+          keyOwner?.created_by ? String(keyOwner.created_by) : null,
+          'api_key',
+        );
+      }
       return {
         ok: true,
         ctx: {
           keyId: row.id,
           keyName: row.name,
-          scopes: Array.isArray(row.scopes) ? row.scopes : [],
+          scopes,
           origin: row.origin ?? null,
+          dataScope,
         },
       };
     }
@@ -215,7 +319,17 @@ export async function authenticate(req: Request): Promise<AuthResult> {
     if (!(await hasVerifiedSubject(token, sub))) {
       return { ok: false, error: { kind: 'invalid' } };
     }
-    const scopes = oauthScopesForStaff(await isStaffUser(sub));
+    const hasScopeClaim = Object.prototype.hasOwnProperty.call(claims, 'scope');
+    const hasScopesClaim = Object.prototype.hasOwnProperty.call(claims, 'scopes');
+    const claimedScopes = hasScopeClaim || hasScopesClaim
+      ? [claims.scope, claims.scopes]
+      : undefined;
+    const dataScope = await dataScopeForUser(sub, 'oauth');
+    const scopes = oauthScopesForStaff(
+      await isStaffUser(sub),
+      claimedScopes,
+      dataScope.unrestricted,
+    );
     if (!scopes) return { ok: false, error: { kind: 'invalid' } };
     return {
       ok: true,
@@ -224,6 +338,7 @@ export async function authenticate(req: Request): Promise<AuthResult> {
         keyName: `oauth:${clientId || 'user'}`,
         scopes,
         origin: `oauth:${clientId || 'user'}:${sub}`,
+        dataScope,
       },
     };
   }
@@ -237,8 +352,8 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 // Kept for backward compat. Expands aggregate scopes so this matches
 // canInvoke() in mcp-tools.ts. Inlined to avoid a circular import.
 const SCOPE_EXPANSIONS_LOCAL: Record<string, string[]> = {
-  'aceleriq:read': ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read'],
-  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write'],
+  'aceleriq:read': ['clients:read','projects:read','tasks:read','reports:read','briefings:read','files:read','workspace:read','contracts:read','editorial:read'],
+  'aceleriq:write': ['projects:write','tasks:write','reports:write','files:write','editorial:write'],
 };
 export function expandScopesLocal(granted: readonly string[]): Set<string> {
   const out = new Set<string>();

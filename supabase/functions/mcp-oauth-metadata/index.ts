@@ -15,7 +15,7 @@ const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const RESOURCE = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-server`;
 const AUTH_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
 
-const MCP_VERSION = '1.7.0';
+const MCP_VERSION = '1.8.0';
 const MCP_PROTOCOL = '2025-06-18';
 
 const ALL_SUPPORTED_SCOPES = [
@@ -27,6 +27,7 @@ const ALL_SUPPORTED_SCOPES = [
   'clients:read',
   'projects:read', 'projects:write',
   'tasks:read', 'tasks:write',
+  'editorial:read', 'editorial:write',
   'reports:read', 'reports:write',
   'briefings:read',
   'files:read', 'files:write', 'files:sensitive:read', 'files:archive',

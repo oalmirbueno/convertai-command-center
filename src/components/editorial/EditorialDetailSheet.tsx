@@ -36,6 +36,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet";
 import { Textarea } from "@/components/ui/textarea";
+import CarouselSlider from "@/components/shared/CarouselSlider";
 import {
   useEditorialMutations,
   useEditorialPostEvents,
@@ -134,6 +135,85 @@ function publicationFileReady(
     post.post.production_status === "ready" &&
     isFilePublishable(post.primaryFile) &&
     isFilePublishable(effectiveFile)
+  );
+}
+
+function PublicationProgress({
+  post,
+  bundle,
+}: {
+  post: EditorialPostBundle;
+  bundle: EditorialPublicationBundle;
+}) {
+  const publication = bundle.publication;
+  const approved = publicationFileReady(post, bundle);
+  const scheduled =
+    Boolean(publication.scheduled_at) ||
+    ["scheduled", "published"].includes(publication.status);
+  const published = publication.status === "published";
+  const steps = [
+    { label: "Aprovado", complete: approved },
+    { label: "Agendado no painel", complete: scheduled },
+    { label: "Publicado", complete: published },
+  ];
+
+  return (
+    <div className="rounded-lg border border-border bg-muted/20 p-3">
+      <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+        Rastreio do processo
+      </p>
+      <ol className="mt-3 grid grid-cols-3 gap-2" aria-label="Etapas da publicação">
+        {steps.map((step, index) => (
+          <li key={step.label} className="relative min-w-0 text-center">
+            {index > 0 && (
+              <span
+                className={cn(
+                  "absolute right-1/2 top-3 h-px w-full",
+                  step.complete ? "bg-success/50" : "bg-border",
+                )}
+                aria-hidden="true"
+              />
+            )}
+            <span
+              className={cn(
+                "relative z-10 mx-auto flex h-6 w-6 items-center justify-center rounded-full border bg-background",
+                step.complete
+                  ? "border-success/40 text-success"
+                  : "border-border text-muted-foreground",
+              )}
+            >
+              {step.complete ? (
+                <CheckCircle2 className="h-3.5 w-3.5" />
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-current" />
+              )}
+            </span>
+            <span
+              className={cn(
+                "mt-1.5 block text-[9px] leading-3",
+                step.complete ? "text-foreground" : "text-muted-foreground",
+              )}
+            >
+              {step.label}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {["failed", "cancelled"].includes(publication.status) && (
+        <p
+          className={cn(
+            "mt-2 text-center text-[10px] font-medium",
+            publication.status === "failed"
+              ? "text-destructive"
+              : "text-muted-foreground",
+          )}
+        >
+          {publication.status === "failed"
+            ? "Processo com falha registrada"
+            : "Agendamento cancelado"}
+        </p>
+      )}
+    </div>
   );
 }
 
@@ -483,6 +563,42 @@ export default function EditorialDetailSheet({
                   </Link>
                 </Button>
               )}
+              {post.primaryFile && (
+                <div className="mt-4 overflow-hidden rounded-xl border border-border bg-muted/20 p-3">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                    Conteúdo principal aprovado
+                  </p>
+                  <CarouselSlider
+                    parent={{
+                      id: post.primaryFile.id,
+                      file_name: post.primaryFile.file_name,
+                      file_url: post.primaryFile.file_url || "",
+                      storage_bucket: post.primaryFile.storage_bucket,
+                      storage_path: post.primaryFile.storage_path,
+                      mime_type: post.primaryFile.mime_type,
+                      extension: post.primaryFile.extension,
+                      created_at: post.primaryFile.created_at,
+                    }}
+                    initialChildren={(post.primaryFileChildren || []).map(
+                      (file) => ({
+                        id: file.id,
+                        file_name: file.file_name,
+                        file_url: file.file_url || "",
+                        storage_bucket: file.storage_bucket,
+                        storage_path: file.storage_path,
+                        mime_type: file.mime_type,
+                        extension: file.extension,
+                        created_at: file.created_at,
+                      }),
+                    )}
+                  />
+                  {(post.primaryFileChildren?.length || 0) > 0 && (
+                    <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                      Carrossel completo · {1 + post.primaryFileChildren!.length} arquivos na ordem do plano
+                    </p>
+                  )}
+                </div>
+              )}
             </section>
 
             <section className="space-y-3">
@@ -537,6 +653,8 @@ export default function EditorialDetailSheet({
                       )}
                     </div>
 
+                    <PublicationProgress post={post} bundle={bundle} />
+
                     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border bg-muted/30 p-3">
                       <div>
                         <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
@@ -562,6 +680,43 @@ export default function EditorialDetailSheet({
                           : "Aprovação pendente"}
                       </Badge>
                     </div>
+
+                    {publication.file_id && effectiveFile && (
+                      <div className="overflow-hidden rounded-xl border border-border bg-muted/20 p-3">
+                        <p className="mb-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Arquivo usado nesta publicação
+                        </p>
+                        <CarouselSlider
+                          parent={{
+                            id: effectiveFile.id,
+                            file_name: effectiveFile.file_name,
+                            file_url: effectiveFile.file_url || "",
+                            storage_bucket: effectiveFile.storage_bucket,
+                            storage_path: effectiveFile.storage_path,
+                            mime_type: effectiveFile.mime_type,
+                            extension: effectiveFile.extension,
+                            created_at: effectiveFile.created_at,
+                          }}
+                          initialChildren={(bundle.fileChildren || []).map(
+                            (file) => ({
+                              id: file.id,
+                              file_name: file.file_name,
+                              file_url: file.file_url || "",
+                              storage_bucket: file.storage_bucket,
+                              storage_path: file.storage_path,
+                              mime_type: file.mime_type,
+                              extension: file.extension,
+                              created_at: file.created_at,
+                            }),
+                          )}
+                        />
+                        {(bundle.fileChildren?.length || 0) > 0 && (
+                          <p className="mt-2 text-center text-[10px] text-muted-foreground">
+                            Carrossel completo · {1 + bundle.fileChildren!.length} arquivos na ordem agendada
+                          </p>
+                        )}
+                      </div>
+                    )}
 
                     {publication.caption && (
                       <p className="whitespace-pre-wrap rounded-lg bg-muted/40 p-3 text-xs text-foreground">
@@ -623,7 +778,7 @@ export default function EditorialDetailSheet({
 
                     {canPublish && !isImpersonating && (
                       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
-                        {["planned", "scheduled", "failed"].includes(
+                        {["planned", "scheduled"].includes(
                           publication.status,
                         ) && (
                           <Button
@@ -644,9 +799,7 @@ export default function EditorialDetailSheet({
                               : "Agendar"}
                           </Button>
                         )}
-                        {["planned", "scheduled", "failed"].includes(
-                          publication.status,
-                        ) && (
+                        {publication.status === "scheduled" && (
                           <Button
                             type="button"
                             size="sm"
@@ -657,9 +810,7 @@ export default function EditorialDetailSheet({
                             Confirmar publicação
                           </Button>
                         )}
-                        {["scheduled", "failed"].includes(
-                          publication.status,
-                        ) && (
+                        {publication.status === "scheduled" && (
                           <Button
                             type="button"
                             size="sm"
@@ -942,7 +1093,7 @@ export default function EditorialDetailSheet({
             <Button
               type="button"
               variant="outline"
-              onClick={closeAction}
+              onClick={() => closeAction()}
               disabled={transitionPublication.isPending}
             >
               Voltar

@@ -1,11 +1,16 @@
-import { useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Plug, Plus, Power, PowerOff, Link2, Link2Off, Loader2, AlertTriangle, Pencil, Save, X } from "lucide-react";
+import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
+import type { EditorialAccountRow } from "@/hooks/useEditorialCalendar";
+import { EDITORIAL_PLATFORMS } from "@/lib/editorial";
 
 interface Props {
   clientId: string;
+  clientName: string;
+  initialProjectId?: string | null;
 }
 
 const PLATFORMS = [
@@ -30,15 +35,23 @@ const PLATFORMS = [
 const FRIENDLY_ERROR = "Não foi possível concluir a operação. Verifique suas permissões e tente novamente.";
 const DUPLICATE_ERROR = "Já existe uma conta cadastrada com esses dados para este cliente.";
 const LINK_DUPLICATE_ERROR = "Esta conta já está vinculada a este projeto.";
+const EDITORIAL_PLATFORM_SET = new Set<string>(EDITORIAL_PLATFORMS);
 
-function friendly(err: any, fallback = FRIENDLY_ERROR) {
-  const raw = String(err?.message || "");
+function friendly(err: unknown, fallback = FRIENDLY_ERROR) {
+  const raw =
+    typeof err === "object" && err !== null && "message" in err
+      ? String((err as { message?: unknown }).message || "")
+      : "";
   if (/duplicate|unique/i.test(raw)) return fallback === FRIENDLY_ERROR ? DUPLICATE_ERROR : fallback;
   if (/permission|denied|row-level|violates row-level/i.test(raw)) return "Você não tem permissão para esta ação.";
   return fallback;
 }
 
-export default function ClientConnectionsPanel({ clientId }: Props) {
+export default function ClientConnectionsPanel({
+  clientId,
+  clientName,
+  initialProjectId = null,
+}: Props) {
   const qc = useQueryClient();
 
   const [creating, setCreating] = useState(false);
@@ -55,6 +68,9 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
   const [editHandle, setEditHandle] = useState("");
   const [editExternalId, setEditExternalId] = useState("");
   const [editSubmitting, setEditSubmitting] = useState(false);
+  const [publishingProjectId, setPublishingProjectId] = useState(
+    initialProjectId || "",
+  );
 
   const {
     data: canManage = false,
@@ -104,9 +120,29 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
     enabled: !!clientId,
   });
 
+  useEffect(() => {
+    setPublishingProjectId(initialProjectId || "");
+  }, [clientId, initialProjectId]);
+
+  useEffect(() => {
+    if (!projects) return;
+    setPublishingProjectId((current) => {
+      if (projects.some((project) => project.id === current)) return current;
+      return projects.length === 1 ? projects[0].id : "";
+    });
+  }, [projects]);
+
+  const publishingProject = (projects || []).find(
+    (project) =>
+      project.id === publishingProjectId && project.client_id === clientId,
+  );
   const accountIds = useMemo(() => (accounts || []).map((a) => a.id), [accounts]);
 
-  const { data: links, isError: linksError } = useQuery({
+  const {
+    data: links,
+    isLoading: linksLoading,
+    isError: linksError,
+  } = useQuery({
     queryKey: ["project-external-accounts", clientId, accountIds.join(",")],
     queryFn: async () => {
       if (!accountIds.length) return [];
@@ -121,9 +157,106 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
     enabled: !!clientId && accountIds.length > 0,
   });
 
+  const {
+    data: officialConnections,
+    isLoading: officialConnectionsLoading,
+    isError: officialConnectionsError,
+  } = useQuery({
+    queryKey: ["external-account-connections", clientId, accountIds.join(",")],
+    queryFn: async () => {
+      if (!accountIds.length) return [];
+      const { data, error } = await supabase
+        .from("external_account_connections")
+        .select("external_account_id, connection_status, automation_enabled")
+        .eq("client_id", clientId)
+        .in("external_account_id", accountIds);
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!clientId && accountIds.length > 0,
+  });
+
+  const officialAccountIds = useMemo(
+    () => new Set((officialConnections || []).map((row) => row.external_account_id)),
+    [officialConnections],
+  );
+  const publishingAccounts = useMemo<EditorialAccountRow[]>(() => {
+    const connectionByAccountId = new Map(
+      (officialConnections || []).map((connection) => [
+        connection.external_account_id,
+        connection,
+      ]),
+    );
+
+    return (accounts || [])
+      .filter(
+        (account) =>
+          account.status === "active" &&
+          EDITORIAL_PLATFORM_SET.has(account.platform),
+      )
+      .map((account) => {
+        const connection = connectionByAccountId.get(account.id);
+        const connectionStatus: EditorialAccountRow["connection_status"] =
+          !connection
+            ? "manual"
+            : connection.connection_status === "connected"
+              ? "connected"
+              : connection.connection_status === "revoked"
+                ? "revoked"
+                : "expired";
+        return {
+          id: account.id,
+          client_id: account.client_id,
+          platform: account.platform,
+          display_name: account.display_name,
+          handle: account.handle,
+          status: account.status,
+          connection_status: connectionStatus,
+          automation_enabled: connection?.automation_enabled === true,
+        };
+      });
+  }, [accounts, officialConnections]);
+  const linkedPublishingAccountIds = useMemo(
+    () =>
+      new Set(
+        (links || [])
+          .filter((link) => link.project_id === publishingProject?.id)
+          .map((link) => link.external_account_id),
+      ),
+    [links, publishingProject?.id],
+  );
+  const linkedPublishingAccounts = useMemo(
+    () =>
+      publishingAccounts.filter((account) =>
+        linkedPublishingAccountIds.has(account.id),
+      ),
+    [linkedPublishingAccountIds, publishingAccounts],
+  );
+  const availablePublishingAccounts = useMemo(
+    () =>
+      publishingAccounts.filter(
+        (account) => !linkedPublishingAccountIds.has(account.id),
+      ),
+    [linkedPublishingAccountIds, publishingAccounts],
+  );
+  const publishingAccountsLoading =
+    isLoading ||
+    permissionsLoading ||
+    linksLoading ||
+    officialConnectionsLoading;
+  const publishingAccountsError =
+    accountsError ||
+    permissionsError ||
+    linksError ||
+    officialConnectionsError;
+  const editingOfficial = editingId
+    ? officialAccountIds.has(editingId)
+    : false;
+
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ["external-accounts", clientId] });
     qc.invalidateQueries({ queryKey: ["project-external-accounts", clientId] });
+    qc.invalidateQueries({ queryKey: ["external-account-connections", clientId] });
     qc.invalidateQueries({ queryKey: ["editorial-editor-options"] });
   };
 
@@ -135,7 +268,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
     setExternalId("");
   };
 
-  const startEditing = (account: any) => {
+  const startEditing = (account: NonNullable<typeof accounts>[number]) => {
     resetForm();
     setEditingId(account.id);
     setEditPlatform(account.platform);
@@ -167,14 +300,20 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
     setEditSubmitting(true);
     try {
+      const updatePayload = editingOfficial
+        ? {
+            display_name: editDisplayName.trim(),
+            handle: editHandle.trim() || null,
+          }
+        : {
+            platform: editPlatform,
+            display_name: editDisplayName.trim(),
+            handle: editHandle.trim() || null,
+            external_id: editExternalId.trim() || null,
+          };
       const { data, error } = await supabase
         .from("external_accounts")
-        .update({
-          platform: editPlatform,
-          display_name: editDisplayName.trim(),
-          handle: editHandle.trim() || null,
-          external_id: editExternalId.trim() || null,
-        })
+        .update(updatePayload)
         .eq("id", editingId)
         .eq("client_id", clientId)
         .select("id")
@@ -185,7 +324,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
       toast.success("Conta atualizada");
       cancelEditing();
       invalidate();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(friendly(e, "Falha ao atualizar a conta."));
     } finally {
       setEditSubmitting(false);
@@ -216,14 +355,14 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
       toast.success("Conta cadastrada");
       resetForm();
       invalidate();
-    } catch (e: any) {
+    } catch (e: unknown) {
       toast.error(friendly(e, "Falha ao cadastrar a conta."));
     } finally {
       setSubmitting(false);
     }
   };
 
-  const toggleStatus = async (acc: any) => {
+  const toggleStatus = async (acc: NonNullable<typeof accounts>[number]) => {
     if (!canManage) return;
     const next = acc.status === "active" ? "inactive" : "active";
     const { data, error } = await supabase
@@ -278,6 +417,75 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
   return (
     <div className="pt-2">
+      <section className="mb-4 rounded-xl border border-primary/20 bg-primary/[0.03] p-3.5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+              Contas para publicação
+            </p>
+            <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+              A conta fica salva neste cliente e vinculada ao projeto escolhido.
+            </p>
+          </div>
+          <div className="min-w-0 sm:w-56">
+            <label
+              htmlFor="publishing-project"
+              className="text-[10px] text-muted-foreground"
+            >
+              Projeto
+            </label>
+            <select
+              id="publishing-project"
+              value={publishingProjectId}
+              onChange={(event) => setPublishingProjectId(event.target.value)}
+              disabled={projectsError || !projects?.length}
+              className="mt-1 h-10 w-full rounded-lg border border-border bg-background px-2 text-sm text-foreground focus:border-primary/50 focus:outline-none"
+            >
+              <option value="">
+                {(projects || []).length === 0
+                  ? "Nenhum projeto disponível"
+                  : "Selecione um projeto"}
+              </option>
+              {(projects || []).map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+
+        {publishingProject && publishingAccountsLoading && (
+          <div className="mt-3 flex min-h-20 items-center justify-center rounded-xl border border-border bg-background/60">
+            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+          </div>
+        )}
+        {publishingProject && publishingAccountsError && (
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-destructive/25 bg-destructive/5 p-3 text-xs text-destructive">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            Não foi possível carregar as contas de publicação deste projeto.
+          </div>
+        )}
+        {publishingProject &&
+          !publishingAccountsLoading &&
+          !publishingAccountsError && (
+          <div className="mt-3">
+            <EditorialAccountSetup
+              clientId={clientId}
+              clientName={clientName}
+              projectId={publishingProject.id}
+              projectName={publishingProject.name || "Projeto"}
+              linkedAccounts={linkedPublishingAccounts}
+              availableAccounts={availablePublishingAccounts}
+              canManage={canManage}
+              permissionUnavailable={permissionsError}
+              showManualOptions={false}
+              onAccountReady={() => undefined}
+            />
+          </div>
+          )}
+      </section>
+
       <div className="flex items-center justify-between mb-2">
         <label className="text-[11px] uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
           <Plug className="w-3 h-3" /> Contas e Canais
@@ -310,10 +518,10 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         </div>
       )}
 
-      {(projectsError || linksError) && (
+      {(projectsError || linksError || officialConnectionsError) && (
         <div className="mb-2 flex items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-[12px] text-amber-500">
           <AlertTriangle className="w-3.5 h-3.5" />
-          Os canais carregaram, mas os vínculos com projetos estão indisponíveis no momento.
+          Os canais carregaram, mas alguns vínculos oficiais ou com projetos estão indisponíveis no momento.
         </div>
       )}
 
@@ -391,12 +599,13 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
         </div>
       ) : (
         <div className="space-y-2">
-          {accounts.map((acc: any) => {
-            const accLinks = (links || []).filter((l: any) => l.external_account_id === acc.id);
-            const linkedProjectIds = new Set(accLinks.map((l: any) => l.project_id));
-            const availableProjects = (projects || []).filter((p: any) => !linkedProjectIds.has(p.id));
+          {accounts.map((acc) => {
+            const accLinks = (links || []).filter((link) => link.external_account_id === acc.id);
+            const linkedProjectIds = new Set(accLinks.map((link) => link.project_id));
+            const availableProjects = (projects || []).filter((project) => !linkedProjectIds.has(project.id));
             const isInactive = acc.status !== "active";
             const isEditing = editingId === acc.id;
+            const isOfficial = officialAccountIds.has(acc.id);
             return (
               <div key={acc.id} className="rounded-xl border border-border bg-secondary/40">
                 {isEditing ? (
@@ -408,7 +617,8 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                           id={`edit-channel-platform-${acc.id}`}
                           value={editPlatform}
                           onChange={(e) => setEditPlatform(e.target.value)}
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                          disabled={editingOfficial}
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50 disabled:cursor-not-allowed disabled:opacity-60"
                         >
                           <option value="">Selecione uma plataforma</option>
                           {PLATFORMS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
@@ -439,10 +649,16 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                           id={`edit-channel-code-${acc.id}`}
                           value={editExternalId}
                           onChange={(e) => setEditExternalId(e.target.value)}
-                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50"
+                          readOnly={editingOfficial}
+                          className="w-full bg-background border border-border rounded-lg px-2 py-1.5 text-sm text-foreground mt-1 focus:outline-none focus:border-primary/50 read-only:cursor-not-allowed read-only:opacity-60"
                         />
                       </div>
                     </div>
+                    {editingOfficial && (
+                      <p className="text-[10px] leading-relaxed text-muted-foreground">
+                        Conta oficial Meta: plataforma e ID são protegidos. Para trocar a identidade, desconecte e autorize a conta correta.
+                      </p>
+                    )}
                     <div className="flex gap-2">
                       <button
                         type="button"
@@ -474,6 +690,11 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                         {isInactive && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">Inativa</span>
                         )}
+                        {isOfficial && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary">
+                            Oficial Meta
+                          </span>
+                        )}
                       </div>
                       {(acc.handle || acc.external_id) && (
                         <p className="text-[11px] text-muted-foreground truncate">
@@ -488,9 +709,19 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                         <button
                           type="button"
                           onClick={() => startEditing(acc)}
-                          title="Editar conta"
+                          title={
+                            officialConnectionsError
+                              ? "Não foi possível confirmar se a conta é oficial"
+                              : officialConnectionsLoading
+                                ? "Confirmando o tipo da conta"
+                                : "Editar conta"
+                          }
                           aria-label="Editar canal"
-                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground"
+                          disabled={
+                            officialConnectionsLoading ||
+                            officialConnectionsError
+                          }
+                          className="inline-flex items-center gap-1 rounded-lg border border-border bg-transparent px-2 py-1.5 text-[11px] text-muted-foreground hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
                         >
                           <Pencil className="w-3.5 h-3.5" /> Editar
                         </button>
@@ -533,7 +764,7 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
                       className="min-w-0 flex-1 bg-background border border-border rounded-lg px-2 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
                     >
                       <option value="">Selecione um projeto…</option>
-                      {availableProjects.map((p: any) => (
+                      {availableProjects.map((p) => (
                         <option key={p.id} value={p.id}>{p.name}</option>
                       ))}
                     </select>
@@ -548,8 +779,8 @@ export default function ClientConnectionsPanel({ clientId }: Props) {
 
                 {!projectsError && !linksError && accLinks.length > 0 && (
                   <div className="px-3 pb-2 flex flex-wrap gap-1.5">
-                    {accLinks.map((l: any) => {
-                      const proj = (projects || []).find((p: any) => p.id === l.project_id);
+                    {accLinks.map((l) => {
+                      const proj = (projects || []).find((p) => p.id === l.project_id);
                       return (
                         <span key={l.id} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-background border border-border text-[11px] text-foreground">
                           {proj?.name || "Projeto"}

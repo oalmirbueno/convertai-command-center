@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   CircleDashed,
   ExternalLink,
+  FileImage,
   FileText,
   GripVertical,
   Images,
@@ -58,6 +59,7 @@ import {
   isEditorialPublicationDraggable,
 } from "@/lib/editorialDrag";
 import { editorialStageForTaskStatus } from "@/lib/taskWorkstreams";
+import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 interface EditorialCalendarViewsProps {
   view: EditorialView;
@@ -163,8 +165,8 @@ const boardColumns: Array<{
   },
   {
     id: "delivery",
-    label: "Agenda e publicados",
-    description: "Registros travados ou finalizados",
+    label: "Produção concluída",
+    description: "Conteúdos prontos, agendados ou já entregues",
     dot: "bg-emerald-500",
   },
 ];
@@ -358,6 +360,78 @@ function ContentDirection({
   );
 }
 
+function EditorialFileThumbnail({
+  post,
+  publication,
+  className,
+}: {
+  post: EditorialPostBundle;
+  publication?: EditorialPublicationBundle | null;
+  className?: string;
+}) {
+  const hasPublicationOverride = Boolean(publication?.publication.file_id);
+  const file = hasPublicationOverride ? publication?.file : post.primaryFile;
+  const fileChildren = hasPublicationOverride
+    ? publication?.fileChildren
+    : post.primaryFileChildren;
+  const kind = mediaKindFromFile(
+    file?.file_name,
+    file?.file_url,
+    file?.mime_type || file?.file_type,
+    file?.extension,
+  );
+  const { url } = useResolvedFileUrl({
+    fileUrl: file?.file_url,
+    storageBucket: file?.storage_bucket,
+    storagePath: file?.storage_path,
+    transform:
+      kind === "image" ? { width: 640, quality: 74, resize: "cover" } : null,
+    expiresIn: 3600,
+  });
+  const fileCount = file ? 1 + (fileChildren?.length || 0) : 0;
+
+  return (
+    <span
+      className={cn(
+        "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-secondary",
+        className,
+      )}
+      aria-hidden="true"
+    >
+      {url && kind === "image" ? (
+        <img
+          src={url}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+        />
+      ) : url && kind === "video" ? (
+        <>
+          <video
+            src={`${url}#t=0.1`}
+            muted
+            playsInline
+            preload="metadata"
+            className="h-full w-full object-cover"
+          />
+          <span className="absolute inset-0 flex items-center justify-center bg-black/20">
+            <Video className="h-5 w-5 text-white" />
+          </span>
+        </>
+      ) : (
+        <FileImage className="h-5 w-5 text-muted-foreground" />
+      )}
+      {fileCount > 1 && (
+        <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
+          <Images className="h-2.5 w-2.5" />
+          {fileCount}
+        </span>
+      )}
+    </span>
+  );
+}
+
 function PublicationPill({
   item,
   compact = false,
@@ -404,11 +478,8 @@ function PublicationPill({
   });
 
   return (
-    <button
+    <div
       ref={setNodeRef}
-      type="button"
-      onClick={onClick}
-      aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
       style={
         transform
           ? {
@@ -417,18 +488,22 @@ function PublicationPill({
           : undefined
       }
       className={cn(
-        "group w-full rounded-lg border text-left transition-colors hover:border-primary/40",
-        compact ? "px-2 py-1.5" : "p-2.5",
+        "group relative min-h-11 w-full rounded-lg border text-left transition-colors hover:border-primary/40",
         statusClasses[publication.status] || statusClasses.planned,
-        draggable &&
-          !moving &&
-          "cursor-grab touch-none active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
-      {...(draggable && !moving ? listeners : {})}
-      {...(draggable && !moving ? attributes : {})}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Tema: ${item.post.post.title}. Contexto: ${context || "não informado"}. ${platform}, ${time}, ${status}`}
+        className={cn(
+          "block min-h-11 w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50",
+          compact ? "px-2 py-1.5" : "p-2.5",
+          draggable && !moving && "pr-12",
+        )}
+      >
       {compact ? (
         <>
           <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
@@ -447,9 +522,6 @@ function PublicationPill({
               {item.post.post.title}
             </span>
             <span className="ml-auto shrink-0 opacity-75">{time}</span>
-            {draggable && !moving && (
-              <GripVertical className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-            )}
           </div>
           <p
             className="mt-0.5 truncate text-[10px] opacity-75"
@@ -460,8 +532,14 @@ function PublicationPill({
           </p>
         </>
       ) : (
-        <>
-          <div className="flex min-w-0 items-center gap-1.5 text-[10px] opacity-80">
+        <div className="flex min-w-0 gap-2">
+          <EditorialFileThumbnail
+            post={item.post}
+            publication={item.publication}
+            className="h-10 w-10"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-1.5 text-[10px] opacity-80">
             <span
               className={cn(
                 "h-2 w-2 shrink-0 rounded-full",
@@ -474,18 +552,28 @@ function PublicationPill({
               {account?.handle ? ` · ${account.handle}` : ""}
             </span>
             <span className="ml-auto shrink-0">{time}</span>
-            {draggable && !moving && (
-              <GripVertical className="h-3 w-3 shrink-0 opacity-0 transition-opacity group-hover:opacity-60" />
-            )}
+            </div>
+            <ContentDirection
+              theme={item.post.post.title}
+              context={context}
+              className="mt-1"
+            />
           </div>
-          <ContentDirection
-            theme={item.post.post.title}
-            context={context}
-            className="mt-1"
-          />
-        </>
+        </div>
       )}
-    </button>
+      </button>
+      {draggable && !moving && (
+        <button
+          type="button"
+          className="absolute inset-y-0 right-0 inline-flex min-h-11 w-11 touch-none cursor-grab items-center justify-center rounded-r-lg border-l border-current/10 opacity-60 transition-opacity hover:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary/50 active:cursor-grabbing"
+          {...listeners}
+          {...attributes}
+          aria-label={`Mover ${item.post.post.title} no calendário`}
+        >
+          <GripVertical className="h-4 w-4" aria-hidden="true" />
+        </button>
+      )}
+    </div>
   );
 }
 
@@ -498,23 +586,30 @@ function taskDeliveryTypeLabel(task: EditorialInboxTask) {
 
 function TaskSchedulePill({
   task,
+  dateKey,
   compact = false,
   projectScopeName,
   onClick,
 }: {
   task: EditorialInboxTask;
+  dateKey: string;
   compact?: boolean;
   projectScopeName?: string;
   onClick: () => void;
 }) {
   const deliveryType = taskDeliveryTypeLabel(task);
   const context = taskContentContext(task);
+  const dueDateLabel = format(
+    new Date(`${dateKey}T12:00:00`),
+    "dd 'de' MMMM 'de' yyyy",
+    { locale: ptBR },
+  );
 
   return (
     <button
       type="button"
       onClick={onClick}
-      aria-label={`Abrir tarefa. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
+      aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban. Prazo em ${dueDateLabel}. Tema: ${task.title}. Contexto: ${context || "não informado"}. ${deliveryType}`}
       className={cn(
         "group w-full rounded-lg border border-violet-500/25 bg-violet-500/10 text-left text-foreground transition-colors hover:border-violet-500/50 hover:bg-violet-500/[0.14]",
         compact ? "px-2 py-1.5" : "p-2.5",
@@ -535,8 +630,11 @@ function TaskSchedulePill({
               <span className="font-semibold opacity-60">Tema:</span>{" "}
               {task.title}
             </span>
-            <span className="ml-auto shrink-0 text-[9px] text-violet-500">
-              {deliveryType}
+            <span
+              className="ml-auto shrink-0 text-[9px] text-violet-500"
+              title={`Prazo do Kanban · ${deliveryType}`}
+            >
+              Prazo · {deliveryType}
             </span>
           </div>
           <p
@@ -555,7 +653,7 @@ function TaskSchedulePill({
               aria-hidden="true"
             />
             <span className="truncate text-[10px] font-medium text-violet-500">
-              {deliveryType}
+              Prazo Kanban · {deliveryType}
               {projectScopeName ? ` · ${projectScopeName}` : ""}
             </span>
           </div>
@@ -693,6 +791,7 @@ function MobileAgenda({
                 <TaskSchedulePill
                   key={task.id}
                   task={task}
+                  dateKey={key}
                   projectScopeName={projectScopeNames.get(task.project_id)}
                   onClick={() => onCreateFromTask(task, key)}
                 />
@@ -791,10 +890,10 @@ function MonthView({
               const key = localDateKey(day);
               const dayItems = itemsByDate.get(key) || [];
               const dayTasks = tasksByDate.get(key) || [];
-              const visibleTasks = dayTasks.slice(0, 3);
-              const visibleItems = dayItems.slice(
+              const visibleItems = dayItems.slice(0, 3);
+              const visibleTasks = dayTasks.slice(
                 0,
-                Math.max(0, 3 - visibleTasks.length),
+                Math.max(0, 3 - visibleItems.length),
               );
               const hiddenTasks = dayTasks.slice(visibleTasks.length);
               const hiddenItems = dayItems.slice(visibleItems.length);
@@ -843,17 +942,6 @@ function MonthView({
                     </div>
                   </div>
                   <div className="space-y-1.5">
-                    {visibleTasks.map((task) => (
-                      <TaskSchedulePill
-                        key={task.id}
-                        task={task}
-                        compact
-                        projectScopeName={projectScopeNames.get(
-                          task.project_id,
-                        )}
-                        onClick={() => onCreateFromTask(task, key)}
-                      />
-                    ))}
                     {visibleItems.map((item) => (
                       <PublicationPill
                         key={item.publication.publication.id}
@@ -863,6 +951,18 @@ function MonthView({
                         canPublish={canPublish}
                         moving={moving}
                         onClick={() => onSelectPost(item.post)}
+                      />
+                    ))}
+                    {visibleTasks.map((task) => (
+                      <TaskSchedulePill
+                        key={task.id}
+                        task={task}
+                        dateKey={key}
+                        compact
+                        projectScopeName={projectScopeNames.get(
+                          task.project_id,
+                        )}
+                        onClick={() => onCreateFromTask(task, key)}
                       />
                     ))}
                     {dayCount > visibleCount && (
@@ -886,16 +986,6 @@ function MonthView({
                             })}
                           </p>
                           <div className="space-y-2">
-                            {hiddenTasks.map((task) => (
-                              <TaskSchedulePill
-                                key={task.id}
-                                task={task}
-                                projectScopeName={projectScopeNames.get(
-                                  task.project_id,
-                                )}
-                                onClick={() => onCreateFromTask(task, key)}
-                              />
-                            ))}
                             {hiddenItems.map((item) => (
                               <PublicationPill
                                 key={item.publication.publication.id}
@@ -904,6 +994,17 @@ function MonthView({
                                 canPublish={canPublish}
                                 moving={moving}
                                 onClick={() => onSelectPost(item.post)}
+                              />
+                            ))}
+                            {hiddenTasks.map((task) => (
+                              <TaskSchedulePill
+                                key={task.id}
+                                task={task}
+                                dateKey={key}
+                                projectScopeName={projectScopeNames.get(
+                                  task.project_id,
+                                )}
+                                onClick={() => onCreateFromTask(task, key)}
                               />
                             ))}
                           </div>
@@ -1018,6 +1119,7 @@ function WeekView({
                     <TaskSchedulePill
                       key={task.id}
                       task={task}
+                      dateKey={key}
                       projectScopeName={projectScopeNames.get(
                         task.project_id,
                       )}
@@ -1101,6 +1203,14 @@ function BoardPostCard({
         isDragging && "opacity-30",
       )}
     >
+      <button
+        type="button"
+        onClick={onClick}
+        className="mb-3 block aspect-[16/9] w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+        aria-label={`Ver conteúdo completo de ${post.post.title}`}
+      >
+        <EditorialFileThumbnail post={post} className="h-full w-full" />
+      </button>
       <div className="flex items-start gap-2.5">
         <button
           type="button"
@@ -1125,7 +1235,7 @@ function BoardPostCard({
         {draggable && !moving && (
           <button
             type="button"
-            className="inline-flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-50 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-50 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
             aria-label={`Mover ${post.post.title}`}
             {...listeners}
             {...attributes}
@@ -1251,7 +1361,7 @@ function BoardTaskCard({
         {draggable && (
           <button
             type="button"
-            className="inline-flex h-8 w-7 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
+            className="inline-flex h-11 w-11 shrink-0 cursor-grab touch-none items-center justify-center rounded-lg text-muted-foreground opacity-60 transition-colors hover:bg-secondary hover:text-foreground hover:opacity-100 active:cursor-grabbing"
             aria-label={`Mover tarefa ${task.title}`}
             {...listeners}
             {...attributes}
@@ -1454,8 +1564,8 @@ function BoardView({
   }, [tasks]);
 
   return (
-    <div className="overflow-x-auto pb-2">
-      <div className="grid min-w-[1120px] grid-cols-4 gap-3">
+    <div className="pb-2">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
         {boardColumns.map((column) => (
           <BoardColumn
             key={column.id}
@@ -1592,7 +1702,7 @@ function ListView({
                       }).format(new Date(`${dateKey}T12:00:00`))}
                     </p>
                     <p className="text-xs text-muted-foreground">
-                      Prazo da tarefa
+                      Prazo editorial
                     </p>
                   </div>
                   <span className="h-9 w-1 shrink-0 rounded-full bg-violet-500" />
@@ -1637,6 +1747,11 @@ function ListView({
                   onClick={() => onSelectPost(item.post)}
                   className="flex min-w-0 flex-1 flex-col gap-3 text-left sm:flex-row sm:items-center"
                 >
+                  <EditorialFileThumbnail
+                    post={item.post}
+                    publication={item.publication}
+                    className="h-14 w-14"
+                  />
                   <div className="flex min-w-[92px] items-center gap-2 sm:block">
                     <p className="text-sm font-semibold text-foreground">
                       {new Intl.DateTimeFormat("pt-BR", {
@@ -1729,7 +1844,7 @@ function ListView({
           <div className="mb-3 flex items-center gap-2">
             <CircleDashed className="h-4 w-4 text-muted-foreground" />
             <h3 className="text-sm font-medium text-foreground">
-              Sem agendamento
+              Sem prazo ou agendamento
             </h3>
             <Badge variant="secondary">
               {backlogItems.length + undatedTasks.length}
@@ -1741,6 +1856,7 @@ function ListView({
                 key={task.id}
                 type="button"
                 onClick={() => onCreateFromTask(task)}
+                aria-label={`Abrir ou preparar conteúdo da tarefa do Kanban sem prazo. Tema: ${task.title}. Contexto: ${taskContentContext(task) || "não informado"}. ${taskDeliveryTypeLabel(task)}`}
                 className="rounded-xl border border-violet-500/20 bg-violet-500/[0.06] p-3 text-left transition-colors hover:border-violet-500/45"
               >
                 <ContentDirection
@@ -1814,12 +1930,15 @@ export default function EditorialCalendarViews({
     () => groupTasksByDate(tasks),
     [tasks],
   );
-  const backlogCount = useMemo(
-    () =>
-      flattenBacklog(posts).length +
-      tasks.filter((task) => !taskDateKey(task)).length,
+  const backlogSummary = useMemo(
+    () => ({
+      publicationCount: flattenBacklog(posts).length,
+      taskCount: tasks.filter((task) => !taskDateKey(task)).length,
+    }),
     [posts, tasks],
   );
+  const backlogCount =
+    backlogSummary.publicationCount + backlogSummary.taskCount;
   const listMonthStartKey = localDateKey(startOfMonth(anchorDate));
   const listMonthEndKey = localDateKey(endOfMonth(anchorDate));
   const hasVisibleListTask = tasks.some((task) => {
@@ -1856,10 +1975,24 @@ export default function EditorialCalendarViews({
         className="mb-3 flex min-h-11 w-full items-center justify-between rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-2.5 text-left text-xs text-foreground transition-colors hover:border-violet-500/40"
       >
         <span>
-          {backlogCount}{" "}
-          {backlogCount === 1
-            ? "publicação sem agendamento"
-            : "publicações sem agendamento"}
+          {[
+            backlogSummary.publicationCount > 0
+              ? `${backlogSummary.publicationCount} ${
+                  backlogSummary.publicationCount === 1
+                    ? "publicação sem agendamento"
+                    : "publicações sem agendamento"
+                }`
+              : null,
+            backlogSummary.taskCount > 0
+              ? `${backlogSummary.taskCount} ${
+                  backlogSummary.taskCount === 1
+                    ? "tarefa do Kanban sem prazo"
+                    : "tarefas do Kanban sem prazo"
+                }`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")}
         </span>
         <span className="inline-flex items-center gap-1 font-medium text-violet-500">
           Ver na lista

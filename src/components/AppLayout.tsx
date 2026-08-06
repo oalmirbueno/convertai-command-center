@@ -32,7 +32,7 @@ const adminMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
-  { title: "Calendário", url: "/calendario", icon: CalendarDays },
+  { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Clientes", url: "/clientes", icon: Users },
 ];
 
@@ -57,7 +57,7 @@ const adminMoreNav: NavItem[] = [
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
-  { title: "Calendário", url: "/calendario", icon: CalendarDays },
+  { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
 ];

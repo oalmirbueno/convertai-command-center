@@ -8,6 +8,9 @@ const read = (path: string) =>
 const migration = read(
   "supabase/migrations/20260731175633_meta_oauth_foundation.sql",
 );
+const auditMigration = read(
+  "supabase/migrations/20260805204443_social_account_audit_trail.sql",
+);
 const editor = read("src/components/editorial/EditorialEditor.tsx");
 const config = read("supabase/config.toml");
 
@@ -181,5 +184,54 @@ describe("Meta OAuth migration security contract", () => {
     expect(config).toMatch(
       /\[functions\.social-meta-oauth\]\s+verify_jwt = true/,
     );
+  });
+
+  it("keeps an append-only, client-scoped routing history without secrets", () => {
+    expect(auditMigration).toContain(
+      "CREATE TABLE public.social_account_events",
+    );
+    expect(auditMigration).toContain(
+      "ALTER TABLE public.social_account_events ENABLE ROW LEVEL SECURITY",
+    );
+    expect(auditMigration).toContain(
+      "USING (public.can_manage_client(client_id))",
+    );
+    expect(auditMigration).toContain(
+      "GRANT SELECT ON public.social_account_events TO authenticated",
+    );
+    expect(auditMigration).toContain(
+      "BEFORE UPDATE OR DELETE ON public.social_account_events",
+    );
+    expect(auditMigration).toContain(
+      "sensitive fields are forbidden in social account events",
+    );
+    expect(auditMigration).toContain(
+      "reason ~ '^[a-z0-9_:-]{1,100}$'",
+    );
+    expect(auditMigration).toContain("project_external_accounts_audit_trg");
+    expect(auditMigration).toContain("external_account_connections_audit_trg");
+    expect(auditMigration).toContain(
+      "external_account_grants_reconnect_audit_trg",
+    );
+    expect(auditMigration).toContain(
+      "account.platform IN ('facebook', 'instagram')",
+    );
+    expect(auditMigration).toContain(
+      "platform and external_id are immutable for connected accounts",
+    );
+    expect(auditMigration).toContain(
+      "disconnect it before reassignment",
+    );
+
+    const publicTable = auditMigration.slice(
+      auditMigration.indexOf("CREATE TABLE public.social_account_events"),
+      auditMigration.indexOf(
+        "CREATE INDEX social_account_events_client_created_idx",
+      ),
+    );
+    expect(publicTable).not.toMatch(
+      /access_token|refresh_token|client_secret|password_hash|vault_secret/i,
+    );
+    expect(auditMigration.match(/\nEND;\n\$\$;/g)).toHaveLength(7);
   });
 });

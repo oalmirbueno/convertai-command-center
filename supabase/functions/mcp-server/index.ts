@@ -5,6 +5,7 @@
 
 import {
   authenticate,
+  DataScopeError,
   hasScope,
   type AuthContext,
   type AuthResult,
@@ -12,6 +13,7 @@ import {
 import { auditLog } from '../_shared/mcp-audit.ts';
 import {
   canInvoke,
+  canUseToolWithDataScope,
   describeTool,
   SERVER_INFO,
   TOOL_MAP,
@@ -45,6 +47,7 @@ const ALL_SUPPORTED_SCOPES = [
   'openid','email','profile',
   'aceleriq:read','aceleriq:write','aceleriq:finance',
   'clients:read','projects:read','projects:write','tasks:read','tasks:write',
+  'editorial:read','editorial:write',
   'reports:read','reports:write','briefings:read',
   'files:read','files:write','files:sensitive:read','files:archive',
   'workspace:read','contracts:read','contracts:write',
@@ -97,6 +100,12 @@ function publicAuthContext(): AuthContext {
     keyName: 'MCP discovery',
     scopes: [],
     origin: 'public-discovery',
+    dataScope: {
+      unrestricted: false,
+      clientIds: [],
+      principalUserId: null,
+      source: 'public',
+    },
   };
 }
 
@@ -133,7 +142,7 @@ async function dispatch(
   if (method === 'initialize') {
     return rpcResult(id, {
       protocolVersion: MCP_PROTOCOL_VERSION,
-      capabilities: { tools: { listChanged: false } },
+      capabilities: { tools: { listChanged: true } },
       serverInfo: SERVER_INFO,
       instructions:
         'Use tools/list to inspect Aceleriq tools. Tools with required scopes need OAuth Bearer authorization before tools/call.',
@@ -149,7 +158,9 @@ async function dispatch(
   }
 
   if (method === 'tools/list') {
-    const visible = auth.ok ? TOOLS.filter(t => canInvoke(auth.ctx, t)) : TOOLS;
+    const visible = auth.ok
+      ? TOOLS.filter(t => canInvoke(auth.ctx, t) && canUseToolWithDataScope(auth.ctx, t))
+      : TOOLS;
     return rpcResult(id, { tools: visible.map(describeTool) });
   }
 
@@ -208,6 +219,25 @@ async function dispatch(
       );
     }
 
+    // service_role bypasses database RLS in the legacy server. Restricted
+    // principals may therefore execute only handlers that explicitly resolve
+    // and enforce their client assignment. Unhardened private tools fail
+    // closed; admin/unrestricted principals preserve the existing surface.
+    if (!canUseToolWithDataScope(ctx, tool)) {
+      await auditLog({
+        correlationId, toolName: name, origin: ctx.origin, keyId: ctx.keyId,
+        scopes: ctx.scopes, input: args,
+        success: false, statusCode: 403, durationMs: Date.now() - started,
+        errorCode: 'data_scope_denied',
+        errorMessage: 'Tool is unavailable for restricted client scope',
+      });
+      return rpcError(
+        id,
+        RpcErrors.forbidden,
+        'Tool is unavailable for this restricted client scope',
+      );
+    }
+
     try {
       const resultRefHolder: { value?: string } = {};
       const callCtx: AuthContext = { ...ctx, correlationId, resultRefHolder };
@@ -224,13 +254,22 @@ async function dispatch(
       });
     } catch (e) {
       const message = (e as Error)?.message ?? String(e);
+      const dataScopeDenied = e instanceof DataScopeError
+        || message.startsWith('write:forbidden')
+        || message.includes('outside this MCP principal data scope');
       await auditLog({
         correlationId, toolName: name, origin: ctx.origin, keyId: ctx.keyId,
         scopes: ctx.scopes, input: args,
-        success: false, statusCode: 500, durationMs: Date.now() - started,
-        errorCode: 'handler_error', errorMessage: message,
+        success: false, statusCode: dataScopeDenied ? 403 : 500,
+        durationMs: Date.now() - started,
+        errorCode: dataScopeDenied ? 'data_scope_denied' : 'handler_error',
+        errorMessage: message,
       });
-      return rpcError(id, RpcErrors.internalError, message);
+      return rpcError(
+        id,
+        dataScopeDenied ? RpcErrors.forbidden : RpcErrors.internalError,
+        dataScopeDenied ? 'Resource is outside this restricted client scope' : message,
+      );
     }
   }
 
@@ -329,4 +368,3 @@ Deno.serve(async (req) => {
   }
   return jsonResponse(payload);
 });
-

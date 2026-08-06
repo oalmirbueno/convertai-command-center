@@ -2,13 +2,16 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
 import {
+  Building2,
   Cable,
   CheckCircle2,
   Facebook,
+  FolderKanban,
   Instagram,
   Link2,
   Loader2,
@@ -20,6 +23,14 @@ import {
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   Dialog,
   DialogContent,
@@ -48,19 +59,25 @@ import {
   type EditorialPlatform,
 } from "@/lib/editorial";
 import {
+  filterMetaOAuthResources,
   parseMetaOAuthPopupMessage,
   type MetaOAuthResource,
 } from "@/lib/socialMetaOAuth";
 
 interface EditorialAccountSetupProps {
   clientId: string;
+  clientName: string;
   projectId: string;
+  projectName: string;
   linkedAccounts: EditorialAccountRow[];
   availableAccounts: EditorialAccountRow[];
   canManage: boolean;
   permissionUnavailable: boolean;
   onAccountReady: (accountId: string) => void;
+  showManualOptions?: boolean;
 }
+
+const MAX_VISIBLE_META_RESOURCES = 100;
 
 interface ActiveMetaSession {
   id: string;
@@ -114,12 +131,15 @@ function MetaPlatformIcon({ platform }: { platform: MetaOAuthResource["platform"
 
 export default function EditorialAccountSetup({
   clientId,
+  clientName,
   projectId,
+  projectName,
   linkedAccounts,
   availableAccounts,
   canManage,
   permissionUnavailable,
   onAccountReady,
+  showManualOptions = true,
 }: EditorialAccountSetupProps) {
   const { createAndLinkAccount, linkAccount } = useEditorialAccountMutations(
     clientId,
@@ -145,6 +165,7 @@ export default function EditorialAccountSetup({
   const [metaDialogOpen, setMetaDialogOpen] = useState(false);
   const [metaSessionId, setMetaSessionId] = useState("");
   const [metaResources, setMetaResources] = useState<MetaOAuthResource[]>([]);
+  const [metaSearch, setMetaSearch] = useState("");
   const [connectedMetaCandidateIds, setConnectedMetaCandidateIds] = useState<
     string[]
   >([]);
@@ -156,7 +177,18 @@ export default function EditorialAccountSetup({
     finishSession.isPending ||
     disconnectAccount.isPending;
   const linkedAccountCount = linkedAccounts.length;
-  const showForm = linkedAccountCount === 0 || expanded;
+  const canShowAlternatives =
+    showManualOptions || availableAccounts.length > 0;
+  const showForm =
+    canShowAlternatives && (linkedAccountCount === 0 || expanded);
+  const filteredMetaResources = useMemo(
+    () => filterMetaOAuthResources(metaResources, metaSearch),
+    [metaResources, metaSearch],
+  );
+  const visibleMetaResources = filteredMetaResources.slice(
+    0,
+    MAX_VISIBLE_META_RESOURCES,
+  );
 
   const clearPopupMonitoring = useCallback(() => {
     if (popupPollRef.current !== null) {
@@ -174,6 +206,7 @@ export default function EditorialAccountSetup({
     setMetaDialogOpen(false);
     setMetaSessionId("");
     setMetaResources([]);
+    setMetaSearch("");
     setConnectedMetaCandidateIds([]);
   }, []);
 
@@ -304,6 +337,7 @@ export default function EditorialAccountSetup({
 
       setMetaSessionId(message.oauth_session_id);
       setMetaResources(message.resources);
+      setMetaSearch("");
       setConnectedMetaCandidateIds([]);
       setMetaDialogOpen(true);
     };
@@ -322,6 +356,7 @@ export default function EditorialAccountSetup({
     if (!canManage || pending) return;
 
     const requestScope = { clientId, projectId };
+    setMetaSearch("");
     popupRef.current?.close();
     const popup = window.open(
       "about:blank",
@@ -450,7 +485,7 @@ export default function EditorialAccountSetup({
       setExistingAccountId("");
       setExpanded(false);
       onAccountReady(accountId);
-      toast.success("Conta vinculada e selecionada nesta publicação.");
+      toast.success("Conta vinculada a este projeto.");
     } catch (error: unknown) {
       const message = errorMessage(
         error,
@@ -486,7 +521,7 @@ export default function EditorialAccountSetup({
       setHandle("");
       setExpanded(false);
       onAccountReady(accountId);
-      toast.success("Conta manual cadastrada e selecionada nesta publicação.");
+      toast.success("Conta manual cadastrada e vinculada ao projeto.");
     } catch (error: unknown) {
       const message = errorMessage(
         error,
@@ -515,11 +550,12 @@ export default function EditorialAccountSetup({
                 : "Contas de publicação"}
             </p>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-              Conecte a Meta oficialmente ou mantenha um cadastro manual. O
-              conteúdo atual permanece aberto.
+              {showManualOptions
+                ? "Conecte a Meta oficialmente ou mantenha um cadastro manual."
+                : "Conecte a Meta oficialmente ou vincule uma conta já cadastrada neste cliente."}
             </p>
           </div>
-          {canManage && linkedAccountCount > 0 && (
+          {canManage && canShowAlternatives && linkedAccountCount > 0 && (
             <Button
               type="button"
               variant="outline"
@@ -532,7 +568,11 @@ export default function EditorialAccountSetup({
               ) : (
                 <Plus className="mr-1.5 h-4 w-4" />
               )}
-              {showForm ? "Fechar cadastro manual" : "Cadastro manual"}
+              {showForm
+                ? "Fechar opções"
+                : showManualOptions
+                  ? "Adicionar ou vincular"
+                  : "Vincular conta"}
             </Button>
           )}
         </div>
@@ -601,8 +641,9 @@ export default function EditorialAccountSetup({
                     Conexão oficial Meta
                   </p>
                   <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
-                    Entre na Meta para escolher Páginas do Facebook e contas
-                    profissionais do Instagram. Senhas não passam pelo painel.
+                    Entre com Facebook/Meta para escolher Páginas que você
+                    administra e contas profissionais do Instagram ligadas a
+                    elas. A senha nunca passa pelo Aceleriq OS.
                   </p>
                 </div>
               </div>
@@ -616,7 +657,7 @@ export default function EditorialAccountSetup({
                 ) : (
                   <Cable className="mr-1.5 h-4 w-4" />
                 )}
-                Conectar Instagram + Facebook
+                Entrar com Facebook/Meta
               </Button>
             </div>
             <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
@@ -633,8 +674,9 @@ export default function EditorialAccountSetup({
                 Alternativas de cadastro
               </p>
               <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                Vincule uma conta já existente ou registre uma referência
-                manual, sem login oficial e somente para planejamento.
+                {showManualOptions
+                  ? "Vincule uma conta já existente ou registre uma referência manual, sem login oficial e somente para planejamento."
+                  : "Escolha uma conta deste cliente para vinculá-la ao projeto certo."}
               </p>
             </div>
 
@@ -686,6 +728,7 @@ export default function EditorialAccountSetup({
               </div>
             )}
 
+            {showManualOptions && (
             <div className="grid gap-3 border-t border-border pt-4 md:grid-cols-3">
               <div className="space-y-2">
                 <Label htmlFor="editorial-new-account-platform">
@@ -737,6 +780,7 @@ export default function EditorialAccountSetup({
                 />
               </div>
             </div>
+            )}
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className="text-[11px] leading-4 text-muted-foreground">
                 Cadastro manual: libera somente planejamento e agendamento
@@ -778,51 +822,126 @@ export default function EditorialAccountSetup({
           <DialogHeader>
             <DialogTitle>Escolha a conta da Meta</DialogTitle>
             <DialogDescription>
-              Selecione a Página ou conta profissional que pertence a este
-              projeto. O vínculo não ativa publicação automática.
+              Pesquise e vincule somente a Página ou conta profissional que
+              pertence ao cliente abaixo. Isso não ativa publicação automática.
             </DialogDescription>
           </DialogHeader>
-          <div className="max-h-[50vh] space-y-2 overflow-y-auto pr-1">
-            {metaResources.map((resource) => {
-              const connected = connectedMetaCandidateIds.includes(
-                resource.candidate_id,
-              );
-              return (
-                <button
-                  key={resource.candidate_id}
-                  type="button"
-                  className="flex w-full items-center gap-3 rounded-lg border border-border p-3 text-left transition-colors hover:border-primary/50 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  onClick={() => handleConnectMetaResource(resource)}
-                  disabled={connectResource.isPending || connected}
-                >
-                  <span className="rounded-lg bg-muted p-2 text-foreground">
-                    <MetaPlatformIcon platform={resource.platform} />
+          <div className="rounded-lg border border-primary/25 bg-primary/[0.04] p-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+              Destino obrigatório do vínculo
+            </p>
+            <div className="mt-2 grid gap-2 text-sm sm:grid-cols-2">
+              <div className="flex min-w-0 items-center gap-2">
+                <Building2
+                  className="h-4 w-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[10px] text-muted-foreground">
+                    Cliente
                   </span>
-                  <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-medium text-foreground">
-                      {resource.display_name}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {resource.platform === "instagram"
-                        ? "Instagram profissional"
-                        : "Página do Facebook"}
-                      {resource.handle ? ` · ${resource.handle}` : ""}
-                    </span>
+                  <span className="block truncate font-medium text-foreground">
+                    {clientName}
                   </span>
-                  {connected ? (
-                    <span className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
-                      <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
-                      Conectada
-                    </span>
-                  ) : connectResource.isPending &&
-                    connectResource.variables?.candidateId ===
-                      resource.candidate_id ? (
-                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
-                  ) : null}
-                </button>
-              );
-            })}
+                </span>
+              </div>
+              <div className="flex min-w-0 items-center gap-2">
+                <FolderKanban
+                  className="h-4 w-4 shrink-0 text-primary"
+                  aria-hidden="true"
+                />
+                <span className="min-w-0">
+                  <span className="block text-[10px] text-muted-foreground">
+                    Projeto
+                  </span>
+                  <span className="block truncate text-foreground">
+                    {projectName}
+                  </span>
+                </span>
+              </div>
+            </div>
           </div>
+          <Command
+            shouldFilter={false}
+            className="rounded-lg border border-border"
+          >
+            <CommandInput
+              value={metaSearch}
+              onValueChange={setMetaSearch}
+              placeholder="Pesquisar por nome, @ ou plataforma"
+              aria-label="Pesquisar contas encontradas na Meta"
+              maxLength={120}
+            />
+            <div
+              className="border-b border-border px-3 py-2 text-[11px] text-muted-foreground"
+              aria-live="polite"
+            >
+              {filteredMetaResources.length} de {metaResources.length} contas
+              {filteredMetaResources.length > MAX_VISIBLE_META_RESOURCES
+                ? ` · mostrando as primeiras ${MAX_VISIBLE_META_RESOURCES}`
+                : ""}
+            </div>
+            <CommandList className="max-h-[45vh] overscroll-contain p-1">
+              <CommandEmpty>
+                Nenhuma conta encontrada. Tente buscar pelo nome ou @.
+              </CommandEmpty>
+              <CommandGroup>
+                {visibleMetaResources.map((resource) => {
+                  const connected = connectedMetaCandidateIds.includes(
+                    resource.candidate_id,
+                  );
+                  const connecting =
+                    connectResource.isPending &&
+                    connectResource.variables?.candidateId ===
+                      resource.candidate_id;
+                  return (
+                    <CommandItem
+                      key={resource.candidate_id}
+                      value={resource.candidate_id}
+                      className="min-h-14 cursor-pointer gap-3 border border-transparent px-3 py-2.5 data-[selected=true]:border-primary/40"
+                      onSelect={() => handleConnectMetaResource(resource)}
+                      disabled={connectResource.isPending || connected}
+                    >
+                      <span className="rounded-lg bg-muted p-2 text-foreground">
+                        <MetaPlatformIcon platform={resource.platform} />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-medium text-foreground">
+                          {resource.display_name}
+                        </span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {resource.platform === "instagram"
+                            ? "Instagram profissional"
+                            : "Página do Facebook"}
+                          {resource.handle ? ` · ${resource.handle}` : ""}
+                        </span>
+                      </span>
+                      {connected ? (
+                        <span className="flex items-center gap-1 text-xs font-medium text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                          Conectada
+                        </span>
+                      ) : connecting ? (
+                        <span className="inline-flex items-center">
+                          <Loader2
+                            className="h-4 w-4 animate-spin text-primary"
+                            aria-hidden="true"
+                          />
+                          <span className="sr-only">
+                            Vinculando {resource.display_name}
+                          </span>
+                        </span>
+                      ) : (
+                        <span className="text-xs font-semibold text-primary">
+                          Vincular
+                        </span>
+                      )}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
+            </CommandList>
+          </Command>
           <DialogFooter>
             <Button
               type="button"

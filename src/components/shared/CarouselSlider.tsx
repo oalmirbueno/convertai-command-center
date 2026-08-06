@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, FileText, Film } from "lucide-react";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
 import { supabase } from "@/integrations/supabase/client";
+import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import { isCarouselAssetGroup, mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
 
 type Slide = {
@@ -12,6 +13,7 @@ type Slide = {
   storage_path?: string | null;
   mime_type?: string | null;
   extension?: string | null;
+  created_at?: string | null;
 };
 
 /**
@@ -28,47 +30,47 @@ export default function CarouselSlider({
 }) {
   const [children, setChildren] = useState<Slide[]>(initialChildren || []);
   const [idx, setIdx] = useState(0);
+  const touchStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     let alive = true;
+    if (initialChildren !== undefined) {
+      setChildren(initialChildren);
+      return () => {
+        alive = false;
+      };
+    }
     if (!parent?.id) return;
     (async () => {
-      const { data } = await (supabase as any)
+      const { data } = await supabase
         .from("files")
-        .select("id, file_name, file_url, storage_bucket, storage_path, mime_type, extension")
+        .select("id, file_name, file_url, storage_bucket, storage_path, mime_type, extension, created_at")
         .eq("parent_file_id", parent.id)
         .order("file_name", { ascending: true });
       if (!alive) return;
       if (data && data.length) setChildren(data);
     })();
     return () => { alive = false; };
-  }, [parent?.id]);
+  }, [initialChildren, parent?.id]);
 
   const files = useMemo(() => {
     const validChildren = isCarouselAssetGroup(parent, children) ? children : [];
     const list: Slide[] = [parent, ...validChildren.filter((c) => c.id !== parent.id)];
-    // Natural sort by trailing number in filename so "slide 2" comes before "slide 10"
-    const num = (s: string) => {
-      const m = /(\d+)(?!.*\d)/.exec(s || "");
-      return m ? parseInt(m[1], 10) : 0;
-    };
-    return [list[0], ...list.slice(1).sort((a, b) => num(a.file_name) - num(b.file_name) || a.file_name.localeCompare(b.file_name))];
-  }, [parent, children]);
+    if (initialChildren !== undefined) return list;
+
+    return orderEditorialCarouselFiles(
+      { ...parent, id: parent.id || "carousel-root" },
+      list.slice(1).map((file, index) => ({
+        ...file,
+        id: file.id || `carousel-child-${index}`,
+      })),
+    );
+  }, [children, initialChildren, parent]);
 
   useEffect(() => {
     prefetchImages(files.map((f) => f.file_url).filter(Boolean));
     setIdx(0);
-  }, [files.length, parent?.id]);
-
-  useEffect(() => {
-    if (files.length <= 1) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "ArrowLeft") setIdx((i) => (i - 1 + files.length) % files.length);
-      if (e.key === "ArrowRight") setIdx((i) => (i + 1) % files.length);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [files.length]);
+  }, [files, parent?.id]);
 
   const current = files[idx];
   if (!current) return null;
@@ -77,7 +79,7 @@ export default function CarouselSlider({
       <FilePreviewContent
         fileName={current.file_name}
         fileUrl={current.file_url}
-        fileId={(current as any).id}
+        fileId={current.id}
         storageBucket={current.storage_bucket}
         storagePath={current.storage_path}
         mimeType={current.mime_type}
@@ -87,11 +89,49 @@ export default function CarouselSlider({
   }
 
   return (
-    <div className="relative group">
+    <div
+      className="relative group rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+      role="group"
+      aria-label={`Prévia de ${files.length} arquivos. Use as setas para navegar.`}
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "ArrowLeft") {
+          event.preventDefault();
+          setIdx((currentIndex) =>
+            (currentIndex - 1 + files.length) % files.length,
+          );
+        }
+        if (event.key === "ArrowRight") {
+          event.preventDefault();
+          setIdx((currentIndex) => (currentIndex + 1) % files.length);
+        }
+      }}
+      onTouchStart={(event) => {
+        const touch = event.touches[0];
+        if (!touch) return;
+        touchStartRef.current = { x: touch.clientX, y: touch.clientY };
+      }}
+      onTouchEnd={(event) => {
+        const start = touchStartRef.current;
+        const touch = event.changedTouches[0];
+        touchStartRef.current = null;
+        if (!start || !touch) return;
+        const deltaX = touch.clientX - start.x;
+        const deltaY = touch.clientY - start.y;
+        if (Math.abs(deltaX) < 40 || Math.abs(deltaX) <= Math.abs(deltaY)) {
+          return;
+        }
+        setIdx((currentIndex) =>
+          deltaX > 0
+            ? (currentIndex - 1 + files.length) % files.length
+            : (currentIndex + 1) % files.length,
+        );
+      }}
+    >
       <FilePreviewContent
         fileName={current.file_name}
         fileUrl={current.file_url}
-        fileId={(current as any).id}
+        fileId={current.id}
         storageBucket={current.storage_bucket}
         storagePath={current.storage_path}
         mimeType={current.mime_type}
@@ -100,7 +140,7 @@ export default function CarouselSlider({
       <button
         type="button"
         aria-label="Anterior"
-        className="absolute z-10 left-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        className="absolute left-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
         onClick={(e) => { e.stopPropagation(); setIdx((idx - 1 + files.length) % files.length); }}
       >
         <ChevronLeft className="w-4 h-4" />
@@ -108,18 +148,16 @@ export default function CarouselSlider({
       <button
         type="button"
         aria-label="Próximo"
-        className="absolute z-10 right-2 top-1/2 -translate-y-1/2 bg-background/80 hover:bg-background border border-border rounded-full p-2 shadow-md opacity-80 hover:opacity-100 transition-all"
+        className="absolute right-2 top-1/2 z-10 inline-flex h-11 w-11 -translate-y-1/2 items-center justify-center rounded-full border border-border bg-background/80 p-0 opacity-80 shadow-md transition-all hover:bg-background hover:opacity-100"
         onClick={(e) => { e.stopPropagation(); setIdx((idx + 1) % files.length); }}
       >
         <ChevronRight className="w-4 h-4" />
       </button>
       <div className="absolute z-10 bottom-2 left-1/2 -translate-x-1/2 flex gap-1">
         {files.map((_, i) => (
-          <button
+          <span
             key={i}
-            type="button"
-            aria-label={`Ir para slide ${i + 1}`}
-            onClick={(e) => { e.stopPropagation(); setIdx(i); }}
+            aria-hidden="true"
             className={`w-2 h-2 rounded-full transition-colors ${i === idx ? "bg-primary" : "bg-muted-foreground/40"}`}
           />
         ))}

@@ -12,13 +12,15 @@ Sempre que o usuário mencionar um cliente pelo nome ou pedir "resumo",
 "situação", "pendências", "briefing" ou "próximos passos".
 
 ## Passos
-1. `aceleriq_list_clients` com `search=<nome mencionado>`. Se houver mais de
+1. `aceleriq_list_clients` com `query=<nome mencionado>`. Se houver mais de
    um match, peça desambiguação — nunca escolha silenciosamente.
-2. `aceleriq_get_client_context` com o `id` resolvido. Este retorno já traz:
+2. `aceleriq_get_client_context` com o `client_id` resolvido. Este retorno já traz:
    perfil, projetos, tarefas abertas, marcos próximos e briefings.
 3. Complementar apenas se necessário:
    - `aceleriq_list_projects` para status/histórico completo.
-   - `aceleriq_list_briefings` para respostas do onboarding.
+   - `aceleriq_list_briefings` para respostas do onboarding, somente quando a
+     tool estiver visível. No legado restrito ela falha fechada até receber
+     recorte próprio por cliente.
 
 ## Regras
 - **Não** invente campos ausentes.

@@ -1,9 +1,9 @@
 {
   "$schema": "https://codex.openai.com/schemas/plugin.json",
   "name": "aceleriq-os",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "title": "Aceleriq OS",
-  "description": "Ponte oficial entre Codex e o Aceleriq Performance OS. Consome o MCP central do Aceleriq para leitura de contexto de clientes/projetos, escrita operacional restrita (tarefas e rascunhos de relatório) e consulta ao Segundo Cérebro (OpenClaw). Não hospeda dados próprios e não expõe qualquer superfície de escrita fora do inbox designado.",
+  "description": "Ponte privada entre Codex e o Aceleriq Performance OS. Consome o MCP central do Aceleriq para contexto autorizado, calendário editorial filtrado, criação segura de itens editoriais, escrita operacional restrita e consulta ao Segundo Cérebro. Não hospeda dados próprios.",
   "publisher": "Aceleriq",
   "homepage": "https://aceleriq.online",
   "license": "UNLICENSED",
@@ -20,6 +20,7 @@
   "skills": [
     { "id": "client-context",     "file": "skills/client-context.md" },
     { "id": "task-management",    "file": "skills/task-management.md" },
+    { "id": "editorial-calendar", "file": "skills/editorial-calendar.md" },
     { "id": "reports",            "file": "skills/reports.md" },
     { "id": "second-brain",       "file": "skills/second-brain.md" },
     { "id": "memory-proposals",   "file": "skills/memory-proposals.md" },

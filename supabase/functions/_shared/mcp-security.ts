@@ -13,19 +13,115 @@ const ASSIGNED_SECRET_RE = /(\b(?:access[_-]?)?(?:token|secret|password|api[_-]?
 export const OAUTH_STAFF_SCOPES = [
   'aceleriq:read',
   'aceleriq:write',
+  'clients:read',
+  'projects:read',
+  'projects:write',
+  'tasks:read',
+  'tasks:write',
+  'editorial:read',
+  'editorial:write',
+  'reports:read',
+  'reports:write',
+  'briefings:read',
+  'files:read',
+  'files:write',
+  'workspace:read',
   'contracts:read',
   'contracts:write',
   'memory:read',
   'memory:propose',
 ] as const;
 
+// The legacy MCP executes with service_role. A restricted principal may only
+// call a private tool after that handler has an explicit client boundary. New
+// private tools are denied by default until they are added here and covered by
+// a scope test. This prevents a future service from silently reintroducing a
+// cross-client access path.
+export const CLIENT_SCOPED_LEGACY_TOOLS = [
+  'aceleriq_list_clients',
+  'aceleriq_get_client_context',
+  'aceleriq_list_projects',
+  'aceleriq_get_project',
+  'aceleriq_list_tasks',
+  'aceleriq_list_editorial_calendar',
+  'aceleriq_create_task',
+  'aceleriq_create_editorial_item',
+  'aceleriq_update_task',
+  'aceleriq_complete_task',
+  'aceleriq_create_report_draft',
+  'aceleriq_update_project',
+] as const;
+
+const CLIENT_SCOPED_LEGACY_TOOL_SET = new Set<string>(CLIENT_SCOPED_LEGACY_TOOLS);
+
+// These handlers never query service_role-backed tenant tables. Their own
+// GitHub bridge scopes and path allowlists remain the authorization boundary,
+// so client assignments must not hide them from existing Work connectors.
+export const GLOBAL_SAFE_LEGACY_TOOLS = [
+  'memory_get_context',
+  'memory_search',
+  'memory_fetch',
+  'memory_list_pending_proposals',
+  'memory_get_pulse',
+  'memory_recent_commits',
+  'memory_propose_update',
+] as const;
+
+const GLOBAL_SAFE_LEGACY_TOOL_SET = new Set<string>(GLOBAL_SAFE_LEGACY_TOOLS);
+
+export function dataScopeAllowsTool(
+  scope: { unrestricted: boolean },
+  toolName: string,
+  isPublic = false,
+): boolean {
+  return isPublic
+    || scope.unrestricted
+    || CLIENT_SCOPED_LEGACY_TOOL_SET.has(toolName)
+    || GLOBAL_SAFE_LEGACY_TOOL_SET.has(toolName);
+}
+
 /**
  * The legacy MCP runs service-role-backed handlers. OAuth therefore remains
  * available only to internal staff. Existing staff capabilities are preserved
  * so the current GPT Work connector is not broken by this hardening step.
  */
-export function oauthScopesForStaff(isStaff: boolean): string[] | null {
-  return isStaff ? [...OAUTH_STAFF_SCOPES] : null;
+function flattenClaimedScopes(value: unknown): string[] {
+  if (typeof value === 'string') return value.split(/[\s,]+/).filter(Boolean);
+  if (!Array.isArray(value)) return [];
+  return value.flatMap(flattenClaimedScopes);
+}
+
+/**
+ * Supabase OAuth JWTs normally carry only OIDC scopes unless the project adds
+ * application scopes through a Custom Access Token Hook. OIDC-only claims
+ * preserve the existing staff grant. As soon as at least one MCP application
+ * scope is present, intersect with the server allowlist so read-only consent
+ * cannot become a write grant inside this service-role-backed legacy server.
+ */
+export function oauthScopesForStaff(
+  isStaff: boolean,
+  claimedScopes?: unknown,
+  isAdmin = false,
+): string[] | null {
+  if (!isStaff) return null;
+  if (claimedScopes === undefined) return [...OAUTH_STAFF_SCOPES];
+  const claimed = new Set(flattenClaimedScopes(claimedScopes));
+  const hasApplicationScope = [...claimed].some(scope =>
+    /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|contracts|memory):/.test(scope)
+    || scope === 'admin'
+  );
+  if (!hasApplicationScope) return [...OAUTH_STAFF_SCOPES];
+  const allowed: readonly string[] = isAdmin
+    ? [...OAUTH_STAFF_SCOPES, 'admin']
+    : OAUTH_STAFF_SCOPES;
+  return allowed.filter(scope => claimed.has(scope));
+}
+
+export function dataScopeAllowsClient(
+  scope: { unrestricted: boolean; clientIds: readonly string[] },
+  clientId: string,
+): boolean {
+  return scope.unrestricted || scope.clientIds.includes(clientId);
 }
 
 /** `mcp_audit_log.key_id` is a UUID FK to `api_keys`; OAuth principals are not. */
