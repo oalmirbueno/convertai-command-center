@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { createClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   requestAiChatCompletion,
   resolveAiProviderChain,
