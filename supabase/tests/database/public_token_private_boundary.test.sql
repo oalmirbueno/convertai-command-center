@@ -6,7 +6,8 @@ BEGIN;
 CREATE EXTENSION IF NOT EXISTS pgtap;
 SELECT * FROM no_plan();
 
-CREATE OR REPLACE FUNCTION pg_temp.act_as(_uid uuid) RETURNS void
+CREATE OR REPLACE FUNCTION pg_temp.set_authenticated_claims(_uid uuid)
+RETURNS void
 LANGUAGE plpgsql AS $$
 BEGIN
   PERFORM set_config('request.jwt.claim.sub', _uid::text, true);
@@ -15,6 +16,13 @@ BEGIN
     json_build_object('sub', _uid::text, 'role', 'authenticated')::text,
     true
   );
+END
+$$;
+
+CREATE OR REPLACE FUNCTION pg_temp.act_as(_uid uuid) RETURNS void
+LANGUAGE plpgsql AS $$
+BEGIN
+  PERFORM pg_temp.set_authenticated_claims(_uid);
   EXECUTE 'SET LOCAL ROLE authenticated';
 END
 $$;
@@ -151,8 +159,11 @@ ON CONFLICT (user_id) DO UPDATE
 SET role = EXCLUDED.role;
 
 -- A non-admin profile owner cannot smuggle a known bearer through the legacy
--- public profile column during the rollout window.
-SELECT pg_temp.act_as('e0000000-0000-4000-8000-000000000003');
+-- public profile column during the rollout window. Keep the database owner
+-- role here so the assertion isolates the trigger from table grants and RLS.
+SELECT pg_temp.set_authenticated_claims(
+  'e0000000-0000-4000-8000-000000000003'
+);
 
 SELECT throws_ok(
   $$
@@ -171,7 +182,9 @@ SELECT pg_temp.act_as_owner();
 
 -- Exercise the legacy admin write with a deterministic bearer so coexistence,
 -- private dual-write and claim transitions can be asserted exactly.
-SELECT pg_temp.act_as('e0000000-0000-4000-8000-000000000001');
+SELECT pg_temp.set_authenticated_claims(
+  'e0000000-0000-4000-8000-000000000001'
+);
 
 UPDATE public.profiles
 SET
