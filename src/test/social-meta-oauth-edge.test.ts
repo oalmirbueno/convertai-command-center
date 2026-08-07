@@ -3,6 +3,7 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   META_REQUIRED_SCOPES,
+  buildAllowedOrigins,
   buildFacebookLoginUrl,
   createAppSecretProof,
   missingMetaScopes,
@@ -18,6 +19,23 @@ const edgeSource = readFileSync(
 );
 
 describe("social Meta OAuth Edge boundary", () => {
+  it("registers the configured callback through service role before session creation", () => {
+    expect(edgeSource).toContain('"social_meta_oauth_register_redirect_uri"');
+    expect(edgeSource).toContain("handleStart(body, config, caller, admin)");
+    const migration = readFileSync(
+      resolve(
+        process.cwd(),
+        "supabase/migrations/20260807215000_portable_meta_oauth_redirect.sql",
+      ),
+      "utf8",
+    );
+    expect(migration).toContain("social_private.meta_oauth_redirect_uris");
+    expect(migration).not.toContain("aceleriq\\.online");
+    expect(migration).toContain(
+      "allowed.redirect_uri = _normalized_redirect_uri",
+    );
+  });
+
   it("authenticates every action and keeps Vault writes behind one service RPC", () => {
     expect(edgeSource).toContain("admin.auth.getUser(jwt)");
     expect(edgeSource).toContain('"social_meta_oauth_store_resources"');
@@ -62,20 +80,32 @@ describe("social Meta OAuth Edge helpers", () => {
     ]);
   });
 
-  it("accepts only the canonical or local callback origin and exact path", () => {
+  it("accepts a configured HTTPS callback host with an exact path", () => {
     expect(
       validateMetaRedirectUri(
         "https://aceleriq.online/oauth/meta/callback",
       ).origin,
     ).toBe("https://aceleriq.online");
-    expect(() =>
-      validateMetaRedirectUri("https://preview.example/oauth/meta/callback"),
-    ).toThrow("origem autorizada");
+    expect(
+      validateMetaRedirectUri("https://preview.example/oauth/meta/callback").origin,
+    ).toBe("https://preview.example");
     expect(() =>
       validateMetaRedirectUri(
         "https://aceleriq.online/oauth/meta/callback?next=/calendario",
       ),
     ).toThrow("META_REDIRECT_URI inválida");
+  });
+
+  it("builds an exact CORS allowlist from deployment configuration", () => {
+    const allowed = buildAllowedOrigins(
+      "https://auth-callback.example/oauth/meta/callback",
+      "https://app.example",
+    );
+    expect([...allowed]).toEqual([
+      "https://auth-callback.example",
+      "https://app.example",
+    ]);
+    expect(allowed.has("https://app.example.evil.test")).toBe(false);
   });
 
   it("creates the Meta appsecret_proof with HMAC SHA-256", async () => {

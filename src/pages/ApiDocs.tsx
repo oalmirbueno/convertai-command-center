@@ -19,10 +19,38 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { WEBHOOK_BASE } from "@/lib/webhooks";
+import {
+  API_GATEWAY_ACTION_SCOPES,
+  API_GATEWAY_AUDIENCE,
+  API_GATEWAY_KEY_ORIGIN,
+  API_GATEWAY_SCOPE_PRESETS,
+  allowedApiGatewayActions,
+  type ApiGatewayAction,
+  type ApiGatewayScopePreset,
+} from "../../supabase/functions/_shared/api-gateway-auth.ts";
 
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const GATEWAY_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/api-gateway`;
-const WEBHOOK_BASE = import.meta.env.VITE_WEBHOOK_URL || "https://n8n.srv1353465.hstgr.cloud/webhook";
+const SUPABASE_FUNCTIONS_URL = `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1`;
+const GATEWAY_URL = `${SUPABASE_FUNCTIONS_URL}/api-gateway`;
+const WEBHOOK_BASE_LABEL = WEBHOOK_BASE ?? "não configurada";
+const webhookUrl = (route: string) => WEBHOOK_BASE
+  ? `${WEBHOOK_BASE}/${route}`
+  : "não configurada";
+
+const gatewayPresetOptions: Record<ApiGatewayScopePreset, { label: string; description: string }> = {
+  read_only: {
+    label: "Somente leitura",
+    description: "Consultas operacionais; sem gravações, exclusões, equipe ou auditoria.",
+  },
+  automation: {
+    label: "Automação operacional",
+    description: "Leitura e gravações operacionais; sem exclusões nem ações administrativas.",
+  },
+  administrator: {
+    label: "Administração completa",
+    description: "Inclui criação de clientes, exclusões, equipe e auditoria.",
+  },
+};
 
 /* ─── Webhook Routes (real, from src/lib/webhooks.ts) ──── */
 const webhookRoutes = [
@@ -36,7 +64,7 @@ const webhookRoutes = [
 
 /* ─── Edge Functions (real, from supabase/functions/) ──── */
 const edgeFunctions = [
-  { name: "api-gateway", desc: "Gateway unificado da API — 44 ações CRUD", auth: "X-API-Key (SHA-256)", method: "POST", public: true },
+  { name: "api-gateway", desc: "Gateway unificado da API — ações CRUD escopadas", auth: "X-API-Key (SHA-256)", method: "POST", public: true },
   { name: "check-renewals", desc: "Verifica renovações de planos e marca inadimplentes", auth: "Sem JWT (cron)", method: "POST", public: true },
   { name: "check-task-reminders", desc: "Envia lembretes de tarefas próximas do vencimento", auth: "Sem JWT (cron)", method: "POST", public: true },
   { name: "manage-team", desc: "Gerencia membros da equipe (criar, atualizar roles)", auth: "Sem JWT (service role)", method: "POST", public: true },
@@ -48,7 +76,7 @@ const actionDocs: {
   category: string;
   icon: string;
   actions: {
-    name: string;
+    name: ApiGatewayAction;
     desc: string;
     required?: string[];
     optional?: string[];
@@ -61,7 +89,7 @@ const actionDocs: {
     icon: "🔧",
     actions: [
       { name: "health", desc: "Verifica se o gateway está online", example: { action: "health" }, responseExample: { success: true, data: { status: "ok", version: "1.0", timestamp: "2026-03-10T12:00:00.000Z" } } },
-      { name: "get_schema", desc: "Lista todas as ações disponíveis", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.0", actions: ["health", "get_schema", "list_clients", "...44 total"], docs: "POST with { action, ...params }" } } },
+      { name: "get_schema", desc: "Lista as ações permitidas para a chave atual", example: { action: "get_schema" }, responseExample: { success: true, data: { version: "1.1", actions: ["health", "get_schema", "list_clients"], required_scopes: { list_clients: "clients:read" } } } },
       { name: "list_audit_log", desc: "Lista logs de auditoria do gateway", optional: ["action", "ip_address", "limit"], example: { action: "list_audit_log", limit: 50 }, responseExample: { success: true, data: [{ id: "uuid", action: "list_clients", status_code: 200, key_name: "n8n-prod", ip_address: "187.x.x.x", created_at: "2026-03-10T12:00:00Z" }] } },
     ],
   },
@@ -81,7 +109,7 @@ const actionDocs: {
     actions: [
       { name: "list_projects", desc: "Lista projetos", optional: ["client_id", "status", "limit"], example: { action: "list_projects", client_id: "uuid" }, responseExample: { success: true, data: [{ id: "uuid", name: "Site Novo", status: "active", progress: 45, project_type: "website", deadline: "2026-04-10" }] } },
       { name: "get_project", desc: "Busca projeto com milestones e tasks", required: ["project_id"], example: { action: "get_project", project_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", name: "Site Novo", status: "active", progress: 45, milestones: [{ id: "uuid", title: "Entrega v1" }], tasks: [{ id: "uuid", title: "Landing page", status: "doing" }] } } },
-      { name: "create_project", desc: "Cria um projeto", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status", "created_by"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" }, responseExample: { success: true, data: { id: "novo-uuid", name: "Site Novo", status: "planning", progress: 0 } } },
+      { name: "create_project", desc: "Cria um projeto; a autoria vem da identidade vinculada à chave", required: ["client_id", "name", "project_type", "start_date", "deadline"], optional: ["description", "objectives", "scope", "status"], example: { action: "create_project", client_id: "uuid", name: "Site Novo", project_type: "website", start_date: "2026-03-10", deadline: "2026-04-10" }, responseExample: { success: true, data: { id: "novo-uuid", name: "Site Novo", status: "planning", progress: 0 } } },
       { name: "update_project", desc: "Atualiza um projeto", required: ["project_id"], example: { action: "update_project", project_id: "uuid", status: "active", progress: 50 }, responseExample: { success: true, data: { id: "uuid", status: "active", progress: 50 } } },
       { name: "delete_project", desc: "Exclui um projeto", required: ["project_id"], example: { action: "delete_project", project_id: "uuid" }, responseExample: { success: true, data: { deleted: "uuid" } } },
     ],
@@ -111,7 +139,7 @@ const actionDocs: {
     icon: "📊",
     actions: [
       { name: "list_reports", desc: "Lista relatórios", optional: ["client_id", "project_id", "status", "limit"], example: { action: "list_reports" }, responseExample: { success: true, data: [{ id: "uuid", title: "Relatório Março", status: "published", client_id: "uuid" }] } },
-      { name: "create_report", desc: "Cria relatório", required: ["client_id", "project_id", "title"], optional: ["summary", "highlights", "next_steps", "metrics", "chart_data", "chart_type", "period_start", "period_end", "status", "created_by", "internal_notes"], example: { action: "create_report", client_id: "uuid", project_id: "uuid", title: "Relatório Março" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Relatório Março", status: "draft" } } },
+      { name: "create_report", desc: "Cria relatório; a autoria vem da identidade vinculada à chave", required: ["client_id", "project_id", "title"], optional: ["summary", "highlights", "next_steps", "metrics", "chart_data", "chart_type", "period_start", "period_end", "status", "internal_notes"], example: { action: "create_report", client_id: "uuid", project_id: "uuid", title: "Relatório Março" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Relatório Março", status: "draft" } } },
       { name: "update_report", desc: "Atualiza relatório", required: ["report_id"], example: { action: "update_report", report_id: "uuid", status: "published" }, responseExample: { success: true, data: { id: "uuid", status: "published" } } },
     ],
   },
@@ -131,6 +159,7 @@ const actionDocs: {
     actions: [
       { name: "send_notification", desc: "Envia notificação para um usuário", required: ["user_id", "message", "notification_type"], optional: ["link"], example: { action: "send_notification", user_id: "uuid", message: "Novo arquivo disponível!", notification_type: "update", link: "/aprovacoes" }, responseExample: { success: true, data: { id: "novo-uuid", message: "Novo arquivo disponível!", read: false } } },
       { name: "list_notifications", desc: "Lista notificações de um usuário", required: ["user_id"], optional: ["read", "limit"], example: { action: "list_notifications", user_id: "uuid", read: false }, responseExample: { success: true, data: [{ id: "uuid", message: "Arquivo aprovado", notification_type: "approval", read: false, created_at: "2026-03-10T12:00:00Z" }] } },
+      { name: "mark_notification_read", desc: "Marca uma notificação como lida", required: ["notification_id"], example: { action: "mark_notification_read", notification_id: "uuid" }, responseExample: { success: true, data: { id: "uuid", read: true } } },
     ],
   },
   {
@@ -169,7 +198,7 @@ const actionDocs: {
     actions: [
       { name: "list_team", desc: "Lista membros da equipe (exceto clientes)", example: { action: "list_team" }, responseExample: { success: true, data: [{ user_id: "uuid", role: "design", profiles: { full_name: "Ana Designer", email: "ana@equipe.com" } }] } },
       { name: "create_comment", desc: "Adiciona comentário a uma tarefa", required: ["task_id", "author_id", "content"], example: { action: "create_comment", task_id: "uuid", author_id: "uuid", content: "Ficou ótimo!" }, responseExample: { success: true, data: { id: "novo-uuid", content: "Ficou ótimo!", created_at: "2026-03-10T12:00:00Z" } } },
-      { name: "create_checklist_item", desc: "Adiciona item de checklist", required: ["task_id", "created_by", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", created_by: "uuid", title: "Revisar cores" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Revisar cores", checked: false } } },
+      { name: "create_checklist_item", desc: "Adiciona item; a autoria vem da identidade vinculada à chave", required: ["task_id", "title"], optional: ["item_order"], example: { action: "create_checklist_item", task_id: "uuid", title: "Revisar cores" }, responseExample: { success: true, data: { id: "novo-uuid", title: "Revisar cores", checked: false } } },
       { name: "update_checklist_item", desc: "Atualiza item de checklist", required: ["item_id"], example: { action: "update_checklist_item", item_id: "uuid", checked: true }, responseExample: { success: true, data: { id: "uuid", checked: true } } },
     ],
   },
@@ -209,10 +238,9 @@ async function sha256(input: string): Promise<string> {
 }
 
 function generateKey(): string {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-  let result = "acq_";
-  for (let i = 0; i < 32; i++) result += chars.charAt(Math.floor(Math.random() * chars.length));
-  return result;
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  return `acq_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
 
 /* ─── API Keys Management ───────────────────────────────── */
@@ -221,13 +249,17 @@ function ApiKeysSection() {
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
   const [newKeyName, setNewKeyName] = useState("");
+  const [newKeyPreset, setNewKeyPreset] = useState<ApiGatewayScopePreset>("read_only");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const fetchKeys = async () => {
     const { data } = await supabase.from("api_keys" as any).select("*").order("created_at", { ascending: false });
-    setKeys((data as any[]) || []);
+    setKeys(((data as any[]) || []).filter((key) =>
+      key.audience === API_GATEWAY_AUDIENCE
+      || (key.audience == null && String(key.origin ?? "").toLowerCase() !== "mcp")
+    ));
     setLoading(false);
   };
 
@@ -236,25 +268,91 @@ function ApiKeysSection() {
   const handleCreate = async () => {
     if (!newKeyName.trim()) return;
     setCreating(true);
-    const rawKey = generateKey();
-    const keyHash = await sha256(rawKey);
-    const keyPreview = rawKey.slice(0, 8) + "..." + rawKey.slice(-4);
-    const { data: userData } = await supabase.auth.getUser();
+    setCreatedKey(null);
+    let incompleteKeyId: string | null = null;
 
-    const { error } = await supabase.from("api_keys" as any).insert({
-      name: newKeyName.trim(),
-      key_hash: keyHash,
-      key_preview: keyPreview,
-      created_by: userData.user?.id,
-    } as any);
+    const discardIncompleteKey = async (keyId: string) => {
+      const { error: revokeError } = await supabase
+        .from("api_keys")
+        .update({
+          is_active: false,
+          revoked_at: new Date().toISOString(),
+          client_scope_mode: "none",
+        })
+        .eq("id", keyId);
+      const { error: removeError } = await supabase
+        .from("api_keys")
+        .delete()
+        .eq("id", keyId);
+      return !revokeError || !removeError;
+    };
 
-    if (error) {
-      toast.error("Erro ao criar chave: " + error.message);
-    } else {
+    try {
+      const { data: userData, error: userError } = await supabase.auth.getUser();
+      if (userError || !userData.user) {
+        toast.error("Não foi possível confirmar o administrador atual.");
+        return;
+      }
+
+      const rawKey = generateKey();
+      const keyHash = await sha256(rawKey);
+      const keyPreview = rawKey.slice(0, 8) + "..." + rawKey.slice(-4);
+      const scopes = [...API_GATEWAY_SCOPE_PRESETS[newKeyPreset]];
+
+      const { data: insertedKey, error: insertError } = await supabase
+        .from("api_keys")
+        .insert({
+          name: newKeyName.trim(),
+          key_hash: keyHash,
+          key_preview: keyPreview,
+          audience: API_GATEWAY_AUDIENCE,
+          origin: API_GATEWAY_KEY_ORIGIN,
+          scopes,
+          created_by: userData.user.id,
+          client_scope_mode: "none",
+        })
+        .select("id")
+        .single();
+
+      if (insertError || !insertedKey) {
+        toast.error("Não foi possível criar a chave.");
+        return;
+      }
+      incompleteKeyId = insertedKey.id;
+
+      const { error: scopeError } = await supabase.rpc(
+        "configure_api_gateway_key_scope",
+        {
+          p_key_id: insertedKey.id,
+          p_scope_mode: "all",
+          p_client_ids: [],
+        },
+      );
+
+      if (scopeError) {
+        const discarded = await discardIncompleteKey(insertedKey.id);
+
+        toast.error(
+          discarded
+            ? "A chave não foi ativada; o registro incompleto foi revogado."
+            : "A chave não foi ativada e precisa ser revisada na lista.",
+        );
+        await fetchKeys();
+        return;
+      }
+
+      incompleteKeyId = null;
       setCreatedKey(rawKey);
-      fetchKeys();
+      await fetchKeys();
+    } catch {
+      if (incompleteKeyId) {
+        await discardIncompleteKey(incompleteKeyId);
+        await fetchKeys();
+      }
+      toast.error("Não foi possível concluir a criação segura da chave.");
+    } finally {
+      setCreating(false);
     }
-    setCreating(false);
   };
 
   const handleDelete = async () => {
@@ -271,14 +369,36 @@ function ApiKeysSection() {
     toast.success(currentActive ? "Chave desativada" : "Chave ativada");
   };
 
+  const issuedScopes = API_GATEWAY_SCOPE_PRESETS[newKeyPreset];
+  const issuedActions = allowedApiGatewayActions({
+    audience: API_GATEWAY_AUDIENCE,
+    origin: API_GATEWAY_KEY_ORIGIN,
+    scopes: issuedScopes,
+    keyId: "api-key-preview",
+    ownerId: "api-key-owner",
+    ownerIsAdmin: true,
+    scope: "all",
+    clientIds: [],
+  });
+
   return (
     <>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-sm font-semibold flex items-center gap-2"><Key className="w-4 h-4 text-primary" /> Suas API Keys</h3>
-        <Button size="sm" onClick={() => { setShowCreate(true); setNewKeyName(""); setCreatedKey(null); }}>
+        <Button size="sm" onClick={() => { setShowCreate(true); setNewKeyName(""); setNewKeyPreset("read_only"); setCreatedKey(null); }}>
           <Plus className="w-3.5 h-3.5 mr-1" /> Nova Chave
         </Button>
       </div>
+
+      {keys.some((key) => key.audience !== API_GATEWAY_AUDIENCE) && (
+        <div className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs text-muted-foreground">
+          <p className="font-medium text-foreground">Rotação obrigatória para chaves legadas</p>
+          <p className="mt-1">
+            Chaves sem audiência explícita ficam bloqueadas pelo gateway. Gere uma nova chave com o perfil mínimo necessário,
+            atualize a integração e revogue a antiga.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <p className="text-xs text-muted-foreground">Carregando...</p>
@@ -300,9 +420,23 @@ function ApiKeysSection() {
                   <Badge variant={k.is_active ? "default" : "secondary"} className="text-[10px]">
                     {k.is_active ? "Ativa" : "Inativa"}
                   </Badge>
+                  {k.audience !== API_GATEWAY_AUDIENCE && (
+                    <Badge variant="outline" className="border-amber-500/50 text-[10px] text-amber-600">
+                      Rotação necessária
+                    </Badge>
+                  )}
                 </div>
                 <div className="flex items-center gap-3 mt-1 flex-wrap">
                   <code className="text-[11px] text-muted-foreground">{k.key_preview}</code>
+                  <span className="text-[10px] text-muted-foreground">
+                    audience: <code>{k.audience ?? "não definida"}</code>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground">
+                    origin: <code>{k.origin ?? "não definida"}</code>
+                  </span>
+                  <span className="text-[10px] text-muted-foreground" title={(k.scopes ?? []).join(", ")}>
+                    {(k.scopes ?? []).length} escopos
+                  </span>
                   {k.last_used_at && (
                     <span className="text-[10px] text-muted-foreground flex items-center gap-1">
                       <Clock className="w-3 h-3" /> Último uso: {new Date(k.last_used_at).toLocaleDateString("pt-BR")}
@@ -314,9 +448,11 @@ function ApiKeysSection() {
                 </div>
               </div>
               <div className="flex items-center gap-1 ml-2">
-                <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggle(k.id, k.is_active)} title={k.is_active ? "Desativar" : "Ativar"}>
-                  {k.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                </Button>
+                {k.audience === API_GATEWAY_AUDIENCE && (
+                  <Button size="icon" variant="ghost" className="h-7 w-7" onClick={() => handleToggle(k.id, k.is_active)} title={k.is_active ? "Desativar" : "Ativar"}>
+                    {k.is_active ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </Button>
+                )}
                 <Button size="icon" variant="ghost" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => setDeleteId(k.id)} title="Revogar">
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
@@ -352,6 +488,19 @@ function ApiKeysSection() {
                 <div className="flex items-center gap-2 p-2 bg-secondary rounded-lg mt-1">
                   <code className="text-[11px] flex-1 break-all select-all font-mono">{GATEWAY_URL}</code>
                   <CopyButton text={GATEWAY_URL} />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold">🔒 Perfil e escopos</Label>
+                <div className="mt-1 space-y-1 rounded-lg bg-secondary p-2 text-[10px]">
+                  <p className="font-medium text-foreground">{gatewayPresetOptions[newKeyPreset].label}</p>
+                  <p className="text-muted-foreground">
+                    audience: <code>{API_GATEWAY_AUDIENCE}</code> · origin: <code>{API_GATEWAY_KEY_ORIGIN}</code>
+                  </p>
+                  <code className="block max-h-20 overflow-y-auto break-all text-muted-foreground">
+                    {issuedScopes.join(", ")}
+                  </code>
                 </div>
               </div>
 
@@ -393,6 +542,9 @@ function ApiKeysSection() {
 
 Base URL: ${GATEWAY_URL}
 Método: POST (todas as ações)
+Audience: ${API_GATEWAY_AUDIENCE}
+Origin: ${API_GATEWAY_KEY_ORIGIN}
+Escopos: ${issuedScopes.join(", ")}
 
 Headers:
   Content-Type: application/json
@@ -407,8 +559,8 @@ Exemplo cURL:
     -H "X-API-Key: ${createdKey}" \\
     -d '{"action": "health"}'
 
-Ações disponíveis: health, get_schema, list_clients, create_client, list_projects, create_project, list_tasks, create_task, etc.
-Use "get_schema" para listar todas as ${totalActions} ações.`;
+Ações autorizadas: ${issuedActions.join(", ")}.
+Use "get_schema" para consultar as ações autorizadas para esta chave.`;
                     navigator.clipboard.writeText(allInfo);
                     toast.success("Todas as informações copiadas!");
                   }}
@@ -432,6 +584,22 @@ Use "get_schema" para listar todas as ${totalActions} ações.`;
                   onKeyDown={(e) => e.key === "Enter" && handleCreate()}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">Use um nome que identifique onde a chave será usada.</p>
+              </div>
+              <div>
+                <Label htmlFor="key-profile">Perfil de acesso</Label>
+                <Select value={newKeyPreset} onValueChange={(value) => setNewKeyPreset(value as ApiGatewayScopePreset)}>
+                  <SelectTrigger id="key-profile" className="mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(gatewayPresetOptions) as ApiGatewayScopePreset[]).map((preset) => (
+                      <SelectItem key={preset} value={preset}>{gatewayPresetOptions[preset].label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  {gatewayPresetOptions[newKeyPreset].description} Cada ação também verifica seu escopo específico.
+                </p>
               </div>
               <DialogFooter>
                 <Button variant="outline" onClick={() => setShowCreate(false)}>Cancelar</Button>
@@ -682,6 +850,9 @@ function ActionCategory({ cat, isOpen, onToggle }: { cat: typeof actionDocs[0]; 
               <div className="flex items-center gap-2">
                 <Badge variant="outline" className="text-[10px] font-mono">POST</Badge>
                 <code className="text-xs font-bold text-primary">{a.name}</code>
+                <Badge variant="secondary" className="text-[9px] font-mono">
+                  {API_GATEWAY_ACTION_SCOPES[a.name]}
+                </Badge>
                 <span className="text-xs text-muted-foreground">— {a.desc}</span>
               </div>
               {a.required && (
@@ -805,6 +976,12 @@ Body (JSON):
   "error": "Invalid API key."
 }
 
+// 403 - Audience, origin ou escopo incompatível
+{
+  "success": false,
+  "error": "API key is not authorized for this action."
+}
+
 // 404 - Ação não encontrada
 {
   "success": false,
@@ -887,11 +1064,11 @@ Body (JSON):
                 <div className="grid sm:grid-cols-3 gap-3 mt-3">
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="font-medium text-foreground mb-1">🌐 API Gateway</p>
-                    <p>Edge Function unificada (<code className="bg-secondary px-1 rounded">api-gateway</code>) — 44 ações CRUD via POST único com autenticação X-API-Key.</p>
+                    <p>Edge Function unificada (<code className="bg-secondary px-1 rounded">api-gateway</code>) — {totalActions} ações CRUD via POST único, com audiência e escopo por ação.</p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="font-medium text-foreground mb-1">🔗 Webhooks n8n</p>
-                    <p>{webhookRoutes.length} rotas de webhook para automação de fluxos. Base: <code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE}</code></p>
+                    <p>{webhookRoutes.length} rotas de webhook para automação de fluxos. Base: <code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE_LABEL}</code></p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="font-medium text-foreground mb-1">⚡ Edge Functions</p>
@@ -975,7 +1152,7 @@ Body (JSON):
                       </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-1.5 pr-4 font-medium text-foreground">Base URL (Webhooks)</td>
-                        <td className="py-1.5"><div className="flex items-center gap-1"><code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE}</code><CopyButton text={WEBHOOK_BASE} /></div></td>
+                        <td className="py-1.5"><div className="flex items-center gap-1"><code className="bg-secondary px-1 rounded text-[10px] break-all">{WEBHOOK_BASE_LABEL}</code><CopyButton text={WEBHOOK_BASE_LABEL} /></div></td>
                       </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-1.5 pr-4 font-medium text-foreground">Método HTTP</td>
@@ -991,11 +1168,11 @@ Body (JSON):
                       </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-1.5 pr-4 font-medium text-foreground">Prefixo das Chaves</td>
-                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">acq_</code> (36 caracteres)</td>
+                        <td className="py-1.5"><code className="bg-secondary px-1 rounded">acq_</code> + 32 bytes aleatórios (68 caracteres)</td>
                       </tr>
                       <tr className="border-b border-border/50">
                         <td className="py-1.5 pr-4 font-medium text-foreground">Validação</td>
-                        <td className="py-1.5">SHA-256 → tabela <code className="bg-secondary px-1 rounded">api_keys</code> → RPC <code className="bg-secondary px-1 rounded">validate_api_key</code></td>
+                        <td className="py-1.5">SHA-256 → tabela <code className="bg-secondary px-1 rounded">api_keys</code> → RPC <code className="bg-secondary px-1 rounded">validate_api_key_for_audience</code> → escopo da ação</td>
                       </tr>
                       <tr>
                         <td className="py-1.5 pr-4 font-medium text-foreground">Infraestrutura</td>
@@ -1046,8 +1223,8 @@ Body (JSON):
                 <p>Webhooks configurados em <code className="bg-secondary px-1 rounded">src/lib/webhooks.ts</code>. Disparados automaticamente pelo frontend via <code className="bg-secondary px-1 rounded">fireWebhook()</code>.</p>
                 <div className="flex items-center gap-1 mt-2">
                   <span className="font-medium text-foreground">Base URL:</span>
-                  <code className="bg-secondary px-2 py-0.5 rounded text-[10px] break-all">{WEBHOOK_BASE}</code>
-                  <CopyButton text={WEBHOOK_BASE} />
+                  <code className="bg-secondary px-2 py-0.5 rounded text-[10px] break-all">{WEBHOOK_BASE_LABEL}</code>
+                  <CopyButton text={WEBHOOK_BASE_LABEL} />
                 </div>
               </div>
               <div className="divide-y divide-border">
@@ -1062,8 +1239,8 @@ Body (JSON):
                     <div>
                       <p className="text-[10px] text-muted-foreground font-medium mb-1">URL Completa</p>
                       <div className="flex items-center gap-1">
-                        <code className="text-[10px] bg-secondary px-2 py-0.5 rounded break-all">{WEBHOOK_BASE}/{w.name}</code>
-                        <CopyButton text={`${WEBHOOK_BASE}/${w.name}`} />
+                        <code className="text-[10px] bg-secondary px-2 py-0.5 rounded break-all">{webhookUrl(w.name)}</code>
+                        <CopyButton text={webhookUrl(w.name)} />
                       </div>
                     </div>
                     <div>
@@ -1104,9 +1281,9 @@ Body (JSON):
                         <td className="py-2">
                           <div className="flex items-center gap-1">
                             <code className="text-[9px] bg-secondary px-1 rounded break-all">
-                              {`https://${PROJECT_ID}.supabase.co/functions/v1/${ef.name}`}
+                              {`${SUPABASE_FUNCTIONS_URL}/${ef.name}`}
                             </code>
-                            <CopyButton text={`https://${PROJECT_ID}.supabase.co/functions/v1/${ef.name}`} />
+                            <CopyButton text={`${SUPABASE_FUNCTIONS_URL}/${ef.name}`} />
                           </div>
                         </td>
                       </tr>
@@ -1134,9 +1311,9 @@ Body (JSON):
                   </thead>
                   <tbody className="text-muted-foreground">
                     <tr className="border-b border-border/30">
-                      <td className="py-2 pr-3"><code className="text-foreground font-mono">VITE_SUPABASE_PROJECT_ID</code></td>
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">VITE_SUPABASE_URL</code></td>
                       <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Frontend</Badge></td>
-                      <td className="py-2">Compõe a Base URL do gateway</td>
+                      <td className="py-2">Base pública do backend e dos endpoints derivados</td>
                     </tr>
                     <tr className="border-b border-border/30">
                       <td className="py-2 pr-3"><code className="text-foreground font-mono">VITE_WEBHOOK_URL</code></td>
@@ -1146,7 +1323,7 @@ Body (JSON):
                     <tr className="border-b border-border/30">
                       <td className="py-2 pr-3"><code className="text-foreground font-mono">EXTERNAL_API_KEY</code></td>
                       <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Secret</Badge></td>
-                      <td className="py-2">Chave legada (fallback) do gateway</td>
+                      <td className="py-2">Compatibilidade temporária, limitada a health/get_schema; deve ser rotacionada e removida</td>
                     </tr>
                     <tr className="border-b border-border/30">
                       <td className="py-2 pr-3"><code className="text-foreground font-mono">SUPABASE_SERVICE_ROLE_KEY</code></td>
@@ -1154,9 +1331,9 @@ Body (JSON):
                       <td className="py-2">Usada pelo gateway para acesso elevado ao banco</td>
                     </tr>
                     <tr>
-                      <td className="py-2 pr-3"><code className="text-foreground font-mono">LOVABLE_API_KEY</code></td>
+                      <td className="py-2 pr-3"><code className="text-foreground font-mono">AI_API_KEY / OPENAI_API_KEY</code></td>
                       <td className="py-2 pr-3"><Badge variant="secondary" className="text-[9px]">Secret</Badge></td>
-                      <td className="py-2">Chave para Lovable AI (edge functions)</td>
+                      <td className="py-2">Credencial do provedor de IA OpenAI-compatible</td>
                     </tr>
                   </tbody>
                 </table>
@@ -1211,13 +1388,22 @@ Body (JSON):
               <div className="p-3 bg-primary/10 rounded-lg border border-primary/20">
                 <p className="font-medium text-foreground mb-1">Fluxo de Autenticação (real)</p>
                 <ol className="list-decimal list-inside space-y-1">
-                  <li>Admin gera API Key na aba "API Keys" (prefixo <code className="bg-secondary px-1 rounded">acq_</code>)</li>
-                  <li>A chave é hasheada com SHA-256 e salva na tabela <code className="bg-secondary px-1 rounded">api_keys</code></li>
+                  <li>Admin gera 32 bytes aleatórios com <code className="bg-secondary px-1 rounded">crypto.getRandomValues()</code></li>
+                  <li>A chave é hasheada com SHA-256 e salva com <code className="bg-secondary px-1 rounded">audience=api-gateway</code>, origem e escopos explícitos</li>
                   <li>A cada request, o gateway hasheia a chave recebida via <code className="bg-secondary px-1 rounded">X-API-Key</code></li>
-                  <li>Executa RPC <code className="bg-secondary px-1 rounded">validate_api_key(_key_hash)</code> para validar</li>
-                  <li>Se válida e ativa → processa. Se não → 401</li>
+                  <li>Executa RPC <code className="bg-secondary px-1 rounded">validate_api_key_for_audience(_key_hash, "api-gateway")</code></li>
+                  <li>Confere a origem permitida e o escopo mínimo da ação; qualquer combinação não mapeada é negada</li>
+                  <li>Chave inválida retorna 401; audiência, origem ou escopo incompatível retorna 403</li>
                   <li>Atualiza <code className="bg-secondary px-1 rounded">last_used_at</code> e registra no <code className="bg-secondary px-1 rounded">api_audit_log</code></li>
                 </ol>
+              </div>
+
+              <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+                <p className="font-medium text-foreground">Rotacione credenciais legadas</p>
+                <p className="mt-1">
+                  Chaves de banco sem audiência/origem explícitas são recusadas. A chave de ambiente legada fica temporariamente
+                  restrita à descoberta. Gere substitutas escopadas, atualize os consumidores, revogue as antigas e retire o fallback.
+                </p>
               </div>
 
               <div>
@@ -1230,7 +1416,7 @@ Body (JSON):
               <div className="grid sm:grid-cols-2 gap-3">
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
                   <p className="font-medium text-foreground flex items-center gap-1"><Shield className="w-3.5 h-3.5 text-primary" /> Chaves Hasheadas</p>
-                  <p>API Keys armazenadas como hash SHA-256. A chave original nunca é salva.</p>
+                  <p>API Keys geradas com CSPRNG e armazenadas como hash SHA-256. A chave original nunca é salva.</p>
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
                   <p className="font-medium text-foreground flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-primary" /> Audit Log Completo</p>
@@ -1242,7 +1428,7 @@ Body (JSON):
                 </div>
                 <div className="p-3 bg-secondary/50 rounded-lg space-y-1">
                   <p className="font-medium text-foreground flex items-center gap-1"><Key className="w-3.5 h-3.5 text-primary" /> Service Role Isolado</p>
-                  <p>O gateway usa service_role_key — nunca exposta ao frontend.</p>
+                  <p>O gateway usa service_role_key internamente; handlers só rodam após validar audiência, origem e escopo da ação.</p>
                 </div>
               </div>
 
@@ -1255,6 +1441,7 @@ Body (JSON):
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Nunca compartilhe a API Key em repositórios públicos ou chats</li>
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Monitore o "Último uso" e o Audit Log regularmente</li>
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Revogue chaves que não são mais utilizadas</li>
+                  <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Rotacione toda chave legada sem audience/origin e remova o fallback após a migração</li>
                   <li className="flex items-start gap-2"><CheckCircle2 className="w-3.5 h-3.5 text-green-500 mt-0.5 flex-shrink-0" /> Chaves desativadas retornam 401 imediatamente sem processar</li>
                 </ul>
               </div>
@@ -1266,15 +1453,15 @@ Body (JSON):
                 <div className="space-y-2">
                   <div className="p-2 bg-secondary/50 rounded">
                     <code className="text-[10px] text-primary font-bold">api_keys</code>
-                    <p className="text-[10px] mt-0.5">Colunas: id, name, key_hash, key_preview, is_active, last_used_at, created_by, created_at</p>
+                    <p className="text-[10px] mt-0.5">Inclui key_hash, audience, origin, scopes, expiração, revogação e último uso</p>
                   </div>
                   <div className="p-2 bg-secondary/50 rounded">
                     <code className="text-[10px] text-primary font-bold">api_audit_log</code>
                     <p className="text-[10px] mt-0.5">Colunas: id, action, ip_address, status_code, params, key_name, error_message, created_at</p>
                   </div>
                   <div className="p-2 bg-secondary/50 rounded">
-                    <code className="text-[10px] text-primary font-bold">validate_api_key()</code>
-                    <p className="text-[10px] mt-0.5">RPC SECURITY DEFINER que valida hash contra api_keys onde is_active = true</p>
+                    <code className="text-[10px] text-primary font-bold">validate_api_key_for_audience()</code>
+                    <p className="text-[10px] mt-0.5">RPC restrita a service_role que valida hash, audience, atividade, expiração e revogação</p>
                   </div>
                 </div>
               </div>

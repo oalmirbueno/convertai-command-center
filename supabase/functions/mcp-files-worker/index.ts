@@ -11,16 +11,23 @@
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { unzipSync, strFromU8 } from 'https://esm.sh/fflate@0.8.2';
+import {
+  requestAiChatCompletion,
+  resolveAiProviderChain,
+} from '../_shared/ai-provider.ts';
 
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 const SERVICE_ROLE = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY') ?? '';
 const BUCKET = 'mcp-files';
 const MAX_ATTEMPTS = Number(Deno.env.get('MCP_FILE_MAX_ATTEMPTS') ?? 3);
 const MAX_BATCH = Number(Deno.env.get('MCP_FILE_WORKER_BATCH') ?? 5);
 const CHUNK_CHARS = Number(Deno.env.get('MCP_FILE_CHUNK_CHARS') ?? 1800);
 const CHUNK_OVERLAP = Number(Deno.env.get('MCP_FILE_CHUNK_OVERLAP') ?? 180);
-const OCR_MODEL = Deno.env.get('MCP_FILE_OCR_MODEL') ?? 'google/gemini-2.5-flash';
+const OCR_MODEL_OVERRIDE = Deno.env.get('MCP_FILE_OCR_MODEL')?.trim();
+const OCR_PROVIDERS = resolveAiProviderChain({
+  primaryModels: [OCR_MODEL_OVERRIDE || 'gpt-4o-mini'],
+  lovableModels: [OCR_MODEL_OVERRIDE || 'google/gemini-2.5-flash'],
+});
 
 const CORS = {
   'Access-Control-Allow-Origin': '*',
@@ -35,8 +42,22 @@ const db = createClient(SUPABASE_URL, SERVICE_ROLE, {
 // ─── Entry ─────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS });
+  if (req.method !== 'POST') {
+    return new Response(JSON.stringify({ error: 'method not allowed' }), {
+      status: 405,
+      headers: { ...CORS, Allow: 'POST, OPTIONS' },
+    });
+  }
+
+  // This worker bypasses RLS and drains a shared queue. Gateway JWT
+  // verification alone is insufficient because it also accepts end-user JWTs.
+  const bearerMatch = req.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i);
+  if (!SERVICE_ROLE || bearerMatch?.[1] !== SERVICE_ROLE) {
+    return json({ error: 'unauthorized' }, 401);
+  }
+
   try {
-    const body = req.method === 'POST' ? await req.json().catch(() => ({})) : {};
+    const body = await req.json().catch(() => ({}));
     if (body.job_id) {
       const { data: job } = await db.from('file_processing_jobs').select('*').eq('id', body.job_id).maybeSingle();
       if (!job) return json({ error: 'job not found' }, 404);
@@ -222,10 +243,10 @@ async function extract(bytes: Uint8Array, mime: string, name: string): Promise<E
   return { status: 'unsupported', engine: 'none', units: [], meta: { reason: `no extractor for ${mime}` } };
 }
 
-// ─── PDF (Gemini multimodal) ───────────────────────────────────
+// ─── PDF (provider multimodal) ─────────────────────────────────
 async function extractPdf(bytes: Uint8Array): Promise<ExtractionResult> {
-  if (!LOVABLE_API_KEY) {
-    return { status: 'unsupported', engine: 'pdf-none', units: [], meta: { reason: 'LOVABLE_API_KEY missing' } };
+  if (!OCR_PROVIDERS.length) {
+    return { status: 'unsupported', engine: 'pdf-none', units: [], meta: { reason: 'AI provider missing' } };
   }
   const b64 = toBase64(bytes);
   const prompt = 'Extract ALL readable text from this PDF, preserving reading order. For each page, emit a line "===PAGE n===" then the text of that page. Include tables as tab-separated text. Do not summarize.';
@@ -233,11 +254,11 @@ async function extractPdf(bytes: Uint8Array): Promise<ExtractionResult> {
     { type: 'text', text: prompt },
     { type: 'file', file: { file_data: `data:application/pdf;base64,${b64}`, filename: 'doc.pdf' } },
   ];
-  const text = await callLovableAI(content);
+  const { text, model } = await callFileAI(content);
   const pages = splitPages(text);
   const units: ExtractedUnit[] = pages.map((t, i) => ({ text: t, page_number: i + 1, content_type: 'page' }));
   return {
-    status: 'ok', engine: OCR_MODEL, units,
+    status: 'ok', engine: model, units,
     page_count: pages.length, total_chars: text.length,
   };
 }
@@ -247,29 +268,31 @@ function splitPages(raw: string): string[] {
   return parts.length ? parts : [raw.trim()];
 }
 
-// ─── Image OCR (Gemini vision) ─────────────────────────────────
+// ─── Image OCR (provider vision) ───────────────────────────────
 async function extractImageOcr(bytes: Uint8Array, mime: string): Promise<ExtractionResult> {
-  if (!LOVABLE_API_KEY) {
-    return { status: 'unsupported', engine: 'ocr-none', units: [], meta: { reason: 'LOVABLE_API_KEY missing' } };
+  if (!OCR_PROVIDERS.length) {
+    return { status: 'unsupported', engine: 'ocr-none', units: [], meta: { reason: 'AI provider missing' } };
   }
   const b64 = toBase64(bytes);
   const content = [
     { type: 'text', text: 'Perform OCR. Return only the transcribed text, no commentary.' },
     { type: 'image_url', image_url: { url: `data:${mime};base64,${b64}` } },
   ];
-  const text = await callLovableAI(content);
-  return { status: 'ok', engine: `${OCR_MODEL}-ocr`, units: [{ text, content_type: 'ocr' }], total_chars: text.length };
+  const { text, model } = await callFileAI(content);
+  return { status: 'ok', engine: `${model}-ocr`, units: [{ text, content_type: 'ocr' }], total_chars: text.length };
 }
 
-async function callLovableAI(content: unknown): Promise<string> {
-  const res = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${LOVABLE_API_KEY}` },
-    body: JSON.stringify({ model: OCR_MODEL, messages: [{ role: 'user', content }] }),
-  });
-  if (!res.ok) throw new Error(`AI gateway ${res.status}: ${(await res.text()).slice(0, 400)}`);
+async function callFileAI(content: unknown): Promise<{ text: string; model: string }> {
+  const { response: res, provider } = await requestAiChatCompletion(
+    OCR_PROVIDERS,
+    { messages: [{ role: 'user', content }] },
+  );
+  if (!res.ok) throw new Error(`AI provider ${res.status}: ${(await res.text()).slice(0, 400)}`);
   const j = await res.json();
-  return String(j?.choices?.[0]?.message?.content ?? '').trim();
+  return {
+    text: String(j?.choices?.[0]?.message?.content ?? '').trim(),
+    model: provider.model,
+  };
 }
 
 function toBase64(bytes: Uint8Array): string {

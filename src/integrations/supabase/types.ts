@@ -84,6 +84,8 @@ export type Database = {
       }
       api_keys: {
         Row: {
+          audience: string | null
+          client_scope_mode: string
           created_at: string
           created_by: string | null
           expires_at: string | null
@@ -98,6 +100,8 @@ export type Database = {
           scopes: string[]
         }
         Insert: {
+          audience?: string | null
+          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -112,6 +116,8 @@ export type Database = {
           scopes?: string[]
         }
         Update: {
+          audience?: string | null
+          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -1935,6 +1941,9 @@ export type Database = {
           created_at: string
           deleted_at: string | null
           email: string
+          first_access_attempts: number
+          first_access_expires_at: string | null
+          first_access_last_attempt_at: string | null
           first_access_token: string | null
           first_access_used_at: string | null
           full_name: string
@@ -1961,6 +1970,9 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email: string
+          first_access_attempts?: number
+          first_access_expires_at?: string | null
+          first_access_last_attempt_at?: string | null
           first_access_token?: string | null
           first_access_used_at?: string | null
           full_name: string
@@ -1987,6 +1999,9 @@ export type Database = {
           created_at?: string
           deleted_at?: string | null
           email?: string
+          first_access_attempts?: number
+          first_access_expires_at?: string | null
+          first_access_last_attempt_at?: string | null
           first_access_token?: string | null
           first_access_used_at?: string | null
           full_name?: string
@@ -2288,6 +2303,7 @@ export type Database = {
       }
       quiz_submissions: {
         Row: {
+          action_count: number
           ai_readiness: string | null
           created_at: string | null
           differential: string | null
@@ -2295,10 +2311,12 @@ export type Database = {
           icp: string | null
           icp_fit_score: number | null
           id: string
+          invitation_expires_at: string | null
           lead_company: string | null
           lead_email: string | null
           lead_name: string | null
           lead_whatsapp: string | null
+          last_action_at: string | null
           main_pains: string | null
           maturity_digital: string | null
           origin: string | null
@@ -2313,6 +2331,7 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          action_count?: number
           ai_readiness?: string | null
           created_at?: string | null
           differential?: string | null
@@ -2320,10 +2339,12 @@ export type Database = {
           icp?: string | null
           icp_fit_score?: number | null
           id?: string
+          invitation_expires_at?: string | null
           lead_company?: string | null
           lead_email?: string | null
           lead_name?: string | null
           lead_whatsapp?: string | null
+          last_action_at?: string | null
           main_pains?: string | null
           maturity_digital?: string | null
           origin?: string | null
@@ -2338,6 +2359,7 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          action_count?: number
           ai_readiness?: string | null
           created_at?: string | null
           differential?: string | null
@@ -2345,10 +2367,12 @@ export type Database = {
           icp?: string | null
           icp_fit_score?: number | null
           id?: string
+          invitation_expires_at?: string | null
           lead_company?: string | null
           lead_email?: string | null
           lead_name?: string | null
           lead_whatsapp?: string | null
+          last_action_at?: string | null
           main_pains?: string | null
           maturity_digital?: string | null
           origin?: string | null
@@ -3247,6 +3271,63 @@ export type Database = {
           },
         ]
       }
+      workspace_inbox_upload_reservations: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          failure_code: string | null
+          folder_id: string
+          id: string
+          node_id: string | null
+          request_id: string
+          size_bytes: number
+          status: string
+          storage_path: string
+          token_generation: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          failure_code?: string | null
+          folder_id: string
+          id?: string
+          node_id?: string | null
+          request_id: string
+          size_bytes: number
+          status?: string
+          storage_path: string
+          token_generation: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          failure_code?: string | null
+          folder_id?: string
+          id?: string
+          node_id?: string | null
+          request_id?: string
+          size_bytes?: number
+          status?: string
+          storage_path?: string
+          token_generation?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_inbox_upload_reservations_folder_id_fkey"
+            columns: ["folder_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_nodes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "workspace_inbox_upload_reservations_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_nodes: {
         Row: {
           client_id: string | null
@@ -3255,6 +3336,10 @@ export type Database = {
           duration_sec: number | null
           id: string
           inbox_token: string | null
+          inbox_token_created_at: string | null
+          inbox_token_expires_at: string | null
+          inbox_token_generation: string | null
+          inbox_scan_status: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime: string | null
           name: string
@@ -3274,6 +3359,10 @@ export type Database = {
           duration_sec?: number | null
           id?: string
           inbox_token?: string | null
+          inbox_token_created_at?: string | null
+          inbox_token_expires_at?: string | null
+          inbox_token_generation?: string | null
+          inbox_scan_status?: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name: string
@@ -3293,6 +3382,10 @@ export type Database = {
           duration_sec?: number | null
           id?: string
           inbox_token?: string | null
+          inbox_token_created_at?: string | null
+          inbox_token_expires_at?: string | null
+          inbox_token_generation?: string | null
+          inbox_scan_status?: string | null
           kind?: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name?: string
@@ -3484,6 +3577,40 @@ export type Database = {
         Returns: boolean
       }
       can_write_file: { Args: { _file_id: string }; Returns: boolean }
+      cancel_workspace_inbox_upload: {
+        Args: {
+          p_failure_code?: string
+          p_reservation_id: string
+          p_storage_orphaned?: boolean
+        }
+        Returns: undefined
+      }
+      complete_workspace_inbox_upload: {
+        Args: {
+          p_mime: string
+          p_name: string
+          p_request_id: string
+          p_reservation_id: string
+          p_token: string
+        }
+        Returns: string
+      }
+      configure_api_gateway_key_scope: {
+        Args: {
+          p_client_ids?: string[]
+          p_key_id: string
+          p_scope_mode: string
+        }
+        Returns: undefined
+      }
+      consume_api_gateway_rate_limit: {
+        Args: { _key_fingerprint: string }
+        Returns: {
+          is_allowed: boolean
+          remaining: number
+          retry_after_seconds: number
+        }[]
+      }
       complete_contract_signature: {
         Args: {
           p_signature_ip: string
@@ -3558,6 +3685,68 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      claim_first_access_token: {
+        Args: { p_token_hash_hex: string }
+        Returns: {
+          claim_id: string
+          email: string
+          profile_id: string
+        }[]
+      }
+      consume_first_access_claim: {
+        Args: { p_claim_id: string }
+        Returns: boolean
+      }
+      issue_first_access_token: {
+        Args: { p_profile_id: string }
+        Returns: { expires_at: string; token: string }[]
+      }
+      issue_first_access_token_service: {
+        Args: { p_profile_id: string }
+        Returns: { expires_at: string; token: string }[]
+      }
+      issue_quiz_invitation: {
+        Args: never
+        Returns: string
+      }
+      issue_quiz_invitation_v2: {
+        Args: never
+        Returns: {
+          expires_at: string
+          submission_id: string
+          token: string
+        }[]
+      }
+      load_quiz_invitation: {
+        Args: { p_token_hash_hex: string }
+        Returns: Json
+      }
+      release_first_access_claim: {
+        Args: { p_claim_id: string }
+        Returns: boolean
+      }
+      save_quiz_invitation: {
+        Args: { p_responses: Json; p_token_hash_hex: string }
+        Returns: Json
+      }
+      submit_quiz_invitation: {
+        Args: {
+          p_plan: string
+          p_responses: Json
+          p_score: number
+          p_token_hash_hex: string
+        }
+        Returns: Json
+      }
+      validate_first_access_token: {
+        Args: { p_token_hash_hex: string }
+        Returns: {
+          email: string
+          expires_at: string
+          profile_id: string
+          status: string
+        }[]
       }
       decide_file_approval: {
         Args: {
@@ -3664,6 +3853,10 @@ export type Database = {
       }
       files_reference_path: { Args: { _url: string }; Returns: string }
       get_admin_user_id: { Args: never; Returns: string }
+      inspect_workspace_inbox: {
+        Args: { p_token: string }
+        Returns: Json
+      }
       get_editorial_approval_preview: {
         Args: { p_file_id: string }
         Returns: {
@@ -3683,6 +3876,14 @@ export type Database = {
         Returns: boolean
       }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      manage_workspace_inbox_token: {
+        Args: { p_action?: string; p_folder_id: string }
+        Returns: Json
+      }
+      mark_workspace_inbox_scan_clean: {
+        Args: { p_node_id: string; p_reference?: string }
+        Returns: Json
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -3990,9 +4191,32 @@ export type Database = {
         Returns: {
           id: string
           name: string
-          origin: string
+          origin: string | null
           scopes: string[]
         }[]
+      }
+      validate_api_key_for_audience: {
+        Args: { _audience: string; _key_hash: string }
+        Returns: {
+          audience: string
+          client_ids: string[]
+          client_scope_mode: string
+          created_by: string | null
+          id: string
+          name: string
+          origin: string | null
+          owner_is_admin: boolean
+          scopes: string[]
+        }[]
+      }
+      reserve_workspace_inbox_upload: {
+        Args: {
+          p_extension: string
+          p_request_id: string
+          p_size_bytes: number
+          p_token: string
+        }
+        Returns: Json
       }
     }
     Enums: {

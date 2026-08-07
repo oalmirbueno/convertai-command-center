@@ -21,6 +21,7 @@ import SourceDashboard from "@/components/reports/SourceDashboard";
 import ReportComparison from "@/components/reports/ReportComparison";
 import MetricsAudit from "@/components/reports/MetricsAudit";
 import { useResolvedFileUrl } from "@/lib/fileUrls";
+import { supportWhatsAppUrl } from "@/lib/supportContact";
 
 const fmtInt   = (v: number) => v >= 1000 ? (v / 1000).toFixed(v >= 10000 ? 0 : 1) + "K" : String(Math.round(v));
 const fmtMoney = (v: number) => "R$ " + v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -428,7 +429,7 @@ export default function ReportDetail() {
     : "";
 
   const whatsappMsg = `Olá! Vi o relatório "${report.title}" e gostaria de conversar sobre os resultados.`;
-  const whatsappUrl = `https://wa.me/5500000000000?text=${encodeURIComponent(whatsappMsg)}`;
+  const whatsappUrl = supportWhatsAppUrl(whatsappMsg);
   const handlePrint = () => window.print();
 
   const parseLines = (text: string) => text.split("\n").map(l => l.trim()).filter(Boolean);
@@ -636,9 +637,11 @@ export default function ReportDetail() {
               <button onClick={handlePrint} className="p-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground transition-colors cursor-pointer border border-border" title="Imprimir / PDF">
                 <Printer className="w-4 h-4" />
               </button>
-              <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border" title="WhatsApp">
-                <MessageCircle className="w-4 h-4" />
-              </a>
+              {whatsappUrl && (
+                <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 rounded-xl bg-secondary hover:bg-secondary/80 text-foreground transition-colors border border-border" title="WhatsApp">
+                  <MessageCircle className="w-4 h-4" />
+                </a>
+              )}
             </div>
           </div>
 
@@ -1555,9 +1558,11 @@ export default function ReportDetail() {
               <Download className="w-4 h-4" /> Baixar Relatório em PDF
             </button>
           )}
-          <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium w-full sm:w-auto border border-border">
-            <MessageCircle className="w-4 h-4" /> Falar sobre resultados
-          </a>
+          {whatsappUrl && (
+            <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center gap-2 px-6 py-3 rounded-xl text-[13px] bg-secondary text-foreground hover:bg-secondary/80 transition-colors font-medium w-full sm:w-auto border border-border">
+              <MessageCircle className="w-4 h-4" /> Falar sobre resultados
+            </a>
+          )}
         </div>
       </div>
 

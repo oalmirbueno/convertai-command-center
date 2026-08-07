@@ -1,117 +1,171 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { EMAIL_APP_URL as PORTAL_URL } from "../_shared/email-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
 };
 
-const PORTAL_URL = "https://aceleriq.online";
+type RpcRecord = Record<string, unknown>;
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function rpcRecord(value: unknown): RpcRecord | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate !== null && typeof candidate === "object" &&
+      !Array.isArray(candidate)
+    ? candidate as RpcRecord
+    : null;
+}
+
+function validUuid(value: unknown): value is string {
+  return typeof value === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+      .test(value);
+}
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+  if (req.method !== "POST") return json({ error: "Method not allowed" }, 405);
+
   try {
     const admin = createClient(
       Deno.env.get("SUPABASE_URL")!,
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Require admin caller
     const authHeader = req.headers.get("Authorization") ?? "";
-    const token = authHeader.replace(/^Bearer\s+/i, "");
-    if (!token) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const { data: userData, error: userErr } = await admin.auth.getUser(token);
-    if (userErr || !userData?.user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const { data: isAdmin } = await admin.rpc("has_role", {
+    const authToken = authHeader.replace(/^Bearer\s+/i, "");
+    if (!authToken) return json({ error: "Unauthorized" }, 401);
+
+    const { data: userData, error: userErr } = await admin.auth.getUser(
+      authToken,
+    );
+    if (userErr || !userData?.user) return json({ error: "Unauthorized" }, 401);
+
+    const { data: isAdmin, error: roleError } = await admin.rpc("has_role", {
       _user_id: userData.user.id,
       _role: "admin",
     });
-    if (!isAdmin) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (roleError || !isAdmin) return json({ error: "Forbidden" }, 403);
+
+    const body = await req.json() as Record<string, unknown>;
+    const profileId = body.profile_id;
+    const newEmail = typeof body.new_email === "string"
+      ? body.new_email.trim().toLowerCase()
+      : "";
+    const newFullName = typeof body.new_full_name === "string"
+      ? body.new_full_name.trim()
+      : "";
+    const sendContractId = body.send_contract_id;
+    if (
+      !validUuid(profileId) ||
+      !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail) ||
+      newEmail.length > 254 ||
+      newFullName.length > 200 ||
+      (sendContractId !== undefined && sendContractId !== null &&
+        !validUuid(sendContractId))
+    ) {
+      return json({ error: "Dados inválidos" }, 400);
     }
 
-    const {
-      profile_id,
-      new_email,
-      new_full_name,
-      send_contract_id,
-    } = await req.json();
-    if (!profile_id || !new_email) throw new Error("profile_id e new_email obrigatórios");
+    const { error: authError } = await admin.auth.admin.updateUserById(
+      profileId,
+      {
+        email: newEmail,
+        email_confirm: true,
+      },
+    );
+    if (authError) throw new Error("auth_update_failed");
 
-    // 1. Update auth email
-    const { error: authErr } = await admin.auth.admin.updateUserById(profile_id, {
-      email: new_email,
-      email_confirm: true,
-    });
-    if (authErr) throw authErr;
-
-    // 2. Reset first-access token
-    const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
-    const updatePayload: Record<string, unknown> = {
-      email: new_email,
-      first_access_token: token,
-      first_access_used_at: null,
+    const profileUpdate: Record<string, unknown> = {
+      email: newEmail,
+      // Explicitly scrub legacy public credential columns. The new bearer is
+      // issued only by the private token RPC below.
       portal_password: null,
+      first_access_token: null,
+      first_access_used_at: null,
+      first_access_expires_at: null,
+      first_access_attempts: 0,
+      first_access_last_attempt_at: null,
     };
-    if (typeof new_full_name === "string" && new_full_name.trim()) {
-      updatePayload.full_name = new_full_name.trim();
-    }
-    const { data: prof, error: profErr } = await admin
+    if (newFullName) profileUpdate.full_name = newFullName;
+
+    const { data: profile, error: profileError } = await admin
       .from("profiles")
-      .update(updatePayload)
-      .eq("id", profile_id)
+      .update(profileUpdate)
+      .eq("id", profileId)
       .select("full_name, company_name")
       .single();
-    if (profErr) throw profErr;
+    if (profileError) throw new Error("profile_update_failed");
 
-    // 3. Send welcome email
-    const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${token}`;
-    await admin.functions.invoke("send-transactional-email", {
-      body: {
-        templateName: "client-welcome",
-        recipientEmail: new_email,
-        idempotencyKey: `client-welcome-resend-${profile_id}-${Date.now()}`,
-        templateData: {
-          name: prof?.full_name || "",
-          company: prof?.company_name || "",
-          email: new_email,
-          firstAccessUrl,
-        },
-      },
-    });
-
-    // 4. Optionally resend a signed contract to a specific email
-    let contractResult: unknown = null;
-    if (send_contract_id) {
-      const { data, error } = await admin.functions.invoke("send-contract-email", {
-        body: {
-          contract_id: send_contract_id,
-        },
-      });
-      if (error) contractResult = { error: error.message };
-      else contractResult = data;
+    const { data: issueData, error: issueError } = await admin.rpc(
+      "issue_first_access_token_service",
+      { p_profile_id: profileId },
+    );
+    const issue = rpcRecord(issueData);
+    const firstAccessToken = typeof issue?.token === "string"
+      ? issue.token
+      : "";
+    if (issueError || !/^[a-f0-9]{64}$/.test(firstAccessToken)) {
+      throw new Error("token_issue_failed");
     }
 
-    return new Response(JSON.stringify({ success: true, firstAccessUrl, contractResult }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    const firstAccessUrl =
+      `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
+    const { data: welcomeData, error: welcomeError } = await admin.functions
+      .invoke(
+        "send-transactional-email",
+        {
+          body: {
+            templateName: "client-welcome",
+            recipientEmail: newEmail,
+            idempotencyKey: `client-welcome-resend-${profileId}-${Date.now()}`,
+            templateData: {
+              name: profile?.full_name || "",
+              company: profile?.company_name || "",
+              email: newEmail,
+              firstAccessUrl,
+            },
+          },
+        },
+      );
+    const welcomeResult = rpcRecord(welcomeData);
+    if (welcomeError || welcomeResult?.error) {
+      throw new Error("welcome_email_failed");
+    }
+
+    let contractResult: unknown = null;
+    if (sendContractId) {
+      const { data, error } = await admin.functions.invoke(
+        "send-contract-email",
+        {
+          body: { contract_id: sendContractId },
+        },
+      );
+      const result = rpcRecord(data);
+      if (error || result?.error) {
+        throw new Error("contract_email_failed");
+      }
+      contractResult = data;
+    }
+
+    return json({ success: true, firstAccessUrl, contractResult });
+  } catch (error) {
+    console.error("admin-reset-client-access failed", {
+      error: error instanceof Error ? error.message : "unknown_error",
     });
-  } catch (err) {
-    console.error("admin-reset-client-access error:", err);
-    return new Response(JSON.stringify({ error: (err as Error).message }), {
-      status: 400,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return json(
+      { error: "Não foi possível redefinir o acesso do cliente." },
+      500,
+    );
   }
 });

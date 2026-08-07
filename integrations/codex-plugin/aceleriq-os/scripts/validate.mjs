@@ -28,6 +28,15 @@ if (plugin) {
   if (plugin?.name === "aceleriq-os") ok("plugin.json name");
   if (Array.isArray(plugin?.skills) && plugin.skills.length === 7) ok("7 skills declared");
   else fail(`expected 7 skills, got ${plugin?.skills?.length}`);
+  if (
+    Array.isArray(plugin?.security?.network) &&
+    plugin.security.network.length === 1 &&
+    plugin.security.network[0] === "https://api.aceleriq.online"
+  ) {
+    ok("stable MCP network origin declared");
+  } else {
+    fail("plugin.json must allow only the stable MCP origin");
+  }
 }
 
 // 2. .mcp.json
@@ -79,7 +88,7 @@ if (url) {
       }),
     });
     const j = await r.json();
-    if (r.ok && j?.result?.serverInfo?.name && j?.result?.capabilities?.tools?.listChanged === true) {
+    if (r.ok && j?.result?.serverInfo?.name && j?.result?.capabilities?.tools?.listChanged === false) {
       ok(`live MCP initialize (${j.result.serverInfo.name} v${j.result.serverInfo.version})`);
     } else {
       fail(`live MCP initialize failed (${r.status}) or payload unexpected`);

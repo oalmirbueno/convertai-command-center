@@ -1,8 +1,8 @@
 # Aceleriq Performance OS — Documentação Completa
 
 > **Versão:** Fevereiro 2026  
-> **Stack:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui + Lovable Cloud (Supabase)  
-> **Repositório:** Gerenciado via Lovable  
+> **Stack:** React 18 + TypeScript + Vite + Tailwind CSS + shadcn/ui + Supabase
+> **Repositório canônico:** GitHub; Lovable permanece apenas como host e compatibilidade durante a transição
 
 ---
 
@@ -59,7 +59,7 @@ Sonner (toasts)
 Framer Motion (animações pontuais)
 ```
 
-### Stack Backend (Lovable Cloud / Supabase)
+### Stack Backend (Supabase)
 
 ```
 PostgreSQL (banco de dados)
@@ -823,12 +823,11 @@ Função para processar atas de reunião com IA e gerar planos de projeto automa
 
 ## 16. Variáveis de Ambiente
 
-### Automáticas (Lovable Cloud)
+### Públicas do frontend
 
 ```
 VITE_SUPABASE_URL           # URL do projeto Supabase
 VITE_SUPABASE_PUBLISHABLE_KEY  # Anon key
-VITE_SUPABASE_PROJECT_ID    # ID do projeto
 ```
 
 ### Manuais
@@ -969,7 +968,6 @@ LOVABLE_API_KEY
 │   │   ├── ProfilePage.tsx
 │   │   ├── Projects.tsx
 │   │   ├── ReportDetail.tsx
-│   │   ├── SeedPage.tsx
 │   │   ├── SettingsPage.tsx
 │   │   ├── Team.tsx
 │   │   └── TimelinePage.tsx

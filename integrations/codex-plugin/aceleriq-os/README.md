@@ -6,11 +6,15 @@ Plugin **privado** que conecta o Codex (e outros clientes MCP compatíveis) ao
 servidor MCP** — apenas empacota configuração, skills e exemplos para consumir
 o endpoint oficial.
 
-- **Endpoint MCP:** `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/mcp-server`
+- **Endpoint MCP:** definido por `ACELERIQ_MCP_URL`; a allowlist aceita somente `api.aceleriq.online`, o endereço estável independente do project ref.
 - **Protocolo:** MCP 2025-06-18 (Streamable HTTP)
 - **Auth:** Bearer token `mcp_live_*` emitido em `/api-docs → aba MCP`
 - **Segundo Cérebro:** ponte GitHub → `oalmirbueno/segundo-cerebro-almir`
   (leitura completa, escrita restrita a `memory/inbox/chatgpt/`)
+
+> **Gate de distribuição:** não instale nem distribua este pacote enquanto
+> `api.aceleriq.online` não tiver DNS/TLS válidos e o handshake MCP ao vivo não
+> passar. A allowlist é deliberadamente fechada e não volta ao project ref antigo.
 
 ## Instalação
 
@@ -28,7 +32,7 @@ confirmar `aceleriq-os → ready`.
 
 | Variável | Obrigatória | Descrição |
 | --- | --- | --- |
-| `ACELERIQ_MCP_URL` | ✅ | URL do MCP. Padrão: endpoint de produção. |
+| `ACELERIQ_MCP_URL` | ✅ | URL pública completa do MCP canônico. |
 | `ACELERIQ_MCP_TOKEN` | ✅ | Token `mcp_live_*`. **Nunca** commitar. |
 | `ACELERIQ_AGENT_ORIGIN` | ⛔ | Identificador de origem (padrão `codex`). |
 

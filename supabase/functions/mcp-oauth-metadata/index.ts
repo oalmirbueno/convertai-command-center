@@ -3,6 +3,8 @@
 // /.well-known/* na raiz do host. O `mcp-server` aponta clientes MCP
 // para esta URL via header WWW-Authenticate.
 
+import { getMcpRuntimeConfig } from '../_shared/mcp-runtime.ts';
+
 const CORS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, content-type, mcp-protocol-version, Mcp-Protocol-Version, mcp-session-id, Mcp-Session-Id, accept',
@@ -10,10 +12,12 @@ const CORS = {
   'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
 };
 
-const PROJECT_REF = 'gicbrgagstyvbaaumprj';
-const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
-const RESOURCE = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-server`;
-const AUTH_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
+const {
+  authIssuer: AUTH_ISSUER,
+  resourceUrl: RESOURCE,
+  appPublicUrl: APP_PUBLIC_URL,
+  authorizationServerMetadataUrl: AUTH_SERVER_METADATA,
+} = getMcpRuntimeConfig();
 
 const MCP_VERSION = '1.8.1';
 const MCP_PROTOCOL = '2025-06-18';
@@ -57,7 +61,7 @@ function protectedResourceMetadata() {
     bearer_methods_supported: ['header'],
     scopes_supported: OAUTH_SCOPES,
     mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES,
-    resource_documentation: 'https://aceleriq.online/conectar-mcp',
+    resource_documentation: `${APP_PUBLIC_URL}/conectar-mcp`,
     resource_name: 'Aceleriq OS MCP',
     mcp: {
       transport: 'streamable-http',

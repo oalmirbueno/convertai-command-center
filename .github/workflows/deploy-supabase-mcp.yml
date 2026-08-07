@@ -1,0 +1,427 @@
+name: Deploy Supabase MCP
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Release the current main tip or roll back to an earlier main ancestor
+        required: true
+        type: choice
+        default: release
+        options:
+          - release
+          - rollback
+      target_sha:
+        description: Full 40-character source SHA to deploy
+        required: true
+        type: string
+      release_confirmation:
+        description: Required only for a release operation
+        required: true
+        type: choice
+        default: CANCEL
+        options:
+          - CANCEL
+          - DEPLOY_MCP_PRODUCTION
+      rollback_confirmation:
+        description: Required only for a rollback operation
+        required: true
+        type: choice
+        default: CANCEL
+        options:
+          - CANCEL
+          - ROLLBACK_MCP_PRODUCTION
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    name: Validate and operate MCP release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    environment: production
+    env:
+      SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID || secrets.SUPABASE_PROJECT_ID }}
+      MCP_BASE_URL: ${{ vars.MCP_BASE_URL }}
+      MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+      MCP_OAUTH_METADATA_URL: ${{ vars.MCP_OAUTH_METADATA_URL }}
+      MCP_AUTH_ISSUER: ${{ vars.MCP_AUTH_ISSUER }}
+      MCP_ALLOWED_ORIGINS: ${{ vars.MCP_ALLOWED_ORIGINS }}
+      APP_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+
+    steps:
+      - name: Checkout current main control plane
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          path: control
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Checkout immutable deployment source
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ inputs.target_sha }}
+          path: release-source
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authorize release or rollback target
+        id: authorization
+        shell: bash
+        env:
+          DEPLOY_OPERATION: ${{ inputs.operation }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          RELEASE_CONFIRMATION: ${{ inputs.release_confirmation }}
+          ROLLBACK_CONFIRMATION: ${{ inputs.rollback_confirmation }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          GH_READ_TOKEN: ${{ github.token }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SUPABASE_PROJECT_ID" =~ ^[a-z0-9]{20}$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test "$EVENT_REF" = "refs/heads/main"
+
+          remote_main_sha="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GH_READ_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+              | jq --exit-status --raw-output '.object.sha'
+          )"
+          control_sha="$(git -C control rev-parse HEAD)"
+          checked_out_sha="$(git -C release-source rev-parse HEAD)"
+
+          test "$EVENT_SHA" = "$remote_main_sha"
+          test "$control_sha" = "$remote_main_sha"
+          test "$checked_out_sha" = "$TARGET_SHA"
+          git -C release-source fetch --no-tags origin \
+            refs/heads/main:refs/remotes/origin/main
+          test "$(git -C release-source rev-parse refs/remotes/origin/main)" = "$remote_main_sha"
+
+          case "$DEPLOY_OPERATION" in
+            release)
+              test "$RELEASE_CONFIRMATION" = "DEPLOY_MCP_PRODUCTION"
+              test "$ROLLBACK_CONFIRMATION" = "CANCEL"
+              test "$TARGET_SHA" = "$remote_main_sha"
+              source_relation="main-tip"
+              ;;
+            rollback)
+              test "$RELEASE_CONFIRMATION" = "CANCEL"
+              test "$ROLLBACK_CONFIRMATION" = "ROLLBACK_MCP_PRODUCTION"
+              test "$TARGET_SHA" != "$remote_main_sha"
+              git -C release-source merge-base --is-ancestor \
+                "$TARGET_SHA" "$remote_main_sha"
+              source_relation="main-ancestor"
+              ;;
+            *)
+              echo "Unsupported operation: $DEPLOY_OPERATION" >&2
+              exit 1
+              ;;
+          esac
+
+          if [ -z "$MCP_BASE_URL" ]; then
+            echo "MCP_BASE_URL=https://${SUPABASE_PROJECT_ID}.supabase.co" >> "$GITHUB_ENV"
+          fi
+          echo "operation=$DEPLOY_OPERATION" >> "$GITHUB_OUTPUT"
+          echo "main_sha=$remote_main_sha" >> "$GITHUB_OUTPUT"
+          echo "source_relation=$source_relation" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: release-source/package-lock.json
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.5.1
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.109.1
+
+      - name: Install deployment-source dependencies
+        working-directory: release-source
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+          npm ci
+
+      - name: Verify current deployment control plane
+        run: node control/scripts/verify-mcp-portability.mjs
+
+      - name: Verify immutable MCP deployment source
+        shell: bash
+        env:
+          DEPLOY_OPERATION: ${{ inputs.operation }}
+        run: |
+          set -euo pipefail
+          args=(--source-root ../release-source --source-only)
+          if [ "$DEPLOY_OPERATION" = "rollback" ]; then
+            args+=(--rollback-source)
+          fi
+          node control/scripts/verify-mcp-portability.mjs "${args[@]}"
+
+      - name: Run deployment-source tests
+        working-directory: release-source
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-placeholder
+          VITE_APP_PUBLIC_URL: https://app.example.com
+        run: |
+          npm test -- --run
+          npm run typecheck
+          deno test --allow-env supabase/functions/mcp-server/mcp_test.ts
+          deno check \
+            supabase/functions/mcp-oauth-metadata/index.ts \
+            supabase/functions/mcp-server/index.ts
+          git diff --exit-code
+
+      - name: Show deploy tool versions
+        run: |
+          node --version
+          npm --version
+          deno --version
+          supabase --version
+
+      - name: Confirm access token can see the exact Supabase project
+        id: project_access
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          project_response="$RUNNER_TEMP/supabase-project.json"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Accept: application/json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID" \
+            --output "$project_response"
+          jq --exit-status --arg project_ref "$SUPABASE_PROJECT_ID" \
+            '(.id // .ref // .project_ref) == $project_ref' \
+            "$project_response" > /dev/null
+          supabase functions list --project-ref "$SUPABASE_PROJECT_ID" > /dev/null
+
+      - name: Verify portable OAuth database gate is ready
+        id: oauth_preflight
+        working-directory: release-source
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+          mapfile -t expected_migrations < <(
+            find ../control/supabase/migrations \
+              -maxdepth 1 \
+              -type f \
+              -name '*.sql' \
+              -printf '%f\n' \
+              | sed -nE 's/^([0-9]{14})_[A-Za-z0-9._-]+\.sql$/\1/p' \
+              | sort --unique
+          )
+          test "${#expected_migrations[@]}" -gt 0
+          for version in "${expected_migrations[@]}"; do
+            [[ "$version" =~ ^[0-9]{14}$ ]]
+          done
+          expected_sql="$(printf "'%s'," "${expected_migrations[@]}")"
+          expected_sql="${expected_sql%,}"
+          preflight_result="$RUNNER_TEMP/mcp-oauth-preflight.csv"
+          supabase db query --linked \
+            --output csv \
+            "select case
+              when to_regclass('public.mcp_oauth_allowed_redirect_origins') is not null
+               and to_regprocedure('public.is_allowed_mcp_oauth_client(uuid)') is not null
+               and public.is_allowed_mcp_oauth_client(
+                 '00000000-0000-0000-0000-000000000000'::uuid
+               ) is false
+               and not exists (
+                 select expected.version
+                 from unnest(array[$expected_sql]::text[]) as expected(version)
+                 left join supabase_migrations.schema_migrations as applied
+                   on applied.version = expected.version
+                 where applied.version is null
+               )
+              then 'MCP_OAUTH_PREFLIGHT_READY'
+              else 'MCP_OAUTH_PREFLIGHT_FAILED'
+            end as mcp_oauth_preflight;" \
+            > "$preflight_result"
+          cat "$preflight_result"
+          preflight_status="$(
+            tr -d '\r' < "$preflight_result" \
+              | grep --fixed-strings --line-regexp "MCP_OAUTH_PREFLIGHT_READY"
+          )"
+          test "$preflight_status" = "MCP_OAUTH_PREFLIGHT_READY"
+
+      - name: Deploy portable MCP server
+        id: deploy_server
+        working-directory: release-source
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: >-
+          supabase functions deploy mcp-server
+          --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Deploy protected resource metadata
+        id: deploy_metadata
+        working-directory: release-source
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: >-
+          supabase functions deploy mcp-oauth-metadata
+          --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Smoke candidate against current runtime configuration
+        id: smoke_candidate
+        shell: bash
+        env:
+          DEPLOY_OPERATION: ${{ inputs.operation }}
+          MCP_BASE_URL: ""
+          MCP_RESOURCE_URL: ""
+          MCP_OAUTH_METADATA_URL: ""
+          MCP_AUTH_ISSUER: ""
+          MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
+          MCP_SMOKE_EXPECTED_KEY_ID: ${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
+          MCP_SMOKE_EXPECTED_CLIENT_ID: ${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
+          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$MCP_SMOKE_TOKEN"
+          test -n "$MCP_SMOKE_EXPECTED_KEY_ID"
+          test -n "$MCP_SMOKE_EXPECTED_CLIENT_ID"
+          test -n "$MCP_SMOKE_EXPECTED_PUBLIC_URL"
+          node control/scripts/mcp-smoke.mjs \
+            --operation "$DEPLOY_OPERATION" \
+            --discover-runtime-config \
+            --require-authenticated \
+            | tee "$RUNNER_TEMP/mcp-candidate-smoke-result.json"
+
+      - name: Reconcile MCP-only runtime overrides
+        id: overrides
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          node control/scripts/validate-mcp-overrides.mjs
+
+          override_args=()
+          applied_names=()
+          unset_names=(MCP_OAUTH_ALLOWED_CLIENT_IDS)
+          for name in \
+            MCP_RESOURCE_URL \
+            MCP_OAUTH_METADATA_URL \
+            MCP_AUTH_ISSUER \
+            MCP_ALLOWED_ORIGINS
+          do
+            value="${!name-}"
+            value="${value#"${value%%[![:space:]]*}"}"
+            value="${value%"${value##*[![:space:]]}"}"
+            if [ -n "$value" ]; then
+              override_args+=("$name=$value")
+              applied_names+=("$name")
+            else
+              unset_names+=("$name")
+            fi
+          done
+
+          if [ "${#override_args[@]}" -gt 0 ]; then
+            supabase secrets set \
+              --project-ref "$SUPABASE_PROJECT_ID" \
+              "${override_args[@]}"
+          fi
+
+          if [ "${#unset_names[@]}" -gt 0 ]; then
+            supabase secrets unset \
+              --project-ref "$SUPABASE_PROJECT_ID" \
+              --yes \
+              "${unset_names[@]}"
+          fi
+
+          if [ "${#applied_names[@]}" -eq 0 ]; then
+            echo "applied=none" >> "$GITHUB_OUTPUT"
+          else
+            applied="$(IFS=,; echo "${applied_names[*]}")"
+            echo "applied=$applied" >> "$GITHUB_OUTPUT"
+          fi
+
+          if [ "${#unset_names[@]}" -eq 0 ]; then
+            echo "removed=none" >> "$GITHUB_OUTPUT"
+          else
+            removed="$(IFS=,; echo "${unset_names[*]}")"
+            echo "removed=$removed" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Smoke final MCP runtime configuration
+        id: smoke
+        shell: bash
+        env:
+          DEPLOY_OPERATION: ${{ inputs.operation }}
+          MCP_SMOKE_TOKEN: ${{ secrets.MCP_SMOKE_TOKEN }}
+          MCP_SMOKE_EXPECTED_KEY_ID: ${{ secrets.MCP_SMOKE_EXPECTED_KEY_ID }}
+          MCP_SMOKE_EXPECTED_CLIENT_ID: ${{ secrets.MCP_SMOKE_EXPECTED_CLIENT_ID }}
+          MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$MCP_SMOKE_TOKEN"
+          test -n "$MCP_SMOKE_EXPECTED_KEY_ID"
+          test -n "$MCP_SMOKE_EXPECTED_CLIENT_ID"
+          test -n "$MCP_SMOKE_EXPECTED_PUBLIC_URL"
+          node control/scripts/mcp-smoke.mjs \
+            --operation "$DEPLOY_OPERATION" \
+            --base-url "$MCP_BASE_URL" \
+            --require-authenticated \
+            | tee "$RUNNER_TEMP/mcp-smoke-result.json"
+
+      - name: Record MCP operation summary
+        if: always()
+        shell: bash
+        env:
+          DEPLOY_OPERATION: ${{ inputs.operation }}
+          TARGET_SHA: ${{ inputs.target_sha }}
+          SOURCE_RELATION: ${{ steps.authorization.outputs.source_relation }}
+          OVERRIDES_APPLIED: ${{ steps.overrides.outputs.applied }}
+          OVERRIDES_REMOVED: ${{ steps.overrides.outputs.removed }}
+          ACCESS_OUTCOME: ${{ steps.project_access.outcome }}
+          OAUTH_PREFLIGHT_OUTCOME: ${{ steps.oauth_preflight.outcome }}
+          METADATA_DEPLOY_OUTCOME: ${{ steps.deploy_metadata.outcome }}
+          SERVER_DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
+          CANDIDATE_SMOKE_OUTCOME: ${{ steps.smoke_candidate.outcome }}
+          SMOKE_OUTCOME: ${{ steps.smoke.outcome }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Supabase MCP operation"
+            echo "- Operation: \`$DEPLOY_OPERATION\`"
+            echo "- SHA: \`$TARGET_SHA\`"
+            echo "- Source relation: \`${SOURCE_RELATION:-not-authorized}\`"
+            echo "- Project access check: \`${ACCESS_OUTCOME:-not-run}\`"
+            echo "- OAuth database preflight: \`${OAUTH_PREFLIGHT_OUTCOME:-not-run}\`"
+            echo "- Functions allowlist: \`mcp-oauth-metadata\`, \`mcp-server\`"
+            echo "- Runtime overrides applied: \`${OVERRIDES_APPLIED:-not-run}\`"
+            echo "- Runtime overrides removed: \`${OVERRIDES_REMOVED:-not-run}\`"
+            echo "- Metadata deploy: \`${METADATA_DEPLOY_OUTCOME:-not-run}\`"
+            echo "- MCP server deploy: \`${SERVER_DEPLOY_OUTCOME:-not-run}\`"
+            echo "- Candidate smoke: \`${CANDIDATE_SMOKE_OUTCOME:-not-run}\`"
+            echo "- Final smoke ($DEPLOY_OPERATION): \`${SMOKE_OUTCOME:-not-run}\`"
+            echo "- Operation status: \`$JOB_STATUS\`"
+            echo "- Migrations/database: not touched"
+          } >> "$GITHUB_STEP_SUMMARY"

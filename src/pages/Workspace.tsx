@@ -23,7 +23,7 @@ import {
   Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
   Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
   Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
-  ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw,
+  ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw, AlertCircle,
 } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -49,6 +49,7 @@ type Node = {
   mime: string | null; size_bytes: number | null; storage_path: string | null;
   duration_sec: number | null; sort_index: number; sent_for_approval_file_id: string | null;
   created_by: string | null; created_at: string;
+  inbox_scan_status?: "pending" | "clean" | "blocked" | null;
   // virtual nodes derived from public.files (linked, not stored in workspace_nodes)
   __virtual?: boolean;
   __external_url?: string | null;
@@ -540,7 +541,7 @@ export default function Workspace() {
   // Batch-prefetch signed URLs for image + video files visible in current view (for covers).
   useEffect(() => {
     const list = (filtered || []).filter(n =>
-      n.kind === "file" && !n.__virtual && n.storage_path
+      n.kind === "file" && !n.__virtual && n.storage_path && !isInboxQuarantined(n)
     );
     const imgTargets = list.filter(n => kindOf(n) === "image" && !coverUrls[n.storage_path!]).slice(0, 60);
     const vidTargets = list.filter(n => kindOf(n) === "video" && !signedUrls[n.storage_path!]).slice(0, 24);
@@ -581,6 +582,7 @@ export default function Workspace() {
     const k = kindOf(n);
     if (k !== "image" && k !== "video") return null;
     if (n.__virtual) return null;
+    if (isInboxQuarantined(n)) return null;
     if (!n.storage_path) return null;
     if (k === "image") return coverUrls[n.storage_path] || signedUrls[n.storage_path] || null;
     return signedUrls[n.storage_path] || null;
@@ -618,6 +620,14 @@ export default function Workspace() {
   }
 
   async function openNodeFile(n: Node) {
+    if (isInboxQuarantined(n)) {
+      toast({
+        title: "Arquivo externo em quarentena",
+        description: "Baixe e verifique o arquivo antes de liberar preview ou abertura.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const url = await urlFor(n);
       if (!url) throw new Error("URL do arquivo indisponível.");
@@ -631,7 +641,9 @@ export default function Workspace() {
     try {
       const url = await urlFor(n);
       if (!url) throw new Error("URL do arquivo indisponível.");
-      await downloadFile(url, n.name);
+      await downloadFile(url, n.name, {
+        allowNavigationFallback: !isInboxQuarantined(n),
+      });
     } catch (e: any) {
       toast({ title: "Não foi possível baixar", description: e?.message || "Tente novamente.", variant: "destructive" });
     }
@@ -1104,6 +1116,7 @@ export default function Workspace() {
       && !n.__virtual
       && n.kind === "file"
       && !!n.storage_path
+      && !isInboxQuarantined(n)
       && scope === "client"
       && !!clientId
       && n.client_id === clientId;
@@ -1121,6 +1134,35 @@ export default function Workspace() {
         !!n.sent_for_approval_file_id
         || (!!n.storage_path && linkedWorkspacePaths.has(n.storage_path))
       );
+  }
+
+  function isInboxQuarantined(n: Node | null) {
+    return n?.inbox_scan_status === "pending" || n?.inbox_scan_status === "blocked";
+  }
+
+  async function markInboxFileVerified(n: Node) {
+    if (n.__virtual || n.inbox_scan_status !== "pending") {
+      if (n.inbox_scan_status === "blocked") {
+        toast({
+          title: "Arquivo bloqueado",
+          description: "Um arquivo bloqueado não pode ser liberado pelo navegador.",
+          variant: "destructive",
+        });
+      }
+      return;
+    }
+    if (!window.confirm("Confirme somente depois de verificar o arquivo com uma ferramenta de segurança confiável.")) return;
+    const { error } = await supabase.rpc("mark_workspace_inbox_scan_clean", {
+      p_node_id: n.id,
+      p_reference: "Confirmação manual no Workspace",
+    });
+    if (error) {
+      toast({ title: "Não foi possível liberar", description: error.message, variant: "destructive" });
+      return;
+    }
+    setSelected((current) => current?.id === n.id ? { ...current, inbox_scan_status: "clean" } : current);
+    toast({ title: "Arquivo marcado como verificado" });
+    invalidate();
   }
 
   function openHandoff(n: Node) {
@@ -1216,6 +1258,28 @@ export default function Workspace() {
               <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
             </DropdownMenuItem>
           )}
+          {n.kind === "folder" && !n.__virtual && (
+            <DropdownMenuSub>
+              <DropdownMenuSubTrigger>
+                <Link2 className="w-3.5 h-3.5 mr-2" /> Link de upload
+              </DropdownMenuSubTrigger>
+              <DropdownMenuSubContent className="w-56">
+                <DropdownMenuItem onSelect={() => shareInbox(n)}>
+                  <Copy className="w-3.5 h-3.5 mr-2" /> Copiar link ativo
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => shareInbox(n, true)}>
+                  <RefreshCw className="w-3.5 h-3.5 mr-2" /> Gerar novo link (7 dias)
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => revokeInbox(n)}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <XIcon className="w-3.5 h-3.5 mr-2" /> Revogar link
+                </DropdownMenuItem>
+              </DropdownMenuSubContent>
+            </DropdownMenuSub>
+          )}
           {n.kind === "file" && (
             <>
               <DropdownMenuItem onSelect={() => setSelected(n)}>
@@ -1288,6 +1352,14 @@ export default function Workspace() {
   }
 
   async function copyLink(n: Node) {
+    if (isInboxQuarantined(n)) {
+      toast({
+        title: "Arquivo externo em quarentena",
+        description: "Verifique o arquivo antes de copiar um link de acesso.",
+        variant: "destructive",
+      });
+      return;
+    }
     try {
       const url = await urlFor(n);
       if (!url) throw new Error("Sem link disponível");
@@ -1298,27 +1370,46 @@ export default function Workspace() {
     }
   }
 
-  async function shareInbox(n: Node) {
+  async function shareInbox(n: Node, rotate = false) {
     if (n.kind !== "folder" || n.__virtual) return;
     try {
-      // Buscar token existente ou gerar novo
-      const { data: current } = await (supabase as any)
-        .from("workspace_nodes").select("inbox_token").eq("id", n.id).maybeSingle();
-      let token = current?.inbox_token as string | null;
-      if (!token) {
-        token = crypto.randomUUID();
-        const { error } = await supabase.from("workspace_nodes")
-          .update({ inbox_token: token } as any).eq("id", n.id);
-        if (error) throw error;
-      }
+      const { data, error } = await supabase.rpc("manage_workspace_inbox_token", {
+        p_folder_id: n.id,
+        p_action: rotate ? "rotate" : "ensure",
+      });
+      if (error) throw error;
+      const token = (data as { token?: string | null } | null)?.token;
+      const expiresAt = (data as { expires_at?: string | null } | null)?.expires_at;
+      if (!token || !expiresAt) throw new Error("O link não pôde ser criado.");
       const url = `${window.location.origin}/inbox/${token}`;
       await navigator.clipboard.writeText(url);
       toast({
-        title: "Link de upload copiado",
-        description: "Qualquer pessoa com este link pode enviar arquivos para " + n.name,
+        title: rotate ? "Novo link de upload copiado" : "Link de upload copiado",
+        description: `${rotate ? "O link anterior foi invalidado. " : ""}Válido até ${new Intl.DateTimeFormat("pt-BR", {
+          dateStyle: "short",
+          timeStyle: "short",
+        }).format(new Date(expiresAt))}.`,
       });
     } catch (e: any) {
       toast({ title: "Erro", description: e?.message, variant: "destructive" });
+    }
+  }
+
+  async function revokeInbox(n: Node) {
+    if (n.kind !== "folder" || n.__virtual) return;
+    if (!window.confirm(`Revogar o link de upload de “${n.name}”? O link atual deixará de funcionar imediatamente.`)) return;
+    try {
+      const { error } = await supabase.rpc("manage_workspace_inbox_token", {
+        p_folder_id: n.id,
+        p_action: "revoke",
+      });
+      if (error) throw error;
+      toast({
+        title: "Link de upload revogado",
+        description: "O endereço anterior não aceita mais arquivos.",
+      });
+    } catch (e: any) {
+      toast({ title: "Erro ao revogar", description: e?.message, variant: "destructive" });
     }
   }
 
@@ -1335,9 +1426,26 @@ export default function Workspace() {
                 <Folder className="w-3.5 h-3.5 mr-2" /> Abrir
               </ContextMenuItem>
               {!n.__virtual && (
-                <ContextMenuItem onSelect={() => shareInbox(n)}>
-                  <Link2 className="w-3.5 h-3.5 mr-2" /> Compartilhar link de upload
-                </ContextMenuItem>
+                <ContextMenuSub>
+                  <ContextMenuSubTrigger>
+                    <Link2 className="w-3.5 h-3.5 mr-2" /> Link de upload
+                  </ContextMenuSubTrigger>
+                  <ContextMenuSubContent className="w-56">
+                    <ContextMenuItem onSelect={() => shareInbox(n)}>
+                      <Copy className="w-3.5 h-3.5 mr-2" /> Copiar link ativo
+                    </ContextMenuItem>
+                    <ContextMenuItem onSelect={() => shareInbox(n, true)}>
+                      <RefreshCw className="w-3.5 h-3.5 mr-2" /> Gerar novo link (7 dias)
+                    </ContextMenuItem>
+                    <ContextMenuSeparator />
+                    <ContextMenuItem
+                      onSelect={() => revokeInbox(n)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <XIcon className="w-3.5 h-3.5 mr-2" /> Revogar link
+                    </ContextMenuItem>
+                  </ContextMenuSubContent>
+                </ContextMenuSub>
               )}
             </>
           ) : (
@@ -1747,6 +1855,11 @@ export default function Workspace() {
                       {isWorkspaceFileLinked(n) && (
                         <span className="pointer-events-none absolute top-1.5 left-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-success/15 text-success backdrop-blur">Em Arquivos</span>
                       )}
+                      {isInboxQuarantined(n) && (
+                        <span className="pointer-events-none absolute bottom-9 right-1.5 z-10 text-[9px] px-1.5 py-0.5 rounded-full bg-amber-500/15 text-amber-500 backdrop-blur">
+                          Quarentena
+                        </span>
+                      )}
                       {!!n.__carousel_count && n.__carousel_count > 0 && (
                         <span className="pointer-events-none absolute bottom-9 left-1.5 z-10 text-[9px] font-mono px-1.5 py-0.5 rounded-full bg-primary/85 text-primary-foreground shadow">
                           Carrossel · {n.__carousel_count + 1}
@@ -1834,6 +1947,7 @@ export default function Workspace() {
                       <Icon className={cn("w-4 h-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} />
                       <span className="flex-1 text-[13px] truncate">{n.name}</span>
                       {!isFolder && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
+                      {isInboxQuarantined(n) && <span className="text-[10px] text-amber-500">Quarentena</span>}
                       {isWorkspaceFileLinked(n) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success/15 text-success">Em Arquivos</span>}
                       <div className="relative z-10">
                         {renderActionsMenu(n)}
@@ -1857,7 +1971,17 @@ export default function Workspace() {
           </DialogHeader>
           {selected && (
             <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              {selected.__virtual && selected.__file_id && selected.__carousel_count && selected.__carousel_count > 0 ? (
+              {isInboxQuarantined(selected) ? (
+                <div className="h-64 rounded-xl border border-amber-500/30 bg-amber-500/5 flex flex-col items-center justify-center gap-3 px-6 text-center">
+                  <AlertCircle className="h-8 w-8 text-amber-500" />
+                  <div>
+                    <p className="text-sm font-medium">Arquivo externo em quarentena</p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      O preview e a abertura ficam bloqueados até uma verificação de segurança fora do navegador.
+                    </p>
+                  </div>
+                </div>
+              ) : selected.__virtual && selected.__file_id && selected.__carousel_count && selected.__carousel_count > 0 ? (
                 <SharedCarouselSlider
                   parent={{
                     id: selected.__file_id,
@@ -1874,12 +1998,29 @@ export default function Workspace() {
                 <FilePreview node={selected} getUrl={urlFor} />
               )}
               <div className="flex flex-wrap items-center gap-2">
-                <Button size="sm" variant="outline" onClick={() => openNodeFile(selected)} className="gap-1.5">
-                  <ExternalLink className="w-3.5 h-3.5" /> Abrir
-                </Button>
+                {!isInboxQuarantined(selected) && (
+                  <Button size="sm" variant="outline" onClick={() => openNodeFile(selected)} className="gap-1.5">
+                    <ExternalLink className="w-3.5 h-3.5" /> Abrir
+                  </Button>
+                )}
                 <Button size="sm" variant="outline" onClick={() => downloadNodeFile(selected)} className="gap-1.5">
-                  <Download className="w-3.5 h-3.5" /> Baixar
+                  <Download className="w-3.5 h-3.5" /> {isInboxQuarantined(selected) ? "Baixar para verificar" : "Baixar"}
                 </Button>
+                {selected.inbox_scan_status === "pending" && profile?.role === "admin" && (
+                  <Button size="sm" variant="outline" onClick={() => markInboxFileVerified(selected)} className="gap-1.5">
+                    <Check className="w-3.5 h-3.5" /> Marcar como verificado
+                  </Button>
+                )}
+                {selected.inbox_scan_status === "pending" && profile?.role !== "admin" && (
+                  <span className="text-xs text-muted-foreground">
+                    Aguardando verificação por um administrador.
+                  </span>
+                )}
+                {selected.inbox_scan_status === "blocked" && (
+                  <span className="text-xs text-destructive">
+                    Bloqueado: substitua o arquivo ou solicite uma nova verificação.
+                  </span>
+                )}
                 <Button size="sm" variant="outline" onClick={() => { setRaming(selected); setRenameValue(selected.name); }} className="gap-1.5">
                   <Pencil className="w-3.5 h-3.5" /> Renomear
                 </Button>
@@ -1910,6 +2051,9 @@ export default function Workspace() {
                 <div>Tipo: {selected.mime || "—"}</div>
                 <div>Tamanho: {fmtSize(selected.size_bytes)}</div>
                 <div>Criado: {new Date(selected.created_at).toLocaleString("pt-BR")}</div>
+                {selected.inbox_scan_status && (
+                  <div>Segurança: {selected.inbox_scan_status === "clean" ? "verificado" : "quarentena"}</div>
+                )}
               </div>
             </div>
           )}

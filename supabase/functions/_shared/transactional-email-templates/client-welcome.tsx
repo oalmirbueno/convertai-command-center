@@ -16,10 +16,9 @@ import {
   Text,
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
+import { EMAIL_APP_URL, EMAIL_LOGO_URL } from '../email-config.ts'
 
-const LOGO_URL =
-  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png'
-const PORTAL_URL = 'https://aceleriq.online'
+const PORTAL_URL = EMAIL_APP_URL
 
 interface ClientWelcomeProps {
   name?: string
@@ -50,7 +49,7 @@ const ClientWelcomeEmail = ({
         <Container style={outer}>
           {/* Header */}
           <Section style={header}>
-            <Img src={LOGO_URL} alt="AcelerIQ" width="140" style={logo} />
+            <Img src={EMAIL_LOGO_URL} alt="AcelerIQ" width="140" style={logo} />
           </Section>
 
           {/* Card */}
@@ -136,7 +135,7 @@ const ClientWelcomeEmail = ({
             <Text style={footerText}>Performance OS para times que entregam.</Text>
             <Text style={footerMeta}>
               <Link href={PORTAL_URL} style={footerLink}>
-                aceleriq.online
+                {new URL(PORTAL_URL).hostname}
               </Link>
               {' · '}
               <Link href="mailto:contato@aceleriq.com.br" style={footerLink}>
@@ -161,7 +160,7 @@ export const template = {
     name: 'André Weglandala',
     company: 'Stop Informática',
     email: 'andre@stopinformatica.com.br',
-    firstAccessUrl: 'https://aceleriq.online/primeiro-acesso?token=exemplo',
+    firstAccessUrl: `${EMAIL_APP_URL}/primeiro-acesso?token=exemplo`,
   },
 } satisfies TemplateEntry
 

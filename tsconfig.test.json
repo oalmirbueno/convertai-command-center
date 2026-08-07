@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.app.json",
+  "compilerOptions": {
+    "types": [
+      "node",
+      "vite/client",
+      "vitest/globals"
+    ]
+  },
+  "include": [
+    "src/vite-env.d.ts",
+    "src/test/**/*.ts",
+    "src/test/**/*.tsx",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
+  ],
+  "exclude": [
+    "src/lib/mcp/index.ts",
+    "src/lib/mcp/supabase.ts",
+    "src/lib/mcp/tools"
+  ]
+}

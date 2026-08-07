@@ -6,14 +6,16 @@ import { Loader2, Eye, EyeOff, ArrowRight, Check, ShieldCheck, AlertTriangle } f
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 function getPasswordStrength(pw: string): { level: number; label: string; color: string } {
-  if (pw.length < 8) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
-  let score = 0;
-  if (pw.length >= 8) score++;
-  if (/[A-Z]/.test(pw)) score++;
-  if (/[0-9]/.test(pw)) score++;
-  if (/[^A-Za-z0-9]/.test(pw)) score++;
-  if (score <= 1) return { level: 33, label: "Fraca", color: "#FF3B3B" };
-  if (score <= 2) return { level: 66, label: "Média", color: "#FFB800" };
+  if (pw.length < 12) return { level: 0, label: "Muito curta", color: "#FF3B3B" };
+  const checks = [
+    /[a-z]/.test(pw),
+    /[A-Z]/.test(pw),
+    /[0-9]/.test(pw),
+    /[^A-Za-z0-9]/.test(pw),
+  ];
+  const score = checks.filter(Boolean).length;
+  if (score <= 2) return { level: 33, label: "Fraca", color: "#FF3B3B" };
+  if (score === 3) return { level: 66, label: "Média", color: "#FFB800" };
   return { level: 100, label: "Forte", color: "#00FF66" };
 }
 
@@ -26,8 +28,6 @@ export default function FirstAccess() {
   const token = params.get("token") || "";
 
   const [phase, setPhase] = useState<Phase>("loading");
-  const [email, setEmail] = useState("");
-  const [name, setName] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -48,8 +48,6 @@ export default function FirstAccess() {
         });
         if (error) throw error;
         if (data?.valid) {
-          setEmail(data.email || "");
-          setName(data.full_name || "");
           setPhase("form");
         } else if (data?.error === "used") {
           setPhase("used");
@@ -65,8 +63,14 @@ export default function FirstAccess() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
-    if (password.length < 8) {
-      setError("A senha deve ter no mínimo 8 caracteres.");
+    if (
+      password.length < 12
+      || !/[a-z]/.test(password)
+      || !/[A-Z]/.test(password)
+      || !/[0-9]/.test(password)
+      || !/[^A-Za-z0-9]/.test(password)
+    ) {
+      setError("Use ao menos 12 caracteres, com maiúscula, minúscula, número e símbolo.");
       return;
     }
     if (password !== confirm) {
@@ -84,21 +88,21 @@ export default function FirstAccess() {
         setSubmitting(false);
         return;
       }
+      const accountEmail = typeof data?.email === "string" ? data.email : "";
       setPhase("done");
       // Auto-login and redirect
       try {
-        await loginWithCredentials(email, password);
+        if (!accountEmail) throw new Error("Email unavailable");
+        await loginWithCredentials(accountEmail, password);
         setTimeout(() => navigate("/dashboard", { replace: true }), 1200);
       } catch {
         setTimeout(() => navigate("/login", { replace: true }), 1600);
       }
-    } catch (err: any) {
-      setError(err.message || "Não foi possível criar a senha. Tente novamente.");
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Não foi possível criar a senha. Tente novamente.");
       setSubmitting(false);
     }
   };
-
-  const firstName = name ? name.split(" ")[0] : "";
 
   return (
     <div className="dark min-h-screen flex flex-col items-center justify-center bg-background px-4 py-10">
@@ -165,7 +169,7 @@ export default function FirstAccess() {
               <div className="text-center space-y-1">
                 <p className="text-[11px] uppercase tracking-[0.2em] text-primary font-semibold">Primeiro acesso</p>
                 <h1 className="text-xl font-semibold text-foreground">
-                  {firstName ? `Olá, ${firstName}!` : "Bem-vindo!"}
+                  Bem-vindo!
                 </h1>
                 <p className="text-xs text-muted-foreground leading-relaxed">
                   Crie a senha que você vai usar para entrar no Portal AcelerIQ.
@@ -173,16 +177,10 @@ export default function FirstAccess() {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-[11px] uppercase tracking-wider text-muted-foreground">E-mail de acesso</label>
-                <input value={email} disabled
-                  className="w-full bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-muted-foreground font-mono" />
-              </div>
-
-              <div className="space-y-1.5">
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Crie sua senha</label>
                 <div className="relative">
                   <input value={password} onChange={(e) => setPassword(e.target.value)} type={showPw ? "text" : "password"}
-                    placeholder="Mínimo 8 caracteres" autoFocus
+                    placeholder="Mínimo 12 caracteres" autoFocus
                     style={{ fontSize: "16px" }}
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 pr-10 text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
                   <button type="button" onClick={() => setShowPw(!showPw)}

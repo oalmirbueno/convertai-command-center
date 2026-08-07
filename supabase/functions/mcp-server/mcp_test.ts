@@ -2,9 +2,20 @@
 // Runs without network: we import the shared modules directly and craft
 // synthetic AuthResult objects, so we don't need Supabase credentials.
 
-import { assert, assertEquals } from 'https://deno.land/std@0.224.0/assert/mod.ts';
+import {
+  assert,
+  assertEquals,
+  assertRejects,
+  assertThrows,
+} from 'https://deno.land/std@0.224.0/assert/mod.ts';
 import { canInvoke, canUseToolWithDataScope, TOOL_MAP, TOOLS } from '../_shared/mcp-tools.ts';
-import { hasScope, type AuthContext } from '../_shared/mcp-auth.ts';
+import {
+  fetchJwksDocument,
+  hasScope,
+  MAX_JWKS_BODY_BYTES,
+  type AuthContext,
+  validateJwksDocument,
+} from '../_shared/mcp-auth.ts';
 import { sanitize } from '../_shared/mcp-audit.ts';
 import {
   canonicalizeEditorialIdempotencyInput,
@@ -15,11 +26,19 @@ import {
   updateTaskSchema,
 } from '../_shared/mcp-write-services.ts';
 import {
+  acceptsMcpResponse,
+  isMcpOriginAllowed,
+  isMcpProtocolVersionSupported,
+  MAX_MCP_REQUEST_BODY_BYTES,
+  McpRequestBodyTooLargeError,
   MCP_PROTOCOL_VERSION,
   prefersSse,
+  readMcpJsonBody,
+  resolveMcpAllowedOrigins,
   rpcError,
   RpcErrors,
   rpcResult,
+  validateJsonRpcRequest,
 } from '../_shared/mcp-response.ts';
 import {
   assertWritableInbox,
@@ -53,6 +72,122 @@ const restrictedCtx: AuthContext = {
     source: 'oauth',
   },
 };
+
+Deno.test('MCP JSON reader parses bounded requests', async () => {
+  const body = await readMcpJsonBody(new Request('https://mcp.example.test', {
+    method: 'POST',
+    body: JSON.stringify({ jsonrpc: '2.0', method: 'tools/list' }),
+  })) as Record<string, unknown>;
+  assertEquals(body.jsonrpc, '2.0');
+  assertEquals(body.method, 'tools/list');
+});
+
+Deno.test('MCP JSON reader rejects streamed bodies above the hard limit', async () => {
+  const testLimit = 32;
+  let error: unknown;
+  try {
+    await readMcpJsonBody(new Request('https://mcp.example.test', {
+      method: 'POST',
+      body: 'x'.repeat(testLimit + 1),
+    }), testLimit);
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error instanceof McpRequestBodyTooLargeError);
+});
+
+Deno.test('MCP JSON reader rejects a declared body above the hard limit before parsing', async () => {
+  const testLimit = 32;
+  let error: unknown;
+  try {
+    await readMcpJsonBody(new Request('https://mcp.example.test', {
+      method: 'POST',
+      headers: { 'content-length': String(testLimit + 1) },
+      body: '{}',
+    }), testLimit);
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error instanceof McpRequestBodyTooLargeError);
+});
+
+Deno.test('MCP JSON reader rejects invalid UTF-8 instead of replacing bytes', async () => {
+  let error: unknown;
+  try {
+    await readMcpJsonBody(new Request('https://mcp.example.test', {
+      method: 'POST',
+      body: new Uint8Array([0xff]),
+    }));
+  } catch (caught) {
+    error = caught;
+  }
+  assert(error instanceof TypeError);
+});
+
+Deno.test('MCP transport limit preserves the 10 MiB inline-file contract', () => {
+  const inlineFileBytes = 10 * 1024 * 1024;
+  const base64Bytes = 4 * Math.ceil(inlineFileBytes / 3);
+  assert(
+    MAX_MCP_REQUEST_BODY_BYTES >= base64Bytes + 64 * 1024,
+    'transport limit must leave room for the base64 file and JSON-RPC envelope',
+  );
+});
+
+Deno.test('JWKS fetch is bounded, non-redirecting, and accepts supported signing keys', async () => {
+  let capturedInit: RequestInit | undefined;
+  const validKey = {
+    kty: 'RSA',
+    alg: 'RS256',
+    use: 'sig',
+    kid: 'primary-key',
+    n: 'test-modulus',
+    e: 'AQAB',
+  };
+  const fetchImpl = ((_input: RequestInfo | URL, init?: RequestInit) => {
+    capturedInit = init;
+    return Promise.resolve(new Response(JSON.stringify({ keys: [validKey] }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+  }) as typeof fetch;
+
+  const keys = await fetchJwksDocument('https://issuer.example.test/.well-known/jwks.json', fetchImpl);
+  assertEquals(keys.length, 1);
+  assertEquals(keys[0].kid, 'primary-key');
+  assertEquals(capturedInit?.redirect, 'error');
+  assert(capturedInit?.signal instanceof AbortSignal);
+  assertEquals(new Headers(capturedInit?.headers).get('accept'), 'application/json');
+});
+
+Deno.test('JWKS validation rejects empty, excessive, and unsupported key sets', () => {
+  assertThrows(() => validateJwksDocument({ keys: [] }), Error, 'invalid number of keys');
+  assertThrows(
+    () => validateJwksDocument({
+      keys: Array.from({ length: 17 }, (_, index) => ({
+        kty: 'RSA', alg: 'RS256', use: 'sig', kid: `key-${index}`,
+      })),
+    }),
+    Error,
+    'invalid number of keys',
+  );
+  assertThrows(
+    () => validateJwksDocument({ keys: [{ kty: 'oct', alg: 'HS256', kid: 'shared-secret' }] }),
+    Error,
+    'unsupported signing key',
+  );
+});
+
+Deno.test('JWKS fetch rejects an oversized document before reading it', async () => {
+  const fetchImpl = (() => Promise.resolve(new Response('{}', {
+    status: 200,
+    headers: { 'content-length': String(MAX_JWKS_BODY_BYTES + 1) },
+  }))) as typeof fetch;
+  await assertRejects(
+    () => fetchJwksDocument('https://issuer.example.test/.well-known/jwks.json', fetchImpl),
+    Error,
+    'exceeds the allowed limit',
+  );
+});
 
 Deno.test('registry exposes foundation + read + memory + write + contracts tools', () => {
   const names = TOOLS.map(t => t.name).sort();
@@ -208,6 +343,77 @@ Deno.test('prefersSse honors Accept header', () => {
   assert(!prefersSse(mk('application/json, text/event-stream')));
   assert(!prefersSse(mk('application/json')));
   assert(!prefersSse(mk('')));
+});
+
+Deno.test('MCP transport Accept negotiation requires JSON or SSE', () => {
+  const mk = (accept?: string) => new Request('https://mcp.example/functions/v1/mcp', {
+    headers: accept === undefined ? undefined : { accept },
+  });
+  assert(acceptsMcpResponse(mk('application/json')));
+  assert(acceptsMcpResponse(mk('text/event-stream')));
+  assert(acceptsMcpResponse(mk('application/json, text/event-stream')));
+  assert(acceptsMcpResponse(mk('*/*')));
+  assert(!acceptsMcpResponse(mk('text/html')));
+  assert(!acceptsMcpResponse(mk()));
+});
+
+Deno.test('MCP protocol version accepts current, compatibility baseline, and absent only', () => {
+  const mk = (version?: string) => new Request('https://mcp.example/functions/v1/mcp', {
+    headers: version === undefined ? undefined : { 'MCP-Protocol-Version': version },
+  });
+  assert(isMcpProtocolVersionSupported(mk()));
+  assert(isMcpProtocolVersionSupported(mk(MCP_PROTOCOL_VERSION)));
+  assert(isMcpProtocolVersionSupported(mk('2025-03-26')));
+  assert(!isMcpProtocolVersionSupported(mk('2099-01-01')));
+});
+
+Deno.test('MCP origin policy allows native, ChatGPT, same-origin, and configured origins only', () => {
+  const allowed = resolveMcpAllowedOrigins(
+    'https://admin.example, *, javascript:alert(1), https://bad.example/path',
+    ['https://project.supabase.co/functions/v1/mcp'],
+  );
+  const request = (origin?: string, url = 'https://project.supabase.co/functions/v1/mcp') =>
+    new Request(url, { headers: origin === undefined ? undefined : { origin } });
+
+  assert(allowed.has('https://chatgpt.com'));
+  assert(allowed.has('https://chat.openai.com'));
+  assert(allowed.has('https://admin.example'));
+  assert(allowed.has('https://project.supabase.co'));
+  assert(!allowed.has('*'));
+  assert(isMcpOriginAllowed(request(), allowed));
+  assert(isMcpOriginAllowed(request('https://chatgpt.com'), allowed));
+  assert(isMcpOriginAllowed(request('https://admin.example'), allowed));
+  assert(isMcpOriginAllowed(request('https://same.example', 'https://same.example/mcp'), allowed));
+  assert(!isMcpOriginAllowed(request('https://evil.example'), allowed));
+  assert(!isMcpOriginAllowed(request('null'), allowed));
+});
+
+Deno.test('MCP JSON-RPC envelope rejects batches and malformed fields', () => {
+  assert(validateJsonRpcRequest({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }).ok);
+  assert(validateJsonRpcRequest({ jsonrpc: '2.0', method: 'notifications/initialized' }).ok);
+
+  const batch = validateJsonRpcRequest([{ jsonrpc: '2.0', id: 1, method: 'tools/list' }]);
+  assertEquals(batch.ok, false);
+  if (!batch.ok) assertEquals(batch.code, RpcErrors.invalidRequest);
+
+  for (const malformed of [
+    null,
+    { id: 1, method: 'tools/list' },
+    { jsonrpc: '1.0', id: 1, method: 'tools/list' },
+    { jsonrpc: '2.0', id: 1, method: '' },
+    { jsonrpc: '2.0', id: {}, method: 'tools/list' },
+  ]) {
+    assertEquals(validateJsonRpcRequest(malformed).ok, false);
+  }
+
+  const badParams = validateJsonRpcRequest({
+    jsonrpc: '2.0',
+    id: 'x',
+    method: 'tools/list',
+    params: [],
+  });
+  assertEquals(badParams.ok, false);
+  if (!badParams.ok) assertEquals(badParams.code, RpcErrors.invalidParams);
 });
 
 // ─── Round 4: Second Brain bridge ────────────────────────────

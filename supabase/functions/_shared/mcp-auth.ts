@@ -1,6 +1,6 @@
 // Bearer-token authentication for the MCP server.
-// Reuses the existing public.api_keys table via validate_api_key(_key_hash),
-// which already filters revoked_at + expires_at. Does NOT touch api-gateway.
+// Reuses public.api_keys through the audience-aware validator, which filters
+// revoked_at + expires_at and prevents API-gateway keys from crossing into MCP.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import {
@@ -8,6 +8,7 @@ import {
   oauthScopesForStaff,
   validateOAuthJwtClaims,
 } from './mcp-security.ts';
+import { getMcpRuntimeConfig } from './mcp-runtime.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -46,7 +47,7 @@ export class DataScopeError extends Error {
 let cached: SupabaseClient | null = null;
 function admin(): SupabaseClient {
   if (cached) return cached;
-  const url = Deno.env.get('SUPABASE_URL');
+  const url = getMcpRuntimeConfig().supabaseUrl;
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY not configured');
   cached = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
@@ -85,22 +86,107 @@ async function classifyMissing(hash: string): Promise<AuthError> {
 }
 
 // ─── Supabase OAuth JWT validation via JWKS ─────────────────────
-// Use the canonical Supabase issuer, not the runtime/backend URL. OAuth
-// discovery advertises the direct `supabase.co` issuer and strict clients issue
-// tokens with that `iss`; using a proxy/runtime URL here makes valid ChatGPT
-// OAuth tokens fail verification.
-const PROJECT_REF = Deno.env.get('SUPABASE_PROJECT_ID') ?? 'gicbrgagstyvbaaumprj';
-const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
-const JWKS_URL = `${AUTH_ISSUER}/.well-known/jwks.json`;
+// `MCP_AUTH_ISSUER` can pin the canonical OAuth issuer when `SUPABASE_URL`
+// points at a proxy/custom domain. Without the override it is derived from the
+// same Supabase base URL used by the function.
+let jwksCache: { url: string; keys: any[]; fetchedAt: number } | null = null;
+export const MAX_JWKS_BODY_BYTES = 256 * 1024;
+const MAX_JWKS_KEYS = 16;
+const JWKS_TIMEOUT_MS = 5_000;
 
-let jwksCache: { keys: any[]; fetchedAt: number } | null = null;
-async function getJwks(): Promise<any[]> {
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isSupportedSigningJwk(value: unknown): value is JsonWebKey {
+  if (!isRecord(value)) return false;
+  if (typeof value.kid !== 'string' || value.kid.trim().length === 0) return false;
+  if (value.use !== undefined && value.use !== 'sig') return false;
+  return (value.kty === 'RSA' && value.alg === 'RS256')
+    || (value.kty === 'EC' && value.alg === 'ES256' && value.crv === 'P-256');
+}
+
+export function validateJwksDocument(value: unknown): JsonWebKey[] {
+  if (!isRecord(value) || !Array.isArray(value.keys)) {
+    throw new Error('jwks response must contain a keys array');
+  }
+  if (value.keys.length === 0 || value.keys.length > MAX_JWKS_KEYS) {
+    throw new Error('jwks response contains an invalid number of keys');
+  }
+  if (!value.keys.every(isSupportedSigningJwk)) {
+    throw new Error('jwks response contains an unsupported signing key');
+  }
+  return value.keys;
+}
+
+async function readBoundedJsonResponse(
+  response: Response,
+  maxBytes: number,
+): Promise<unknown> {
+  const declaredHeader = response.headers.get('content-length');
+  if (declaredHeader !== null) {
+    const normalized = declaredHeader.trim();
+    const declared = Number(normalized);
+    if (!/^\d+$/.test(normalized) || !Number.isSafeInteger(declared)) {
+      throw new Error('jwks response has an invalid Content-Length');
+    }
+    if (declared > maxBytes) throw new Error('jwks response exceeds the allowed limit');
+  }
+
+  if (!response.body) throw new Error('jwks response body is missing');
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        try {
+          await reader.cancel();
+        } catch {
+          // The document is already rejected; cancellation failure must not
+          // change the security classification.
+        }
+        throw new Error('jwks response exceeds the allowed limit');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  const bytes = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes));
+}
+
+export async function fetchJwksDocument(
+  jwksUrl: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<JsonWebKey[]> {
+  const response = await fetchImpl(jwksUrl, {
+    headers: { Accept: 'application/json' },
+    redirect: 'error',
+    signal: AbortSignal.timeout(JWKS_TIMEOUT_MS),
+  });
+  if (!response.ok) throw new Error(`jwks fetch ${response.status}`);
+  const body = await readBoundedJsonResponse(response, MAX_JWKS_BODY_BYTES);
+  return validateJwksDocument(body);
+}
+
+async function getJwks(jwksUrl: string): Promise<any[]> {
   const now = Date.now();
-  if (jwksCache && now - jwksCache.fetchedAt < 10 * 60_000) return jwksCache.keys;
-  const res = await fetch(JWKS_URL);
-  if (!res.ok) throw new Error(`jwks fetch ${res.status}`);
-  const body = await res.json();
-  jwksCache = { keys: body.keys ?? [], fetchedAt: now };
+  if (jwksCache?.url === jwksUrl && now - jwksCache.fetchedAt < 10 * 60_000) {
+    return jwksCache.keys;
+  }
+  const keys = await fetchJwksDocument(jwksUrl);
+  jwksCache = { url: jwksUrl, keys, fetchedAt: now };
   return jwksCache.keys;
 }
 
@@ -118,6 +204,7 @@ function exactBuffer(bytes: Uint8Array): ArrayBuffer {
 }
 
 async function verifySupabaseJwt(token: string): Promise<Record<string, any> | null> {
+  const { authIssuer, jwksUrl } = getMcpRuntimeConfig();
   const parts = token.split('.');
   if (parts.length !== 3) return null;
   const [h, p, s] = parts;
@@ -126,12 +213,15 @@ async function verifySupabaseJwt(token: string): Promise<Record<string, any> | n
     header = JSON.parse(new TextDecoder().decode(b64urlDecode(h)));
     payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
   } catch { return null; }
-  if (!validateOAuthJwtClaims(payload, AUTH_ISSUER)) return null;
+  if (!validateOAuthJwtClaims(payload, authIssuer)) return null;
 
   const alg = header.alg;
   const kid = header.kid;
-  const keys = await getJwks();
-  const jwk = keys.find(k => k.kid === kid) ?? keys[0];
+  if (!['RS256', 'ES256'].includes(alg) || typeof kid !== 'string' || !kid.trim()) {
+    return null;
+  }
+  const keys = await getJwks(jwksUrl);
+  const jwk = keys.find(k => k.kid === kid && k.alg === alg);
   if (!jwk) return null;
 
   let algo: any;
@@ -165,7 +255,7 @@ function readUnexpiredJwtClaims(token: string): Record<string, any> | null {
   // This fallback only parses claims. `authenticate` always validates the same
   // token with Supabase Auth before trusting the subject or checking roles.
   const claims = readJwtClaimsUnsafe(token);
-  return validateOAuthJwtClaims(claims, AUTH_ISSUER) ? claims : null;
+  return validateOAuthJwtClaims(claims, getMcpRuntimeConfig().authIssuer) ? claims : null;
 }
 
 async function hasVerifiedSubject(token: string, expectedSubject: string): Promise<boolean> {
@@ -183,6 +273,19 @@ async function isStaffUser(userId: string): Promise<boolean> {
   if (!userId) return false;
   try {
     const { data, error } = await admin().rpc('is_staff', { _user_id: userId });
+    return !error && data === true;
+  } catch {
+    return false;
+  }
+}
+
+async function isAllowedOAuthClient(clientId: string): Promise<boolean> {
+  if (!clientId) return false;
+
+  try {
+    const { data, error } = await admin().rpc('is_allowed_mcp_oauth_client', {
+      _client_id: clientId,
+    });
     return !error && data === true;
   } catch {
     return false;
@@ -260,7 +363,10 @@ export async function authenticate(req: Request): Promise<AuthResult> {
 
   // 1) API key path (mcp_live_*, sha256 hash in api_keys)
   const hash = await sha256Hex(token);
-  const { data, error } = await admin().rpc('validate_api_key', { _key_hash: hash });
+  const { data, error } = await admin().rpc('validate_api_key_for_audience', {
+    _key_hash: hash,
+    _audience: 'mcp',
+  });
   if (!error) {
     const row = Array.isArray(data) ? data[0] : data;
     if (row) {
@@ -315,6 +421,9 @@ export async function authenticate(req: Request): Promise<AuthResult> {
   if (claims) {
     const sub = String(claims.sub ?? '');
     const clientId = String(claims.client_id ?? claims.azp ?? '');
+    if (!(await isAllowedOAuthClient(clientId))) {
+      return { ok: false, error: { kind: 'invalid' } };
+    }
     if (!(await hasVerifiedSubject(token, sub))) {
       return { ok: false, error: { kind: 'invalid' } };
     }

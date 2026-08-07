@@ -20,6 +20,7 @@ import { BrandFilter, BRAND_FILTERS, matchesBrandFilter, getProjectBrand } from 
 import { PipelineBar } from "@/components/admin/ProjectPipeline";
 import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidget";
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
+import { appPublicUrl } from "@/lib/publicUrl";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -277,8 +278,16 @@ export default function AdminDashboard() {
   };
 
   const generateQuizLink = async () => {
-    const token = (crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    const url = `https://aceleriq.online/quiz/${token}`;
+    const { data, error } = await supabase.rpc("issue_quiz_invitation_v2");
+    const issued = Array.isArray(data) ? data[0] : data;
+    const token = issued && typeof issued === "object" && "token" in issued
+      ? issued.token
+      : null;
+    if (error || typeof token !== "string" || !/^[a-f0-9]{64}$/.test(token)) {
+      toast.error("Não foi possível gerar o link do quiz");
+      return;
+    }
+    const url = appPublicUrl(`/quiz/${token}`);
     try {
       await navigator.clipboard.writeText(url);
       toast.success("Link do quiz copiado!", {

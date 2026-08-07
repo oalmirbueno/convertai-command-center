@@ -20,7 +20,7 @@ const viewAsClient = read("src/pages/AdminViewAsClient.tsx");
 describe("client credential boundary", () => {
   it("never persists or reveals a client's password in profile data", () => {
     expect(firstAccessFunction).not.toMatch(/portal_password:\s*password/);
-    expect(firstAccessFunction).toContain("portal_password: null");
+    expect(firstAccessFunction).not.toContain("portal_password");
     expect(editClientDrawer).not.toContain("client.portal_password");
     expect(editClientDrawer).not.toContain("navigator.clipboard");
     expect(editClientDrawer).not.toContain("Senha copiada!");
@@ -29,11 +29,13 @@ describe("client credential boundary", () => {
     expect(createClientModal).toContain("permanece privada e protegida");
   });
 
-  it("uses the same eight-character minimum in the page and server", () => {
-    expect(firstAccessFunction).toContain("password.length < 8");
-    expect(firstAccessFunction).toContain("no mínimo 8 caracteres");
-    expect(firstAccessPage).toContain("password.length < 8");
-    expect(firstAccessPage).toContain('placeholder="Mínimo 8 caracteres"');
+  it("uses the stronger twelve-character first-access policy consistently", () => {
+    expect(firstAccessFunction).toContain("password.length >= 12");
+    expect(firstAccessFunction).toContain("/[a-z]/.test(password)");
+    expect(firstAccessFunction).toContain("ao menos 12 caracteres");
+    expect(firstAccessPage).toContain("password.length < 12");
+    expect(firstAccessPage).toContain("!/[a-z]/.test(password)");
+    expect(firstAccessPage).toContain('placeholder="Mínimo 12 caracteres"');
     expect(firstAccessPage).not.toContain("password.length < 6");
     expect(firstAccessPage).not.toContain("Mínimo 6 caracteres");
     expect(loginPage).toContain("password.length < 8");
@@ -46,17 +48,19 @@ describe("client credential boundary", () => {
   });
 
   it("keeps the first-access password exclusively in Supabase Auth", () => {
+    const claim = firstAccessFunction.indexOf('"claim_first_access_token"');
     const authUpdate = firstAccessFunction.indexOf(
       "admin.auth.admin.updateUserById",
     );
-    const profileCleanup = firstAccessFunction.indexOf(
-      "portal_password: null",
-      authUpdate,
-    );
+    const consume = firstAccessFunction.indexOf('"consume_first_access_claim"');
 
+    expect(claim).toBeGreaterThan(-1);
     expect(authUpdate).toBeGreaterThan(-1);
-    expect(profileCleanup).toBeGreaterThan(authUpdate);
-    expect(firstAccessFunction).toContain("first_access_token: null");
+    expect(consume).toBeGreaterThan(-1);
+    expect(claim).toBeLessThan(authUpdate);
+    expect(authUpdate).toBeLessThan(consume);
+    expect(firstAccessFunction).toContain("sha256Hex(token)");
+    expect(firstAccessFunction).not.toContain('.from("profiles")');
     expect(firstAccessFunction).not.toContain("client-first-access token restore failed");
   });
 

@@ -311,7 +311,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
           >
             <FileSpreadsheet className="w-3.5 h-3.5" /> Importar CSV / XLSX
           </button>
-          <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx,.xls" className="hidden" onChange={handleCsvImport} />
+          <input ref={csvInputRef} type="file" accept=".csv,.tsv,.txt,.xlsx" className="hidden" onChange={handleCsvImport} />
         </div>
 
         <p className="text-[11px] text-muted-foreground -mt-2">

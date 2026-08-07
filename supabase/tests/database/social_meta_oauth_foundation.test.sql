@@ -475,6 +475,15 @@ CREATE TEMP TABLE social_foundation_state (
 GRANT SELECT, INSERT, UPDATE ON pg_temp.social_foundation_state
   TO authenticated;
 
+INSERT INTO social_private.meta_oauth_redirect_uris (
+  redirect_uri,
+  active
+) VALUES (
+  'http://localhost:5173/oauth/meta/callback',
+  true
+)
+ON CONFLICT (redirect_uri) DO UPDATE SET active = true;
+
 SELECT pg_temp.act_as('a1000000-0000-4000-8000-000000000001');
 INSERT INTO pg_temp.social_foundation_state (label, result)
 VALUES (

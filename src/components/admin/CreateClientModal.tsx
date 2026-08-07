@@ -5,6 +5,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
+import { APP_PUBLIC_URL as PORTAL_URL } from "@/lib/publicUrl";
+import type { Database } from "@/integrations/supabase/types";
+
+type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
+type BillingInsert = Database["public"]["Tables"]["billing"]["Insert"];
 
 function generatePassword(len = 16) {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789!@#";
@@ -13,13 +18,12 @@ function generatePassword(len = 16) {
     .join("");
 }
 
-function generateToken() {
-  return Array.from(crypto.getRandomValues(new Uint8Array(24)))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+function rpcRecord(value: unknown): Record<string, unknown> | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  return candidate !== null && typeof candidate === "object" && !Array.isArray(candidate)
+    ? candidate as Record<string, unknown>
+    : null;
 }
-
-const PORTAL_URL = "https://aceleriq.online";
 
 const SERVICES = [
   { key: "trafego", label: "Tráfego Pago" },
@@ -95,7 +99,6 @@ export default function CreateClientModal({ open, onClose }: Props) {
     try {
       // Random unknown password — the client will set their own via first-access link.
       const password = generatePassword();
-      const firstAccessToken = generateToken();
 
       // Use edge function to create user server-side (avoids session swap)
       const { data: result, error: fnError } = await supabase.functions.invoke("manage-team", {
@@ -109,115 +112,132 @@ export default function CreateClientModal({ open, onClose }: Props) {
       });
 
       if (fnError) {
-        toast.error(fnError.message || "Erro ao criar cliente");
-        setSaving(false);
-        return;
+        throw new Error(fnError.message || "Erro ao criar cliente");
       }
 
-      if (result?.error) {
-        const msg = result.error;
+      const createResult = rpcRecord(result);
+      if (createResult?.error) {
+        const msg = typeof createResult.error === "string"
+          ? createResult.error
+          : "Erro ao criar cliente";
         if (msg.includes("already") || msg.includes("exists")) {
-          toast.error("Este email já está cadastrado");
-        } else {
-          toast.error(msg);
+          throw new Error("Este email já está cadastrado");
         }
-        setSaving(false);
-        return;
+        throw new Error(msg);
       }
 
-      const newUserId = result?.user_id;
+      const newUserId = typeof createResult?.user_id === "string"
+        ? createResult.user_id
+        : "";
+      if (!newUserId) throw new Error("O usuário foi criado sem um identificador válido.");
 
-      // Update profile with extra fields + first-access token
-      if (newUserId) {
-        const planValueNum = parseFloat(planValue) || 0;
-        const profileUpdate: any = {
-          phone: phone.trim() || null,
-          company_name: company.trim(),
-          services_config: services,
-          client_type: clientType,
-          brand: brand || null,
-          first_access_token: firstAccessToken,
-          first_access_used_at: null,
-        };
-        if (showRecurring && planValueNum > 0) {
-          profileUpdate.plan_value = planValueNum;
-          profileUpdate.plan_name = "Mensalidade";
-          profileUpdate.plan_status = "active";
-          if (planRenewalDate) profileUpdate.plan_renewal_date = planRenewalDate;
-        }
-        await supabase.from("profiles").update(profileUpdate).eq("id", newUserId);
+      const planValueNum = parseFloat(planValue) || 0;
+      const profileUpdate: ProfileUpdate = {
+        phone: phone.trim() || null,
+        company_name: company.trim(),
+        services_config: services,
+        client_type: clientType,
+        brand: brand || null,
+      };
+      if (showRecurring && planValueNum > 0) {
+        profileUpdate.plan_value = planValueNum;
+        profileUpdate.plan_name = "Mensalidade";
+        profileUpdate.plan_status = "active";
+        if (planRenewalDate) profileUpdate.plan_renewal_date = planRenewalDate;
+      }
+      const { error: profileError } = await supabase
+        .from("profiles")
+        .update(profileUpdate)
+        .eq("id", newUserId);
+      if (profileError) throw new Error("Não foi possível completar o cadastro do cliente.");
 
-        // Ao cadastrar um cliente recorrente, o pagamento do ciclo atual JÁ está pago
-        // (motivo do cadastro). Registramos a entrada paga de hoje e a próxima
-        // renovação como pendente na data informada.
-        if (showRecurring && planValueNum > 0) {
-          const todayStr = new Date().toISOString().slice(0, 10);
-          const rowsRec: any[] = [{
+      // Ao cadastrar um cliente recorrente, o pagamento do ciclo atual JÁ está pago
+      // (motivo do cadastro). Registramos a entrada paga de hoje e a próxima
+      // renovação como pendente na data informada.
+      if (showRecurring && planValueNum > 0) {
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const rowsRec: BillingInsert[] = [{
+          client_id: newUserId,
+          type: "renewal",
+          amount: planValueNum,
+          due_date: todayStr,
+          paid_date: todayStr,
+          paid_amount: planValueNum,
+          description: `Mensalidade — ${company.trim() || fullName.trim()} (pago no cadastro)`,
+          status: "paid",
+        }];
+        if (planRenewalDate && planRenewalDate > todayStr) {
+          rowsRec.push({
             client_id: newUserId,
             type: "renewal",
             amount: planValueNum,
-            due_date: todayStr,
-            paid_date: todayStr,
-            paid_amount: planValueNum,
-            description: `Mensalidade — ${company.trim() || fullName.trim()} (pago no cadastro)`,
-            status: "paid",
-          }];
-          if (planRenewalDate && planRenewalDate > todayStr) {
-            rowsRec.push({
-              client_id: newUserId,
-              type: "renewal",
-              amount: planValueNum,
-              due_date: planRenewalDate,
-              description: `Mensalidade — ${company.trim() || fullName.trim()}`,
-              status: "pending",
-            });
-          }
-          await supabase.from("billing").insert(rowsRec as any);
-        }
-
-        // Cria as cobranças do projeto avulso (integral ou parcelado)
-        const projValueNum = parseFloat(projectValue) || 0;
-        if (showOneOff && projValueNum > 0 && firstDueDate) {
-          const n = payMode === "integral" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
-          const per = +(projValueNum / n).toFixed(2);
-          const first = new Date(firstDueDate + "T00:00:00");
-          const todayIso = new Date().toISOString().slice(0, 10);
-          const rows = Array.from({ length: n }, (_, idx) => {
-            const due = new Date(first);
-            due.setMonth(due.getMonth() + idx);
-            const dueStr = due.toISOString().slice(0, 10);
-            // Última parcela acerta arredondamento
-            const amount = idx === n - 1 ? +(projValueNum - per * (n - 1)).toFixed(2) : per;
-            // 1ª parcela / valor integral → já pago no ato do cadastro
-            const isFirst = idx === 0;
-            return {
-              client_id: newUserId,
-              type: "one_off",
-              amount,
-              due_date: isFirst ? todayIso : dueStr,
-              paid_date: isFirst ? todayIso : null,
-              paid_amount: isFirst ? amount : null,
-              description: n === 1
-                ? `Projeto — ${company.trim() || fullName.trim()} (pago no cadastro)`
-                : `Projeto — Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
-              status: isFirst ? "paid" : "pending",
-            };
+            due_date: planRenewalDate,
+            description: `Mensalidade — ${company.trim() || fullName.trim()}`,
+            status: "pending",
           });
-          await supabase.from("billing").insert(rows as any);
+        }
+        const { error: recurringBillingError } = await supabase
+          .from("billing")
+          .insert(rowsRec);
+        if (recurringBillingError) {
+          throw new Error("Cliente criado, mas não foi possível registrar a cobrança recorrente.");
         }
       }
 
-      setCreatedSuccess(true);
-      queryClient.invalidateQueries({ queryKey: ["clients"] });
-      queryClient.invalidateQueries({ queryKey: ["billing"] });
+      // Cria as cobranças do projeto avulso (integral ou parcelado)
+      const projValueNum = parseFloat(projectValue) || 0;
+      if (showOneOff && projValueNum > 0 && firstDueDate) {
+        const n = payMode === "integral" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
+        const per = +(projValueNum / n).toFixed(2);
+        const first = new Date(firstDueDate + "T00:00:00");
+        const todayIso = new Date().toISOString().slice(0, 10);
+        const rows: BillingInsert[] = Array.from({ length: n }, (_, idx) => {
+          const due = new Date(first);
+          due.setMonth(due.getMonth() + idx);
+          const dueStr = due.toISOString().slice(0, 10);
+          // Última parcela acerta arredondamento
+          const amount = idx === n - 1 ? +(projValueNum - per * (n - 1)).toFixed(2) : per;
+          // 1ª parcela / valor integral → já pago no ato do cadastro
+          const isFirst = idx === 0;
+          return {
+            client_id: newUserId,
+            type: "one_off",
+            amount,
+            due_date: isFirst ? todayIso : dueStr,
+            paid_date: isFirst ? todayIso : null,
+            paid_amount: isFirst ? amount : null,
+            description: n === 1
+              ? `Projeto — ${company.trim() || fullName.trim()} (pago no cadastro)`
+              : `Projeto — Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
+            status: isFirst ? "paid" : "pending",
+          };
+        });
+        const { error: projectBillingError } = await supabase
+          .from("billing")
+          .insert(rows);
+        if (projectBillingError) {
+          throw new Error("Cliente criado, mas não foi possível registrar a cobrança do projeto.");
+        }
+      }
 
-      // Send welcome email with first-access link (fire and forget)
+      // The database issues the bearer once and persists only its digest in a
+      // private schema. No browser-generated token is written to profiles.
+      const { data: issueData, error: issueError } = await supabase.rpc(
+        "issue_first_access_token",
+        { p_profile_id: newUserId },
+      );
+      const issue = rpcRecord(issueData);
+      const firstAccessToken = typeof issue?.token === "string" ? issue.token : "";
+      if (issueError || !/^[a-f0-9]{64}$/.test(firstAccessToken)) {
+        throw new Error("Cliente criado, mas não foi possível gerar o convite de primeiro acesso.");
+      }
+
       const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
-      supabase.functions.invoke("send-transactional-email", {
+      const { data: emailData, error: emailError } = await supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "client-welcome",
           recipientEmail: email.trim(),
-          idempotencyKey: `client-welcome-${newUserId ?? email.trim()}`,
+          idempotencyKey: `client-welcome-${newUserId}`,
           templateData: {
             name: fullName.trim(),
             company: company.trim(),
@@ -225,22 +245,28 @@ export default function CreateClientModal({ open, onClose }: Props) {
             firstAccessUrl,
           },
         },
-      }).catch((e) => console.warn("welcome email failed", e));
+      });
+      const emailResult = rpcRecord(emailData);
+      if (emailError || emailResult?.error) {
+        throw new Error("Cliente criado, mas não foi possível enviar o convite de primeiro acesso.");
+      }
+
+      setCreatedSuccess(true);
+      void queryClient.invalidateQueries({ queryKey: ["clients"] });
+      void queryClient.invalidateQueries({ queryKey: ["billing"] });
 
       // Fire webhook (fire and forget)
-      if (newUserId) {
-        fireWebhook(webhooks.onboardClient, {
-          client_id: newUserId,
-          name: fullName.trim(),
-          email: email.trim(),
-          company: company.trim(),
-          phone: phone.trim() || '',
-          services: services,
-          send_welcome_email: true,
-        });
-      }
-    } catch (err: any) {
-      toast.error(err.message || "Erro ao criar cliente");
+      void fireWebhook(webhooks.onboardClient, {
+        client_id: newUserId,
+        name: fullName.trim(),
+        email: email.trim(),
+        company: company.trim(),
+        phone: phone.trim() || "",
+        services,
+        send_welcome_email: true,
+      });
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Erro ao criar cliente");
     } finally {
       setSaving(false);
     }
@@ -331,7 +357,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
                       <button
                         key={opt.v}
                         type="button"
-                        onClick={() => setClientType(opt.v as any)}
+                        onClick={() => setClientType(opt.v as typeof clientType)}
                         className={`px-3 py-2.5 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
                           clientType === opt.v
                             ? "border-primary bg-primary/10 text-foreground"
@@ -355,7 +381,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
                       <button
                         key={opt.v}
                         type="button"
-                        onClick={() => setBrand(opt.v as any)}
+                        onClick={() => setBrand(opt.v as typeof brand)}
                         className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer ${
                           brand === opt.v
                             ? "border-primary bg-primary/10 text-foreground font-semibold"
@@ -415,7 +441,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
                         <button
                           key={opt.v}
                           type="button"
-                          onClick={() => setPayMode(opt.v as any)}
+                          onClick={() => setPayMode(opt.v as typeof payMode)}
                           className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
                             payMode === opt.v
                               ? "border-primary bg-primary/10 text-foreground"

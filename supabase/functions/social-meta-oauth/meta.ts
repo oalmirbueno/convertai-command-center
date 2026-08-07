@@ -65,12 +65,8 @@ export function validateMetaRedirectUri(value: string): URL {
   const localHttp =
     redirect.protocol === "http:" &&
     (redirect.hostname === "localhost" || redirect.hostname === "127.0.0.1");
-  const canonicalHttps =
-    redirect.protocol === "https:" &&
-    (redirect.hostname === "aceleriq.online" ||
-      redirect.hostname === "www.aceleriq.online");
-  if (!canonicalHttps && !localHttp) {
-    throw new Error("META_REDIRECT_URI precisa usar uma origem autorizada");
+  if (redirect.protocol !== "https:" && !localHttp) {
+    throw new Error("META_REDIRECT_URI precisa usar HTTPS fora do ambiente local");
   }
   if (
     redirect.username ||
@@ -84,13 +80,17 @@ export function validateMetaRedirectUri(value: string): URL {
   return redirect;
 }
 
-export function buildAllowedOrigins(redirectUri: string): Set<string> {
+export function buildAllowedOrigins(
+  redirectUri: string,
+  appPublicUrl?: string,
+): Set<string> {
   const redirect = validateMetaRedirectUri(redirectUri);
-  return new Set([
-    "https://aceleriq.online",
-    "https://www.aceleriq.online",
-    redirect.origin,
-  ]);
+  const origins = new Set([redirect.origin]);
+  if (appPublicUrl) {
+    const appUrl = new URL(appPublicUrl);
+    origins.add(appUrl.origin);
+  }
+  return origins;
 }
 
 export function buildFacebookLoginUrl(input: {

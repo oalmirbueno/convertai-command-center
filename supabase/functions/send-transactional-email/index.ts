@@ -3,14 +3,11 @@ import { renderAsync } from 'npm:@react-email/components@0.0.22'
 import { createClient } from 'npm:@supabase/supabase-js@2'
 import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
+import {
+  EMAIL_FROM_DOMAIN,
+  EMAIL_SITE_NAME,
+} from '../_shared/email-config.ts'
 
-// Configuration baked in at scaffold time — do NOT change these manually.
-// To update, re-run the email domain setup flow.
-const SITE_NAME = "AcelerIQ"
-// Sending is handled via Resend. The From: header uses the verified domain below.
-// The local part can be customized (e.g., notify@, contato@). Keep the domain verified in Resend.
-const SENDER_DOMAIN = "aceleriq.online"
-const FROM_DOMAIN = "aceleriq.online"
 const FROM_LOCAL_PART = "notify"
 
 // Generate a cryptographically random 32-byte hex token
@@ -21,10 +18,6 @@ function generateToken(): string {
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
 }
-
-// Auth note: this function uses verify_jwt = true in config.toml, so Supabase's
-// gateway validates the caller's JWT (anon or service_role) before the request
-// reaches this code. No in-function auth check is needed.
 
 Deno.serve(async (req) => {
   // Handle CORS preflight
@@ -44,6 +37,54 @@ Deno.serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       }
     )
+  }
+
+  // verify_jwt authenticates the JWT at the gateway, but it does not authorize
+  // who may use a service-role mailer. Internal functions call with the service
+  // key; browser callers must be authenticated staff.
+  const supabase = createClient(supabaseUrl, supabaseServiceKey)
+  const bearerMatch = req.headers.get('Authorization')?.match(/^Bearer\s+(\S+)$/i)
+  const callerToken = bearerMatch?.[1]
+  if (!callerToken) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      {
+        status: 401,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      }
+    )
+  }
+
+  if (callerToken !== supabaseServiceKey) {
+    const { data: callerData, error: callerError } = await supabase.auth.getUser(callerToken)
+    if (callerError || !callerData.user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
+
+    const { data: isStaff, error: staffError } = await supabase.rpc('is_staff', {
+      _user_id: callerData.user.id,
+    })
+    if (staffError) {
+      console.error('Failed to authorize transactional email caller', {
+        callerId: callerData.user.id,
+        error: staffError,
+      })
+    }
+    if (staffError || isStaff !== true) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden' }),
+        {
+          status: 403,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      )
+    }
   }
 
   // Parse request body
@@ -114,9 +155,6 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Create Supabase client with service role (bypasses RLS)
-  const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
   // 2. Check suppression list (fail-closed: if we can't verify, don't send)
   const { data: suppressed, error: suppressionError } = await supabase
     .from('suppressed_emails')
@@ -126,8 +164,8 @@ Deno.serve(async (req) => {
 
   if (suppressionError) {
     console.error('Suppression check failed — refusing to send', {
-      error: suppressionError,
-      effectiveRecipient,
+      code: suppressionError.code,
+      messageId,
     })
     return new Response(
       JSON.stringify({ error: 'Failed to verify suppression status' }),
@@ -147,7 +185,7 @@ Deno.serve(async (req) => {
       status: 'suppressed',
     })
 
-    console.log('Email suppressed', { effectiveRecipient, templateName })
+    console.log('Email suppressed', { messageId, templateName })
     return new Response(
       JSON.stringify({ success: false, reason: 'email_suppressed' }),
       {
@@ -170,8 +208,8 @@ Deno.serve(async (req) => {
 
   if (tokenLookupError) {
     console.error('Token lookup failed', {
-      error: tokenLookupError,
-      email: normalizedEmail,
+      code: tokenLookupError.code,
+      messageId,
     })
     await supabase.from('email_send_log').insert({
       message_id: messageId,
@@ -232,8 +270,8 @@ Deno.serve(async (req) => {
 
     if (reReadError || !storedToken) {
       console.error('Failed to read back unsubscribe token after upsert', {
-        error: reReadError,
-        email: normalizedEmail,
+        code: reReadError?.code,
+        messageId,
       })
       await supabase.from('email_send_log').insert({
         message_id: messageId,
@@ -255,7 +293,7 @@ Deno.serve(async (req) => {
     // Token exists but is already used — email should have been caught by suppression check above.
     // This is a safety fallback; log and skip sending.
     console.warn('Unsubscribe token already used but email not suppressed', {
-      email: normalizedEmail,
+      messageId,
     })
     await supabase.from('email_send_log').insert({
       message_id: messageId,
@@ -305,8 +343,8 @@ Deno.serve(async (req) => {
     payload: {
       message_id: messageId,
       to: effectiveRecipient,
-      from: `${SITE_NAME} <${FROM_LOCAL_PART}@${FROM_DOMAIN}>`,
-      sender_domain: SENDER_DOMAIN,
+      from: `${EMAIL_SITE_NAME} <${FROM_LOCAL_PART}@${EMAIL_FROM_DOMAIN}>`,
+      sender_domain: EMAIL_FROM_DOMAIN,
       subject: resolvedSubject,
       html,
       text: plainText,
@@ -320,9 +358,9 @@ Deno.serve(async (req) => {
 
   if (enqueueError) {
     console.error('Failed to enqueue email', {
-      error: enqueueError,
+      code: enqueueError.code,
       templateName,
-      effectiveRecipient,
+      messageId,
     })
 
     await supabase.from('email_send_log').insert({
@@ -339,7 +377,7 @@ Deno.serve(async (req) => {
     })
   }
 
-  console.log('Transactional email enqueued', { templateName, effectiveRecipient })
+  console.log('Transactional email enqueued', { messageId, templateName })
 
   return new Response(
     JSON.stringify({ success: true, queued: true }),

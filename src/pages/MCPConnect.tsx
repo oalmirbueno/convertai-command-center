@@ -4,10 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 import { toast } from "sonner";
+import { MCP_OAUTH_METADATA_URL, MCP_SERVER_URL } from "@/lib/mcp/endpoints";
 
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const MCP_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-server`;
-const PRM_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-oauth-metadata`;
+const MCP_URL = MCP_SERVER_URL;
+const PRM_URL = MCP_OAUTH_METADATA_URL;
 
 const agents = [
   {

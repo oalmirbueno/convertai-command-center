@@ -13,9 +13,7 @@ import {
   Section,
   Text,
 } from 'npm:@react-email/components@0.0.22'
-
-const LOGO_URL =
-  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png'
+import { EMAIL_APP_URL, EMAIL_LOGO_URL } from '../email-config.ts'
 
 interface EmailLayoutProps {
   preview: string
@@ -34,7 +32,7 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
         {/* Header */}
         <Section style={header}>
           <Img
-            src={LOGO_URL}
+            src={EMAIL_LOGO_URL}
             alt="AcelerIQ"
             width="140"
             style={logo}
@@ -54,8 +52,8 @@ export const EmailLayout = ({ preview, children }: EmailLayoutProps) => (
             Performance OS para times que entregam.
           </Text>
           <Text style={footerMeta}>
-            <Link href="https://aceleriq.online" style={footerLink}>
-              aceleriq.online
+            <Link href={EMAIL_APP_URL} style={footerLink}>
+              {new URL(EMAIL_APP_URL).hostname}
             </Link>
             {' · '}
             <Link href="mailto:contato@aceleriq.com.br" style={footerLink}>

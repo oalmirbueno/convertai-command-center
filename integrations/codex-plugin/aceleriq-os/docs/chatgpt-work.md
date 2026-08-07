@@ -8,7 +8,7 @@ Para ChatGPT Work, use OAuth. Não cole token `mcp_live_*` no conector.
 
 ## Configuração
 Em ChatGPT Work → **Custom Connectors** → adicionar servidor MCP:
-- URL: `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/mcp-server`
+- URL: o valor público de `ACELERIQ_MCP_URL` do ambiente aprovado
 - Auth: OAuth
 - Após salvar, o ChatGPT deve abrir a tela de login/autorização do Aceleriq.
 

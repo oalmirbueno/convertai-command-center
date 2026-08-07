@@ -7,6 +7,7 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import { z } from 'https://esm.sh/zod@3.23.8';
 import { WriteError, type WriteCtx } from './mcp-write-services.ts';
 import { auditPrincipalSelector } from './mcp-security.ts';
+import { getMcpRuntimeConfig } from './mcp-runtime.ts';
 
 let cached: SupabaseClient | null = null;
 function db(): SupabaseClient {
@@ -76,7 +77,7 @@ function requireUnsignedUnsentDraft(row: ContractState): void {
 }
 
 function publicSignUrl(sign_token: string): string {
-  return `https://aceleriq.online/contrato/${sign_token}`;
+  return `${getMcpRuntimeConfig().appPublicUrl}/contrato/${sign_token}`;
 }
 
 function enrichContract<T extends Record<string, any>>(row: T) {

@@ -4,14 +4,19 @@
 // intent + a contract-aware action plan.
 //
 // Goals:
-//  • Funcionar 100% no plano gratuito do Lovable AI (fallback chain de modelos
-//    free; graceful-degrade pra "unknown" se TODOS falharem — nunca trava).
+//  • Funcionar com qualquer provider OpenAI-compatible configurado, com cadeia
+//    opcional de compatibilidade e graceful-degrade para "unknown".
 //  • Ler contrato direto do sistema: dado um clientId, busca o último contrato
 //    em `contracts` e baixa o PDF pra extrair texto, sem o usuário precisar
 //    arrastar nada.
 
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import {
+  fetchAiChatCompletion,
+  resolveAiProviderChain,
+  type AiProvider,
+} from "../_shared/ai-provider.ts";
 
 const SYSTEM_PROMPT = `Você é o ACELERIQ OS — agente operacional sênior da agência AcelerIQ, dentro do Performance OS.
 
@@ -101,13 +106,13 @@ Gere SEMPRE que houver projeto/plan. Regras absolutas:
 - Não cita ferramentas internas, modelos de IA, nem datas técnicas (offsetDays).
 - Não usa markdown nem asteriscos nem cabeçalhos.`;
 
-// Ordem de fallback: modelos gratuitos primeiro. Se TODOS falharem (402/429),
-// devolve unknown sem quebrar a UI — o regex local cuida do básico.
-const MODEL_CHAIN = [
-  "google/gemini-3-flash-preview",       // default atual do catálogo Lovable
-  "google/gemini-3.1-flash-lite-preview",// fallback rápido / mais barato
-  "google/gemini-2.5-flash",             // estável
-  "google/gemini-2.5-flash-lite",        // último recurso
+// Se todos os providers/modelos falharem, devolve unknown sem quebrar a UI.
+const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
+const LOVABLE_COMPAT_MODEL_CHAIN = [
+  "google/gemini-3-flash-preview",
+  "google/gemini-3.1-flash-lite-preview",
+  "google/gemini-2.5-flash",
+  "google/gemini-2.5-flash-lite",
 ];
 
 interface RequestBody {
@@ -315,23 +320,17 @@ async function loadAllClientDocs(
 }
 
 async function callModel(
-  apiKey: string,
-  model: string,
+  provider: AiProvider,
   system: string,
   user: string,
 ): Promise<{ ok: true; content: string } | { ok: false; status: number; body: string }> {
-  const resp = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "Lovable-API-Key": apiKey },
-    body: JSON.stringify({
-      model,
+  const resp = await fetchAiChatCompletion(provider, {
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },
       ],
       response_format: { type: "json_object" },
-      temperature: 0.2,
-    }),
+      ...(/^gpt-5/i.test(provider.model) ? {} : { temperature: 0.2 }),
   });
   if (!resp.ok) {
     const body = await resp.text();
@@ -345,7 +344,10 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
 
   try {
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    const providers = resolveAiProviderChain({
+      primaryModels: PRIMARY_MODEL_CHAIN,
+      lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
+    });
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, serviceKey);
@@ -432,7 +434,7 @@ Deno.serve(async (req) => {
       ...incomingAttachments.map((a) => ({ fileName: a.fileName, text: a.text, source: "anexo" })),
       ...systemLoaded,
     ];
-    // Cap total ~60k chars pra não estourar contexto dos modelos free.
+    // Cap total ~60k chars para não estourar o contexto do provider.
     const PER_DOC_CAP = 12000;
     const TOTAL_CAP = 60000;
     let used = 0;
@@ -453,8 +455,8 @@ Deno.serve(async (req) => {
       attachmentBlock +
       `\n\nRetorne APENAS o JSON conforme schema, sem markdown.`;
 
-    // Fallback degradado se não há API key.
-    if (!apiKey) {
+    // Fallback degradado se não há provider configurado.
+    if (!providers.length) {
       return new Response(JSON.stringify({
         intent: { kind: "unknown", raw: body.text },
         suggestedClientIds: [], narrative: "IA indisponível (sem API key). Usando interpretação local.",
@@ -462,25 +464,25 @@ Deno.serve(async (req) => {
       }), { headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
-    // Tenta cadeia de modelos free → preview. 402/429 = pula. 5xx = pula.
+    // Tenta a cadeia portátil e depois a compatibilidade opcional.
     let parsed: any = null;
     let usedModel: string | null = null;
     const errors: string[] = [];
-    for (const model of MODEL_CHAIN) {
-      const r = await callModel(apiKey, model, SYSTEM_PROMPT, userPrompt);
+    for (const provider of providers) {
+      const r = await callModel(provider, SYSTEM_PROMPT, userPrompt);
       if (r.ok) {
         try { parsed = JSON.parse(r.content); }
         catch {
           const m = r.content.match(/\{[\s\S]*\}/);
           parsed = m ? JSON.parse(m[0]) : null;
         }
-        if (parsed) { usedModel = model; break; }
-        errors.push(`${model}: parse_failed`);
+        if (parsed) { usedModel = provider.model; break; }
+        errors.push(`${provider.label}: parse_failed`);
         continue;
       }
-      errors.push(`${model}: ${r.status}`);
-      // só pula automaticamente em rate-limit / credits / server-side
-      if (![402, 429, 500, 502, 503, 504].includes(r.status)) break;
+      errors.push(`${provider.label}: ${r.status}`);
+      // Continua para o próximo modelo/provider, inclusive em falha de credencial
+      // ou incompatibilidade de payload do provider anterior.
     }
 
     // Se TODOS falharem, degrada elegante — não trava o usuário.

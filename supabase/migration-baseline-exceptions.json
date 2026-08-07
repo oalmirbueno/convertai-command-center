@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "exceptions": [
+    {
+      "path": "supabase/migrations/20260505022451_4daa3d28-efa6-4993-b8c8-6fc678fe0f37.sql",
+      "published_sha256": "476cf9eeeff88851da6f141505262908027c4a656bc2d3de7b2621fd0d82afe6",
+      "sanitized_sha256": "6cbda43a1a1a551fa1e9a8a054db3f9f5a3640dd71d9a9e90d39809c968932d1",
+      "forward_fix": "supabase/migrations/20260807211000_harden_notify_ops_sync_vault.sql",
+      "reason": "Approved one-time historical source sanitization; deployment state is reconciled by the referenced forward migration."
+    },
+    {
+      "path": "supabase/migrations/20260505022542_b2913727-2ed9-4c6b-adba-24e4e708b78a.sql",
+      "published_sha256": "bd667ae7a8841f383dae06210e020eb243d3c82880da431efa6d569c343d0580",
+      "sanitized_sha256": "b6fb094d260030f836d3f98a2c9d650aaf6b34e6c370a3332d72ccc2346aec7f",
+      "forward_fix": "supabase/migrations/20260807211000_harden_notify_ops_sync_vault.sql",
+      "reason": "Approved one-time historical source sanitization; deployment state is reconciled by the referenced forward migration."
+    }
+  ]
+}

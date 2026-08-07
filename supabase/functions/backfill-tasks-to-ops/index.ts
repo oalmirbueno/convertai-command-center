@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolvePortalFunctionUrl } from "../_shared/ops-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,10 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const PROJECT_REF =
-  Deno.env.get("SUPABASE_URL")?.match(/https?:\/\/([^.]+)\./)?.[1] ?? "gicbrgagstyvbaaumprj";
-
-const PORTAL_TO_OPS_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/portal-to-ops`;
+const PORTAL_TO_OPS_URL = resolvePortalFunctionUrl("portal-to-ops");
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
 
 Deno.serve(async (req) => {
@@ -45,6 +43,7 @@ Deno.serve(async (req) => {
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${SERVICE_KEY}`,
+            "x-webhook-secret": OPS_SECRET,
           },
           body: JSON.stringify({ event: "task_created", task_id: t.id }),
         });

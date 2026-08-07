@@ -1319,14 +1319,15 @@ var list_contracts_default = defineTool8({
 });
 
 // src/lib/mcp/index.ts
-var projectRef = "gicbrgagstyvbaaumprj";
+var supabaseUrl = String("https://gicbrgagstyvbaaumprj.supabase.co").replace(/\/$/, "");
+var authIssuer = `${supabaseUrl}/auth/v1`;
 var mcp_default = defineMcp({
   name: "aceleriq-os",
   title: "Aceleriq OS",
   version: "1.1.0",
   instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban.",
   auth: auth.oauth.issuer({
-    issuer: `https://${projectRef}.supabase.co/auth/v1`,
+    issuer: authIssuer,
     acceptedAudiences: "authenticated"
   }),
   tools: [

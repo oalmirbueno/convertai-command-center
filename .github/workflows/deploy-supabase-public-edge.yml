@@ -1,0 +1,331 @@
+name: Deploy Supabase Public Edge
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sha:
+        description: Full 40-character SHA of the current main tip
+        required: true
+        type: string
+      release_confirmation:
+        description: Confirm the exact five-function production release
+        required: true
+        type: choice
+        default: CANCEL
+        options:
+          - CANCEL
+          - DEPLOY_PUBLIC_EDGE_PRODUCTION
+      database_confirmation:
+        description: Confirm the required database security release ran first
+        required: true
+        type: choice
+        default: CANCEL
+        options:
+          - CANCEL
+          - PUBLIC_EDGE_DATABASE_GATES_VERIFIED
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-production
+  cancel-in-progress: false
+
+jobs:
+  validate-and-deploy:
+    name: Validate and release public Edge allowlist
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    environment: production
+    env:
+      SUPABASE_PROJECT_ID: ${{ vars.SUPABASE_PROJECT_ID || secrets.SUPABASE_PROJECT_ID }}
+
+    steps:
+      - name: Checkout the current main control plane
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Authorize the exact current main tip
+        id: authorization
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          RELEASE_CONFIRMATION: ${{ inputs.release_confirmation }}
+          DATABASE_CONFIRMATION: ${{ inputs.database_confirmation }}
+          EVENT_REF: ${{ github.ref }}
+          EVENT_SHA: ${{ github.sha }}
+          GH_READ_TOKEN: ${{ github.token }}
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          [[ "$TARGET_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$SUPABASE_PROJECT_ID" =~ ^[a-z0-9]{20}$ ]]
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          test "$RELEASE_CONFIRMATION" = "DEPLOY_PUBLIC_EDGE_PRODUCTION"
+          test "$DATABASE_CONFIRMATION" = "PUBLIC_EDGE_DATABASE_GATES_VERIFIED"
+          test "$EVENT_REF" = "refs/heads/main"
+
+          remote_main_sha="$(
+            curl --fail --silent --show-error \
+              --header "Authorization: Bearer $GH_READ_TOKEN" \
+              --header "Accept: application/vnd.github+json" \
+              --header "X-GitHub-Api-Version: 2022-11-28" \
+              "$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/git/ref/heads/main" \
+              | jq --exit-status --raw-output '.object.sha'
+          )"
+          checked_out_sha="$(git rev-parse HEAD)"
+
+          test "$EVENT_SHA" = "$remote_main_sha"
+          test "$TARGET_SHA" = "$remote_main_sha"
+          test "$checked_out_sha" = "$remote_main_sha"
+          echo "target_sha=$remote_main_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.5.1
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
+        with:
+          version: 2.109.1
+
+      - name: Install release dependencies
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+          npm ci
+
+      - name: Test the exact release source
+        env:
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-placeholder
+          VITE_APP_PUBLIC_URL: https://app.example.com
+        run: |
+          npm test -- --run
+          npm run typecheck
+          deno check \
+            supabase/functions/admin-reset-client-access/index.ts \
+            supabase/functions/client-first-access/index.ts \
+            supabase/functions/submit-quiz/index.ts \
+            supabase/functions/api-gateway/index.ts \
+            supabase/functions/workspace-inbox/index.ts
+          git diff --exit-code
+
+      - name: Show deploy tool versions
+        run: |
+          node --version
+          npm --version
+          deno --version
+          supabase --version
+
+      - name: Confirm access token can see the exact Supabase project
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          project_response="$RUNNER_TEMP/supabase-project.json"
+          curl --fail --silent --show-error \
+            --header "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" \
+            --header "Accept: application/json" \
+            "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID" \
+            --output "$project_response"
+          jq --exit-status --arg project_ref "$SUPABASE_PROJECT_ID" \
+            '(.id // .ref // .project_ref) == $project_ref' \
+            "$project_response" > /dev/null
+          supabase functions list --project-ref "$SUPABASE_PROJECT_ID" > /dev/null
+
+      - name: Verify public Edge database gates
+        id: database_preflight
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_DB_PASSWORD"
+          supabase link \
+            --project-ref "$SUPABASE_PROJECT_ID" \
+            --password "$SUPABASE_DB_PASSWORD"
+
+          preflight_result="$RUNNER_TEMP/public-edge-preflight.csv"
+          supabase db query --linked \
+            --output csv \
+            "with required_migrations(version) as (
+              values
+                ('20260807221000'),
+                ('20260807222000'),
+                ('20260807223000')
+            ),
+            required_v2_rpcs(signature, grantee) as (
+              values
+                ('public.has_role(uuid,public.app_role)', 'service_role'),
+                ('public.issue_first_access_token_service(uuid)', 'service_role'),
+                ('public.validate_first_access_token(text)', 'service_role'),
+                ('public.claim_first_access_token(text)', 'service_role'),
+                ('public.release_first_access_claim(uuid)', 'service_role'),
+                ('public.consume_first_access_claim(uuid)', 'service_role'),
+                ('public.issue_first_access_token(uuid)', 'authenticated'),
+                ('public.issue_quiz_invitation_v2()', 'authenticated'),
+                ('public.load_quiz_invitation(text)', 'service_role'),
+                ('public.save_quiz_invitation(text,jsonb)', 'service_role'),
+                ('public.submit_quiz_invitation(text,jsonb,integer,text)', 'service_role'),
+                ('public.validate_api_key(text)', 'service_role'),
+                ('public.validate_api_key_for_audience(text,text)', 'service_role'),
+                ('public.consume_api_gateway_rate_limit(text)', 'service_role'),
+                ('public.configure_api_gateway_key_scope(uuid,text,uuid[])', 'authenticated'),
+                ('public.inspect_workspace_inbox(uuid)', 'service_role'),
+                ('public.reserve_workspace_inbox_upload(uuid,bigint,uuid,text)', 'service_role'),
+                ('public.complete_workspace_inbox_upload(uuid,uuid,uuid,text,text)', 'service_role'),
+                ('public.cancel_workspace_inbox_upload(uuid,text,boolean)', 'service_role'),
+                ('public.manage_workspace_inbox_token(uuid,text)', 'authenticated'),
+                ('public.mark_workspace_inbox_scan_clean(uuid,text)', 'authenticated'),
+                ('public.workspace_storage_object_is_releasable(text)', 'authenticated')
+            )
+            select case
+              when not exists (
+                select required.version
+                from required_migrations as required
+                left join supabase_migrations.schema_migrations as applied
+                  on applied.version = required.version
+                where applied.version is null
+              )
+               and to_regclass('app_private.first_access_tokens') is not null
+               and to_regclass('app_private.quiz_invitation_tokens') is not null
+               and to_regclass('api_gateway_private.api_gateway_key_client_scopes') is not null
+               and to_regclass('api_gateway_private.api_gateway_rate_limits') is not null
+               and to_regclass('public.workspace_inbox_scan_events') is not null
+               and not exists (
+                 select 1
+                 from required_v2_rpcs as required
+                 where not coalesce(
+                   has_function_privilege(
+                     required.grantee,
+                     to_regprocedure(required.signature),
+                     'EXECUTE'
+                   ),
+                   false
+                 )
+               )
+               and not exists (
+                 select 1
+                 from public.api_keys as api_key
+                 where api_key.is_active = true
+                   and api_key.revoked_at is null
+                   and (api_key.expires_at is null or api_key.expires_at > now())
+                   and (
+                     (
+                       api_key.audience = 'api-gateway'
+                       and api_key.client_scope_mode = 'none'
+                     )
+                     or (
+                       api_key.audience is null
+                       and coalesce(lower(btrim(api_key.origin)), '') <> 'mcp'
+                     )
+                   )
+               )
+              then 'PUBLIC_EDGE_PREFLIGHT_READY'
+              else 'PUBLIC_EDGE_PREFLIGHT_BLOCKED'
+            end as public_edge_preflight_status;" \
+            > "$preflight_result"
+          preflight_status="$(
+            tr -d '\r' < "$preflight_result" \
+              | grep --fixed-strings --line-regexp "PUBLIC_EDGE_PREFLIGHT_READY"
+          )"
+          test "$preflight_status" = "PUBLIC_EDGE_PREFLIGHT_READY"
+
+      - name: Deploy the exact five-function allowlist
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          supabase functions deploy admin-reset-client-access --project-ref "$SUPABASE_PROJECT_ID"
+          supabase functions deploy client-first-access --project-ref "$SUPABASE_PROJECT_ID"
+          supabase functions deploy submit-quiz --project-ref "$SUPABASE_PROJECT_ID"
+          supabase functions deploy workspace-inbox --project-ref "$SUPABASE_PROJECT_ID"
+          supabase functions deploy api-gateway --project-ref "$SUPABASE_PROJECT_ID"
+
+      - name: Run credential-free negative smoke
+        id: negative_smoke
+        shell: bash
+        run: |
+          set -euo pipefail
+          edge_base_url="https://${SUPABASE_PROJECT_ID}.supabase.co/functions/v1"
+          smoke_dir="$RUNNER_TEMP/public-edge-negative-smoke"
+          mkdir -p "$smoke_dir"
+
+          assert_status() {
+            local function_name="$1"
+            local method="$2"
+            local expected_status="$3"
+            local actual_status
+            actual_status="$(
+              curl --silent --show-error \
+                --request "$method" \
+                --connect-timeout 10 \
+                --max-time 30 \
+                --output "$smoke_dir/${function_name}.json" \
+                --dump-header "$smoke_dir/${function_name}.headers" \
+                --write-out '%{http_code}' \
+                "$edge_base_url/$function_name"
+            )"
+            if [ "$actual_status" != "$expected_status" ]; then
+              echo "$function_name returned HTTP $actual_status; expected $expected_status" >&2
+              return 1
+            fi
+            echo "$function_name rejected the credential-free request with HTTP $actual_status"
+          }
+
+          assert_status admin-reset-client-access POST 401
+          assert_status client-first-access GET 405
+          assert_status submit-quiz GET 405
+          assert_status api-gateway GET 401
+          assert_status workspace-inbox GET 404
+
+          jq --exit-status \
+            '.error == "Method not allowed"' \
+            "$smoke_dir/client-first-access.json" > /dev/null
+          jq --exit-status \
+            '.error == "Method not allowed"' \
+            "$smoke_dir/submit-quiz.json" > /dev/null
+          jq --exit-status \
+            '.success == false and .error == "Missing API key. Send X-API-Key header."' \
+            "$smoke_dir/api-gateway.json" > /dev/null
+          jq --exit-status \
+            '.code == "invalid_or_expired_link"' \
+            "$smoke_dir/workspace-inbox.json" > /dev/null
+          tr -d '\r' < "$smoke_dir/workspace-inbox.headers" \
+            | grep --ignore-case --line-regexp 'cache-control: no-store' \
+              > /dev/null
+
+      - name: Write release summary
+        if: always()
+        shell: bash
+        env:
+          TARGET_SHA: ${{ inputs.target_sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Supabase public Edge release"
+            echo
+            echo "- Status: \`$JOB_STATUS\`"
+            echo "- Source SHA: \`$TARGET_SHA\`"
+            echo "- Allowlist: \`admin-reset-client-access\`, \`client-first-access\`, \`submit-quiz\`, \`workspace-inbox\`, \`api-gateway\`"
+            echo "- Database: read-only preflight; no migrations applied"
+            echo "- Runtime secrets: unchanged"
+            echo "- Smoke: credential-free negative requests only"
+          } >> "$GITHUB_STEP_SUMMARY"

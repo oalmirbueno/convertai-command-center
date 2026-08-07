@@ -5,6 +5,7 @@ import { Bell, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChec
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
+import { safeInternalPath } from "@/lib/internalNavigation";
 import { toast } from "sonner";
 
 function getNotifIcon(type: string) {
@@ -84,8 +85,9 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
       await supabase.from("notifications").update({ read: true }).eq("id", n.id);
       queryClient.invalidateQueries({ queryKey: ["notifications"] });
     }
-    if (n.link) {
-      navigate(n.link);
+    const destination = safeInternalPath(n.link);
+    if (destination) {
+      navigate(destination);
       onOpenChange(false);
     }
   };

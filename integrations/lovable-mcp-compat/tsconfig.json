@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "allowImportingTsExtensions": true,
+    "baseUrl": ".",
+    "isolatedModules": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "moduleDetection": "force",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "noImplicitAny": false,
+    "noUnusedLocals": false,
+    "noUnusedParameters": false,
+    "paths": {
+      "@lovable.dev/mcp-js": ["node_modules/@lovable.dev/mcp-js/dist/index.d.ts"],
+      "@supabase/supabase-js": ["types/supabase.d.ts"],
+      "zod": ["node_modules/zod/index.d.ts"]
+    },
+    "skipLibCheck": true,
+    "strict": false,
+    "target": "ES2022",
+    "types": ["node", "vite/client"]
+  },
+  "include": [
+    "../../src/lib/mcp/index.ts",
+    "../../src/lib/mcp/supabase.ts",
+    "../../src/lib/mcp/tools/**/*.ts"
+  ]
+}

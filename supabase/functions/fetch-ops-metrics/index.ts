@@ -1,5 +1,6 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { resolveOpsFunctionUrl } from "../_shared/ops-config.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -44,10 +45,10 @@ serve(async (req) => {
     }
 
     // Chama Ops
-    const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
+    const opsMetricsUrl = resolveOpsFunctionUrl("client-metrics-public");
     const SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
 
-    const opsRes = await fetch(`${OPS_URL}/client-metrics-public`, {
+    const opsRes = await fetch(opsMetricsUrl, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

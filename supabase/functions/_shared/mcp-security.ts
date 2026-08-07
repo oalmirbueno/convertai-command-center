@@ -71,6 +71,12 @@ export const OAUTH_STAFF_SCOPES = [
   'memory:propose',
 ] as const;
 
+// A plain Supabase OAuth/OIDC consent (`openid email profile`) must never
+// become an implicit write grant. Until a Custom Access Token Hook adds
+// explicit application scopes, authenticated staff receives only the narrow
+// read capability needed to verify its own tenant binding.
+export const OAUTH_OIDC_BASELINE_SCOPES = ['clients:read'] as const;
+
 // The legacy MCP executes with service_role. A restricted principal may only
 // call a private tool after that handler has an explicit client boundary. New
 // private tools are denied by default until they are added here and covered by
@@ -132,10 +138,9 @@ function flattenClaimedScopes(value: unknown): string[] {
 
 /**
  * Supabase OAuth JWTs normally carry only OIDC scopes unless the project adds
- * application scopes through a Custom Access Token Hook. OIDC-only claims
- * preserve the existing staff grant. As soon as at least one MCP application
- * scope is present, intersect with the server allowlist so read-only consent
- * cannot become a write grant inside this service-role-backed legacy server.
+ * application scopes through a Custom Access Token Hook. OIDC-only claims are
+ * deliberately read-minimal. When application scopes are present, intersect
+ * them with the server allowlist so consent can never expand privilege.
  */
 export function oauthScopesForStaff(
   isStaff: boolean,
@@ -143,13 +148,12 @@ export function oauthScopesForStaff(
   isAdmin = false,
 ): string[] | null {
   if (!isStaff) return null;
-  if (claimedScopes === undefined) return [...OAUTH_STAFF_SCOPES];
   const claimed = new Set(flattenClaimedScopes(claimedScopes));
   const hasApplicationScope = [...claimed].some(scope =>
     /^(?:aceleriq|clients|projects|tasks|editorial|reports|briefings|files|workspace|contracts|memory):/.test(scope)
     || scope === 'admin'
   );
-  if (!hasApplicationScope) return [...OAUTH_STAFF_SCOPES];
+  if (!hasApplicationScope) return [...OAUTH_OIDC_BASELINE_SCOPES];
   const allowed: readonly string[] = isAdmin
     ? [...OAUTH_STAFF_SCOPES, 'admin']
     : OAUTH_STAFF_SCOPES;
