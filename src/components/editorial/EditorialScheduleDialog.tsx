@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
 import {
   AlertCircle,
   CalendarCheck2,
@@ -15,7 +14,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
+import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import EditorialAssetPreviewDialog from "@/components/editorial/EditorialAssetPreviewDialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -178,6 +188,7 @@ export default function EditorialScheduleDialog({
   const [accountSearch, setAccountSearch] = useState("");
   const [showLibrary, setShowLibrary] = useState(true);
   const [previewSelectedAsset, setPreviewSelectedAsset] = useState(false);
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
   const attemptRef = useRef<PendingAttempt | null>(null);
 
@@ -210,6 +221,7 @@ export default function EditorialScheduleDialog({
     setAccountSearch("");
     setShowLibrary(true);
     setPreviewSelectedAsset(false);
+    setDiscardConfirmOpen(false);
     setDirty(false);
     attemptRef.current = null;
   }, [defaultClientId, defaultProjectId, defaultScheduledAt, open]);
@@ -343,6 +355,15 @@ export default function EditorialScheduleDialog({
     attemptRef.current = null;
   };
 
+  const handleAccountReady = (accountId: string) => {
+    setSelectedAccountIds((current) => [
+      ...new Set([...current, accountId]),
+    ]);
+    setDirty(true);
+    attemptRef.current = null;
+    void refetchOptions();
+  };
+
   const missingFields = editorialScheduleMissingFields({
     clientId,
     projectId,
@@ -353,15 +374,19 @@ export default function EditorialScheduleDialog({
 
   const requestOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && savePost.isPending) return false;
-    if (
-      !nextOpen &&
-      dirty &&
-      !window.confirm("Fechar e descartar este agendamento?")
-    ) {
+    if (!nextOpen && dirty) {
+      setDiscardConfirmOpen(true);
       return false;
     }
     onOpenChange(nextOpen);
     return true;
+  };
+
+  const discardAndClose = () => {
+    setDiscardConfirmOpen(false);
+    setDirty(false);
+    attemptRef.current = null;
+    onOpenChange(false);
   };
 
   const handleSchedule = async () => {
@@ -887,28 +912,28 @@ export default function EditorialScheduleDialog({
                         Nenhuma conta vinculada a este projeto
                       </p>
                       <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
-                        Cadastre a conta dentro do cliente para não deixar nada solto.
+                        Conecte ou vincule a conta aqui mesmo para continuar.
                       </p>
                     </div>
                   )}
 
-                  <Button
-                    asChild
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="mt-3 h-10 w-full"
-                  >
-                    <Link
-                      to={`/clientes?client=${encodeURIComponent(clientId)}&project=${encodeURIComponent(projectId)}&section=accounts`}
-                      onClick={(event) => {
-                        if (!requestOpenChange(false)) event.preventDefault();
-                      }}
-                    >
-                      <Settings2 className="mr-1.5 h-4 w-4" />
-                      Configurar contas no cliente
-                    </Link>
-                  </Button>
+                  <div className="mt-3">
+                    <EditorialAccountSetup
+                      clientId={clientId}
+                      clientName={selectedClientName}
+                      projectId={projectId}
+                      projectName={selectedProjectName}
+                      linkedAccounts={options?.accounts || []}
+                      availableAccounts={options?.availableAccounts || []}
+                      canManage={options?.canManageAccounts === true}
+                      permissionUnavailable={
+                        options?.accountPermissionUnavailable === true
+                      }
+                      onAccountReady={handleAccountReady}
+                      showManualOptions={false}
+                      compact
+                    />
+                  </div>
                   {hasUnavailableSelection && (
                     <p
                       role="alert"
@@ -926,7 +951,7 @@ export default function EditorialScheduleDialog({
                       {missingSelectedAccountIds.length === 1
                         ? "Uma conta deste plano foi inativada ou removida do projeto."
                         : `${missingSelectedAccountIds.length} contas deste plano foram inativadas ou removidas do projeto.`}{" "}
-                      Abra as contas do cliente e revise o vínculo.
+                      Revise ou reconecte o vínculo abaixo para continuar.
                     </p>
                   )}
                 </section>
@@ -1017,6 +1042,29 @@ export default function EditorialScheduleDialog({
         </DialogFooter>
         </DialogContent>
       </Dialog>
+      <AlertDialog
+        open={discardConfirmOpen}
+        onOpenChange={setDiscardConfirmOpen}
+      >
+        <AlertDialogContent className="w-[calc(100vw-2rem)] rounded-lg sm:max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Descartar este agendamento?</AlertDialogTitle>
+            <AlertDialogDescription>
+              O rascunho do agendamento será descartado. Contas já conectadas
+              permanecem vinculadas ao cliente e ao projeto.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Continuar editando</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={discardAndClose}
+            >
+              Descartar e fechar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <EditorialAssetPreviewDialog
         asset={selectedAsset}
         open={previewSelectedAsset}

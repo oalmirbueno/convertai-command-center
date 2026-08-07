@@ -75,6 +75,7 @@ interface EditorialAccountSetupProps {
   permissionUnavailable: boolean;
   onAccountReady: (accountId: string) => void;
   showManualOptions?: boolean;
+  compact?: boolean;
 }
 
 const MAX_VISIBLE_META_RESOURCES = 100;
@@ -140,6 +141,7 @@ export default function EditorialAccountSetup({
   permissionUnavailable,
   onAccountReady,
   showManualOptions = true,
+  compact = false,
 }: EditorialAccountSetupProps) {
   const { createAndLinkAccount, linkAccount } = useEditorialAccountMutations(
     clientId,
@@ -545,12 +547,16 @@ export default function EditorialAccountSetup({
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <p className="text-sm font-medium text-foreground">
-              {linkedAccountCount === 0
+              {compact
+                ? "Conectar sem sair do agendamento"
+                : linkedAccountCount === 0
                 ? "Adicione uma conta para liberar as plataformas"
                 : "Contas de publicação"}
             </p>
             <p className="mt-1 max-w-2xl text-xs leading-5 text-muted-foreground">
-              {showManualOptions
+              {compact
+                ? "Conecte uma conta oficial ou vincule outra conta deste cliente. O agendamento permanece aberto."
+                : showManualOptions
                 ? "Conecte a Meta oficialmente ou mantenha um cadastro manual."
                 : "Conecte a Meta oficialmente ou vincule uma conta já cadastrada neste cliente."}
             </p>
@@ -591,7 +597,7 @@ export default function EditorialAccountSetup({
           </div>
         )}
 
-        {linkedAccounts.length > 0 && (
+        {!compact && linkedAccounts.length > 0 && (
           <div className="mt-4 space-y-2" aria-label="Contas vinculadas">
             {linkedAccounts.map((account) => (
               <div
@@ -641,9 +647,9 @@ export default function EditorialAccountSetup({
                     Conexão oficial Meta
                   </p>
                   <p className="mt-1 max-w-xl text-xs leading-5 text-muted-foreground">
-                    Entre com Facebook/Meta para escolher Páginas que você
-                    administra e contas profissionais do Instagram ligadas a
-                    elas. A senha nunca passa pelo Aceleriq OS.
+                    {compact
+                      ? "Entre com Facebook/Meta, escolha a conta correta e continue daqui mesmo."
+                      : "Entre com Facebook/Meta para escolher Páginas que você administra e contas profissionais do Instagram ligadas a elas. A senha nunca passa pelo Aceleriq OS."}
                   </p>
                 </div>
               </div>
@@ -657,7 +663,7 @@ export default function EditorialAccountSetup({
                 ) : (
                   <Cable className="mr-1.5 h-4 w-4" />
                 )}
-                Entrar com Facebook/Meta
+                {compact ? "Conectar Meta" : "Entrar com Facebook/Meta"}
               </Button>
             </div>
             <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
@@ -781,25 +787,27 @@ export default function EditorialAccountSetup({
               </div>
             </div>
             )}
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <p className="text-[11px] leading-4 text-muted-foreground">
-                Cadastro manual: libera somente planejamento e agendamento
-                interno; não autentica a rede social.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handleCreate}
-                disabled={pending || !platform || !displayName.trim()}
-              >
-                {createAndLinkAccount.isPending ? (
-                  <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-                ) : (
-                  <Plus className="mr-1.5 h-4 w-4" />
-                )}
-                Cadastrar manualmente e usar
-              </Button>
-            </div>
+            {showManualOptions && (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-[11px] leading-4 text-muted-foreground">
+                  Cadastro manual: libera somente planejamento e agendamento
+                  interno; não autentica a rede social.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleCreate}
+                  disabled={pending || !platform || !displayName.trim()}
+                >
+                  {createAndLinkAccount.isPending ? (
+                    <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+                  ) : (
+                    <Plus className="mr-1.5 h-4 w-4" />
+                  )}
+                  Cadastrar manualmente e usar
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </div>

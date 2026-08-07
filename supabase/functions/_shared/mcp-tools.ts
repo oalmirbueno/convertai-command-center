@@ -215,7 +215,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.8.0',
+  version: '1.8.1',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1613,6 +1613,9 @@ export function describeTool(t: ToolDefinition) {
     description: t.description,
     inputSchema: t.inputSchema,
     annotations: t.annotations,
+    // Current ChatGPT plugin discovery reads securitySchemes from the tool
+    // descriptor itself. Keep the _meta mirror for older MCP Apps clients.
+    securitySchemes,
     _meta: {
       securitySchemes,
       required_mcp_scopes: t.scopes,

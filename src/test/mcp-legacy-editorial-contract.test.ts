@@ -17,9 +17,23 @@ describe("legacy MCP editorial contract", () => {
     expect(tools).toContain("aceleriq_create_editorial_item");
     expect(tools).toContain("'editorial:read'");
     expect(tools).toContain("'editorial:write'");
-    expect(tools).toContain("version: '1.8.0'");
-    expect(metadata).toContain("const MCP_VERSION = '1.8.0'");
+    expect(tools).toContain("version: '1.8.1'");
+    expect(metadata).toContain("const MCP_VERSION = '1.8.1'");
     expect(server).toContain("listChanged: true");
+  });
+
+  it("publishes current ChatGPT OAuth discovery and reauthorization metadata", () => {
+    expect(tools).toMatch(/annotations: t\.annotations,[\s\S]*?securitySchemes,[\s\S]*?_meta:/);
+    expect(tools).toContain("securitySchemes,");
+    expect(server).toContain("'mcp/www_authenticate': [WWW_AUTH_TOOL_HEADER]");
+    expect(server).toContain('error="invalid_token"');
+    expect(server).toContain('error_description="OAuth authorization required"');
+    expect(server).toContain("shouldUseOAuthToolChallenge(");
+    expect(server).toContain("status: toolChallengeOnly ? 200 : 401");
+    expect(server).toContain("scopes_supported: OAUTH_SCOPES");
+    expect(server).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
+    expect(metadata).toContain("scopes_supported: OAUTH_SCOPES");
+    expect(metadata).toContain("mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES");
   });
 
   it("returns one deduplicated, client-scoped calendar with safe media", () => {
