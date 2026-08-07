@@ -192,19 +192,25 @@ Deno.test('JWKS fetch rejects an oversized document before reading it', async ()
 Deno.test('registry exposes foundation + read + memory + write + contracts tools', () => {
   const names = TOOLS.map(t => t.name).sort();
   assertEquals(names, [
+    'aceleriq_archive_file',
     'aceleriq_cancel_contract',
     'aceleriq_capabilities',
     'aceleriq_complete_task',
     'aceleriq_create_contract',
     'aceleriq_create_editorial_item',
+    'aceleriq_create_file_version',
     'aceleriq_create_report_draft',
     'aceleriq_create_task',
     'aceleriq_fetch',
+    'aceleriq_finalize_file_upload',
     'aceleriq_get_briefing',
     'aceleriq_get_client_context',
     'aceleriq_get_contract',
     'aceleriq_get_file',
+    'aceleriq_get_file_content',
+    'aceleriq_get_file_processing_status',
     'aceleriq_get_project',
+    'aceleriq_get_project_memory',
     'aceleriq_get_report',
     'aceleriq_get_workspace_node',
     'aceleriq_health',
@@ -217,10 +223,17 @@ Deno.test('registry exposes foundation + read + memory + write + contracts tools
     'aceleriq_list_reports',
     'aceleriq_list_tasks',
     'aceleriq_list_workspace_nodes',
+    'aceleriq_prepare_file_upload',
+    'aceleriq_restore_file',
     'aceleriq_search',
+    'aceleriq_search_file_content',
     'aceleriq_update_contract',
+    'aceleriq_update_file_metadata',
     'aceleriq_update_project',
     'aceleriq_update_task',
+    'aceleriq_upload_file',
+    'aceleriq_upload_file_inline',
+    'aceleriq_upsert_project_memory',
     'memory_fetch',
     'memory_get_context',
     'memory_get_pulse',
@@ -241,9 +254,10 @@ Deno.test('foundation tools are open to any authenticated key; gated tools requi
     assert(!canInvoke(emptyCtx, t), `${t.name} should be gated`);
     assert(canInvoke(adminCtx, t), `${t.name} should allow admin`);
     if (t.name.startsWith('memory_')) continue; // memory scopes tested separately
-    if (t.scopes.includes('editorial:write' as any)) continue;
-    if (t.scopes.includes('aceleriq:write' as any)) continue; // write scopes tested separately
-    if (t.scopes.includes('contracts:write' as any)) continue; // contracts write scope tested separately
+    if (t.scopes.some(scope => scope.endsWith(':write') || scope === 'files:archive')) {
+      assert(!canInvoke(readCtx, t), `${t.name} should reject aceleriq:read`);
+      continue;
+    }
     assert(canInvoke(readCtx, t), `${t.name} should allow aceleriq:read`);
   }
 });
