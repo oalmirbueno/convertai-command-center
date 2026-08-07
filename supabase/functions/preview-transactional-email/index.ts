@@ -4,15 +4,25 @@ import { corsHeaders } from 'npm:@supabase/supabase-js@2/cors'
 import { TEMPLATES } from '../_shared/transactional-email-templates/registry.ts'
 
 // Renders all registered templates with their previewData.
-// Gated by LOVABLE_API_KEY — only the Go API calls this.
+// A scoped internal hook secret is preferred. The previous platform key is
+// accepted only as a temporary compatibility fallback during rotation.
 
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
-  if (!apiKey) {
+  const scopedSecrets = [
+    Deno.env.get('INTERNAL_HOOK_SECRET')?.trim(),
+    Deno.env.get('EMAIL_PREVIEW_SECRET')?.trim(),
+  ].filter((secret): secret is string => Boolean(secret))
+  const legacyFallbackSecret = Deno.env.get('LOVABLE_API_KEY')?.trim()
+  const acceptedSecrets = new Set(scopedSecrets)
+  // Keep the previous credential valid only for the migration window. Remove
+  // this fallback after every internal caller has rotated to a scoped secret.
+  if (legacyFallbackSecret) acceptedSecrets.add(legacyFallbackSecret)
+
+  if (acceptedSecrets.size === 0) {
     return new Response(
       JSON.stringify({ error: 'Server configuration error' }),
       {
@@ -22,10 +32,10 @@ Deno.serve(async (req) => {
     )
   }
 
-  // Verify the caller is authorized with LOVABLE_API_KEY
+  // Verify the caller with the configured internal bearer secret.
   const authHeader = req.headers.get('Authorization')
   const token = authHeader?.replace(/^Bearer\s+/i, '')
-  if (token !== apiKey) {
+  if (!token || !acceptedSecrets.has(token)) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

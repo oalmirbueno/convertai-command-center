@@ -1,4 +1,5 @@
 import { Toaster as Sonner } from "@/components/ui/sonner";
+import { lazy, Suspense, type ReactNode } from "react";
 import DownloadProgressOverlay from "@/components/shared/DownloadProgressOverlay";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -6,49 +7,50 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import Login from "@/pages/Login";
-import AdminDashboard from "@/pages/AdminDashboard";
-import ClientDashboard from "@/pages/ClientDashboard";
-import Kanban from "@/pages/Kanban";
-import Clients from "@/pages/Clients";
-import AdminFiles from "@/pages/AdminFiles";
-import AdminApprovals from "@/pages/AdminApprovals";
-import ClientDocuments from "@/pages/ClientDocuments";
-import ClientApprovals from "@/pages/ClientApprovals";
-import AdminRequests from "@/pages/AdminRequests";
-import ClientRequests from "@/pages/ClientRequests";
-import Team from "@/pages/Team";
-import BriefingPublic from "@/pages/BriefingPublic";
-import QuizPublicPage from "@/pages/QuizPublicPage";
-import AdminBriefings from "@/pages/AdminBriefings";
-import Projects from "@/pages/Projects";
-import AdminFinanceiro from "@/pages/AdminFinanceiro";
-import AdminProjection from "@/pages/AdminProjection";
-import ClientFinanceiro from "@/pages/ClientFinanceiro";
-import AdminReports from "@/pages/AdminReports";
-import ClientReports from "@/pages/ClientReports";
-import TimelinePage from "@/pages/TimelinePage";
-import AdminReportCreate from "@/pages/AdminReportCreate";
-import ReportDetail from "@/pages/ReportDetail";
-import ProfilePage from "@/pages/ProfilePage";
-import SettingsPage from "@/pages/SettingsPage";
-import AdminViewAsClient from "@/pages/AdminViewAsClient";
-import ApiDocs from "@/pages/ApiDocs";
-import AdminQuizSubmissions from "@/pages/AdminQuizSubmissions";
-import AdminBackfillPage from "@/pages/AdminBackfillPage";
-import ClientVaultPage from "@/pages/ClientVaultPage";
-import Workspace from "@/pages/Workspace";
-import UnsubscribePage from "@/pages/UnsubscribePage";
-import FirstAccess from "@/pages/FirstAccess";
-import AdminContracts from "@/pages/AdminContracts";
-import EditorialCalendar from "@/pages/EditorialCalendar";
-import ContractPublic from "@/pages/ContractPublic";
-import WorkspaceInboxPublic from "@/pages/WorkspaceInboxPublic";
-import OAuthConsent from "@/pages/OAuthConsent";
-import MetaOAuthCallback from "@/pages/MetaOAuthCallback";
-import MCPConnect from "@/pages/MCPConnect";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
+
+const Login = lazy(() => import("@/pages/Login"));
+const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
+const ClientDashboard = lazy(() => import("@/pages/ClientDashboard"));
+const Kanban = lazy(() => import("@/pages/Kanban"));
+const Clients = lazy(() => import("@/pages/Clients"));
+const AdminFiles = lazy(() => import("@/pages/AdminFiles"));
+const AdminApprovals = lazy(() => import("@/pages/AdminApprovals"));
+const ClientDocuments = lazy(() => import("@/pages/ClientDocuments"));
+const ClientApprovals = lazy(() => import("@/pages/ClientApprovals"));
+const AdminRequests = lazy(() => import("@/pages/AdminRequests"));
+const ClientRequests = lazy(() => import("@/pages/ClientRequests"));
+const Team = lazy(() => import("@/pages/Team"));
+const BriefingPublic = lazy(() => import("@/pages/BriefingPublic"));
+const QuizPublicPage = lazy(() => import("@/pages/QuizPublicPage"));
+const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
+const Projects = lazy(() => import("@/pages/Projects"));
+const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
+const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
+const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
+const AdminReports = lazy(() => import("@/pages/AdminReports"));
+const ClientReports = lazy(() => import("@/pages/ClientReports"));
+const TimelinePage = lazy(() => import("@/pages/TimelinePage"));
+const AdminReportCreate = lazy(() => import("@/pages/AdminReportCreate"));
+const ReportDetail = lazy(() => import("@/pages/ReportDetail"));
+const ProfilePage = lazy(() => import("@/pages/ProfilePage"));
+const SettingsPage = lazy(() => import("@/pages/SettingsPage"));
+const AdminViewAsClient = lazy(() => import("@/pages/AdminViewAsClient"));
+const ApiDocs = lazy(() => import("@/pages/ApiDocs"));
+const AdminQuizSubmissions = lazy(() => import("@/pages/AdminQuizSubmissions"));
+const AdminBackfillPage = lazy(() => import("@/pages/AdminBackfillPage"));
+const ClientVaultPage = lazy(() => import("@/pages/ClientVaultPage"));
+const Workspace = lazy(() => import("@/pages/Workspace"));
+const UnsubscribePage = lazy(() => import("@/pages/UnsubscribePage"));
+const FirstAccess = lazy(() => import("@/pages/FirstAccess"));
+const AdminContracts = lazy(() => import("@/pages/AdminContracts"));
+const EditorialCalendar = lazy(() => import("@/pages/EditorialCalendar"));
+const ContractPublic = lazy(() => import("@/pages/ContractPublic"));
+const WorkspaceInboxPublic = lazy(() => import("@/pages/WorkspaceInboxPublic"));
+const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
+const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
+const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -85,7 +87,7 @@ function LoadingScreen() {
   );
 }
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedRoute({ children }: { children: ReactNode }) {
   const { user, loading } = useAuth();
   if (loading) return <LoadingScreen />;
   if (!user) return <Navigate to="/login" replace />;
@@ -97,8 +99,11 @@ function AppRoutes() {
   if (loading) return <LoadingScreen />;
 
   return (
-    <Routes>
+    <Suspense fallback={<LoadingScreen />}>
+      <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/oauth/consent" element={<OAuthConsent />} />
+      {/* Compatibility alias for projects that still use Lovable's consent URL. */}
       <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
       <Route path="/briefing/:token" element={<BriefingPublic />} />
       <Route path="/contrato/:token" element={<ContractPublic />} />
@@ -138,7 +143,8 @@ function AppRoutes() {
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
-    </Routes>
+      </Routes>
+    </Suspense>
   );
 }
 

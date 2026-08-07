@@ -1,4 +1,10 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import {
+  EMAIL_APP_URL,
+  EMAIL_FROM_DOMAIN,
+  EMAIL_LOGO_URL,
+} from "../_shared/email-config.ts";
+import { ResendApiError, sendResendEmail } from "../_shared/resend.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,13 +12,14 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const json = (data: any, status = 200) =>
+const json = (data: unknown, status = 200) =>
   new Response(JSON.stringify(data), {
     status,
     headers: { ...corsHeaders, "Content-Type": "application/json" },
   });
 
-const PORTAL_URL = "https://aceleriq.online";
+const PORTAL_URL = EMAIL_APP_URL;
+const PORTAL_HOST = new URL(PORTAL_URL).hostname;
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
@@ -76,13 +83,11 @@ Deno.serve(async (req) => {
 
     const signUrl = `${PORTAL_URL}/contrato/${contract.sign_token}`;
     const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY");
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
 
-    if (!RESEND_API_KEY || !LOVABLE_API_KEY) {
+    if (!RESEND_API_KEY) {
       return json({ error: "email service not configured" }, 500);
     }
 
-    const LOGO_URL = "https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png";
     const year = new Date().getFullYear();
 
     const html = `<!DOCTYPE html>
@@ -96,7 +101,7 @@ Deno.serve(async (req) => {
 <body style="margin:0;padding:32px 16px;background-color:#F4F4F4;font-family:Outfit,-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,sans-serif;">
   <div style="max-width:600px;margin:0 auto;">
     <div style="background-color:#0D0D0D;padding:28px 32px;border-radius:16px 16px 0 0;border-bottom:2px solid #00FF66;text-align:left;">
-      <img src="${LOGO_URL}" alt="AcelerIQ" width="140" style="display:block;height:auto;" />
+      <img src="${EMAIL_LOGO_URL}" alt="AcelerIQ" width="140" style="display:block;height:auto;" />
     </div>
     <div style="background-color:#ffffff;border-radius:0 0 16px 16px;padding:40px 36px;border:1px solid #ECECEC;border-top:none;box-shadow:0 1px 2px rgba(0,0,0,0.04);">
       <h1 style="font-size:26px;font-weight:700;color:#0D0D0D;margin:0 0 18px;line-height:1.25;letter-spacing:-0.01em;">
@@ -131,7 +136,7 @@ Deno.serve(async (req) => {
         Performance OS para times que entregam.
       </div>
       <div style="font-size:12px;color:#6b6b6b;margin:0 0 8px;">
-        <a href="https://aceleriq.online" style="color:#0D0D0D;text-decoration:none;">aceleriq.online</a>
+        <a href="${PORTAL_URL}" style="color:#0D0D0D;text-decoration:none;">${PORTAL_HOST}</a>
         ·
         <a href="mailto:contato@aceleriq.com.br" style="color:#0D0D0D;text-decoration:none;">contato@aceleriq.com.br</a>
       </div>
@@ -143,24 +148,22 @@ Deno.serve(async (req) => {
 </body>
 </html>`;
 
-    const res = await fetch("https://connector-gateway.lovable.dev/resend/emails", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "X-Connection-Api-Key": RESEND_API_KEY,
-      },
-      body: JSON.stringify({
-        from: "Aceleriq <contratos@aceleriq.online>",
+    try {
+      await sendResendEmail({
+        from: `Aceleriq <contratos@${EMAIL_FROM_DOMAIN}>`,
         to: [recipient],
         subject: `📄 Contrato para assinatura: ${contract.title}`,
         html,
-      }),
-    });
-
-    const result = await res.json();
-    if (!res.ok) {
-      return json({ error: result?.message || "email send failed", details: result }, 500);
+      });
+    } catch (error) {
+      if (error instanceof ResendApiError) {
+        const responseBody: Record<string, unknown> = {
+          error: error.message || "email send failed",
+        };
+        if (error.details !== null) responseBody.details = error.details;
+        return json(responseBody, 500);
+      }
+      throw error;
     }
 
     const { error: statusError } = await supabase.from("contracts").update({
@@ -172,7 +175,7 @@ Deno.serve(async (req) => {
     }
 
     return json({ ok: true, signUrl });
-  } catch (e: any) {
-    return json({ error: e.message }, 500);
+  } catch (e: unknown) {
+    return json({ error: e instanceof Error ? e.message : "internal error" }, 500);
   }
 });

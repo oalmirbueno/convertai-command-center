@@ -220,7 +220,7 @@ describe("editorial calendar content direction", () => {
     const taskButtons = day.getAllByRole("button", {
       name: /Abrir ou preparar conteúdo da tarefa do Kanban/,
     });
-    const dayButtons = Array.from(
+    const dayButtons: HTMLElement[] = Array.from(
       (dayCell as HTMLElement).querySelectorAll("button"),
     );
 

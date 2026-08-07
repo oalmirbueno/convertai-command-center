@@ -3,6 +3,7 @@ import { X, Copy, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { toast } from "sonner";
+import { appPublicUrl } from "@/lib/publicUrl";
 
 interface Props { open: boolean; onClose: () => void; }
 
@@ -30,7 +31,7 @@ export default function BriefingLinkModal({ open, onClose }: Props) {
         project_id: projectId || null,
       }).select("token").single();
       if (error) throw error;
-      const url = `https://aceleriq.online/briefing/${data.token}`;
+      const url = appPublicUrl(`/briefing/${data.token}`);
       setGeneratedUrl(url);
       toast.success("Link gerado! Envie para o cliente.");
     } catch (err: any) {

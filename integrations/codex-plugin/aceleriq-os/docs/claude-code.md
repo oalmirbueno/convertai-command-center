@@ -11,7 +11,7 @@ Adicionar em `~/.claude/mcp.json` (ou config equivalente do Claude Code):
   "mcpServers": {
     "aceleriq": {
       "transport": "streamable-http",
-      "url": "https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/mcp-server",
+      "url": "${ACELERIQ_MCP_URL}",
       "headers": {
         "Authorization": "Bearer ${ACELERIQ_MCP_TOKEN}",
         "Accept": "application/json, text/event-stream",

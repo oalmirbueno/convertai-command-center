@@ -11,6 +11,7 @@
 // success=false so the Kanban UI never blanks because of a background sync miss.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveOpsBaseUrl } from "../_shared/ops-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -19,8 +20,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_FUNCTIONS_BASE =
-  Deno.env.get("OPS_BASE_URL") ?? "https://grxljyocuadywcksfyvu.supabase.co/functions/v1";
+const OPS_FUNCTIONS_BASE = resolveOpsBaseUrl();
 
 type OpsEndpoint = {
   url: string;

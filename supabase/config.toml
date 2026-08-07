@@ -1,4 +1,4 @@
-project_id = "gicbrgagstyvbaaumprj"
+project_id = "aceleriq-os"
 
 [functions]
   [functions.workspace-inbox]
@@ -63,7 +63,35 @@ project_id = "gicbrgagstyvbaaumprj"
     verify_jwt = false
   [functions.handle-email-suppression]
     verify_jwt = false
+  [functions.mcp]
+    verify_jwt = false
   [functions.mcp-server]
     verify_jwt = false
   [functions.mcp-oauth-metadata]
     verify_jwt = false
+  [functions.admin-reset-client-access]
+    verify_jwt = true
+  [functions.delete-file-assets]
+    verify_jwt = true
+  [functions.fetch-ops-metrics]
+    verify_jwt = true
+  [functions.mcp-files-worker]
+    verify_jwt = true
+  [functions.notify-admin]
+    verify_jwt = true
+  [functions.ops-quiz-list]
+    verify_jwt = true
+  [functions.ops-quiz-mark-processed]
+    verify_jwt = true
+  [functions.second-brain-pulse]
+    verify_jwt = true
+  [functions.send-contract-email]
+    verify_jwt = true
+  [functions.voice-assistant-agent]
+    verify_jwt = true
+  [functions.workspace-agent]
+    verify_jwt = true
+  [functions.workspace-agent-import]
+    verify_jwt = true
+  [functions.workspace-ocr]
+    verify_jwt = true

@@ -25,11 +25,19 @@
     "strict": false,
     "target": "ES2020",
     "types": [
-      "vitest/globals"
+      "vite/client"
     ],
     "useDefineForClassFields": true
   },
   "include": [
     "src"
+  ],
+  "exclude": [
+    "src/lib/mcp/index.ts",
+    "src/lib/mcp/supabase.ts",
+    "src/lib/mcp/tools",
+    "src/test",
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx"
   ]
 }

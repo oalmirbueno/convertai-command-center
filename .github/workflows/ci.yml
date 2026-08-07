@@ -20,17 +20,21 @@ jobs:
   test-and-build:
     name: Test and build
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
+    env:
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-placeholder
+      VITE_APP_PUBLIC_URL: https://app.example.com
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
           cache: npm
@@ -41,14 +45,122 @@ jobs:
           npm --version
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+          npm ci
+
+      - name: Verify append-only migration ledger
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+          npm run migrations:verify
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            node scripts/verify-migration-integrity.mjs --base-ref "$PR_BASE_SHA"
+          fi
 
       - name: Run tests
         run: npm test -- --run
 
+      - name: Type-check application
+        run: npm run typecheck
+
       - name: Build application
         run: npm run build
+
+      - name: Build portable container
+        run: |
+          docker build --pull \
+            --build-arg "VITE_SUPABASE_URL=$VITE_SUPABASE_URL" \
+            --build-arg "VITE_SUPABASE_PUBLISHABLE_KEY=$VITE_SUPABASE_PUBLISHABLE_KEY" \
+            --build-arg "VITE_APP_PUBLIC_URL=$VITE_APP_PUBLIC_URL" \
+            --tag aceleriq-os:ci \
+            .
+
+      - name: Start portable container
+        run: >-
+          docker run --detach
+          --name aceleriq-os-ci
+          --publish 127.0.0.1:18080:8080
+          aceleriq-os:ci
+
+      - name: Verify container health and SPA fallback
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          health_status="starting"
+          for attempt in {1..60}; do
+            health_status="$(
+              docker inspect \
+                --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}missing{{end}}' \
+                aceleriq-os-ci
+            )"
+            case "$health_status" in
+              healthy)
+                break
+                ;;
+              unhealthy|missing)
+                docker logs aceleriq-os-ci
+                exit 1
+                ;;
+            esac
+            sleep 1
+          done
+
+          if [ "$health_status" != "healthy" ]; then
+            docker logs aceleriq-os-ci
+            exit 1
+          fi
+
+          curl --fail --silent --show-error \
+            --output /dev/null \
+            http://127.0.0.1:18080/healthz
+
+          index_file="$RUNNER_TEMP/aceleriq-container-index.html"
+          index_headers="$RUNNER_TEMP/aceleriq-container-index.headers"
+          curl --fail --silent --show-error \
+            --dump-header "$index_headers" \
+            --output "$index_file" \
+            http://127.0.0.1:18080/index.html
+          tr -d '\r' < "$index_headers" \
+            | grep --ignore-case --line-regexp 'X-Content-Type-Options: nosniff'
+          tr -d '\r' < "$index_headers" \
+            | grep --ignore-case --line-regexp 'Referrer-Policy: strict-origin-when-cross-origin'
+          tr -d '\r' < "$index_headers" \
+            | grep --ignore-case --line-regexp 'Cache-Control: no-store'
+
+          asset_path="$(
+            grep --only-matching --extended-regexp '/assets/[^" ]+\.(js|css)' "$index_file" \
+              | sed -n '1p'
+          )"
+          test -n "$asset_path"
+          asset_headers="$RUNNER_TEMP/aceleriq-container-asset.headers"
+          curl --fail --silent --show-error \
+            --dump-header "$asset_headers" \
+            --output /dev/null \
+            "http://127.0.0.1:18080$asset_path"
+          tr -d '\r' < "$asset_headers" \
+            | grep --ignore-case --line-regexp 'X-Content-Type-Options: nosniff'
+          tr -d '\r' < "$asset_headers" \
+            | grep --ignore-case --line-regexp 'Referrer-Policy: strict-origin-when-cross-origin'
+          tr -d '\r' < "$asset_headers" \
+            | grep --ignore-case --extended-regexp '^Cache-Control: public, max-age=31536000, immutable$'
+
+          for route in login conectar-mcp calendario; do
+            route_file="$RUNNER_TEMP/aceleriq-container-$route.html"
+            curl --fail --silent --show-error \
+              --output "$route_file" \
+              "http://127.0.0.1:18080/$route"
+            cmp --silent "$index_file" "$route_file"
+          done
 
       - name: Check pull request diff
         if: github.event_name == 'pull_request'
         run: git diff --check "origin/${{ github.base_ref }}...HEAD"
+
+      - name: Stop portable container
+        if: always()
+        run: docker rm --force aceleriq-os-ci 2>/dev/null || true

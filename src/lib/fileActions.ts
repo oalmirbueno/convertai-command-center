@@ -70,8 +70,17 @@ async function shareOrSave(blob: Blob, fileName: string) {
   return false;
 }
 
-export async function downloadFile(url: string, fileName?: string) {
+export type DownloadFileOptions = {
+  allowNavigationFallback?: boolean;
+};
+
+export async function downloadFile(
+  url: string,
+  fileName?: string,
+  options: DownloadFileOptions = {},
+) {
   if (!url || url === "#") return;
+  const allowNavigationFallback = options.allowNavigationFallback ?? true;
   const id = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const name = safeFileName(fileName || url.split("/").pop()?.split("?")[0]);
 
@@ -115,7 +124,7 @@ export async function downloadFile(url: string, fileName?: string) {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      if (isIOSLike()) {
+      if (isIOSLike() && allowNavigationFallback) {
         // iOS Safari without Web Share fallback → open blob so user can save
         setTimeout(() => openFile(blobUrl), 50);
         setTimeout(() => URL.revokeObjectURL(blobUrl), 60_000);
@@ -127,7 +136,10 @@ export async function downloadFile(url: string, fileName?: string) {
     emit("file-download:done", { id });
   } catch (e: any) {
     emit("file-download:error", { id, message: e?.message || "Falha no download" });
-    // Last-resort fallback: navigate to URL
+    if (!allowNavigationFallback) {
+      throw e instanceof Error ? e : new Error("Falha no download");
+    }
+    // Last-resort fallback for ordinary trusted files only.
     try { openFile(url); } catch { /* noop */ }
   }
 }

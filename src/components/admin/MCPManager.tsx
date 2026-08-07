@@ -17,12 +17,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import { MCP_OAUTH_METADATA_URL, MCP_SERVER_URL } from "@/lib/mcp/endpoints";
+import { appPublicUrl } from "@/lib/publicUrl";
 
 /* ─── Config ──────────────────────────────────────────────── */
-const PROJECT_ID = import.meta.env.VITE_SUPABASE_PROJECT_ID;
-const MCP_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-server`;
-const PRM_URL = `https://${PROJECT_ID}.supabase.co/functions/v1/mcp-oauth-metadata`;
-const CONNECT_URL = "https://aceleriq.online/conectar-mcp";
+const MCP_URL = MCP_SERVER_URL;
+const PRM_URL = MCP_OAUTH_METADATA_URL;
+const CONNECT_URL = appPublicUrl("/conectar-mcp");
 
 const SCOPES: { id: string; label: string; hint: string; danger?: boolean }[] = [
   { id: "aceleriq:read", label: "aceleriq:read", hint: "Leitura de projetos, tarefas, clientes, relatórios e calendário editorial." },
@@ -116,6 +117,7 @@ interface ApiKey {
   key_preview: string;
   scopes: string[] | null;
   origin: string | null;
+  audience: string | null;
   is_active: boolean;
   created_at: string;
   last_used_at: string | null;
@@ -221,7 +223,7 @@ export default function MCPManager() {
     setLoadingKeys(true);
     const { data, error } = await supabase
       .from("api_keys")
-      .select("id, name, key_preview, scopes, origin, is_active, created_at, last_used_at, expires_at, revoked_at")
+      .select("id, name, key_preview, scopes, origin, audience, is_active, created_at, last_used_at, expires_at, revoked_at")
       .order("created_at", { ascending: false });
     if (error) toast.error("Erro ao carregar credenciais: " + error.message);
     setKeys((data as ApiKey[]) ?? []);
@@ -244,7 +246,9 @@ export default function MCPManager() {
   useEffect(() => { loadDiscovery(); loadKeys(); loadAudit(); }, [loadDiscovery, loadKeys, loadAudit]);
 
   const mcpKeys = useMemo(
-    () => showOnlyMcp ? keys.filter(k => (k.origin ?? "").toLowerCase() === "mcp" || (k.scopes ?? []).some(s => s.startsWith("aceleriq:") || s.startsWith("memory:"))) : keys,
+    () => showOnlyMcp
+      ? keys.filter(k => k.audience === "mcp" || (k.audience === null && (k.origin ?? "").toLowerCase() === "mcp"))
+      : keys,
     [keys, showOnlyMcp]
   );
 
@@ -267,6 +271,7 @@ export default function MCPManager() {
       key_preview: preview,
       scopes,
       origin: "mcp",
+      audience: "mcp",
       is_active: true,
       expires_at: expiresAt,
       created_by: userData.user?.id ?? null,

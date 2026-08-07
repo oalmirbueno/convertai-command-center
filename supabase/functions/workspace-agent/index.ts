@@ -1,4 +1,9 @@
-import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { createClient } from "npm:@supabase/supabase-js@2.97.0";
+import {
+  requestAiChatCompletion,
+  resolveAiProviderChain,
+} from "../_shared/ai-provider.ts";
+import { fetchPublicText } from "../_shared/public-http.ts";
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory, memoryToPromptBlock } from "../_shared/project-memory-services.ts";
 import { getContextBundle as _sbGetContext, searchCode as _sbSearch, proposeUpdate as _sbPropose } from "../_shared/second-brain-github.ts";
 
@@ -6,6 +11,24 @@ const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const MAX_REQUEST_BYTES = 256 * 1024;
+const STAFF_ROLES = new Set(["admin", "design", "traffic", "manager"]);
+
+// Exact egress allowlist for links pasted into Studio. Deno.fetch cannot pin
+// the DNS answer checked by the SSRF guard, so untrusted hosts are never read
+// unless an operator explicitly trusts that exact hostname.
+const WORKSPACE_LINK_READER_ALLOWED_HOSTS = new Set(
+  (Deno.env.get("WORKSPACE_LINK_READER_ALLOWED_HOSTS") ?? "")
+    .split(",")
+    .map((hostname) => hostname.trim().toLowerCase().replace(/\.$/, ""))
+    .filter(Boolean),
+);
+try {
+  const projectHostname = new URL(Deno.env.get("SUPABASE_URL") ?? "").hostname
+    .toLowerCase()
+    .replace(/\.$/, "");
+  if (projectHostname) WORKSPACE_LINK_READER_ALLOWED_HOSTS.add(projectHostname);
+} catch { /* invalid server configuration is handled by the Supabase client */ }
 
 const SYSTEM_BASE = `Você é o Prepro Director da AcelerIQ — um estrategista sênior dentro do Workspace. Resolve na primeira resposta, no tom de um humano real de bastidor de agência: pensa em voz alta, corta caminho, entrega.
 
@@ -66,21 +89,42 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
+    const declaredLength = Number(req.headers.get("content-length") || "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
+    }
+    const rawRequest = await req.text();
+    if (new TextEncoder().encode(rawRequest).byteLength > MAX_REQUEST_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
+    }
+    let preview: Record<string, any>;
+    try {
+      const parsed: unknown = JSON.parse(rawRequest);
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error();
+      preview = parsed as Record<string, any>;
+    } catch {
+      return json({ error: "JSON inválido" }, 400);
+    }
+
     // ─── MODO STRUCTURE / ENRICH (não-stream, retorna JSON pronto pro doc) ───
-    const preview = await req.clone().json().catch(() => ({} as any));
     const specialMode = preview?.mode as "structure" | "enrich" | "reflow" | undefined;
     if (specialMode === "structure" || specialMode === "enrich" || specialMode === "reflow") {
+      const { data: roleRows } = await sb.from("user_roles").select("role").eq("user_id", user.id);
+      if (!roleRows?.some(({ role }) => STAFF_ROLES.has(String(role)))) {
+        return json({ error: "Acesso negado" }, 403);
+      }
+      const { data: quota } = await sb.rpc("claim_ai_usage", {
+        _workload: "workspace-agent-editor",
+      });
+      if (quota !== true) return json({ error: "Limite de uso atingido" }, 429);
       const raw = String(preview?.text || "").slice(0, 32000);
       const ctxName = preview?.context?.client_name || "Global";
       const folderP = preview?.context?.folder_path || "raiz";
-      const openaiKey = Deno.env.get("OPENAI_API_KEY");
-      const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-      const url = openaiKey ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
-      const key = openaiKey || lovableKey;
-      const model = openaiKey
-        ? (specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini")
-        : "google/gemini-2.5-flash";
-      if (!key) return json({ error: "sem_motor" }, 500);
+      const providers = resolveAiProviderChain({
+        primaryModels: [specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini"],
+        lovableModels: ["google/gemini-2.5-flash"],
+      });
+      if (!providers.length) return json({ error: "sem_motor" }, 500);
 
       const sysStructure = `Você é EDITOR EXECUTIVO da AcelerIQ. Recebe conversas cruas do Studio (mensagens do usuário e do agente, com anexos, links, imagens/prints em markdown ![](url), buscas web e trechos de navegação) e devolve uma NOTA de trabalho pronta, bonita e organizada. Devolva APENAS markdown, sem cercas \`\`\`, seguindo EXATAMENTE este layout:
 
@@ -161,19 +205,14 @@ Regras absolutas:
 
       const sysMap: Record<string, string> = { structure: sysStructure, enrich: sysEnrich, reflow: sysReflow };
 
-      const r = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${key}` },
-        body: JSON.stringify({
-          model,
+      const { response: r } = await requestAiChatCompletion(providers, (provider) => ({
           messages: [
             { role: "system", content: sysMap[specialMode] },
             { role: "user", content: raw || "(vazio)" },
           ],
-          ...(/^gpt-5/i.test(model) ? {} : { temperature: specialMode === "reflow" ? 0.15 : 0.2 }),
+          ...(/^gpt-5/i.test(provider.model) ? {} : { temperature: specialMode === "reflow" ? 0.15 : 0.2 }),
           ...(specialMode === "enrich" ? { response_format: { type: "json_object" } } : {}),
-        }),
-      });
+      }));
       if (!r.ok) return json({ error: `ai_${r.status}`, detail: (await r.text()).slice(0, 200) }, r.status);
       const jr = await r.json();
       const out = (jr?.choices?.[0]?.message?.content || "").replace(/^```(?:markdown)?\s*|\s*```$/g, "");
@@ -186,7 +225,7 @@ Regras absolutas:
     }
 
 
-    const body = await req.json();
+    const body = preview;
     const { thread_id, message, display_message, context } = body as {
       thread_id: string;
       message: string;
@@ -210,8 +249,61 @@ Regras absolutas:
 
     // valida ownership
     const { data: thread } = await admin.from("workspace_agent_threads")
-      .select("id, user_id, system_prompt, title").eq("id", thread_id).maybeSingle();
+      .select("id, user_id, client_id, system_prompt, title").eq("id", thread_id).maybeSingle();
     if (!thread || thread.user_id !== user.id) return json({ error: "Thread inválida" }, 403);
+
+    const { data: quota } = await sb.rpc("claim_ai_usage", {
+      _workload: "workspace-agent-chat",
+    });
+    if (quota !== true) return json({ error: "Limite de uso atingido" }, 429);
+
+    // Resolve e valida todo identificador de escopo com o cliente autenticado
+    // antes de qualquer leitura service_role dirigida pelo contexto do request.
+    // A thread também é uma fronteira: um client_id enviado não pode trocar o
+    // cliente ao qual a conversa já está vinculada.
+    let authorizedClientId = thread.client_id ?? null;
+    const denyContext = () => json({ error: "Contexto fora do escopo autorizado" }, 403);
+
+    if (authorizedClientId && context?.client_id && context.client_id !== authorizedClientId) {
+      return denyContext();
+    }
+
+    if (context?.client_id) {
+      const { data: canAccessClient, error: accessError } = await sb.rpc("can_access_client", {
+        _client_id: context.client_id,
+      });
+      if (accessError || canAccessClient !== true) return denyContext();
+      authorizedClientId = context.client_id;
+    }
+
+    if (context?.project_id) {
+      const { data: project, error: projectError } = await sb.from("projects")
+        .select("id,client_id").eq("id", context.project_id).maybeSingle();
+      if (projectError || !project) return denyContext();
+      if (authorizedClientId && project.client_id !== authorizedClientId) return denyContext();
+      authorizedClientId = project.client_id;
+    }
+
+    if (context?.folder_id) {
+      const { data: folder, error: folderError } = await sb.from("workspace_nodes")
+        .select("id,client_id,scope").eq("id", context.folder_id).maybeSingle();
+      if (folderError || !folder) return denyContext();
+      if (folder.scope === "client" && !folder.client_id) return denyContext();
+      if (folder.client_id) {
+        if (authorizedClientId && folder.client_id !== authorizedClientId) return denyContext();
+        authorizedClientId = folder.client_id;
+      }
+    }
+
+    if (authorizedClientId) {
+      const { data: canAccessClient, error: accessError } = await sb.rpc("can_access_client", {
+        _client_id: authorizedClientId,
+      });
+      if (accessError || canAccessClient !== true) return denyContext();
+    }
+
+    const safeClientId = context?.client_id ?? authorizedClientId;
+    const safeProjectId = context?.project_id ?? null;
 
     // carrega histórico (últimas 30 msgs)
     const { data: history } = await admin.from("workspace_agent_messages")
@@ -220,7 +312,7 @@ Regras absolutas:
     // fallback server-side: se cliente não enviou folder_contents mas temos folder_id, busca do banco
     let fc = context?.folder_contents;
     if ((!fc || (!fc.files?.length && !fc.subfolders?.length)) && context?.folder_id) {
-      const { data: nodes } = await admin.from("workspace_nodes")
+      const { data: nodes } = await sb.from("workspace_nodes")
         .select("id,name,kind,mime,storage_path").eq("parent_id", context.folder_id).limit(80);
       if (nodes?.length) {
         fc = {
@@ -234,9 +326,9 @@ Regras absolutas:
     // Contexto profundo server-side: o agente sempre lê a base do cliente/projeto,
     // não apenas a pasta aberta no Workspace.
     const deepLines: string[] = [];
-    if (context?.client_id) {
-      const cidDeep = context.client_id;
-      const pidDeep = context.project_id || null;
+    if (safeClientId) {
+      const cidDeep = safeClientId;
+      const pidDeep = safeProjectId;
       const [profRes, projRes, fileRes, wsRes, briefRes, reportRes, docRes] = await Promise.all([
         admin.from("profiles").select("full_name,company_name,email,phone,plan_name,plan_value,plan_status,brand,client_type").eq("id", cidDeep).maybeSingle(),
         admin.from("projects").select("id,name,status,progress,description,scope,objectives,deadline,brand,created_at").eq("client_id", cidDeep).order("created_at", { ascending: false }).limit(12),
@@ -331,19 +423,23 @@ Regras absolutas:
     try {
       const urlSet = new Set<string>();
       (context?.attachments ?? []).forEach(a => {
-        if (a.url && /^https?:\/\//i.test(a.url)) urlSet.add(a.url);
+        if (a.url && /^https:\/\//i.test(a.url)) urlSet.add(a.url);
       });
-      const inMsg = message.match(/https?:\/\/[^\s)]+/g) ?? [];
+      const inMsg = message.match(/https:\/\/[^\s)]+/g) ?? [];
       inMsg.forEach(u => urlSet.add(u));
       const urls = Array.from(urlSet).slice(0, 3);
       if (urls.length) {
         const fetched = await Promise.all(urls.map(async (u) => {
           try {
-            const rr = await fetch(u, { headers: { "User-Agent": "AcelerIQ-Studio/1.0" }, signal: AbortSignal.timeout(6000) });
+            const rr = await fetchPublicText(u, {
+              allowedHostnames: WORKSPACE_LINK_READER_ALLOWED_HOSTS,
+              headers: { "User-Agent": "AcelerIQ-Studio/1.0" },
+              timeoutMs: 6_000,
+              maxBytes: 256 * 1024,
+            });
             const ct = rr.headers.get("content-type") || "";
             if (!rr.ok || !/text|html|json|xml/i.test(ct)) return `- ${u} (${rr.status} ${ct || "binário"})`;
-            const raw = await rr.text();
-            const clean = raw
+            const clean = rr.text
               .replace(/<script[\s\S]*?<\/script>/gi, " ")
               .replace(/<style[\s\S]*?<\/style>/gi, " ")
               .replace(/<[^>]+>/g, " ")
@@ -368,7 +464,7 @@ Regras absolutas:
     //    (needs_extra_agent=true + recommended_persona_id válido no escopo) OU se
     //    o cliente forçar via body.persona_id.
     const forcedPersonaId = (body as any).persona_id as string | undefined;
-    const cid = context?.client_id || null;
+    const cid = safeClientId;
     const fpath = context?.folder_path || null;
 
     const { data: personasRaw } = await admin.from("workspace_agent_personas")
@@ -382,11 +478,10 @@ Regras absolutas:
       return false;
     });
 
-    const openaiKey0 = Deno.env.get("OPENAI_API_KEY");
-    const lovableKey0 = Deno.env.get("LOVABLE_API_KEY");
-    const routerKey = openaiKey0 || lovableKey0;
-    const routerUrl = openaiKey0 ? "https://api.openai.com/v1/chat/completions" : "https://ai.gateway.lovable.dev/v1/chat/completions";
-    const routerModel = openaiKey0 ? "gpt-5-mini" : "google/gemini-2.5-flash";
+    const routerProviders = resolveAiProviderChain({
+      primaryModels: ["gpt-5-mini"],
+      lovableModels: ["google/gemini-2.5-flash"],
+    });
 
     type Orq = {
       intent: string;
@@ -398,7 +493,7 @@ Regras absolutas:
     };
     let orq: Orq = { intent: "responder", plan: [], needs_extra_agent: false, recommended_persona_id: null, reason: "default", web_queries: [] };
 
-    if (routerKey) {
+    if (routerProviders.length) {
       const catalog = inScope.length
         ? inScope.map(p => `- id=${p.id} · "${p.gpt_name || "sem nome"}" — ${(p.gpt_description || p.persona_prompt || "").slice(0, 200).replace(/\n/g, " ")}`).join("\n")
         : "(nenhum agente extra cadastrado)";
@@ -410,20 +505,18 @@ Regras:
 - plan: 2–4 passos curtos e acionáveis.
 - web_queries: até 3 queries pt-BR quando exigir dados atuais, benchmarks, notícias, cotações, tendências, referências externas, concorrência, marca/pessoa pública, ou quando o usuário disser "pesquise", "busque", "procure na internet", "hoje", "atual", "última". Caso contrário [].`;
       try {
-        const rr = await fetch(routerUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${routerKey}` },
-          body: JSON.stringify({
-            model: routerModel,
+        const { response: rr } = await requestAiChatCompletion(
+          routerProviders,
+          (provider) => ({
             messages: [
               { role: "system", content: orqSys },
               { role: "user", content: `CATÁLOGO DE AGENTES EXTRAS:\n${catalog}\n\nCONTEXTO: cliente=${context?.client_name || "-"}, pasta=/${fpath || "raiz"}\n\nMENSAGEM DO USUÁRIO:\n${message.slice(0, 1400)}` },
             ],
-            ...(/^gpt-5/i.test(routerModel) ? {} : { temperature: 0 }),
+            ...(/^gpt-5/i.test(provider.model) ? {} : { temperature: 0 }),
             max_tokens: 400,
             response_format: { type: "json_object" },
           }),
-        });
+        );
         if (rr.ok) {
           const rj = await rr.json();
           const raw = rj?.choices?.[0]?.message?.content || "{}";
@@ -449,12 +542,14 @@ Regras:
     if (orq.web_queries.length) {
       const results = await Promise.all(orq.web_queries.map(async (q) => {
         try {
-          const r = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+          const r = await fetchPublicText(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(q)}`, {
+            allowedHostnames: ["html.duckduckgo.com"],
             headers: { "User-Agent": "Mozilla/5.0 (compatible; AcelerIQ-Studio/1.0)" },
-            signal: AbortSignal.timeout(7000),
+            timeoutMs: 7_000,
+            maxBytes: 384 * 1024,
           });
           if (!r.ok) return { q, items: [] as { title: string; url: string; snippet: string }[] };
-          const html = await r.text();
+          const html = r.text;
           const items: { title: string; url: string; snippet: string }[] = [];
           const re = /<a[^>]+class="result__a"[^>]+href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/g;
           let m: RegExpExecArray | null;
@@ -471,22 +566,10 @@ Regras:
           return { q, items };
         } catch { return { q, items: [] as { title: string; url: string; snippet: string }[] }; }
       }));
-      const topReads = await Promise.all(results.flatMap(r => r.items.slice(0, 2).map(async (it) => {
-        try {
-          const rr = await fetch(it.url, { headers: { "User-Agent": "Mozilla/5.0 AcelerIQ-Studio" }, signal: AbortSignal.timeout(5500) });
-          const ct = rr.headers.get("content-type") || "";
-          if (!rr.ok || !/text|html/i.test(ct)) return null;
-          const raw = await rr.text();
-          const clean = raw.replace(/<script[\s\S]*?<\/script>/gi, " ").replace(/<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().slice(0, 1600);
-          return { url: it.url, title: it.title, excerpt: clean };
-        } catch { return null; }
-      })));
       results.forEach(r => {
         if (!r.items.length) { webBlocks.push(`\n### Busca: "${r.q}"\n(sem resultados)`); return; }
         webBlocks.push(`\n### Busca: "${r.q}"\n${r.items.map(it => `- [${it.title}](${it.url}) — ${it.snippet}`).join("\n")}`);
       });
-      const reads = topReads.filter(Boolean) as { url: string; title: string; excerpt: string }[];
-      if (reads.length) webBlocks.push(`\n### Leitura das páginas top\n${reads.map(r => `\n#### ${r.title}\n${r.url}\n${r.excerpt}`).join("\n")}`);
     }
 
     // Resolve persona final: prioridade → forcedPersonaId > recomendação do Orq > nenhuma (usa SYSTEM_BASE)
@@ -534,46 +617,42 @@ Regras:
     }
 
     // ============ MOTOR ============
-    // Prioridade: OpenAI direto (chave do usuário, SEM consumir créditos Lovable) → Lovable AI (fallback).
-    const openaiKey = Deno.env.get("OPENAI_API_KEY");
-    const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-
-    type Provider = { url: string; headers: Record<string, string>; model: string; label: string };
-    const chain: Provider[] = [];
-    if (openaiKey) {
-      const oaiHeaders = { "Content-Type": "application/json", Authorization: `Bearer ${openaiKey}` };
-      // Prioridade: GPT-5 (raciocínio topo) → GPT-5-mini (rápido/barato) → GPT-4.1 (fallback estável) → 4o-mini (último recurso)
-      chain.push(
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-5", label: "openai/gpt-5" },
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-5-mini", label: "openai/gpt-5-mini" },
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4.1", label: "openai/gpt-4.1" },
-        { url: "https://api.openai.com/v1/chat/completions", headers: oaiHeaders, model: "gpt-4o-mini", label: "openai/gpt-4o-mini" },
-      );
-    }
-    if (lovableKey) {
-      // Prioriza modelo mais forte primeiro (Pro), com fallback progressivo.
-      for (const m of ["google/gemini-2.5-pro", "google/gemini-2.5-flash", "google/gemini-3-flash-preview"]) {
-        chain.push({ url: "https://ai.gateway.lovable.dev/v1/chat/completions", headers: { "Content-Type": "application/json", Authorization: `Bearer ${lovableKey}` }, model: m, label: m });
-      }
-    }
-    if (!chain.length) return json({ error: "Nenhum motor de IA configurado (OPENAI_API_KEY ou LOVABLE_API_KEY)" }, 500);
+    // Provider OpenAI-compatible configurado primeiro; compatibilidade opcional por último.
+    const providers = resolveAiProviderChain({
+      primaryModels: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o-mini"],
+      lovableModels: [
+        "google/gemini-2.5-pro",
+        "google/gemini-2.5-flash",
+        "google/gemini-3-flash-preview",
+      ],
+    });
+    if (!providers.length) return json({ error: "Nenhum provedor de IA configurado" }, 500);
 
     let aiRes: Response | null = null;
     let lastStatus = 0; let lastText = "";
-    for (const p of chain) {
-      const supportsTemp = !/^gpt-5/i.test(p.model);
-      const body: Record<string, unknown> = { model: p.model, messages, stream: true };
-      if (supportsTemp) body.temperature = 0.55;
-      const r = await fetch(p.url, { method: "POST", headers: p.headers, body: JSON.stringify(body) });
-      if (r.ok && r.body) { aiRes = r; break; }
-      lastStatus = r.status; lastText = await r.text().catch(() => "");
-      if (![400, 401, 402, 429].includes(r.status)) break;
+    try {
+      const { response } = await requestAiChatCompletion(providers, (provider) => {
+        const payload: Record<string, unknown> = { messages, stream: true };
+        if (!/^gpt-5/i.test(provider.model)) payload.temperature = 0.55;
+        return payload;
+      });
+      if (response.ok && response.body) {
+        aiRes = response;
+      } else {
+        lastStatus = response.ok ? 502 : response.status;
+        lastText = response.ok
+          ? "Resposta de streaming sem corpo"
+          : await response.text().catch(() => "");
+      }
+    } catch (error) {
+      lastStatus = 502;
+      lastText = error instanceof Error ? error.message : String(error);
     }
 
     if (!aiRes) {
-      if (lastStatus === 402) return json({ error: "PAYMENT_REQUIRED", message: "Sem saldo em nenhum motor. Recarregue OpenAI ou aguarde refill do Lovable." }, 402);
+      if (lastStatus === 402) return json({ error: "PAYMENT_REQUIRED", message: "Sem saldo no provedor de IA configurado." }, 402);
       if (lastStatus === 429) return json({ error: "RATE_LIMITED", message: "Muitas requisições. Tente em instantes." }, 429);
-      if (lastStatus === 401) return json({ error: "AUTH_FAILED", message: "Chave OpenAI inválida. Atualize a OPENAI_API_KEY." }, 401);
+      if (lastStatus === 401) return json({ error: "AUTH_FAILED", message: "Credencial do provedor de IA inválida." }, 401);
       return json({ error: `AI falhou: ${lastStatus} ${lastText.slice(0, 200)}` }, 500);
     }
 
@@ -613,13 +692,13 @@ Regras:
               await admin.from("workspace_agent_threads").update({ updated_at: new Date().toISOString() }).eq("id", thread_id);
             }
             // ── Memória persistente: grava turno como registro cumulativo ──
-            if (context?.client_id) {
+            if (safeClientId) {
               try {
                 const briefTitle = userMessageToStore.slice(0, 90).replace(/\n/g, " ").trim();
                 const body = `**Pergunta:** ${userMessageToStore.slice(0, 1200)}\n\n**Resposta do agente:** ${full.slice(0, 3200)}`;
                 await _upsertProjectMemory({
-                  client_id: context.client_id,
-                  project_id: context.project_id ?? null,
+                  client_id: safeClientId,
+                  project_id: safeProjectId,
                   kind: "summary",
                   source: "studio-agent",
                   title: briefTitle,
@@ -633,12 +712,12 @@ Regras:
               try {
                 if (full.length > 400) {
                   await _sbPropose({
-                    title: `Studio · ${(context.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
+                    title: `Studio · ${(context?.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
                     summary: userMessageToStore.slice(0, 400),
                     origin: "aceleriq-studio",
                     correlation_id: thread_id,
-                    context: `client_id=${context.client_id}${context.project_id ? ` · project_id=${context.project_id}` : ""}`,
-                    body_markdown: `# Studio turn\n\n**Cliente:** ${context.client_name || context.client_id}\n\n## Pergunta\n${userMessageToStore.slice(0, 2000)}\n\n## Resposta do agente\n${full.slice(0, 8000)}`,
+                    context: `client_id=${safeClientId}${safeProjectId ? ` · project_id=${safeProjectId}` : ""}`,
+                    body_markdown: `# Studio turn\n\n**Cliente:** ${context?.client_name || safeClientId}\n\n## Pergunta\n${userMessageToStore.slice(0, 2000)}\n\n## Resposta do agente\n${full.slice(0, 8000)}`,
                   });
                 }
               } catch (e) { console.warn("second-brain propose failed", (e as Error).message); }

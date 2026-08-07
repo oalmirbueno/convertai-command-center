@@ -37,9 +37,10 @@ Execute, quando aplicável:
 
 ```bash
 npm test -- --run
-npx tsc --noEmit
+npm run typecheck
 npm run build
-npx lovable-mcp-extract-manifest
+npm --prefix integrations/lovable-mcp-compat run verify
+npm --prefix integrations/lovable-mcp-compat run generate
 git diff --check
 ```
 

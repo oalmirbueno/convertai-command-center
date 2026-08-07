@@ -16,11 +16,10 @@ import {
   Text,
 } from 'npm:@react-email/components@0.0.22'
 import type { TemplateEntry } from './registry.ts'
+import { EMAIL_APP_URL, EMAIL_LOGO_URL } from '../email-config.ts'
 
-const LOGO_URL =
-  'https://gicbrgagstyvbaaumprj.supabase.co/storage/v1/object/public/email-assets/logo-aceleriq-email.png'
-const PORTAL_URL = 'https://aceleriq.online'
-const FINANCE_URL = 'https://aceleriq.online/financeiro'
+const PORTAL_URL = EMAIL_APP_URL
+const FINANCE_URL = `${EMAIL_APP_URL}/financeiro`
 
 type BillingStatus = 'upcoming' | 'today' | 'overdue'
 
@@ -84,7 +83,7 @@ const BillingReminderEmail = ({
         <Container style={outer}>
           {/* Header */}
           <Section style={{ ...header, borderBottom: `2px solid ${theme.accent}` }}>
-            <Img src={LOGO_URL} alt="AcelerIQ" width="140" style={logo} />
+            <Img src={EMAIL_LOGO_URL} alt="AcelerIQ" width="140" style={logo} />
           </Section>
 
           {/* Card */}
@@ -156,7 +155,7 @@ const BillingReminderEmail = ({
             <Text style={footerText}>Performance OS para times que entregam.</Text>
             <Text style={footerMeta}>
               <Link href={PORTAL_URL} style={footerLink}>
-                aceleriq.online
+                {new URL(PORTAL_URL).hostname}
               </Link>
               {' · '}
               <Link href="mailto:contato@aceleriq.com.br" style={footerLink}>

@@ -1,7 +1,71 @@
 // Parser/normalizador para exports de Google Ads, Meta Ads, Social Media e Vendas
 // Recebe matriz [headers, ...rows] já lida (CSV ou XLSX) e devolve estrutura unificada.
 
-import * as XLSX from "xlsx";
+import { readSheet } from "read-excel-file/browser";
+
+const MAX_SPREADSHEET_BYTES = 15 * 1024 * 1024;
+const MAX_XLSX_UNCOMPRESSED_BYTES = 50 * 1024 * 1024;
+const MAX_XLSX_ENTRIES = 4096;
+const MAX_SPREADSHEET_ROWS = 20_000;
+const MAX_SPREADSHEET_COLUMNS = 256;
+
+function assertBoundedMatrix(matrix: unknown[][]): void {
+  const columnCount = matrix.reduce((max, row) => Math.max(max, row.length), 0);
+  if (matrix.length > MAX_SPREADSHEET_ROWS || columnCount > MAX_SPREADSHEET_COLUMNS) {
+    throw new Error("Planilha excede o limite seguro de linhas ou colunas.");
+  }
+}
+
+// XLSX is a ZIP archive. Reject malformed/ZIP64 archives and expansion bombs
+// before handing them to the workbook reader.
+function assertSafeXlsxArchive(buffer: ArrayBuffer): void {
+  const view = new DataView(buffer);
+  const minimumEocd = 22;
+  let eocd = -1;
+  for (let offset = view.byteLength - minimumEocd; offset >= Math.max(0, view.byteLength - 65_557); offset--) {
+    if (view.getUint32(offset, true) === 0x06054b50) {
+      eocd = offset;
+      break;
+    }
+  }
+  if (eocd < 0) throw new Error("Arquivo XLSX inválido.");
+
+  const entryCount = view.getUint16(eocd + 10, true);
+  const centralSize = view.getUint32(eocd + 12, true);
+  const centralOffset = view.getUint32(eocd + 16, true);
+  if (
+    entryCount === 0xffff ||
+    centralSize === 0xffffffff ||
+    centralOffset === 0xffffffff ||
+    entryCount > MAX_XLSX_ENTRIES ||
+    centralOffset + centralSize > eocd
+  ) {
+    throw new Error("Arquivo XLSX excede os limites seguros.");
+  }
+
+  let offset = centralOffset;
+  let totalUncompressed = 0;
+  for (let index = 0; index < entryCount; index++) {
+    if (offset + 46 > eocd || view.getUint32(offset, true) !== 0x02014b50) {
+      throw new Error("Arquivo XLSX inválido.");
+    }
+    const uncompressed = view.getUint32(offset + 24, true);
+    if (uncompressed === 0xffffffff) {
+      throw new Error("Arquivo XLSX ZIP64 não é suportado.");
+    }
+    totalUncompressed += uncompressed;
+    if (totalUncompressed > MAX_XLSX_UNCOMPRESSED_BYTES) {
+      throw new Error("Arquivo XLSX excede o limite seguro descompactado.");
+    }
+    offset += 46
+      + view.getUint16(offset + 28, true)
+      + view.getUint16(offset + 30, true)
+      + view.getUint16(offset + 32, true);
+  }
+  if (offset !== centralOffset + centralSize) {
+    throw new Error("Arquivo XLSX inválido.");
+  }
+}
 
 export type ReportSource = "google_ads" | "meta_ads" | "social_media" | "sales" | "generic";
 
@@ -327,19 +391,29 @@ export function parseMatrix(matrix: any[][]): ParsedReport {
 /* ── Entradas ────────────────────────────────────────────── */
 export async function parseFile(file: File): Promise<ParsedReport> {
   const ext = file.name.split(".").pop()?.toLowerCase();
+  if (file.size > MAX_SPREADSHEET_BYTES) {
+    throw new Error("Planilha muito grande para processamento seguro (máximo 15 MB).");
+  }
   if (ext === "csv" || ext === "tsv" || ext === "txt") {
     const text = await file.text();
     const sep = text.split("\n")[0]?.includes(";") ? ";" : (ext === "tsv" ? "\t" : ",");
-    const matrix = text.split(/\r?\n/).map(line =>
+    const lines = text.split(/\r?\n/);
+    if (lines.length > MAX_SPREADSHEET_ROWS) {
+      throw new Error("Planilha excede o limite seguro de linhas ou colunas.");
+    }
+    const matrix = lines.map(line =>
       // split simples respeitando aspas
       line.match(new RegExp(`(?:"([^"]*)")|([^${sep}]+)`, "g"))?.map(c => c.replace(/^"|"$/g, "").trim()) ?? []
     );
+    assertBoundedMatrix(matrix);
     return parseMatrix(matrix);
   }
-  // xlsx/xls
+  if (ext !== "xlsx") {
+    throw new Error("Formato de planilha não suportado. Envie CSV, TSV ou XLSX.");
+  }
   const buf = await file.arrayBuffer();
-  const wb = XLSX.read(buf, { type: "array", cellDates: true });
-  const sheet = wb.Sheets[wb.SheetNames[0]];
-  const matrix: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: true });
+  assertSafeXlsxArchive(buf);
+  const matrix = await readSheet(buf);
+  assertBoundedMatrix(matrix);
   return parseMatrix(matrix);
 }

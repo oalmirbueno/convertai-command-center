@@ -1,73 +1,61 @@
-# Welcome to your Lovable project
+# Aceleriq OS
 
-## Project info
+Painel operacional da Aceleriq para clientes, projetos, conteúdo, aprovações, arquivos, financeiro e integrações com agentes via MCP.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+O GitHub é a fonte canônica do código, da arquitetura e das operações versionadas. O Lovable continua sendo o provedor atual do frontend de produção e permanece compatível, mas não é requisito para compilar ou hospedar o frontend, executar o MCP, consumir IA ou enviar e-mails. O backend atual continua no mesmo projeto Supabase; migrar dados, Auth, Storage ou Edge Functions para outro projeto é uma operação separada da portabilidade já entregue.
 
-## How can I edit this code?
+## Stack
 
-There are several ways of editing your application.
+- React 18, TypeScript e Vite
+- Tailwind CSS e shadcn/ui
+- Supabase Database, Auth, Storage e Edge Functions
+- Vitest e ESLint
+- Build estático, com opção de container Nginx
 
-**Use Lovable**
+## Desenvolvimento local
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
+Requisitos: Node.js 22 ou uma versão LTS compatível e npm.
 
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+cp .env.example .env.local
+npm ci
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+Preencha `.env.local` antes de iniciar. O contrato de endpoints e provedores já está desacoplado do Lovable, o `.env` não faz mais parte do checkout e arquivos locais de ambiente são ignorados. O gate privado de credenciais deve estar concluído antes de qualquer release. Não versione credenciais de servidor nem detalhes de incidentes.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+| Variável | Obrigatória | Uso |
+|---|---:|---|
+| `VITE_SUPABASE_URL` | sim | URL pública do projeto Supabase atual |
+| `VITE_SUPABASE_PUBLISHABLE_KEY` | sim | chave pública usada pelo navegador |
+| `VITE_APP_PUBLIC_URL` | sim no build de produção | base de links absolutos e metadados sociais; em desenvolvimento pode usar a origem do navegador |
+| `VITE_MCP_SERVER_URL` | não | sobrescreve o endpoint MCP padrão |
+| `VITE_MCP_OAUTH_METADATA_URL` | não | sobrescreve o metadata OAuth do MCP |
+| `VITE_WEBHOOK_URL` | conforme o ambiente | base dos webhooks externos |
+| `VITE_SUPPORT_WHATSAPP_NUMBER` | não | número internacional dos CTAs de suporte; sem valor, os CTAs ficam ocultos |
 
-**Use GitHub Codespaces**
+Sem os dois overrides de MCP, o frontend deriva os endereços de `VITE_SUPABASE_URL`:
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- `/functions/v1/mcp-server`
+- `/functions/v1/mcp-oauth-metadata`
 
-## What technologies are used for this project?
+Como o Vite incorpora variáveis `VITE_*` no artefato, uma mudança de endpoint exige um novo build do frontend.
 
-This project is built with:
+## Verificação
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+```sh
+npm test
+npm run typecheck
+npm run build
+npm run mcp:portability
+```
 
-## How can I deploy this project?
+## Deploy
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+O fluxo atual do frontend de produção continua sendo o publish manual no Lovable após PR, revisão e aceite. Para hospedar o mesmo build em outro provedor, há um `Dockerfile` portátil e fallback de SPA no Nginx.
 
-## Can I connect a custom domain to my Lovable project?
+Produção usa três workflows manuais e serializados pelo mesmo grupo `supabase-production`. Primeiro, [`Deploy Supabase Database`](.github/workflows/deploy-supabase-database.yml) aplica migrations forward-only do tip atual de `main`, com backup restaurável confirmado e sem reset, seed ou repair. Para o lote não-MCP, abra o Preview do frontend do mesmo SHA sem publicá-lo, revise os escopos das chaves no ApiDocs e só então execute [`Deploy Supabase Public Edge`](.github/workflows/deploy-supabase-public-edge.yml), que publica as cinco funções endurecidas após preflight read-only do banco e smoke negativo sem credenciais. Com a Edge nova, valide tanto o Inbox multipart da produção antiga quanto o protocolo binário do Preview; só então publique o frontend do mesmo SHA. [`Deploy Supabase MCP`](.github/workflows/deploy-supabase-mcp.yml) publica ou reverte separadamente as duas funções MCP a partir de SHA imutável. Cada workflow confirma seus próprios gates de banco antes de publicar funções.
 
-Yes, you can!
+O procedimento completo de bootstrap, build, smoke test, release, rollback e migração está em [`docs/operations/MCP-PORTABLE-DEPLOY.md`](docs/operations/MCP-PORTABLE-DEPLOY.md). O contrato público de configuração está em [`docs/operations/ENVIRONMENT-INVENTORY.md`](docs/operations/ENVIRONMENT-INVENTORY.md); o inventário real permanece privado. A decisão arquitetural está em [`ADR-0003`](docs/architecture/decisions/ADR-0003-portabilidade-do-frontend-e-endpoints-mcp.md).
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Nunca envie `service_role`, segredos OAuth ou tokens de provedores ao frontend ou como argumentos de build.

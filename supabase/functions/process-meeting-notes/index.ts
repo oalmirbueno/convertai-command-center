@@ -1,4 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import {
+  requestAiChatCompletion,
+  resolveAiProviderChain,
+} from "../_shared/ai-provider.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -13,8 +17,10 @@ Deno.serve(async (req) => {
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY not configured");
+    const providers = resolveAiProviderChain({
+      primaryModels: ["gpt-4o-mini"],
+      lovableModels: ["google/gemini-3-flash-preview"],
+    });
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
@@ -59,7 +65,7 @@ Deno.serve(async (req) => {
 
     const clientName = clientProfile?.company_name || clientProfile?.full_name || "Cliente";
 
-    const systemPrompt = `Você é um Diretor de Projetos experiente em agências de marketing digital. 
+    const systemPrompt = `Você é um Diretor de Projetos experiente em agências de marketing digital.
 Sua função é analisar documentos de reunião, atas, briefings e anotações para extrair e organizar um plano de projeto completo.
 
 IMPORTANTE: Responda APENAS usando a tool/function fornecida. Não escreva texto livre.
@@ -78,14 +84,7 @@ Analise TODO o conteúdo fornecido (pode incluir múltiplos documentos) e:
 
 Seja detalhado no escopo — organize as informações como um diretor de projetos faria, agrupando por tema/área.`;
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-3-flash-preview",
+    const { response } = await requestAiChatCompletion(providers, {
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: combinedContent },
@@ -155,7 +154,6 @@ Seja detalhado no escopo — organize as informações como um diretor de projet
           }
         ],
         tool_choice: { type: "function", function: { name: "create_project_plan" } },
-      }),
     });
 
     if (!response.ok) {
@@ -172,8 +170,8 @@ Seja detalhado no escopo — organize as informações como um diretor de projet
         });
       }
       const errorText = await response.text();
-      console.error("AI gateway error:", response.status, errorText);
-      throw new Error("AI gateway error");
+      console.error("AI provider error:", response.status, errorText);
+      throw new Error("AI provider error");
     }
 
     const aiResult = await response.json();

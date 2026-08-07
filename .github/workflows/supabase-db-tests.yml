@@ -19,27 +19,56 @@ jobs:
     name: Supabase local + pgTAP + build
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    env:
+      VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+      VITE_SUPABASE_PUBLISHABLE_KEY: ci-public-placeholder
+      VITE_APP_PUBLIC_URL: https://app.example.com
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            integrations/lovable-mcp-compat/package-lock.json
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: v2.5.1
 
       - name: Setup Supabase CLI
-        uses: supabase/setup-cli@v1
+        uses: supabase/setup-cli@3c2f5e2ae34c34e428e8e206e2c4d21fa2d20fbf # v2.1.1
         with:
           version: 2.109.1
 
       - name: Install NPM dependencies
-        run: npm ci
+        run: |
+          npm install --global npm@11.9.0
+          test "$(npm --version)" = "11.9.0"
+          npm ci
+
+      - name: Install versioned Lovable MCP compatibility dependencies
+        run: npm ci --prefix integrations/lovable-mcp-compat
+
+      - name: Verify append-only migration ledger
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || '' }}
+        run: |
+          set -euo pipefail
+          npm run migrations:verify
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            node scripts/verify-migration-integrity.mjs --base-ref "$PR_BASE_SHA"
+          fi
 
       - name: Log Supabase CLI capabilities
         run: |
@@ -48,21 +77,11 @@ jobs:
           supabase db reset --help
           supabase test db --help
 
-      - name: Restore production-only legacy quiz table in CI
+      - name: Restore reviewed legacy prerequisites in empty CI database
         run: |
-          cat > supabase/migrations/20260528163000_ci_quiz_submissions_compat.sql <<'SQL'
-          CREATE TABLE IF NOT EXISTS public.quiz_submissions (
-            id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-            submitted_at timestamptz
-          );
-          ALTER TABLE public.quiz_submissions ENABLE ROW LEVEL SECURITY;
-
-          CREATE OR REPLACE FUNCTION public.email_queue_dispatch()
-          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
-
-          CREATE OR REPLACE FUNCTION public.email_queue_wake()
-          RETURNS void LANGUAGE sql AS 'SELECT NULL::void';
-          SQL
+          cp \
+            supabase/bootstrap/legacy_prerequisites.sql \
+            supabase/migrations/20260528163000_legacy_prerequisites.sql
 
       - name: Start Supabase local stack
         run: supabase start
@@ -76,14 +95,38 @@ jobs:
       - name: Run unit tests
         run: npm test -- --run
 
+      - name: Run MCP Deno unit tests
+        run: deno test --allow-env supabase/functions/mcp-server/mcp_test.ts
+
+      - name: Type-check portable and public Edge Functions
+        run: |
+          deno check \
+            supabase/functions/admin-reset-client-access/index.ts \
+            supabase/functions/api-gateway/index.ts \
+            supabase/functions/client-first-access/index.ts \
+            supabase/functions/mcp-oauth-metadata/index.ts \
+            supabase/functions/mcp-server/index.ts \
+            supabase/functions/notify-admin/index.ts \
+            supabase/functions/social-meta-oauth/index.ts \
+            supabase/functions/submit-quiz/index.ts \
+            supabase/functions/workspace-agent/index.ts \
+            supabase/functions/workspace-agent-import/index.ts \
+            supabase/functions/workspace-inbox/index.ts \
+            supabase/functions/workspace-ocr/index.ts
+
       - name: Check TypeScript
-        run: npx tsc --noEmit
+        run: npm run typecheck
 
       - name: Build application
         run: npm run build
 
-      - name: Validate Lovable manifest
-        run: npx lovable-mcp-extract-manifest
+      - name: Validate versioned Lovable MCP compatibility artifacts
+        run: |
+          npm --prefix integrations/lovable-mcp-compat run verify
+          npm --prefix integrations/lovable-mcp-compat run generate
+          git diff --exit-code -- \
+            .lovable/mcp/manifest.json \
+            supabase/functions/mcp/index.ts
 
       - name: Stop Supabase local stack
         if: always()

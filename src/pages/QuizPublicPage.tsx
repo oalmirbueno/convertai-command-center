@@ -9,10 +9,9 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import { supportWhatsAppUrl } from "@/lib/supportContact";
 
 // ============== Constants ==============
-
-const WHATSAPP_NUMBER = "5541997483429";
 
 type Category = "identidade" | "mercado" | "objetivos" | "perfil" | "maturidade";
 
@@ -599,7 +598,7 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
   const offset = c - (Math.max(0, Math.min(100, score)) / 100) * c;
 
   const waText = `Olá! Acabei de fazer o diagnóstico no site. Meu ICP Score foi ${score}. Quero conversar.`;
-  const waUrl = `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(waText)}`;
+  const waUrl = supportWhatsAppUrl(waText);
 
   const firstName = (leadName || "").trim().split(" ")[0];
 
@@ -687,20 +686,24 @@ function ResultScreen({ score, plan, leadName }: { score: number; plan: string; 
       </div>
 
       {/* Single CTA */}
-      <Button
-        asChild
-        size="lg"
-        className="w-full h-14 text-base font-semibold"
-      >
-        <a href={waUrl} target="_blank" rel="noopener noreferrer">
-          <MessageCircle className="mr-2 h-5 w-5" />
-          Falar com o time no WhatsApp
-        </a>
-      </Button>
+      {waUrl && (
+        <>
+          <Button
+            asChild
+            size="lg"
+            className="w-full h-14 text-base font-semibold"
+          >
+            <a href={waUrl} target="_blank" rel="noopener noreferrer">
+              <MessageCircle className="mr-2 h-5 w-5" />
+              Falar com o time no WhatsApp
+            </a>
+          </Button>
 
-      <p className="mt-4 text-sm text-muted-foreground">
-        Alguém do time responde em até 2 horas em dias úteis.
-      </p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Alguém do time responde em até 2 horas em dias úteis.
+          </p>
+        </>
+      )}
     </motion.div>
   );
 }

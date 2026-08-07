@@ -20,6 +20,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
+import { APP_PUBLIC_URL } from "@/lib/publicUrl";
 
 
 /**
@@ -29,6 +30,8 @@ import aceleriqLogo from "@/assets/logo-aceleriq.png";
  */
 
 const PREPRO_GPT = "https://chatgpt.com/g/g-6a4e9158529c8191a937cee536c18c9f-prepro-director-gpt";
+const WORKSPACE_AGENT_URL = `${String(import.meta.env.VITE_SUPABASE_URL).replace(/\/$/, "")}/functions/v1/workspace-agent`;
+const APP_PUBLIC_HOST = new URL(APP_PUBLIC_URL).hostname;
 
 type FileRef = { id: string; name: string; kind: "file" | "folder"; url?: string | null; meta?: string | null };
 
@@ -502,8 +505,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         const { data: sess } = await supabase.auth.getSession();
         const tok = sess?.session?.access_token;
         if (!tok) return;
-        const url = `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`;
-        const r = await fetch(url, {
+        const r = await fetch(WORKSPACE_AGENT_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
           body: JSON.stringify({ mode: "enrich", text: state.notes.slice(-4000), context: { client_name: clientName, folder_path: folderPath } }),
@@ -544,8 +546,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
         const { data: sess } = await supabase.auth.getSession();
         const tok = sess?.session?.access_token;
         if (!tok) return;
-        const url = `https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`;
-        const r = await fetch(url, {
+        const r = await fetch(WORKSPACE_AGENT_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
           body: JSON.stringify({ mode: "reflow", text: txt.slice(0, 8000), context: { client_name: clientName, folder_path: folderPath } }),
@@ -658,7 +659,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
   async function handleImageFile(file: File) {
     if (!file.type.startsWith("image/")) return;
     setOcrBusy(true);
-    toast({ title: "Analisando imagem…", description: "Extraindo texto via Lovable AI (Gemini Flash Lite)." });
+    toast({ title: "Analisando imagem…", description: "Extraindo texto com o provedor de IA configurado." });
     try {
       const text = await ocrFile(file);
       insertAtCaret(`\n> **Imagem, texto extraído:**\n${text.split("\n").map(l => `> ${l}`).join("\n")}\n`);
@@ -1056,7 +1057,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
                         const { data: sess } = await supabase.auth.getSession();
                         const tok = sess?.session?.access_token; if (!tok) return;
                         toast({ title: "Estruturando", description: "O agente está montando o documento executivo." });
-                        const r = await fetch(`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/workspace-agent`, {
+                        const r = await fetch(WORKSPACE_AGENT_URL, {
                           method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
                           body: JSON.stringify({ mode: "structure", text: raw, context: { client_name: clientName, folder_path: folderPath } }),
                         });
@@ -1492,7 +1493,7 @@ function renderBrandedDoc(md: string, clientName: string, projectName: string, l
 ${html}
   </div>
 
-  <div class="doc-footer"><span>aceleriq.online</span><span>Confidencial · ${date}</span></div>
+  <div class="doc-footer"><span>${APP_PUBLIC_HOST}</span><span>Confidencial · ${date}</span></div>
 </section>
 </body></html>`;
 }
@@ -2822,8 +2823,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
     try {
       const { data: sess } = await supabase.auth.getSession();
       const token = sess.session?.access_token;
-      const url = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/workspace-agent`;
-      const res = await fetch(url, {
+      const res = await fetch(WORKSPACE_AGENT_URL, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -2866,7 +2866,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         try {
           const j = JSON.parse(t);
           if (j?.error === "PAYMENT_REQUIRED" || res.status === 402) {
-            msg = j?.message || "Créditos do Lovable AI esgotados. Adicione créditos nas configurações de uso.";
+            msg = j?.message || "O provedor de IA recusou a solicitação por limite de uso. Verifique a configuração da conta.";
           } else if (j?.error === "RATE_LIMITED" || res.status === 429) {
             msg = j?.message || "Muitas requisições. Tente novamente em instantes.";
           } else if (j?.message || j?.error) {

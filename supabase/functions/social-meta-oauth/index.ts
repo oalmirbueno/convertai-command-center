@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.97.0";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   buildAllowedOrigins,
   buildFacebookLoginUrl,
@@ -10,6 +10,7 @@ import {
   sanitizeMetaResources,
   validateMetaRedirectUri,
 } from "./meta.ts";
+import { resolvePublicAppUrl } from "../_shared/public-url.ts";
 
 const MAX_REQUEST_BYTES = 64 * 1024;
 const MAX_META_RESPONSE_BYTES = 1024 * 1024;
@@ -23,11 +24,6 @@ const ACTIONS = new Set([
   "finish",
   "disconnect",
 ]);
-const CANONICAL_ORIGINS = new Set([
-  "https://aceleriq.online",
-  "https://www.aceleriq.online",
-]);
-
 type Action = "start" | "complete" | "connect" | "finish" | "disconnect";
 type JsonRecord = Record<string, unknown>;
 
@@ -125,11 +121,12 @@ function loadMetaConfig(supabase: SupabaseRuntimeConfig): RuntimeConfig {
 
 function allowedOrigins(): Set<string> {
   const redirectUri = Deno.env.get("META_REDIRECT_URI")?.trim();
-  if (!redirectUri) return CANONICAL_ORIGINS;
+  const appPublicUrl = resolvePublicAppUrl();
+  if (!redirectUri) return new Set([new URL(appPublicUrl).origin]);
   try {
-    return buildAllowedOrigins(redirectUri);
+    return buildAllowedOrigins(redirectUri, appPublicUrl);
   } catch {
-    return CANONICAL_ORIGINS;
+    return new Set([new URL(appPublicUrl).origin]);
   }
 }
 
@@ -288,7 +285,7 @@ async function authenticate(req: Request, config: SupabaseRuntimeConfig) {
 }
 
 async function rpcOrThrow(
-  client: ReturnType<typeof createClient>,
+  client: SupabaseClient,
   name: string,
   args: JsonRecord,
   publicMessage: string,
@@ -511,7 +508,8 @@ async function loadManagedPages(
 async function handleStart(
   body: JsonRecord,
   config: RuntimeConfig,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
+  admin: SupabaseClient,
 ): Promise<JsonRecord> {
   const clientId = requiredUuid(
     alias(body, "client_id", "clientId"),
@@ -520,6 +518,12 @@ async function handleStart(
   const projectId = requiredUuid(
     alias(body, "project_id", "projectId"),
     "Projeto inválido.",
+  );
+  await rpcOrThrow(
+    admin,
+    "social_meta_oauth_register_redirect_uri",
+    { _redirect_uri: config.metaRedirectUri },
+    "A configuração de callback da Meta não pôde ser validada.",
   );
   const data = await rpcOrThrow(
     caller,
@@ -557,8 +561,8 @@ async function handleStart(
 async function handleComplete(
   body: JsonRecord,
   config: RuntimeConfig,
-  caller: ReturnType<typeof createClient>,
-  admin: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
+  admin: SupabaseClient,
   userId: string,
 ): Promise<JsonRecord> {
   const code = requiredText(
@@ -662,7 +666,7 @@ async function handleComplete(
 
 async function handleConnect(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const oauthSessionId = requiredUuid(
     alias(body, "oauth_session_id", "oauthSessionId"),
@@ -702,7 +706,7 @@ async function handleConnect(
 
 async function handleFinish(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const oauthSessionId = requiredUuid(
     alias(body, "oauth_session_id", "oauthSessionId"),
@@ -731,7 +735,7 @@ async function handleFinish(
 
 async function handleDisconnect(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const externalAccountId = requiredText(
     alias(body, "external_account_id", "externalAccountId") ??
@@ -784,7 +788,7 @@ Deno.serve(async (req) => {
     let result: JsonRecord;
     if (action === "start") {
       const config = loadMetaConfig(supabaseConfig);
-      result = await handleStart(body, config, caller);
+      result = await handleStart(body, config, caller, admin);
     } else if (action === "complete") {
       const config = loadMetaConfig(supabaseConfig);
       result = await handleComplete(

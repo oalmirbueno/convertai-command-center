@@ -8,7 +8,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, Send, CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
-const BACKFILL_URL = "https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/backfill-to-ops";
+const PORTAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+if (!PORTAL_SUPABASE_URL) {
+  throw new Error("VITE_SUPABASE_URL is required for Ops backfill");
+}
+const BACKFILL_URL = `${PORTAL_SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/backfill-to-ops`;
 
 interface BackfillResult {
   total?: number;

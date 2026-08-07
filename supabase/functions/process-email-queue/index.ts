@@ -1,56 +1,5 @@
 import { createClient } from 'npm:@supabase/supabase-js@2'
-
-// Resend connector gateway — sending transport.
-const RESEND_GATEWAY_URL = 'https://connector-gateway.lovable.dev/resend'
-
-// Error carrying an HTTP status so the existing rate-limit (429) / forbidden (403)
-// detection helpers keep working unchanged.
-class EmailSendError extends Error {
-  status: number
-  retryAfterSeconds: number | null
-  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
-    super(message)
-    this.name = 'EmailSendError'
-    this.status = status
-    this.retryAfterSeconds = retryAfterSeconds
-  }
-}
-
-// Send a single email through the Resend connector gateway. Throws EmailSendError
-// on failure so the dispatcher's retry / DLQ / rate-limit logic applies as before.
-async function sendViaResend(payload: Record<string, any>): Promise<void> {
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY')
-  const resendApiKey = Deno.env.get('RESEND_API_KEY')
-  if (!lovableApiKey) throw new EmailSendError('LOVABLE_API_KEY is not configured', 500)
-  if (!resendApiKey) throw new EmailSendError('RESEND_API_KEY is not configured', 500)
-
-  const res = await fetch(`${RESEND_GATEWAY_URL}/emails`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${lovableApiKey}`,
-      'X-Connection-Api-Key': resendApiKey,
-    },
-    body: JSON.stringify({
-      from: payload.from,
-      to: [payload.to],
-      subject: payload.subject,
-      html: payload.html,
-      text: payload.text,
-    }),
-  })
-
-  if (!res.ok) {
-    const bodyText = await res.text().catch(() => '')
-    const retryAfterHeader = res.headers.get('retry-after')
-    const retryAfterSeconds = retryAfterHeader ? parseInt(retryAfterHeader, 10) : null
-    throw new EmailSendError(
-      `Resend send failed [${res.status}]: ${bodyText}`,
-      res.status,
-      Number.isFinite(retryAfterSeconds as number) ? retryAfterSeconds : null,
-    )
-  }
-}
+import { sendResendEmail } from '../_shared/resend.ts'
 
 const MAX_RETRIES = 5
 const DEFAULT_BATCH_SIZE = 10
@@ -130,11 +79,11 @@ async function moveToDlq(
 }
 
 Deno.serve(async (req) => {
-  const apiKey = Deno.env.get('LOVABLE_API_KEY')
+  const resendApiKey = Deno.env.get('RESEND_API_KEY')
   const supabaseUrl = Deno.env.get('SUPABASE_URL')
   const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')
 
-  if (!apiKey || !supabaseUrl || !supabaseServiceKey) {
+  if (!resendApiKey || !supabaseUrl || !supabaseServiceKey) {
     console.error('Missing required environment variables')
     return new Response(
       JSON.stringify({ error: 'Server configuration error' }),
@@ -300,7 +249,21 @@ Deno.serve(async (req) => {
       }
 
       try {
-        await sendViaResend(payload)
+        const providerIdempotencyKey =
+          typeof payload.message_id === 'string'
+          && /^[A-Za-z0-9._:-]{1,128}$/.test(payload.message_id.trim())
+            ? payload.message_id.trim()
+            : `email-queue:${queue}:${msg.msg_id}`
+        await sendResendEmail(
+          {
+            from: payload.from,
+            to: [payload.to],
+            subject: payload.subject,
+            html: payload.html,
+            text: payload.text,
+          },
+          { idempotencyKey: providerIdempotencyKey },
+        )
 
 
         // Log success

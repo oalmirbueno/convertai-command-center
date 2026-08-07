@@ -19,7 +19,7 @@ describe("legacy MCP editorial contract", () => {
     expect(tools).toContain("'editorial:write'");
     expect(tools).toContain("version: '1.8.1'");
     expect(metadata).toContain("const MCP_VERSION = '1.8.1'");
-    expect(server).toContain("listChanged: true");
+    expect(server).toContain("listChanged: false");
   });
 
   it("publishes current ChatGPT OAuth discovery and reauthorization metadata", () => {
@@ -81,7 +81,7 @@ describe("legacy MCP editorial contract", () => {
   it("uses public initialize for the optional live plugin validation", () => {
     expect(validator).toContain('method: "POST"');
     expect(validator).toContain('method: "initialize"');
-    expect(validator).toContain('listChanged === true');
+    expect(validator).toContain('listChanged === false');
     expect(validator).not.toContain('fetch(url, { headers:');
   });
 

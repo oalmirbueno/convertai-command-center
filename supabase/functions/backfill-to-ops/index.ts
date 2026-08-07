@@ -1,12 +1,13 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.4";
+import { resolveOpsReceiveLeadUrl } from "../_shared/ops-config.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
 
-const OPS_URL = "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-lead";
+const OPS_URL = resolveOpsReceiveLeadUrl();
 const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
 
 serve(async (req) => {

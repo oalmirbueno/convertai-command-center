@@ -7,7 +7,7 @@ import { ptBR } from "date-fns/locale";
 import { motion } from "framer-motion";
 import {
   Eye, CheckCircle2, Copy, Loader2, Search, Filter,
-  Mail, Phone, Building2, Sparkles, ArrowDownToLine, Link2, Hash,
+  Mail, Phone, Building2, Sparkles, ArrowDownToLine, Hash,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -22,12 +22,14 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
+import { APP_PUBLIC_URL } from "@/lib/publicUrl";
+
+const APP_PUBLIC_HOST = new URL(APP_PUBLIC_URL).hostname;
 
 // ----------------- Types & helpers -----------------
 
 type Submission = {
   id: string;
-  token: string;
   status: string | null;
   lead_name: string | null;
   lead_email: string | null;
@@ -50,6 +52,14 @@ type Submission = {
   created_at: string | null;
   updated_at: string | null;
 };
+
+const QUIZ_SUBMISSION_FIELDS = [
+  "id", "status", "lead_name", "lead_email", "lead_whatsapp", "lead_company",
+  "positioning", "differential", "icp", "main_pains", "goals_12m",
+  "success_metric", "revenue_range", "team_size", "maturity_digital",
+  "ai_readiness", "recommended_plan", "icp_fit_score", "origin",
+  "submitted_at", "created_at", "updated_at",
+].join(",");
 
 const PLAN_LABELS: Record<string, string> = {
   starter: "Fundação",
@@ -99,13 +109,13 @@ export default function AdminQuizSubmissions() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("quiz_submissions")
-        .select("*")
+        .select(QUIZ_SUBMISSION_FIELDS)
         .in("status", ["draft", "submitted", "processed"])
         .order("submitted_at", { ascending: false, nullsFirst: false })
         .order("updated_at", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []) as Submission[];
+      return (data ?? []) as unknown as Submission[];
     },
     refetchInterval: 60_000,
   });
@@ -134,7 +144,7 @@ export default function AdminQuizSubmissions() {
 
       if (search.trim()) {
         const q = search.trim().toLowerCase();
-        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp, s.token]
+        const hay = [s.lead_name, s.lead_email, s.lead_company, s.lead_whatsapp]
           .filter(Boolean).join(" ").toLowerCase();
         if (!hay.includes(q)) return false;
       }
@@ -173,7 +183,7 @@ export default function AdminQuizSubmissions() {
 
   const copyOpsPayload = async (s: Submission) => {
     const payload = {
-      source: "aceleriq.online",
+      source: APP_PUBLIC_HOST,
       submission_id: s.id,
       submitted_at: s.submitted_at,
       icp_fit_score: s.icp_fit_score,
@@ -205,18 +215,6 @@ export default function AdminQuizSubmissions() {
     }
   };
 
-  const copyQuizLink = async (s: Submission) => {
-    const url = `https://aceleriq.online/quiz/${s.token}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.success("Link do quiz copiado.", {
-        description: s.lead_name ? `Lead: ${s.lead_name}` : undefined,
-      });
-    } catch {
-      toast.error("Falha ao copiar o link.");
-    }
-  };
-
   // ----------------- Render -----------------
 
   // Guard: only admin
@@ -239,7 +237,7 @@ export default function AdminQuizSubmissions() {
           </span>
           <h1 className="text-3xl md:text-4xl font-semibold tracking-tight">Diagnósticos recebidos</h1>
           <p className="text-muted-foreground mt-1">
-            Leads que completaram o quiz público em <span className="text-foreground">aceleriq.online/quiz</span>.
+            Leads que completaram o quiz público em <span className="text-foreground">{APP_PUBLIC_HOST}/quiz</span>.
           </p>
         </div>
       </header>
@@ -372,7 +370,7 @@ export default function AdminQuizSubmissions() {
                           )}
                           {!s.lead_name && !s.lead_email && (
                             <span className="inline-flex items-center gap-1 font-mono">
-                              <Hash className="h-3 w-3" /> {s.token.slice(0, 8)}…
+                              <Hash className="h-3 w-3" /> {s.id.slice(0, 8)}…
                             </span>
                           )}
                         </div>
@@ -423,14 +421,6 @@ export default function AdminQuizSubmissions() {
                             onClick={() => setOpenSubmission(s)}
                           >
                             <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            size="sm" variant="ghost"
-                            className="h-8 w-8 p-0"
-                            title="Copiar link do quiz"
-                            onClick={() => copyQuizLink(s)}
-                          >
-                            <Link2 className="h-4 w-4" />
                           </Button>
                           <Button
                             size="sm" variant="ghost"

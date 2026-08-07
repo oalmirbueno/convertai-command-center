@@ -3,6 +3,7 @@
 // inclusive eventos de deleção (profile_deleted, project_deleted,
 // milestone_deleted, task_deleted).
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { resolveOpsReceivePortalSyncUrl } from "../_shared/ops-config.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
@@ -11,8 +12,7 @@ const cors = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_URL =
-  "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
+const OPS_URL = resolveOpsReceivePortalSyncUrl();
 const OPS_SECRET = Deno.env.get("OPS_WEBHOOK_SECRET") ?? "";
 if (!OPS_SECRET) {
   console.error("notify-ops: OPS_WEBHOOK_SECRET not configured");

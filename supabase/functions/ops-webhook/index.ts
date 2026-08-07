@@ -60,8 +60,7 @@ Deno.serve(async (req) => {
     const body = (await req.json()) as OpsEvent;
     const { event, data } = body || ({} as OpsEvent);
 
-    console.log("[ops-webhook] received event:", event);
-    console.log("[ops-webhook] received data:", JSON.stringify(data));
+    console.log("[ops-webhook] received event", { event });
 
     if (!event || !data || typeof data !== "object") {
       return new Response(

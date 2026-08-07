@@ -1,7 +1,7 @@
 # Catálogo de Tools
 
-Fonte de verdade: `tools/list` no endpoint
-`https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/mcp-server`.
+Fonte de verdade: `tools/list` no endpoint configurado em
+`ACELERIQ_MCP_URL`.
 Com Bearer, o servidor devolve somente as tools permitidas para a credencial.
 Este catálogo é um snapshot legível da superfície administrativa.
 

@@ -45,6 +45,8 @@
   "security": {
     "tokens": "environment-only",
     "storage": "none",
-    "network": ["https://gicbrgagstyvbaaumprj.supabase.co"]
+    "network": [
+      "https://api.aceleriq.online"
+    ]
   }
 }

@@ -5,8 +5,8 @@ security definer
 set search_path = public
 as $$
 declare
-  v_url text := 'https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync';
-  v_secret text := 'aceleriq-ops-portal-bridge-2025-x7k9m2n4p8q';
+  v_url text;
+  v_secret text;
   v_event text;
   v_data jsonb;
   v_old jsonb;
@@ -43,6 +43,26 @@ begin
     exception when others then
       v_ctx := '{}'::jsonb;
     end;
+  end if;
+
+  -- Legacy bridge configuration is deployment-specific and must never be
+  -- embedded in a migration. A fresh environment keeps this retired bridge
+  -- disabled until both Vault entries are explicitly provisioned.
+  begin
+    select decrypted_secret into v_url
+      from vault.decrypted_secrets
+     where name = 'ops_receive_portal_sync_url'
+     limit 1;
+    select decrypted_secret into v_secret
+      from vault.decrypted_secrets
+     where name = 'ops_webhook_secret'
+     limit 1;
+  exception when others then
+    return coalesce(NEW, OLD);
+  end;
+
+  if v_url is null or v_secret is null then
+    return coalesce(NEW, OLD);
   end if;
 
   perform net.http_post(

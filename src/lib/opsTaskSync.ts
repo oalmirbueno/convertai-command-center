@@ -14,7 +14,11 @@
  */
 import { supabase } from "@/integrations/supabase/client";
 
-const URL = "https://gicbrgagstyvbaaumprj.supabase.co/functions/v1/portal-to-ops";
+const PORTAL_SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+if (!PORTAL_SUPABASE_URL) {
+  throw new Error("VITE_SUPABASE_URL is required for Ops task sync");
+}
+const URL = `${PORTAL_SUPABASE_URL.replace(/\/+$/, "")}/functions/v1/portal-to-ops`;
 const ANON = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY ?? "";
 
 async function enrich(task_id: string) {

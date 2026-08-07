@@ -1,4 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { resolveOpsReceivePortalSyncUrl } from "../_shared/ops-config.ts";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -6,9 +7,7 @@ const corsHeaders = {
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
 
-const OPS_RECEIVE_URL =
-  Deno.env.get("OPS_RECEIVE_URL") ??
-  "https://grxljyocuadywcksfyvu.supabase.co/functions/v1/receive-portal-sync";
+const OPS_RECEIVE_PORTAL_SYNC_URL = resolveOpsReceivePortalSyncUrl();
 
 const OPS_WEBHOOK_SECRET =
   Deno.env.get("OPS_WEBHOOK_SECRET") ??
@@ -143,7 +142,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    const res = await fetch(OPS_RECEIVE_URL, {
+    const res = await fetch(OPS_RECEIVE_PORTAL_SYNC_URL, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

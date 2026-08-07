@@ -6,6 +6,7 @@ import {
   dataScopeAllowsClient,
   oauthScopesForStaff,
   OAUTH_STAFF_SCOPES,
+  OAUTH_OIDC_BASELINE_SCOPES,
   persistedAuditKeyId,
   sanitizeAuditError,
   sanitizeAuditInput,
@@ -42,10 +43,10 @@ describe('legacy MCP security helpers', () => {
     expect(validateOAuthJwtClaims({ ...valid, nbf: now + 90 }, issuer, 'authenticated', now)).toBe(false);
   });
 
-  it('denies OAuth capabilities to non-staff and preserves current staff scopes', () => {
+  it('denies non-staff and keeps plain OIDC consent read-minimal', () => {
     expect(oauthScopesForStaff(false)).toBeNull();
-    expect(oauthScopesForStaff(true)).toEqual([...OAUTH_STAFF_SCOPES]);
-    expect(oauthScopesForStaff(true)).toContain('aceleriq:write');
+    expect(oauthScopesForStaff(true)).toEqual([...OAUTH_OIDC_BASELINE_SCOPES]);
+    expect(oauthScopesForStaff(true)).not.toContain('aceleriq:write');
   });
 
   it('intersects explicit OAuth claims and keeps legacy fallback only when absent', () => {
@@ -54,7 +55,9 @@ describe('legacy MCP security helpers', () => {
       'aceleriq:read',
       'editorial:write',
     ]);
-    expect(oauthScopesForStaff(true, 'openid email profile')).toEqual([...OAUTH_STAFF_SCOPES]);
+    expect(oauthScopesForStaff(true, 'openid email profile')).toEqual([
+      ...OAUTH_OIDC_BASELINE_SCOPES,
+    ]);
     expect(oauthScopesForStaff(true, 'openid tasks:read')).toEqual(['tasks:read']);
     expect(oauthScopesForStaff(true, 'openid admin')).toEqual([]);
     expect(oauthScopesForStaff(true, 'openid admin', true)).toEqual(['admin']);

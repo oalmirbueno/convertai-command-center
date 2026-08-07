@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Loader2, ArrowRight, Eye, EyeOff, Check, BarChart3, Zap, Target } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { safeInternalPath } from "@/lib/internalNavigation";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import consultantHero from "@/assets/consultant-hero-flipped.jpg";
@@ -67,7 +68,7 @@ export default function Login() {
   const avaliacao = useCountUp(49, 1000, 1000); // 4.9 → animate as 49, display /10
 
   const next = new URLSearchParams(window.location.search).get("next");
-  const safeNext = next && next.startsWith("/") && !next.startsWith("//") ? next : "/dashboard";
+  const safeNext = safeInternalPath(next) ?? "/dashboard";
 
   useEffect(() => {
     if (!loading && user && profile) {

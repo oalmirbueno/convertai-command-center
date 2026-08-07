@@ -1,9 +1,15 @@
-import { createClient } from "npm:@supabase/supabase-js@2.49.4";
+import { createClient } from "npm:@supabase/supabase-js@2.97.0";
+import {
+  requestAiChatCompletion,
+  resolveAiProviderChain,
+} from "../_shared/ai-provider.ts";
+import { fetchPublicText } from "../_shared/public-http.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
+const MAX_REQUEST_BYTES = 64 * 1024;
 
 function json(o: unknown, status = 200) {
   return new Response(JSON.stringify(o), { status, headers: { ...cors, "Content-Type": "application/json" } });
@@ -21,7 +27,15 @@ Deno.serve(async (req) => {
     const user = userRes?.user;
     if (!user) return json({ error: "Usuário inválido" }, 401);
 
-    const { url, clear, client_id, folder_path, persona_id, delete_id } = await req.json() as {
+    const declaredLength = Number(req.headers.get("content-length") || "0");
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_REQUEST_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
+    }
+    const rawBody = await req.text();
+    if (new TextEncoder().encode(rawBody).byteLength > MAX_REQUEST_BYTES) {
+      return json({ error: "Payload muito grande" }, 413);
+    }
+    const { url, clear, client_id, folder_path, persona_id, delete_id } = JSON.parse(rawBody) as {
       url?: string; clear?: boolean; client_id?: string | null; folder_path?: string | null;
       persona_id?: string | null; delete_id?: string | null;
     };
@@ -44,23 +58,36 @@ Deno.serve(async (req) => {
       return json({ ok: true, cleared: true });
     }
 
-    if (!url || !/^https?:\/\//i.test(url)) return json({ error: "URL inválida" }, 400);
+    if (!url) return json({ error: "URL inválida" }, 400);
+
+    const { data: quota } = await sb.rpc("claim_ai_usage", {
+      _workload: "workspace-agent-import",
+    });
+    if (quota !== true) return json({ error: "Limite de uso atingido" }, 429);
 
     // Fetch da página pública do GPT
     let html = "";
+    let fetchedUrl = url;
     try {
-      const r = await fetch(url, {
+      const r = await fetchPublicText(url, {
+        allowedHostnames: ["chatgpt.com", "www.chatgpt.com", "chat.openai.com"],
         headers: {
           "User-Agent": "Mozilla/5.0 (compatible; AceleriqBot/1.0)",
           "Accept": "text/html,application/xhtml+xml",
           "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.8",
         },
-        redirect: "follow",
+        timeoutMs: 8_000,
+        maxBytes: 1024 * 1024,
       });
       if (!r.ok) return json({ error: `Falha ao acessar link (${r.status}). O GPT precisa estar público.` }, 400);
-      html = await r.text();
+      const contentType = r.headers.get("content-type") || "";
+      if (!/text|html|xhtml/i.test(contentType)) {
+        return json({ error: "O link precisa apontar para uma página pública de texto." }, 400);
+      }
+      html = r.text;
+      fetchedUrl = r.url;
     } catch (e) {
-      return json({ error: `Erro de rede: ${e instanceof Error ? e.message : "unknown"}` }, 400);
+      return json({ error: `URL pública HTTPS inválida ou inacessível: ${e instanceof Error ? e.message : "unknown"}` }, 400);
     }
 
     // Extrai metadados básicos
@@ -91,22 +118,20 @@ Deno.serve(async (req) => {
       return json({ error: "Não foi possível ler o conteúdo desse link. Verifique se o GPT está público." }, 400);
     }
 
-    // Sintetiza persona via Lovable AI (opcional — se falhar, usamos os metadados brutos)
-    const apiKey = Deno.env.get("LOVABLE_API_KEY");
+    // Sintetiza a persona quando houver um provider de IA. Se falhar, usa os metadados brutos.
+    const providers = resolveAiProviderChain({
+      primaryModels: ["gpt-4o-mini"],
+      lovableModels: ["google/gemini-2.5-flash"],
+    });
     let persona = `Você É o "${title}".\n\n${description}${starters.length ? `\n\nExemplos de perguntas que você domina:\n${starters.map(s => `- ${s}`).join("\n")}` : ""}`;
 
-    if (apiKey) {
+    if (providers.length) {
       try {
-        const r = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-          method: "POST",
-          headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-          body: JSON.stringify({
-            model: "google/gemini-2.5-flash",
-            messages: [
-              { role: "system", content: "Você escreve system prompts para agentes de IA em português do Brasil. Seja direto, técnico, sem clichê." },
-              { role: "user", content: `A partir das informações públicas abaixo sobre um GPT customizado, escreva um SYSTEM PROMPT completo para reproduzir a mesma persona, tom, especialidade, método de trabalho e formato de saída. Não diga que é cópia. Não use emoji decorativo. Escreva em 2ª pessoa ("Você é..."). Inclua: identidade, especialidade, método/passos, regras de operação, formato de saída. Máximo 500 palavras.\n\nTÍTULO: ${title}\nDESCRIÇÃO: ${description}\nSTARTERS: ${starters.join(" | ") || "(nenhum)"}\nURL: ${url}` },
-            ],
-          }),
+        const { response: r } = await requestAiChatCompletion(providers, {
+          messages: [
+            { role: "system", content: "Você escreve system prompts para agentes de IA em português do Brasil. Seja direto, técnico, sem clichê." },
+            { role: "user", content: `A partir das informações públicas abaixo sobre um GPT customizado, escreva um SYSTEM PROMPT completo para reproduzir a mesma persona, tom, especialidade, método de trabalho e formato de saída. Não diga que é cópia. Não use emoji decorativo. Escreva em 2ª pessoa ("Você é..."). Inclua: identidade, especialidade, método/passos, regras de operação, formato de saída. Máximo 500 palavras.\n\nTÍTULO: ${title}\nDESCRIÇÃO: ${description}\nSTARTERS: ${starters.join(" | ") || "(nenhum)"}\nURL: ${fetchedUrl}` },
+          ],
         });
         if (r.ok) {
           const j = await r.json();
@@ -121,7 +146,7 @@ Deno.serve(async (req) => {
       user_id: user.id,
       client_id: cid,
       folder_path: fpath,
-      gpt_url: url,
+      gpt_url: fetchedUrl,
       gpt_name: title || null,
       gpt_description: description || null,
       persona_prompt: persona,
