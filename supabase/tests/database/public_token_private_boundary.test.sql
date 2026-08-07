@@ -147,7 +147,8 @@ VALUES
   ('e0000000-0000-4000-8000-000000000001', 'admin'),
   ('e0000000-0000-4000-8000-000000000002', 'manager'),
   ('e0000000-0000-4000-8000-000000000004', 'design')
-ON CONFLICT (user_id, role) DO NOTHING;
+ON CONFLICT (user_id) DO UPDATE
+SET role = EXCLUDED.role;
 
 -- A non-admin profile owner cannot smuggle a known bearer through the legacy
 -- public profile column during the rollout window.
