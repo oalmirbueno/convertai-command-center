@@ -1,6 +1,6 @@
 // Public, token-scoped inbox for Workspace folders. The database serializes
 // reservations per token generation before bytes reach Storage.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
+import { createClient, type SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.0";
 import {
   canonicalInboxMime,
   createCountingInboxStream,
@@ -220,7 +220,7 @@ Deno.serve(async (req) => {
   return json({ ok: true, node_id: nodeId, usage: reservation.usage });
 });
 
-type AdminClient = ReturnType<typeof createClient>;
+type AdminClient = SupabaseClient;
 
 async function storageObjectSize(admin: AdminClient, key: string): Promise<number | null> {
   const separator = key.lastIndexOf("/");

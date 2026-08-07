@@ -1,4 +1,4 @@
-import { createClient } from "npm:@supabase/supabase-js@2.97.0";
+import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2.97.0";
 import {
   buildAllowedOrigins,
   buildFacebookLoginUrl,
@@ -285,7 +285,7 @@ async function authenticate(req: Request, config: SupabaseRuntimeConfig) {
 }
 
 async function rpcOrThrow(
-  client: ReturnType<typeof createClient>,
+  client: SupabaseClient,
   name: string,
   args: JsonRecord,
   publicMessage: string,
@@ -508,8 +508,8 @@ async function loadManagedPages(
 async function handleStart(
   body: JsonRecord,
   config: RuntimeConfig,
-  caller: ReturnType<typeof createClient>,
-  admin: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
+  admin: SupabaseClient,
 ): Promise<JsonRecord> {
   const clientId = requiredUuid(
     alias(body, "client_id", "clientId"),
@@ -561,8 +561,8 @@ async function handleStart(
 async function handleComplete(
   body: JsonRecord,
   config: RuntimeConfig,
-  caller: ReturnType<typeof createClient>,
-  admin: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
+  admin: SupabaseClient,
   userId: string,
 ): Promise<JsonRecord> {
   const code = requiredText(
@@ -666,7 +666,7 @@ async function handleComplete(
 
 async function handleConnect(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const oauthSessionId = requiredUuid(
     alias(body, "oauth_session_id", "oauthSessionId"),
@@ -706,7 +706,7 @@ async function handleConnect(
 
 async function handleFinish(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const oauthSessionId = requiredUuid(
     alias(body, "oauth_session_id", "oauthSessionId"),
@@ -735,7 +735,7 @@ async function handleFinish(
 
 async function handleDisconnect(
   body: JsonRecord,
-  caller: ReturnType<typeof createClient>,
+  caller: SupabaseClient,
 ): Promise<JsonRecord> {
   const externalAccountId = requiredText(
     alias(body, "external_account_id", "externalAccountId") ??

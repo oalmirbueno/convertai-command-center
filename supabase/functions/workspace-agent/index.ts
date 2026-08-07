@@ -712,7 +712,7 @@ Regras:
               try {
                 if (full.length > 400) {
                   await _sbPropose({
-                    title: `Studio · ${(context.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
+                    title: `Studio · ${(context?.client_name || "cliente").slice(0,60)} · ${new Date().toISOString().slice(0,10)}`,
                     summary: userMessageToStore.slice(0, 400),
                     origin: "aceleriq-studio",
                     correlation_id: thread_id,
