@@ -136,7 +136,7 @@ function extFromName(n: string): string {
   return i >= 0 ? n.slice(i + 1).toLowerCase() : '';
 }
 
-async function sha256Hex(bytes: Uint8Array): Promise<string> {
+async function sha256Hex(bytes: Uint8Array<ArrayBuffer>): Promise<string> {
   const buf = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 }

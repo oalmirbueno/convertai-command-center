@@ -26,9 +26,7 @@ const UUID = z.string().uuid();
 const IDEMPOTENCY_KEY = z.string().min(8).max(128).regex(/^[A-Za-z0-9._:\-]+$/);
 
 const CONTRACT_SELECT =
-  'id, client_id, project_id, title, description, original_file_url, original_file_name, ' +
-  'status, admin_signature_name, admin_signed_at, admin_signature_ip, client_signature_name, ' +
-  'client_signed_at, client_signature_ip, sign_token, sent_at, file_id, created_by, created_at, updated_at';
+  'id, client_id, project_id, title, description, original_file_url, original_file_name, status, admin_signature_name, admin_signed_at, admin_signature_ip, client_signature_name, client_signed_at, client_signature_ip, sign_token, sent_at, file_id, created_by, created_at, updated_at' as const;
 
 const SIGNED_STATUSES = new Set(['signed', 'completed']);
 

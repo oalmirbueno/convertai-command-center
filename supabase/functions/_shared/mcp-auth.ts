@@ -89,7 +89,14 @@ async function classifyMissing(hash: string): Promise<AuthError> {
 // `MCP_AUTH_ISSUER` can pin the canonical OAuth issuer when `SUPABASE_URL`
 // points at a proxy/custom domain. Without the override it is derived from the
 // same Supabase base URL used by the function.
-let jwksCache: { url: string; keys: any[]; fetchedAt: number } | null = null;
+export type SupportedSigningJwk = JsonWebKey & {
+  kid: string;
+  alg: 'RS256' | 'ES256';
+  kty: 'RSA' | 'EC';
+  use?: 'sig';
+};
+
+let jwksCache: { url: string; keys: SupportedSigningJwk[]; fetchedAt: number } | null = null;
 export const MAX_JWKS_BODY_BYTES = 256 * 1024;
 const MAX_JWKS_KEYS = 16;
 const JWKS_TIMEOUT_MS = 5_000;
@@ -98,7 +105,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
-function isSupportedSigningJwk(value: unknown): value is JsonWebKey {
+function isSupportedSigningJwk(value: unknown): value is SupportedSigningJwk {
   if (!isRecord(value)) return false;
   if (typeof value.kid !== 'string' || value.kid.trim().length === 0) return false;
   if (value.use !== undefined && value.use !== 'sig') return false;
@@ -106,7 +113,7 @@ function isSupportedSigningJwk(value: unknown): value is JsonWebKey {
     || (value.kty === 'EC' && value.alg === 'ES256' && value.crv === 'P-256');
 }
 
-export function validateJwksDocument(value: unknown): JsonWebKey[] {
+export function validateJwksDocument(value: unknown): SupportedSigningJwk[] {
   if (!isRecord(value) || !Array.isArray(value.keys)) {
     throw new Error('jwks response must contain a keys array');
   }
@@ -169,7 +176,7 @@ async function readBoundedJsonResponse(
 export async function fetchJwksDocument(
   jwksUrl: string,
   fetchImpl: typeof fetch = fetch,
-): Promise<JsonWebKey[]> {
+): Promise<SupportedSigningJwk[]> {
   const response = await fetchImpl(jwksUrl, {
     headers: { Accept: 'application/json' },
     redirect: 'error',
@@ -180,7 +187,7 @@ export async function fetchJwksDocument(
   return validateJwksDocument(body);
 }
 
-async function getJwks(jwksUrl: string): Promise<any[]> {
+async function getJwks(jwksUrl: string): Promise<SupportedSigningJwk[]> {
   const now = Date.now();
   if (jwksCache?.url === jwksUrl && now - jwksCache.fetchedAt < 10 * 60_000) {
     return jwksCache.keys;
