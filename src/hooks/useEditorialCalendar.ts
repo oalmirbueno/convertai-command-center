@@ -1040,18 +1040,16 @@ export function useEditorialEditorOptions(
             .order("external_account_id", { ascending: true })
             .range(from, to),
         ),
-        mode === "full"
-          ? (async () => {
-              const { data, error } = await editorialDb.rpc(
-                "can_manage_client",
-                { _client_id: clientId },
-              );
-              return {
-                canManage: !error && data === true,
-                unavailable: Boolean(error),
-              };
-            })()
-          : Promise.resolve({ canManage: false, unavailable: false }),
+        (async () => {
+          const { data, error } = await editorialDb.rpc(
+            "can_manage_client",
+            { _client_id: clientId },
+          );
+          return {
+            canManage: !error && data === true,
+            unavailable: Boolean(error),
+          };
+        })(),
         readAllPages<EditorialFileRow>((from, to) =>
           editorialDb
             .from("staff_files_secure")

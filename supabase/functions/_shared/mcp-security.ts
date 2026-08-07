@@ -10,6 +10,45 @@ const BEARER_VALUE_RE = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi;
 const QUERY_SECRET_RE = /([?&](?:access[_-]?)?(?:token|secret|password|api[_-]?key|authorization|signature|credential)=)[^&#\s]+/gi;
 const ASSIGNED_SECRET_RE = /(\b(?:access[_-]?)?(?:token|secret|password|api[_-]?key|authorization)\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;]+)/gi;
 
+export type OAuthAuthErrorKind = 'missing' | 'invalid' | 'expired_or_revoked';
+
+export function shouldUseOAuthToolChallenge(
+  errorKind: OAuthAuthErrorKind,
+  methods: readonly string[],
+): boolean {
+  return errorKind === 'missing'
+    && methods.length > 0
+    && methods.every(method => method === 'tools/call');
+}
+
+export function validateOAuthJwtClaims(
+  claims: Record<string, unknown> | null | undefined,
+  issuer: string,
+  acceptedAudience = 'authenticated',
+  nowSeconds = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!claims || claims.iss !== issuer) return false;
+
+  const clientId = typeof claims.client_id === 'string' ? claims.client_id : '';
+  if (!UUID_RE.test(clientId)) return false;
+
+  const expiresAt = typeof claims.exp === 'number' ? claims.exp : Number.NaN;
+  if (!Number.isFinite(expiresAt) || expiresAt <= nowSeconds) return false;
+
+  const notBefore = typeof claims.nbf === 'number' ? claims.nbf : null;
+  if (notBefore !== null && notBefore > nowSeconds + 30) return false;
+
+  const issuedAt = typeof claims.iat === 'number' ? claims.iat : null;
+  if (issuedAt !== null && issuedAt > nowSeconds + 60) return false;
+
+  const audiences = Array.isArray(claims.aud)
+    ? claims.aud.filter((value): value is string => typeof value === 'string')
+    : typeof claims.aud === 'string'
+      ? [claims.aud]
+      : [];
+  return audiences.includes(acceptedAudience);
+}
+
 export const OAUTH_STAFF_SCOPES = [
   'aceleriq:read',
   'aceleriq:write',

@@ -11,6 +11,7 @@ import {
   type AuthResult,
 } from '../_shared/mcp-auth.ts';
 import { auditLog } from '../_shared/mcp-audit.ts';
+import { shouldUseOAuthToolChallenge } from '../_shared/mcp-security.ts';
 import {
   canInvoke,
   canUseToolWithDataScope,
@@ -42,9 +43,13 @@ const PRM_URL = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-oauth-metad
 const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const AUTHORIZATION_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
 const WWW_AUTH_HEADER = `Bearer resource_metadata="${PRM_URL}"`;
+const WWW_AUTH_TOOL_HEADER = `${WWW_AUTH_HEADER}, error="invalid_token", error_description="OAuth authorization required"`;
 
-const ALL_SUPPORTED_SCOPES = [
-  'openid','email','profile',
+// Supabase OAuth currently issues only standard OIDC scopes. Application
+// permissions are derived server-side after the user and tenant scope are
+// verified, so they must not be advertised as OAuth scopes to ChatGPT.
+const OAUTH_SCOPES = ['openid', 'email', 'profile'];
+const INTERNAL_MCP_SCOPES = [
   'aceleriq:read','aceleriq:write','aceleriq:finance',
   'clients:read','projects:read','projects:write','tasks:read','tasks:write',
   'editorial:read','editorial:write',
@@ -59,7 +64,8 @@ function protectedResourceMetadata() {
     resource: RESOURCE_URL,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ALL_SUPPORTED_SCOPES,
+    scopes_supported: OAUTH_SCOPES,
+    mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES,
     resource_name: 'Aceleriq OS MCP',
     resource_documentation: 'https://aceleriq.online/conectar-mcp',
     mcp: {
@@ -91,6 +97,19 @@ function oauthChallengeResponse(body: unknown, status = 401) {
       'Link': `<${PRM_URL}>; rel="oauth-protected-resource", <${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
       'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
     },
+  });
+}
+
+function oauthToolChallenge(id: JsonRpcId): JsonRpcResponse {
+  return rpcResult(id, {
+    content: [{
+      type: 'text',
+      text: 'Authentication required: connect the Aceleriq OS account to continue.',
+    }],
+    _meta: {
+      'mcp/www_authenticate': [WWW_AUTH_TOOL_HEADER],
+    },
+    isError: true,
   });
 }
 
@@ -338,15 +357,36 @@ Deno.serve(async (req) => {
   const messages: JsonRpcRequest[] = (isBatch ? body : [body]) as JsonRpcRequest[];
   const auth = await authenticate(req);
 
-  // Discovery methods are public. Protected tool calls still produce a real
-  // HTTP 401 + WWW-Authenticate so OAuth clients can start/repair consent.
+  // Discovery methods are public. A missing bearer on tools/call returns the
+  // MCP result-level challenge ChatGPT needs to open OAuth. Invalid, expired
+  // or revoked credentials remain real HTTP 401 responses.
   if (!auth.ok) {
     const allPublic = messages.every(isPublicRpc);
     if (!allPublic) {
+      const toolChallengeOnly = shouldUseOAuthToolChallenge(
+        auth.error.kind,
+        messages.map(m => String(m?.method ?? '')),
+      );
       const payload = isBatch
-        ? messages.map(m => rpcError(m?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required'))
-        : rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required');
-      return oauthChallengeResponse(payload);
+        ? messages.map(m => toolChallengeOnly && m?.method === 'tools/call'
+          ? oauthToolChallenge(m?.id ?? null)
+          : rpcError(m?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required'))
+        : toolChallengeOnly && messages[0]?.method === 'tools/call'
+          ? oauthToolChallenge(messages[0]?.id ?? null)
+          : rpcError(messages[0]?.id ?? null, RpcErrors.unauthorized, 'OAuth authorization required');
+      return new Response(JSON.stringify(payload), {
+        // MCP tool errors are successful JSON-RPC transport responses so the
+        // host reads result._meta and launches OAuth. Non-tool requests retain
+        // the RFC 9728 HTTP challenge status.
+        status: toolChallengeOnly ? 200 : 401,
+        headers: {
+          ...corsHeaders,
+          'Content-Type': 'application/json',
+          'WWW-Authenticate': WWW_AUTH_TOOL_HEADER,
+          'Link': `<${PRM_URL}>; rel="oauth-protected-resource", <${AUTHORIZATION_SERVER_METADATA}>; rel="oauth-authorization-server"`,
+          'Access-Control-Expose-Headers': 'WWW-Authenticate, Mcp-Session-Id, Link',
+        },
+      });
     }
   }
 

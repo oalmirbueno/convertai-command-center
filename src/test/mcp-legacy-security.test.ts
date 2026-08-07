@@ -9,9 +9,39 @@ import {
   persistedAuditKeyId,
   sanitizeAuditError,
   sanitizeAuditInput,
+  shouldUseOAuthToolChallenge,
+  validateOAuthJwtClaims,
 } from '../../supabase/functions/_shared/mcp-security.ts';
 
 describe('legacy MCP security helpers', () => {
+  it('uses the in-tool OAuth challenge only when the bearer is absent', () => {
+    expect(shouldUseOAuthToolChallenge('missing', ['tools/call'])).toBe(true);
+    expect(shouldUseOAuthToolChallenge('missing', ['tools/call', 'tools/call'])).toBe(true);
+    expect(shouldUseOAuthToolChallenge('missing', ['initialize', 'tools/call'])).toBe(false);
+    expect(shouldUseOAuthToolChallenge('invalid', ['tools/call'])).toBe(false);
+    expect(shouldUseOAuthToolChallenge('expired_or_revoked', ['tools/call'])).toBe(false);
+  });
+
+  it('accepts only current Supabase OAuth client tokens for this issuer', () => {
+    const issuer = 'https://project.supabase.co/auth/v1';
+    const now = 1_800_000_000;
+    const valid = {
+      iss: issuer,
+      aud: 'authenticated',
+      client_id: '11111111-2222-3333-4444-555555555555',
+      exp: now + 300,
+      iat: now - 30,
+    };
+
+    expect(validateOAuthJwtClaims(valid, issuer, 'authenticated', now)).toBe(true);
+    expect(validateOAuthJwtClaims({ ...valid, aud: ['other', 'authenticated'] }, issuer, 'authenticated', now)).toBe(true);
+    expect(validateOAuthJwtClaims({ ...valid, iss: 'https://wrong.example/auth/v1' }, issuer, 'authenticated', now)).toBe(false);
+    expect(validateOAuthJwtClaims({ ...valid, aud: 'other' }, issuer, 'authenticated', now)).toBe(false);
+    expect(validateOAuthJwtClaims({ ...valid, client_id: undefined }, issuer, 'authenticated', now)).toBe(false);
+    expect(validateOAuthJwtClaims({ ...valid, exp: now }, issuer, 'authenticated', now)).toBe(false);
+    expect(validateOAuthJwtClaims({ ...valid, nbf: now + 90 }, issuer, 'authenticated', now)).toBe(false);
+  });
+
   it('denies OAuth capabilities to non-staff and preserves current staff scopes', () => {
     expect(oauthScopesForStaff(false)).toBeNull();
     expect(oauthScopesForStaff(true)).toEqual([...OAUTH_STAFF_SCOPES]);

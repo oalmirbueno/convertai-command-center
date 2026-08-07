@@ -15,13 +15,11 @@ const AUTH_ISSUER = `https://${PROJECT_REF}.supabase.co/auth/v1`;
 const RESOURCE = `https://${PROJECT_REF}.supabase.co/functions/v1/mcp-server`;
 const AUTH_SERVER_METADATA = `${AUTH_ISSUER}/.well-known/oauth-authorization-server`;
 
-const MCP_VERSION = '1.8.0';
+const MCP_VERSION = '1.8.1';
 const MCP_PROTOCOL = '2025-06-18';
 
-const ALL_SUPPORTED_SCOPES = [
-  // OIDC identity
-  'openid', 'email', 'profile',
-  // Aceleriq aggregate
+const OAUTH_SCOPES = ['openid', 'email', 'profile'];
+const INTERNAL_MCP_SCOPES = [
   'aceleriq:read', 'aceleriq:write', 'aceleriq:finance',
   // Granular
   'clients:read',
@@ -45,7 +43,7 @@ async function proxyAuthorizationServerMetadata() {
   return {
     ...metadata,
     issuer: AUTH_ISSUER,
-    scopes_supported: ALL_SUPPORTED_SCOPES,
+    scopes_supported: OAUTH_SCOPES,
     code_challenge_methods_supported: metadata.code_challenge_methods_supported ?? ['S256'],
     token_endpoint_auth_methods_supported: metadata.token_endpoint_auth_methods_supported ?? ['none'],
     mcp_resource: RESOURCE,
@@ -57,7 +55,8 @@ function protectedResourceMetadata() {
     resource: RESOURCE,
     authorization_servers: [AUTH_ISSUER],
     bearer_methods_supported: ['header'],
-    scopes_supported: ALL_SUPPORTED_SCOPES,
+    scopes_supported: OAUTH_SCOPES,
+    mcp_internal_scopes_supported: INTERNAL_MCP_SCOPES,
     resource_documentation: 'https://aceleriq.online/conectar-mcp',
     resource_name: 'Aceleriq OS MCP',
     mcp: {

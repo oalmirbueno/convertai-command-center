@@ -17,7 +17,7 @@ Resposta esperada:
   "serverInfo": {
     "name": "aceleriq-mcp",
     "title": "Aceleriq OS MCP",
-    "version": "1.8.0"
+    "version": "1.8.1"
   },
   "capabilities": { "tools": { "listChanged": true } }
 }

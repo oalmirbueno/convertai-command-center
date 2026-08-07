@@ -3,7 +3,11 @@
 // which already filters revoked_at + expires_at. Does NOT touch api-gateway.
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
-import { dataScopeAllowsClient, oauthScopesForStaff } from './mcp-security.ts';
+import {
+  dataScopeAllowsClient,
+  oauthScopesForStaff,
+  validateOAuthJwtClaims,
+} from './mcp-security.ts';
 
 export interface AuthContext {
   keyId: string;
@@ -122,9 +126,7 @@ async function verifySupabaseJwt(token: string): Promise<Record<string, any> | n
     header = JSON.parse(new TextDecoder().decode(b64urlDecode(h)));
     payload = JSON.parse(new TextDecoder().decode(b64urlDecode(p)));
   } catch { return null; }
-  if (!payload) return null;
-  const now = Math.floor(Date.now() / 1000);
-  if (payload.exp && payload.exp < now) return null;
+  if (!validateOAuthJwtClaims(payload, AUTH_ISSUER)) return null;
 
   const alg = header.alg;
   const kid = header.kid;
@@ -163,10 +165,7 @@ function readUnexpiredJwtClaims(token: string): Record<string, any> | null {
   // This fallback only parses claims. `authenticate` always validates the same
   // token with Supabase Auth before trusting the subject or checking roles.
   const claims = readJwtClaimsUnsafe(token);
-  if (!claims) return null;
-  const now = Math.floor(Date.now() / 1000);
-  if (claims.exp && claims.exp < now) return null;
-  return claims;
+  return validateOAuthJwtClaims(claims, AUTH_ISSUER) ? claims : null;
 }
 
 async function hasVerifiedSubject(token: string, expectedSubject: string): Promise<boolean> {

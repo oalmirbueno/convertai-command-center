@@ -96,9 +96,12 @@ describe("editorial scheduling UX contract", () => {
   });
 
   it("keeps official publishing accounts inside the selected client and project", () => {
-    expect(scheduler).toContain("Configurar contas no cliente");
-    expect(scheduler).toContain("/clientes?client=");
-    expect(scheduler).toContain("&project=");
+    expect(scheduler).toContain("<EditorialAccountSetup");
+    expect(scheduler).toContain("onAccountReady={handleAccountReady}");
+    expect(scheduler).toContain("showManualOptions={false}");
+    expect(scheduler).toContain("compact");
+    expect(scheduler).toContain("options?.canManageAccounts === true");
+    expect(scheduler).not.toContain("/clientes?client=");
     expect(clients).toContain('searchParams.get("section") === "accounts"');
     expect(clients).toContain('searchParams.get("project")');
     expect(connections).toContain("Contas para publicação");
@@ -108,7 +111,18 @@ describe("editorial scheduling UX contract", () => {
     expect(connections).not.toContain("useEditorialEditorOptions");
     expect(scheduler).toContain("reconexão necessária");
     expect(scheduler).toContain("missingSelectedAccountIds");
-    expect(scheduler).toContain("requestOpenChange(false)");
+    expect(scheduler).toContain("refetchOptions");
+    expect(scheduler).toContain("Conecte ou vincule a conta aqui mesmo para continuar.");
+    expect(scheduler).toContain("Revise ou reconecte o vínculo abaixo para continuar.");
+    expect(scheduler).not.toContain("Abra as contas do cliente e revise o vínculo.");
+    expect(hook).toContain('"can_manage_client"');
+  });
+
+  it("replaces the native browser alert with an accessible in-app discard dialog", () => {
+    expect(scheduler).not.toContain("window.confirm");
+    expect(scheduler).toContain("<AlertDialog");
+    expect(scheduler).toContain("Continuar editando");
+    expect(scheduler).toContain("Descartar e fechar");
   });
 
   it("keeps new content creation free from account and scheduling setup", () => {
