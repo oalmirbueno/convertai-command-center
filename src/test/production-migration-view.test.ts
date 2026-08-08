@@ -283,15 +283,14 @@ describe("production migration view", () => {
 
     const reordered = read();
     const [first, second] = reordered.applied_forward_aliases;
-    reordered.applied_forward_aliases[0] = {
-      ...second,
-      remote_version: first.remote_version,
-      remote_name: first.remote_name,
-      remote_statements_sha256: first.remote_statements_sha256,
-      shadow_path: first.shadow_path,
-      shadow_local_sha256: first.shadow_local_sha256,
-      shadow_statements_sha256: first.shadow_statements_sha256,
-    };
+    const canonicalOf = (entry: Record<string, unknown>) => ({
+      canonical_version: entry.canonical_version,
+      canonical_path: entry.canonical_path,
+      canonical_local_sha256: entry.canonical_local_sha256,
+    });
+    reordered.applied_forward_aliases[0] = { ...first, ...canonicalOf(second) };
+    reordered.applied_forward_aliases[1] = { ...second, ...canonicalOf(first) };
+
     const reorderedPath = join(root, "reordered-alias.json");
     writeFileSync(reorderedPath, JSON.stringify(reordered));
     expect(() => loadProductionMigrationPlan({ manifestFile: reorderedPath }))
