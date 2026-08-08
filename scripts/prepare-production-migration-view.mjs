@@ -709,6 +709,14 @@ export function loadProductionMigrationPlan({
     }
   }
   const canonicalForward = sources.filter(source => source.version >= cutoff)
+  validateUnique(aliasEntries, 'remote_version', productionManifestPath)
+  validateUnique(aliasEntries, 'canonical_path', productionManifestPath)
+  validateUnique(aliasEntries, 'shadow_path', productionManifestPath)
+  for (let index = 1; index < aliasEntries.length; index += 1) {
+    if (aliasEntries[index - 1].remote_version >= aliasEntries[index].remote_version) {
+      fail(`${productionManifestPath} applied forward aliases must be strictly increasing`)
+    }
+  }
   const forwardMigrations = forwardEntries.map(entry => {
     const source = sourceByPath.get(entry.path)
     if (!source || source.version < cutoff) {
@@ -729,12 +737,66 @@ export function loadProductionMigrationPlan({
     return source
   })
   if (forwardMigrations.length === 0) fail('forward migration manifest is empty')
+
+  // Applied forward aliases: the Lovable runner replayed the canonical forward
+  // SQL under its own generated versions. The canonical files stay the single
+  // logical forward sequence; the runner shadow files are evidence only and are
+  // never a second forward sequence.
+  const forwardIndexByPath = new Map(
+    forwardEntries.map((entry, index) => [entry.path, index]),
+  )
+  const appliedAliases = aliasEntries.map((entry, index) => {
+    const label = `applied forward alias ${entry.remote_version}`
+    const canonicalIndex = forwardIndexByPath.get(entry.canonical_path)
+    if (canonicalIndex === undefined) {
+      fail(`${label} does not reference a canonical forward migration`)
+    }
+    if (canonicalIndex !== index) {
+      fail(`${label} is not paired with the canonical forward migration in order`)
+    }
+    const canonical = forwardMigrations[canonicalIndex]
+    if (canonical.version !== entry.canonical_version) {
+      fail(`${label} canonical version does not match its path`)
+    }
+    if (canonical.sha256 !== entry.canonical_local_sha256) {
+      fail(`${label} canonical local SHA-256 mismatch`)
+    }
+    const shadow = sourceByPath.get(entry.shadow_path)
+    if (!shadow) fail(`${label} shadow migration file is missing`)
+    if (shadow.version !== entry.remote_version) {
+      fail(`${label} shadow filename version does not match the remote version`)
+    }
+    if (shadow.name !== entry.remote_name) {
+      fail(`${label} shadow filename name does not match the remote name`)
+    }
+    if (
+      shadow.sha256 !== entry.shadow_local_sha256
+      || checksums.get(entry.shadow_path) !== entry.shadow_local_sha256
+    ) {
+      fail(`${label} shadow local SHA-256 mismatch`)
+    }
+    if (shadow.statementsSha256 !== entry.shadow_statements_sha256) {
+      fail(`${label} shadow statement SHA-256 mismatch`)
+    }
+    if (entry.remote_version <= canonical.version) {
+      fail(`${label} must be recorded after its canonical version`)
+    }
+    return {
+      canonical,
+      shadow,
+      remoteVersion: entry.remote_version,
+      remoteName: entry.remote_name,
+      remoteStatementsSha256: entry.remote_statements_sha256,
+    }
+  })
+  const shadowPaths = new Set(aliasEntries.map(entry => entry.shadow_path))
   compareExactSets(
-    new Set(forwardEntries.map(entry => entry.path)),
+    new Set([...forwardEntries.map(entry => entry.path), ...shadowPaths]),
     new Set(canonicalForward.map(source => source.relativePath)),
     'forward migration manifest coverage',
   )
   const forwardPaths = new Set(forwardEntries.map(entry => entry.path))
+
   const mappedPaths = new Set()
   const usedExceptions = new Set()
   const modeCounts = {
