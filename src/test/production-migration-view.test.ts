@@ -112,18 +112,29 @@ describe("production migration view", () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 + 2 + 24 contract and lists only deployable versions", () => {
+  it("validates the explicit 96 + 2 + 12 canonical + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(24);
-    expect(plan.forwardMigrations).toHaveLength(24);
-    expect(versions).toHaveLength(120);
+    expect(plan.manifest.forward_migrations).toHaveLength(12);
+    expect(plan.forwardMigrations).toHaveLength(12);
+    expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
+    expect(plan.appliedAliases).toHaveLength(12);
+    expect(plan.shadowPaths).toHaveLength(12);
+    expect(plan.forwardLedger).toHaveLength(12);
+    expect(versions).toHaveLength(108);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
+    // The canonical versions are the logical forward set, never remote rows.
+    for (const forward of plan.forwardMigrations) {
+      expect(versions).not.toContain(forward.version);
+    }
+    for (const alias of plan.appliedAliases) {
+      expect(versions).toContain(alias.remoteVersion);
+    }
 
     const cli = spawnSync(process.execPath, [scriptPath, "--list-versions"], {
       cwd: repoRoot,
@@ -133,10 +144,19 @@ describe("production migration view", () => {
     expect(cli.stderr).toBe("");
     expect(cli.stdout).toBe(`${versions.join("\n")}\n`);
 
+    const shadowCli = spawnSync(process.execPath, [scriptPath, "--list-shadow-files"], {
+      cwd: repoRoot,
+      encoding: "utf8",
+    });
+    expect(shadowCli.status, shadowCli.stderr).toBe(0);
+    expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
+
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(120);
+    expect(sqlValues.split("\n")).toHaveLength(108);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
-    expect(sqlValues).toContain("'20260807223000','harden_api_gateway_tenant_scope'");
+    const lastAlias = plan.appliedAliases.at(-1)!;
+    expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
+    expect(sqlValues).not.toContain("'20260807223000'");
     const sqlCli = spawnSync(process.execPath, [scriptPath, "--ledger-sql-values"], {
       cwd: repoRoot,
       encoding: "utf8",
@@ -154,10 +174,11 @@ describe("production migration view", () => {
     expect(result).toEqual({
       aliases: 96,
       appliedForward: 0,
-      pendingForward: 24,
-      files: 120,
+      appliedAliases: 0,
+      pendingForward: 12,
+      files: 108,
     });
-    expect(filenames).toHaveLength(120);
+    expect(filenames).toHaveLength(108);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -171,15 +192,44 @@ describe("production migration view", () => {
     }
   });
 
+  it("reconciles the live aliased ledger to sentinels only and zero pending forward", () => {
+    const plan = loadProductionMigrationPlan();
+    const { outputDir, result } = buildFixture(12);
+    const filenames = readdirSync(outputDir).sort();
+
+    expect(result).toEqual({
+      aliases: 96,
+      appliedForward: 12,
+      appliedAliases: 12,
+      pendingForward: 0,
+      files: 108,
+    });
+    expect(filenames).toHaveLength(108);
+    expect(filenames.every((name) => name.endsWith("_production_ledger_sentinel.sql"))).toBe(true);
+    for (const alias of plan.appliedAliases) {
+      const sentinel = readFileSync(
+        join(outputDir, `${alias.remoteVersion}_production_ledger_sentinel.sql`),
+        "utf8",
+      );
+      expect(sentinel).toContain(`migration sentinel ${alias.remoteVersion}`);
+      // No canonical or shadow SQL may be replayed against production.
+      expect(filenames).not.toContain(alias.canonical.filename);
+      expect(filenames).not.toContain(alias.shadow.filename);
+    }
+  });
+
   it("turns an applied forward prefix into sentinels and leaves only its suffix pending", () => {
     const plan = loadProductionMigrationPlan();
     const { outputDir, result } = buildFixture(2);
 
     expect(result.appliedForward).toBe(2);
-    expect(result.pendingForward).toBe(22);
-    for (const forward of plan.forwardMigrations.slice(0, 2)) {
-      expect(readFileSync(join(outputDir, forward.filename), "utf8"))
-        .toContain(`migration sentinel ${forward.version}`);
+    expect(result.appliedAliases).toBe(2);
+    expect(result.pendingForward).toBe(10);
+    for (const applied of plan.forwardLedger.slice(0, 2)) {
+      expect(readFileSync(
+        join(outputDir, `${applied.version}_production_ledger_sentinel.sql`),
+        "utf8",
+      )).toContain(`migration sentinel ${applied.version}`);
     }
     expect(readFileSync(join(outputDir, plan.forwardMigrations[2].filename)))
       .toEqual(plan.forwardMigrations[2].bytes);
@@ -189,8 +239,123 @@ describe("production migration view", () => {
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(120);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(108);
   });
+
+  it("applies canonical-only migrations when the shadow files are excluded in CI", () => {
+    const plan = loadProductionMigrationPlan();
+    const root = temporaryRoot();
+    const sourceDir = join(root, "ci-migrations");
+    cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
+    for (const shadow of plan.shadowPaths) {
+      rmSync(join(sourceDir, shadow.replace("supabase/migrations/", "")));
+    }
+    const applied = readdirSync(sourceDir).sort();
+    expect(applied).toHaveLength(readdirSync(resolve(repoRoot, "supabase/migrations")).length - 12);
+    for (const forward of plan.forwardMigrations) {
+      expect(applied).toContain(forward.filename);
+    }
+    for (const alias of plan.appliedAliases) {
+      expect(applied).not.toContain(alias.shadow.filename);
+    }
+  });
+
+  it("rejects missing, extra, reordered, and drifted applied forward aliases", () => {
+    const root = temporaryRoot();
+    const read = () => JSON.parse(readFileSync(manifestPath, "utf8"));
+
+    const missing = read();
+    missing.applied_forward_aliases.pop();
+    const missingPath = join(root, "missing-alias.json");
+    writeFileSync(missingPath, JSON.stringify(missing));
+    expect(() => loadProductionMigrationPlan({ manifestFile: missingPath }))
+      .toThrow(/forward migration manifest coverage is not exact/);
+
+    const extra = read();
+    extra.applied_forward_aliases.push({
+      ...extra.applied_forward_aliases.at(-1),
+      remote_version: "20260809000000",
+    });
+    const extraPath = join(root, "extra-alias.json");
+    writeFileSync(extraPath, JSON.stringify(extra));
+    expect(() => loadProductionMigrationPlan({ manifestFile: extraPath }))
+      .toThrow(/contains duplicate canonical_path|shadow migration file is missing/);
+
+    const reordered = read();
+    const [first, second] = reordered.applied_forward_aliases;
+    reordered.applied_forward_aliases[0] = {
+      ...second,
+      remote_version: first.remote_version,
+      remote_name: first.remote_name,
+      remote_statements_sha256: first.remote_statements_sha256,
+      shadow_path: first.shadow_path,
+      shadow_local_sha256: first.shadow_local_sha256,
+      shadow_statements_sha256: first.shadow_statements_sha256,
+    };
+    const reorderedPath = join(root, "reordered-alias.json");
+    writeFileSync(reorderedPath, JSON.stringify(reordered));
+    expect(() => loadProductionMigrationPlan({ manifestFile: reorderedPath }))
+      .toThrow(/not paired with the canonical forward migration in order/);
+
+    const drifted = read();
+    drifted.applied_forward_aliases[0].shadow_local_sha256 = "0".repeat(64);
+    const driftedPath = join(root, "drifted-alias.json");
+    writeFileSync(driftedPath, JSON.stringify(drifted));
+    expect(() => loadProductionMigrationPlan({ manifestFile: driftedPath }))
+      .toThrow(/shadow local SHA-256 mismatch/);
+
+    const hashDrift = read();
+    hashDrift.applied_forward_aliases[0].remote_statements_sha256 = "0".repeat(64);
+    const hashDriftPath = join(root, "hash-drift-alias.json");
+    writeFileSync(hashDriftPath, JSON.stringify(hashDrift));
+    expect(() => loadProductionMigrationPlan({ manifestFile: hashDriftPath }))
+      .toThrow(/remote statement hash must match the runner shadow file/);
+  });
+
+  it("keeps a future unaliased forward migration pending after the current package", () => {
+    const plan = loadProductionMigrationPlan();
+    const rows = parseRemoteLedgerCsv(ledgerCsv(remoteRows(12)));
+    const future = { ...plan.forwardLedger.at(-1)! };
+    const syntheticPlan = {
+      ...plan,
+      forwardLedger: [
+        ...plan.forwardLedger,
+        {
+          canonical: { ...future.canonical, version: "20260809120000" },
+          alias: null,
+          version: "20260809120000",
+          name: "future_forward_migration",
+          statementsSha256: future.statementsSha256,
+        },
+      ],
+    };
+
+    const reconciliation = validateRemoteLedger(syntheticPlan, rows);
+    expect(reconciliation.appliedForward).toHaveLength(12);
+    expect(reconciliation.appliedAliases).toHaveLength(12);
+    expect(reconciliation.pendingForward).toHaveLength(1);
+    expect(reconciliation.pendingForward[0].version).toBe("20260809120000");
+
+    const withFuture = [...rows, {
+      remoteVersion: "20260809120000",
+      remoteName: "future_forward_migration",
+      remoteStatementsSha256: future.statementsSha256,
+    }];
+    expect(validateRemoteLedger(syntheticPlan, withFuture).pendingForward).toHaveLength(0);
+  });
+
+  it("rejects a canonical version recorded directly when an alias exists", () => {
+    const plan = loadProductionMigrationPlan();
+    const rows = [...remoteRows(), {
+      remoteVersion: plan.forwardMigrations[0].version,
+      remoteName: plan.forwardMigrations[0].name,
+      remoteStatementsSha256: plan.forwardMigrations[0].statementsSha256,
+    }];
+    expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows))))
+      .toThrow(/aliased canonical version unexpectedly exists/);
+  });
+
+
 
   it("rejects missing, altered, non-prefix, and schema-attested remote rows", () => {
     const plan = loadProductionMigrationPlan();
