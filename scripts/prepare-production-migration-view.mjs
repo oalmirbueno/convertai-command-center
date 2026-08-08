@@ -893,9 +893,45 @@ export function loadProductionMigrationPlan({
     }
   }
 
+  // The expected remote sequence for the forward package: each canonical
+  // migration is recorded either under its own version or under the alias the
+  // Lovable runner used when it applied the same SQL.
+  const aliasByCanonicalPath = new Map(
+    appliedAliases.map(alias => [alias.canonical.relativePath, alias]),
+  )
+  const forwardLedger = forwardMigrations.map(source => {
+    const alias = aliasByCanonicalPath.get(source.relativePath)
+    return alias
+      ? {
+          canonical: source,
+          alias,
+          version: alias.remoteVersion,
+          name: alias.remoteName,
+          statementsSha256: alias.remoteStatementsSha256,
+        }
+      : {
+          canonical: source,
+          alias: null,
+          version: source.version,
+          name: source.name,
+          statementsSha256: source.statementsSha256,
+        }
+  })
+  for (let index = 1; index < forwardLedger.length; index += 1) {
+    if (forwardLedger[index - 1].version >= forwardLedger[index].version) {
+      fail('expected forward ledger versions must be strictly increasing')
+    }
+  }
+  if (
+    forwardLedger.length > 0
+    && legacyEntries.at(-1).remote_version >= forwardLedger[0].version
+  ) {
+    fail('expected forward ledger must start after the legacy ledger')
+  }
+
   const listedVersions = [
     ...legacyEntries.map(entry => entry.remote_version),
-    ...forwardMigrations.map(source => source.version),
+    ...forwardLedger.map(entry => entry.version),
   ]
   if (new Set(listedVersions).size !== listedVersions.length) {
     fail('production migration versions are not unique')
@@ -909,9 +945,13 @@ export function loadProductionMigrationPlan({
     legacyEntries,
     attestations,
     forwardMigrations,
+    appliedAliases,
+    forwardLedger,
+    shadowPaths: [...shadowPaths].sort(),
     listedVersions,
   }
 }
+
 
 export function validateRemoteLedger(plan, remoteEntries) {
   if (!plan || !Array.isArray(plan.legacyEntries) || !Array.isArray(plan.forwardMigrations)) {
