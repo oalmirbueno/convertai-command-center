@@ -362,6 +362,7 @@ export function parseProductionMigrationManifest(input, source = productionManif
       'version',
       'cutoff_version',
       'forward_migrations',
+      'applied_forward_aliases',
       'remote_legacy_entries',
       'schema_attestations',
       'audit',
@@ -376,9 +377,13 @@ export function parseProductionMigrationManifest(input, source = productionManif
   if (!Array.isArray(document.forward_migrations)) {
     fail(`${source} forward_migrations must be an array`)
   }
+  if (!Array.isArray(document.applied_forward_aliases)) {
+    fail(`${source} applied_forward_aliases must be an array`)
+  }
   if (!Array.isArray(document.schema_attestations)) {
     fail(`${source} schema_attestations must be an array`)
   }
+
 
   document.remote_legacy_entries.forEach((entry, index) => {
     const label = `${source} remote_legacy_entries[${index}]`
