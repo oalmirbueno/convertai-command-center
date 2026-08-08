@@ -70,6 +70,23 @@ jobs:
             node scripts/verify-migration-integrity.mjs --base-ref "$PR_BASE_SHA"
           fi
 
+      # The empty CI database applies the 12 canonical forward migrations. The
+      # runner shadow files replay exactly the same SQL under the aliases that
+      # production recorded, so they must not run a second time here. The list
+      # is derived from the audited manifest, never hardcoded.
+      - name: Stage canonical-only migrations for the empty CI database
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/shadow-migrations"
+          node scripts/prepare-production-migration-view.mjs --list-shadow-files \
+            > "$RUNNER_TEMP/shadow-migrations/list.txt"
+          test -s "$RUNNER_TEMP/shadow-migrations/list.txt"
+          while read -r path; do
+            test -f "$path"
+            mv "$path" "$RUNNER_TEMP/shadow-migrations/$(basename "$path")"
+          done < "$RUNNER_TEMP/shadow-migrations/list.txt"
+
       - name: Log Supabase CLI capabilities
         run: |
           supabase --version
@@ -98,6 +115,23 @@ jobs:
           if [[ -e supabase/migrations/20260528163000_legacy_prerequisites.sql ]]; then
             unlink supabase/migrations/20260528163000_legacy_prerequisites.sql
           fi
+
+      - name: Restore runner shadow migrations
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          list="$RUNNER_TEMP/shadow-migrations/list.txt"
+          if [[ -s "$list" ]]; then
+            while read -r path; do
+              staged="$RUNNER_TEMP/shadow-migrations/$(basename "$path")"
+              if [[ -f "$staged" ]]; then
+                mv "$staged" "$path"
+              fi
+            done < "$list"
+          fi
+          git diff --quiet -- supabase/migrations
+
 
       - name: Run unit tests
         run: npm test -- --run

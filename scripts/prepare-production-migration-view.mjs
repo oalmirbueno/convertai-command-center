@@ -362,6 +362,7 @@ export function parseProductionMigrationManifest(input, source = productionManif
       'version',
       'cutoff_version',
       'forward_migrations',
+      'applied_forward_aliases',
       'remote_legacy_entries',
       'schema_attestations',
       'audit',
@@ -376,9 +377,13 @@ export function parseProductionMigrationManifest(input, source = productionManif
   if (!Array.isArray(document.forward_migrations)) {
     fail(`${source} forward_migrations must be an array`)
   }
+  if (!Array.isArray(document.applied_forward_aliases)) {
+    fail(`${source} applied_forward_aliases must be an array`)
+  }
   if (!Array.isArray(document.schema_attestations)) {
     fail(`${source} schema_attestations must be an array`)
   }
+
 
   document.remote_legacy_entries.forEach((entry, index) => {
     const label = `${source} remote_legacy_entries[${index}]`
@@ -425,6 +430,48 @@ export function parseProductionMigrationManifest(input, source = productionManif
     }
     assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
   })
+
+  document.applied_forward_aliases.forEach((entry, index) => {
+    const label = `${source} applied_forward_aliases[${index}]`
+    assertExactKeys(
+      entry,
+      [
+        'canonical_version',
+        'canonical_path',
+        'canonical_local_sha256',
+        'remote_version',
+        'remote_name',
+        'remote_statements_sha256',
+        'shadow_path',
+        'shadow_local_sha256',
+        'shadow_statements_sha256',
+      ],
+      label,
+    )
+    assertVersion(entry.canonical_version, `${label} canonical_version`)
+    assertVersion(entry.remote_version, `${label} remote_version`)
+    if (!migrationPathPattern.test(entry.canonical_path)) fail(`${label} canonical_path is invalid`)
+    if (!migrationPathPattern.test(entry.shadow_path)) fail(`${label} shadow_path is invalid`)
+    if (entry.canonical_path === entry.shadow_path) {
+      fail(`${label} shadow_path must differ from canonical_path`)
+    }
+    assertHash(entry.canonical_local_sha256, `${label} canonical_local_sha256`)
+    assertHash(entry.shadow_local_sha256, `${label} shadow_local_sha256`)
+    assertHash(entry.shadow_statements_sha256, `${label} shadow_statements_sha256`)
+    assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
+    if (
+      typeof entry.remote_name !== 'string'
+      || entry.remote_name.length === 0
+      || /[\u0000-\u001f\u007f]/.test(entry.remote_name)
+    ) {
+      fail(`${label} remote_name is invalid`)
+    }
+    if (entry.remote_statements_sha256 !== entry.shadow_statements_sha256) {
+      fail(`${label} remote statement hash must match the runner shadow file`)
+    }
+  })
+
+
 
   document.schema_attestations.forEach((entry, index) => {
     const label = `${source} schema_attestations[${index}]`
@@ -637,6 +684,8 @@ export function loadProductionMigrationPlan({
 
   const legacyEntries = manifest.remote_legacy_entries
   const forwardEntries = manifest.forward_migrations
+  const aliasEntries = manifest.applied_forward_aliases
+
   const attestations = manifest.schema_attestations
   if (legacyEntries.length !== 96) fail('version 1 requires exactly 96 remote legacy entries')
   if (attestations.length !== 2) fail('version 1 requires exactly 2 schema attestations')
@@ -660,6 +709,14 @@ export function loadProductionMigrationPlan({
     }
   }
   const canonicalForward = sources.filter(source => source.version >= cutoff)
+  validateUnique(aliasEntries, 'remote_version', productionManifestPath)
+  validateUnique(aliasEntries, 'canonical_path', productionManifestPath)
+  validateUnique(aliasEntries, 'shadow_path', productionManifestPath)
+  for (let index = 1; index < aliasEntries.length; index += 1) {
+    if (aliasEntries[index - 1].remote_version >= aliasEntries[index].remote_version) {
+      fail(`${productionManifestPath} applied forward aliases must be strictly increasing`)
+    }
+  }
   const forwardMigrations = forwardEntries.map(entry => {
     const source = sourceByPath.get(entry.path)
     if (!source || source.version < cutoff) {
@@ -680,12 +737,66 @@ export function loadProductionMigrationPlan({
     return source
   })
   if (forwardMigrations.length === 0) fail('forward migration manifest is empty')
+
+  // Applied forward aliases: the Lovable runner replayed the canonical forward
+  // SQL under its own generated versions. The canonical files stay the single
+  // logical forward sequence; the runner shadow files are evidence only and are
+  // never a second forward sequence.
+  const forwardIndexByPath = new Map(
+    forwardEntries.map((entry, index) => [entry.path, index]),
+  )
+  const appliedAliases = aliasEntries.map((entry, index) => {
+    const label = `applied forward alias ${entry.remote_version}`
+    const canonicalIndex = forwardIndexByPath.get(entry.canonical_path)
+    if (canonicalIndex === undefined) {
+      fail(`${label} does not reference a canonical forward migration`)
+    }
+    if (canonicalIndex !== index) {
+      fail(`${label} is not paired with the canonical forward migration in order`)
+    }
+    const canonical = forwardMigrations[canonicalIndex]
+    if (canonical.version !== entry.canonical_version) {
+      fail(`${label} canonical version does not match its path`)
+    }
+    if (canonical.sha256 !== entry.canonical_local_sha256) {
+      fail(`${label} canonical local SHA-256 mismatch`)
+    }
+    const shadow = sourceByPath.get(entry.shadow_path)
+    if (!shadow) fail(`${label} shadow migration file is missing`)
+    if (shadow.version !== entry.remote_version) {
+      fail(`${label} shadow filename version does not match the remote version`)
+    }
+    if (shadow.name !== entry.remote_name) {
+      fail(`${label} shadow filename name does not match the remote name`)
+    }
+    if (
+      shadow.sha256 !== entry.shadow_local_sha256
+      || checksums.get(entry.shadow_path) !== entry.shadow_local_sha256
+    ) {
+      fail(`${label} shadow local SHA-256 mismatch`)
+    }
+    if (shadow.statementsSha256 !== entry.shadow_statements_sha256) {
+      fail(`${label} shadow statement SHA-256 mismatch`)
+    }
+    if (entry.remote_version <= canonical.version) {
+      fail(`${label} must be recorded after its canonical version`)
+    }
+    return {
+      canonical,
+      shadow,
+      remoteVersion: entry.remote_version,
+      remoteName: entry.remote_name,
+      remoteStatementsSha256: entry.remote_statements_sha256,
+    }
+  })
+  const shadowPaths = new Set(aliasEntries.map(entry => entry.shadow_path))
   compareExactSets(
-    new Set(forwardEntries.map(entry => entry.path)),
+    new Set([...forwardEntries.map(entry => entry.path), ...shadowPaths]),
     new Set(canonicalForward.map(source => source.relativePath)),
     'forward migration manifest coverage',
   )
   const forwardPaths = new Set(forwardEntries.map(entry => entry.path))
+
   const mappedPaths = new Set()
   const usedExceptions = new Set()
   const modeCounts = {
@@ -782,9 +893,45 @@ export function loadProductionMigrationPlan({
     }
   }
 
+  // The expected remote sequence for the forward package: each canonical
+  // migration is recorded either under its own version or under the alias the
+  // Lovable runner used when it applied the same SQL.
+  const aliasByCanonicalPath = new Map(
+    appliedAliases.map(alias => [alias.canonical.relativePath, alias]),
+  )
+  const forwardLedger = forwardMigrations.map(source => {
+    const alias = aliasByCanonicalPath.get(source.relativePath)
+    return alias
+      ? {
+          canonical: source,
+          alias,
+          version: alias.remoteVersion,
+          name: alias.remoteName,
+          statementsSha256: alias.remoteStatementsSha256,
+        }
+      : {
+          canonical: source,
+          alias: null,
+          version: source.version,
+          name: source.name,
+          statementsSha256: source.statementsSha256,
+        }
+  })
+  for (let index = 1; index < forwardLedger.length; index += 1) {
+    if (forwardLedger[index - 1].version >= forwardLedger[index].version) {
+      fail('expected forward ledger versions must be strictly increasing')
+    }
+  }
+  if (
+    forwardLedger.length > 0
+    && legacyEntries.at(-1).remote_version >= forwardLedger[0].version
+  ) {
+    fail('expected forward ledger must start after the legacy ledger')
+  }
+
   const listedVersions = [
     ...legacyEntries.map(entry => entry.remote_version),
-    ...forwardMigrations.map(source => source.version),
+    ...forwardLedger.map(entry => entry.version),
   ]
   if (new Set(listedVersions).size !== listedVersions.length) {
     fail('production migration versions are not unique')
@@ -798,12 +945,21 @@ export function loadProductionMigrationPlan({
     legacyEntries,
     attestations,
     forwardMigrations,
+    appliedAliases,
+    forwardLedger,
+    shadowPaths: [...shadowPaths].sort(),
     listedVersions,
   }
 }
 
+
 export function validateRemoteLedger(plan, remoteEntries) {
-  if (!plan || !Array.isArray(plan.legacyEntries) || !Array.isArray(plan.forwardMigrations)) {
+  if (
+    !plan
+    || !Array.isArray(plan.legacyEntries)
+    || !Array.isArray(plan.forwardMigrations)
+    || !Array.isArray(plan.forwardLedger)
+  ) {
     fail('production migration plan is invalid')
   }
   if (!Array.isArray(remoteEntries)) fail('remote migration entries must be an array')
@@ -812,6 +968,13 @@ export function validateRemoteLedger(plan, remoteEntries) {
   const recordedAttestation = remoteEntries.find(entry => attestedVersions.has(entry.remoteVersion))
   if (recordedAttestation) {
     fail(`schema-attested version unexpectedly exists in the remote ledger: ${recordedAttestation.remoteVersion}`)
+  }
+  const aliasedCanonicalVersions = new Set(
+    plan.forwardLedger.filter(entry => entry.alias).map(entry => entry.canonical.version),
+  )
+  const recordedCanonical = remoteEntries.find(entry => aliasedCanonicalVersions.has(entry.remoteVersion))
+  if (recordedCanonical) {
+    fail(`aliased canonical version unexpectedly exists in the remote ledger: ${recordedCanonical.remoteVersion}`)
   }
   if (remoteEntries.length < legacy.length) {
     fail(`remote ledger has ${remoteEntries.length} rows; expected at least ${legacy.length}`)
@@ -829,12 +992,12 @@ export function validateRemoteLedger(plan, remoteEntries) {
   }
 
   const appliedForwardRows = remoteEntries.slice(legacy.length)
-  if (appliedForwardRows.length > plan.forwardMigrations.length) {
+  if (appliedForwardRows.length > plan.forwardLedger.length) {
     fail('remote ledger contains more forward migrations than the canonical source')
   }
   for (let index = 0; index < appliedForwardRows.length; index += 1) {
     const actual = appliedForwardRows[index]
-    const expected = plan.forwardMigrations[index]
+    const expected = plan.forwardLedger[index]
     if (actual.remoteVersion !== expected.version) {
       fail(`remote forward ledger is not a canonical prefix at ${actual.remoteVersion}`)
     }
@@ -845,11 +1008,17 @@ export function validateRemoteLedger(plan, remoteEntries) {
       fail(`remote forward statement hash mismatch at version ${expected.version}`)
     }
   }
+  const applied = plan.forwardLedger.slice(0, appliedForwardRows.length)
   return {
-    appliedForward: plan.forwardMigrations.slice(0, appliedForwardRows.length),
-    pendingForward: plan.forwardMigrations.slice(appliedForwardRows.length),
+    appliedForward: applied.map(entry => entry.canonical),
+    appliedLedger: applied,
+    appliedAliases: applied.filter(entry => entry.alias).map(entry => entry.alias),
+    pendingForward: plan.forwardLedger
+      .slice(appliedForwardRows.length)
+      .map(entry => entry.canonical),
   }
 }
+
 
 export function createSentinelSql(version) {
   assertVersion(version, 'sentinel version')
@@ -914,19 +1083,27 @@ export function buildProductionMigrationView({
     ledgerCsvPath,
   )
   const reconciliation = validateRemoteLedger(plan, remoteEntries)
-  const appliedForwardVersions = new Set(
-    reconciliation.appliedForward.map(source => source.version),
+  const appliedCanonicalPaths = new Set(
+    reconciliation.appliedForward.map(source => source.relativePath),
   )
   const files = plan.legacyEntries.map(entry => ({
     filename: `${entry.remote_version}_production_ledger_sentinel.sql`,
     bytes: createSentinelSql(entry.remote_version),
   }))
-  for (const source of plan.forwardMigrations) {
+  for (const entry of plan.forwardLedger) {
+    if (!appliedCanonicalPaths.has(entry.canonical.relativePath)) {
+      // Not in the remote ledger yet: the canonical SQL is the only thing that
+      // may still execute.
+      files.push({ filename: entry.canonical.filename, bytes: entry.canonical.bytes })
+      continue
+    }
+    // Already applied — emit a sentinel for the version the remote ledger
+    // actually recorded (the runner alias when one exists).
     files.push({
-      filename: source.filename,
-      bytes: appliedForwardVersions.has(source.version)
-        ? createSentinelSql(source.version)
-        : source.bytes,
+      filename: entry.alias
+        ? `${entry.version}_production_ledger_sentinel.sql`
+        : entry.canonical.filename,
+      bytes: createSentinelSql(entry.version),
     })
   }
   files.sort((left, right) => left.filename.localeCompare(right.filename))
@@ -934,6 +1111,7 @@ export function buildProductionMigrationView({
   return {
     aliases: plan.legacyEntries.length,
     appliedForward: reconciliation.appliedForward.length,
+    appliedAliases: reconciliation.appliedAliases.length,
     pendingForward: reconciliation.pendingForward.length,
     files: files.length,
   }
@@ -941,6 +1119,10 @@ export function buildProductionMigrationView({
 
 export function listProductionVersions(options = {}) {
   return loadProductionMigrationPlan(options).listedVersions
+}
+
+export function listShadowMigrationPaths(options = {}) {
+  return loadProductionMigrationPlan(options).shadowPaths
 }
 
 export function listProductionLedgerEntries(options = {}) {
@@ -951,13 +1133,14 @@ export function listProductionLedgerEntries(options = {}) {
       name: entry.remote_name,
       statementsSha256: entry.remote_statements_sha256,
     })),
-    ...plan.manifest.forward_migrations.map(entry => ({
+    ...plan.forwardLedger.map(entry => ({
       version: entry.version,
-      name: entry.remote_name,
-      statementsSha256: entry.remote_statements_sha256,
+      name: entry.name,
+      statementsSha256: entry.statementsSha256,
     })),
   ].sort((left, right) => left.version.localeCompare(right.version))
 }
+
 
 function quoteSqlText(value) {
   if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/.test(value)) {
@@ -976,6 +1159,7 @@ export function parseArgs(argv) {
   const args = {
     listVersions: false,
     ledgerSqlValues: false,
+    listShadowFiles: false,
     ledgerCsvPath: undefined,
     outputDir: undefined,
     repoRoot: defaultRepoRoot,
@@ -1008,6 +1192,12 @@ export function parseArgs(argv) {
       seen.add(argument)
       continue
     }
+    if (argument === '--list-shadow-files') {
+      if (seen.has(argument)) fail(`duplicate argument ${argument}`)
+      args.listShadowFiles = true
+      seen.add(argument)
+      continue
+    }
     const key = valueFlags.get(argument)
     if (!key) fail(`unknown argument ${argument}`)
     if (seen.has(argument)) fail(`duplicate argument ${argument}`)
@@ -1032,10 +1222,12 @@ export function parseArgs(argv) {
     ? resolve(args.checksumFile)
     : resolve(args.repoRoot, migrationManifestPath)
 
-  if (args.listVersions && args.ledgerSqlValues) {
-    fail('--list-versions and --ledger-sql-values are mutually exclusive')
+  const listingModes = [args.listVersions, args.ledgerSqlValues, args.listShadowFiles]
+    .filter(Boolean).length
+  if (listingModes > 1) {
+    fail('--list-versions, --ledger-sql-values and --list-shadow-files are mutually exclusive')
   }
-  if (args.listVersions || args.ledgerSqlValues) {
+  if (listingModes === 1) {
     if (args.ledgerCsvPath || args.outputDir) {
       fail('listing modes cannot be combined with --ledger-csv or --output-dir')
     }
@@ -1062,6 +1254,10 @@ export function runCli(argv = process.argv.slice(2)) {
   }
   if (args.ledgerSqlValues) {
     process.stdout.write(`${formatProductionLedgerSqlValues(planOptions)}\n`)
+    return
+  }
+  if (args.listShadowFiles) {
+    process.stdout.write(`${listShadowMigrationPaths(planOptions).join('\n')}\n`)
     return
   }
   buildProductionMigrationView({
