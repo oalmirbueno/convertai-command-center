@@ -431,6 +431,48 @@ export function parseProductionMigrationManifest(input, source = productionManif
     assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
   })
 
+  document.applied_forward_aliases.forEach((entry, index) => {
+    const label = `${source} applied_forward_aliases[${index}]`
+    assertExactKeys(
+      entry,
+      [
+        'canonical_version',
+        'canonical_path',
+        'canonical_local_sha256',
+        'remote_version',
+        'remote_name',
+        'remote_statements_sha256',
+        'shadow_path',
+        'shadow_local_sha256',
+        'shadow_statements_sha256',
+      ],
+      label,
+    )
+    assertVersion(entry.canonical_version, `${label} canonical_version`)
+    assertVersion(entry.remote_version, `${label} remote_version`)
+    if (!migrationPathPattern.test(entry.canonical_path)) fail(`${label} canonical_path is invalid`)
+    if (!migrationPathPattern.test(entry.shadow_path)) fail(`${label} shadow_path is invalid`)
+    if (entry.canonical_path === entry.shadow_path) {
+      fail(`${label} shadow_path must differ from canonical_path`)
+    }
+    assertHash(entry.canonical_local_sha256, `${label} canonical_local_sha256`)
+    assertHash(entry.shadow_local_sha256, `${label} shadow_local_sha256`)
+    assertHash(entry.shadow_statements_sha256, `${label} shadow_statements_sha256`)
+    assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
+    if (
+      typeof entry.remote_name !== 'string'
+      || entry.remote_name.length === 0
+      || /[\u0000-\u001f\u007f]/.test(entry.remote_name)
+    ) {
+      fail(`${label} remote_name is invalid`)
+    }
+    if (entry.remote_statements_sha256 !== entry.shadow_statements_sha256) {
+      fail(`${label} remote statement hash must match the runner shadow file`)
+    }
+  })
+
+
+
   document.schema_attestations.forEach((entry, index) => {
     const label = `${source} schema_attestations[${index}]`
     assertExactKeys(
