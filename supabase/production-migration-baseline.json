@@ -1,0 +1,888 @@
+{
+  "version": 1,
+  "cutoff_version": "20260807210000",
+  "forward_migrations": [
+    {
+      "version": "20260807210000",
+      "path": "supabase/migrations/20260807210000_bind_mcp_oauth_clients.sql",
+      "local_sha256": "901d6b81028f91230e1960b464db080f58193572195986c6c7025ab8cb5cb2b3",
+      "remote_name": "bind_mcp_oauth_clients",
+      "remote_statements_sha256": "e939a7f9a741db2dc3f0b18a00dadba8a841054a47f5b02e280de6eda03138b6"
+    },
+    {
+      "version": "20260807211000",
+      "path": "supabase/migrations/20260807211000_harden_notify_ops_sync_vault.sql",
+      "local_sha256": "3d8230382a168e14536ccfb0b23ac0a397575347bb8bd6a5811813a12796ace8",
+      "remote_name": "harden_notify_ops_sync_vault",
+      "remote_statements_sha256": "70629de632adc2a24a529095b92f0a4e0fd3a71bf6600a39904c5cc1cebf6218"
+    },
+    {
+      "version": "20260807212000",
+      "path": "supabase/migrations/20260807212000_scope_api_gateway_keys.sql",
+      "local_sha256": "4f58716d7b0d667dbe89c0b1ce81d205827a6b26615941b29843d7a7e26a2e1b",
+      "remote_name": "scope_api_gateway_keys",
+      "remote_statements_sha256": "aea29ed7eaa015634697f9f88ffe90322b27674fa497000622962b3505069b6f"
+    },
+    {
+      "version": "20260807213000",
+      "path": "supabase/migrations/20260807213000_harden_workspace_inbox_tokens.sql",
+      "local_sha256": "59ac159de461c4c4d0a89ff4f734f7b8eb3520160b82dbedace31c125599b1cc",
+      "remote_name": "harden_workspace_inbox_tokens",
+      "remote_statements_sha256": "ebf8272d6f15a2a6b1266e84dfffcf33090bb5b21b7bcfeb360a1a4fecad8b18"
+    },
+    {
+      "version": "20260807215000",
+      "path": "supabase/migrations/20260807215000_portable_meta_oauth_redirect.sql",
+      "local_sha256": "a50111c5cfba9f2b3a1bc2791c80523c685f0faa0522b77dc1253992b694004b",
+      "remote_name": "portable_meta_oauth_redirect",
+      "remote_statements_sha256": "a25bd73890cf4ed212efc9fa828a0082691af7b82b9fcd3ced152a91f1d6f2ec"
+    },
+    {
+      "version": "20260807216000",
+      "path": "supabase/migrations/20260807216000_harden_quiz_invitations.sql",
+      "local_sha256": "350f09a75b5804f3518668312da266717a3aa3d55e87bab0ad1e1865f6e58df0",
+      "remote_name": "harden_quiz_invitations",
+      "remote_statements_sha256": "38b1ef65851b8fe819690d03b917e162c795a4a2c42164b59592d596e2c5c339"
+    },
+    {
+      "version": "20260807217000",
+      "path": "supabase/migrations/20260807217000_expire_first_access_tokens.sql",
+      "local_sha256": "a04de5def1b74a70133f6c105a93779284b3086593975ace61dbb4d113afcf91",
+      "remote_name": "expire_first_access_tokens",
+      "remote_statements_sha256": "74ca11f9c493b1b3dafe11bb115f19c1a8dc56ae3e6509866e7c1f67fc09d648"
+    },
+    {
+      "version": "20260807219000",
+      "path": "supabase/migrations/20260807219000_atomic_ai_usage_quota.sql",
+      "local_sha256": "af15eec7bdd41474603a6c204c3c0af63ebc76de1c604ab2164b1e3ec5f1a1c2",
+      "remote_name": "atomic_ai_usage_quota",
+      "remote_statements_sha256": "c4e44857dc917e60c3e40075522c85ef5124b5505eadfec71d19327f25d3bf60"
+    },
+    {
+      "version": "20260807220000",
+      "path": "supabase/migrations/20260807220000_rate_limit_notification_dispatch.sql",
+      "local_sha256": "9f48933a775f87304697cf6e79755500cca96295aa62c226a1092fe294a2eeb4",
+      "remote_name": "rate_limit_notification_dispatch",
+      "remote_statements_sha256": "48506052cf244983783df0b7b8c5a55c3435313316b82dedcacd1bc8b278941a"
+    },
+    {
+      "version": "20260807221000",
+      "path": "supabase/migrations/20260807221000_harden_workspace_quarantine_boundary.sql",
+      "local_sha256": "38f427b9ca12e973eb6b34d365a6d18e0bd7707b5fbdb1ababf4546fc8c6e152",
+      "remote_name": "harden_workspace_quarantine_boundary",
+      "remote_statements_sha256": "b94b265b746867ebf34d52d488bb4789773d175fe1d043f648eb72510caf9a2a"
+    },
+    {
+      "version": "20260807222000",
+      "path": "supabase/migrations/20260807222000_harden_public_tokens_private.sql",
+      "local_sha256": "b6719efc4d75a830d15805387170e11f349b392ca4536aad57f70b6011259489",
+      "remote_name": "harden_public_tokens_private",
+      "remote_statements_sha256": "3cd36e81baee0a2dd150f5609dbc513d0b4e9a96639493a3738f322ba007e677"
+    },
+    {
+      "version": "20260807223000",
+      "path": "supabase/migrations/20260807223000_harden_api_gateway_tenant_scope.sql",
+      "local_sha256": "c6538e58af092796eb10e50e5eb97a8ddb6bce17615692b1727352b3487d6224",
+      "remote_name": "harden_api_gateway_tenant_scope",
+      "remote_statements_sha256": "284cb2ff9e2f425d66cc49c602b795827255a0e9aa2337c3fe518ec7647b62b8"
+    }
+  ],
+  "remote_legacy_entries": [
+    {
+      "remote_version": "20260223193632",
+      "local_path": "supabase/migrations/20260223193634_53550802-f9c7-4caf-8aca-9dbd9741eb24.sql",
+      "local_sha256": "3312f9ddae283e3d670a6cfdc88e528b933291b6f8826e9ee349bfb3f6642a22",
+      "remote_name": "",
+      "remote_statements_sha256": "3312f9ddae283e3d670a6cfdc88e528b933291b6f8826e9ee349bfb3f6642a22",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223200931",
+      "local_path": "supabase/migrations/20260223200933_e55e6bfc-e072-43c4-b986-6cd701c38380.sql",
+      "local_sha256": "ffbba75b188ff14bcf351e5fa187ed1f3fd4d8630a733417d016c1efc9ebdb7e",
+      "remote_name": "",
+      "remote_statements_sha256": "ffbba75b188ff14bcf351e5fa187ed1f3fd4d8630a733417d016c1efc9ebdb7e",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223201839",
+      "local_path": "supabase/migrations/20260223201840_bfc53123-eb1a-4b68-aaa1-968a34a22900.sql",
+      "local_sha256": "a024bcf987e5692743e181ccb2ab6ee06372f351fe7012757e61cbda9a6c2830",
+      "remote_name": "",
+      "remote_statements_sha256": "a024bcf987e5692743e181ccb2ab6ee06372f351fe7012757e61cbda9a6c2830",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223202010",
+      "local_path": "supabase/migrations/20260223202011_c528f955-f93e-41c7-90b8-859f63989071.sql",
+      "local_sha256": "6122d494f370e00d4503d3e1c3c9751402c105f78fa91f861b8c3b5beb4c140c",
+      "remote_name": "",
+      "remote_statements_sha256": "6122d494f370e00d4503d3e1c3c9751402c105f78fa91f861b8c3b5beb4c140c",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223210124",
+      "local_path": "supabase/migrations/20260223210126_b8c2fce3-96a7-476c-87ce-58d2108549e3.sql",
+      "local_sha256": "f17bd87f2ab1b1d7651fe847db5c431d22cc54c51fdf4360ca357161b7d79df2",
+      "remote_name": "",
+      "remote_statements_sha256": "f17bd87f2ab1b1d7651fe847db5c431d22cc54c51fdf4360ca357161b7d79df2",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223211959",
+      "local_path": "supabase/migrations/20260223212001_83349a40-29e7-4509-86bd-c104f87542f6.sql",
+      "local_sha256": "1e23616ae950e929bc9d3b920746190157c0ee66b3d622d79ba3d39be59c6437",
+      "remote_name": "",
+      "remote_statements_sha256": "1e23616ae950e929bc9d3b920746190157c0ee66b3d622d79ba3d39be59c6437",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223213217",
+      "local_path": "supabase/migrations/20260223213218_7f5eaf50-9c1c-4335-ae01-2d40f859dbac.sql",
+      "local_sha256": "f4dc564483240ac55c230359ce421f4c69e25d85c0963d3c5b6f5316247b75c9",
+      "remote_name": "",
+      "remote_statements_sha256": "f4dc564483240ac55c230359ce421f4c69e25d85c0963d3c5b6f5316247b75c9",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223215643",
+      "local_path": "supabase/migrations/20260223215645_beb45fdf-8a4e-4fe4-a65b-5fa54179c030.sql",
+      "local_sha256": "caae8ee12594c87440342ba5b274b27f171b0a041e79f9724370c6b0af009155",
+      "remote_name": "",
+      "remote_statements_sha256": "caae8ee12594c87440342ba5b274b27f171b0a041e79f9724370c6b0af009155",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223220357",
+      "local_path": "supabase/migrations/20260223220359_a8eb51ec-3870-47df-83f6-de1310badfe5.sql",
+      "local_sha256": "2bbb7077361564f5a8dc743adb1dcd6f5be4ca8507a5266e438b19eeb6b4ec7c",
+      "remote_name": "",
+      "remote_statements_sha256": "2bbb7077361564f5a8dc743adb1dcd6f5be4ca8507a5266e438b19eeb6b4ec7c",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223224718",
+      "local_path": "supabase/migrations/20260223224719_921fe597-b95c-4a8b-85a0-13ce274c2a40.sql",
+      "local_sha256": "4a7eb6f4f5ddc4fed861ce5f6d0f61bd5c8dab28bb61a87584daca822616430e",
+      "remote_name": "",
+      "remote_statements_sha256": "4a7eb6f4f5ddc4fed861ce5f6d0f61bd5c8dab28bb61a87584daca822616430e",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223230127",
+      "local_path": "supabase/migrations/20260223230128_e9562c33-238a-4d25-b4b7-1cf7b9cc0fbd.sql",
+      "local_sha256": "172b70041dc1227e70d7a95a519e5ff348525352e8047d18218e6784d8a203f0",
+      "remote_name": "",
+      "remote_statements_sha256": "172b70041dc1227e70d7a95a519e5ff348525352e8047d18218e6784d8a203f0",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223231443",
+      "local_path": "supabase/migrations/20260223231444_cae28acb-9fdd-4830-982d-e6bbe64b4a95.sql",
+      "local_sha256": "c4fc2fd76bd55774610a95d1855e3a5624d42b878f73b0849670b48338cf0268",
+      "remote_name": "",
+      "remote_statements_sha256": "c4fc2fd76bd55774610a95d1855e3a5624d42b878f73b0849670b48338cf0268",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260223233217",
+      "local_path": "supabase/migrations/20260223233219_295d065f-66af-44c8-b8a5-531d6aa170aa.sql",
+      "local_sha256": "9fb95bc4477cce0e3a7e17b8648820ed20232255880e5db691c93e0f2d81e01e",
+      "remote_name": "",
+      "remote_statements_sha256": "9fb95bc4477cce0e3a7e17b8648820ed20232255880e5db691c93e0f2d81e01e",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224001128",
+      "local_path": "supabase/migrations/20260224001129_2c0874ac-add4-4776-bfe8-de4905059674.sql",
+      "local_sha256": "2bda8589ff9e47e46e6d7cde908cf23cf0ade2c746e8c34c73c79225becdf88f",
+      "remote_name": "",
+      "remote_statements_sha256": "2bda8589ff9e47e46e6d7cde908cf23cf0ade2c746e8c34c73c79225becdf88f",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224002728",
+      "local_path": "supabase/migrations/20260224002729_dc78b0c2-9f13-4d14-83cf-c98e55d5c721.sql",
+      "local_sha256": "705744fbf247b00a9d0aa23bb9c3382337ae9712e1b07b9961704ad214faf229",
+      "remote_name": "",
+      "remote_statements_sha256": "705744fbf247b00a9d0aa23bb9c3382337ae9712e1b07b9961704ad214faf229",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224010030",
+      "local_path": "supabase/migrations/20260224010031_d2cbc098-c262-4b45-a508-14ec8a09b1e0.sql",
+      "local_sha256": "c7332ca7d1f2e1e98bc24f240768723aa4b838f168c1ebee1fb03a16808914f3",
+      "remote_name": "",
+      "remote_statements_sha256": "c7332ca7d1f2e1e98bc24f240768723aa4b838f168c1ebee1fb03a16808914f3",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224183342",
+      "local_path": "supabase/migrations/20260224183344_f750a022-305f-408e-9e37-88f278684dc8.sql",
+      "local_sha256": "5316da7b84e3ee3d40ca7c2a8947337dbcf2bfe5725ba06361ddeae24a0332f8",
+      "remote_name": "",
+      "remote_statements_sha256": "5316da7b84e3ee3d40ca7c2a8947337dbcf2bfe5725ba06361ddeae24a0332f8",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224190300",
+      "local_path": "supabase/migrations/20260224190302_2cbe66e4-677d-47c5-b135-b32d7b2b096e.sql",
+      "local_sha256": "d7e698e3eea59ec1949a67c40c2bfb900cafc7b12a5f418eb3ac6f337077efbb",
+      "remote_name": "",
+      "remote_statements_sha256": "d7e698e3eea59ec1949a67c40c2bfb900cafc7b12a5f418eb3ac6f337077efbb",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224192353",
+      "local_path": "supabase/migrations/20260224192355_6d21a483-104d-4277-8784-44dd64d6e2ed.sql",
+      "local_sha256": "4f492843bd7e3dc3444b0af70ab0c39095f6da649c18e55bd933e13d7700bfbd",
+      "remote_name": "",
+      "remote_statements_sha256": "4f492843bd7e3dc3444b0af70ab0c39095f6da649c18e55bd933e13d7700bfbd",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224204152",
+      "local_path": "supabase/migrations/20260224204154_4b730c0f-e814-4388-a2bf-84d38f227b33.sql",
+      "local_sha256": "efb1b875d8f36d32ebe6665f001569d22a8a90f10d75b022819a89ce630b3c29",
+      "remote_name": "",
+      "remote_statements_sha256": "efb1b875d8f36d32ebe6665f001569d22a8a90f10d75b022819a89ce630b3c29",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260224220759",
+      "local_path": "supabase/migrations/20260224220800_0acf9678-ea69-4aad-9894-5a8e1505bd86.sql",
+      "local_sha256": "da3da444a12290fc8c69141af07d5dbe4efe8b36cdd348b02f147aca28455d04",
+      "remote_name": "",
+      "remote_statements_sha256": "da3da444a12290fc8c69141af07d5dbe4efe8b36cdd348b02f147aca28455d04",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260225144918",
+      "local_path": "supabase/migrations/20260225144921_32e39012-82ba-4db1-bb64-7a983c361e5d.sql",
+      "local_sha256": "46c66457757d4f9ffbbd8c027473f3562a6e257d0a51e7d730bc3928f1493ec9",
+      "remote_name": "",
+      "remote_statements_sha256": "46c66457757d4f9ffbbd8c027473f3562a6e257d0a51e7d730bc3928f1493ec9",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260225145915",
+      "local_path": "supabase/migrations/20260225145916_f47760bb-5a6c-4e54-b1f4-8b5883723439.sql",
+      "local_sha256": "8409494ca5b9eb73dd039dd0e9513ae57f14c3f12ca5c22203dcddba20d54ff5",
+      "remote_name": "",
+      "remote_statements_sha256": "8409494ca5b9eb73dd039dd0e9513ae57f14c3f12ca5c22203dcddba20d54ff5",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260226160140",
+      "local_path": "supabase/migrations/20260226160142_2376ec24-03eb-4270-9d08-324821aa39ab.sql",
+      "local_sha256": "4cdafcf187426d7d40add2e9347eb14d5375bc6206a69a85fb4ea403368a7c3a",
+      "remote_name": "",
+      "remote_statements_sha256": "4cdafcf187426d7d40add2e9347eb14d5375bc6206a69a85fb4ea403368a7c3a",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260226221741",
+      "local_path": "supabase/migrations/20260226221742_2ad6b2d9-7850-4000-aad7-d709afb34b35.sql",
+      "local_sha256": "2b81a26b3a1a68c14ef7009b17c36eff342829406d67e313b165213f6af626d8",
+      "remote_name": "",
+      "remote_statements_sha256": "2b81a26b3a1a68c14ef7009b17c36eff342829406d67e313b165213f6af626d8",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260226222153",
+      "local_path": "supabase/migrations/20260226222155_14d392c6-c1aa-4381-8c0c-5502c4f092f1.sql",
+      "local_sha256": "2d3b6e137c5c1a6d2511f95b20bccfabe5de2e088255c1e0cb1d427140bafa50",
+      "remote_name": "",
+      "remote_statements_sha256": "2d3b6e137c5c1a6d2511f95b20bccfabe5de2e088255c1e0cb1d427140bafa50",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260305154839",
+      "local_path": "supabase/migrations/20260305154841_22f5e833-5878-453d-b6ce-a6f9dbe4a22f.sql",
+      "local_sha256": "d8c1edaebea28caf30fb8532c446d2f44bcbec6377f61ece86ed2ac0eaca5917",
+      "remote_name": "",
+      "remote_statements_sha256": "d8c1edaebea28caf30fb8532c446d2f44bcbec6377f61ece86ed2ac0eaca5917",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260306152156",
+      "local_path": "supabase/migrations/20260306152158_c9a58573-4572-4d86-b1e8-1e27c9ad1730.sql",
+      "local_sha256": "1503463a4afbd3544173d6f5f58c091d3dc7b69da15343bcfb54b5496b5b740a",
+      "remote_name": "",
+      "remote_statements_sha256": "1503463a4afbd3544173d6f5f58c091d3dc7b69da15343bcfb54b5496b5b740a",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260309150307",
+      "local_path": "supabase/migrations/20260309150308_141bb1a1-b27e-45fa-8cc3-a69f0686c359.sql",
+      "local_sha256": "ce469a8f7e28f9b2ec71212883908fcb41f06d87510d777f64844024a5a9c492",
+      "remote_name": "",
+      "remote_statements_sha256": "ce469a8f7e28f9b2ec71212883908fcb41f06d87510d777f64844024a5a9c492",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260309150433",
+      "local_path": "supabase/migrations/20260309150434_6be62dc0-1b58-4b18-b65a-599019febe87.sql",
+      "local_sha256": "6cc39555f7dd7aca9edcf39d9d67dab5a855c72c8fb3cf771db68decb5104e54",
+      "remote_name": "",
+      "remote_statements_sha256": "6cc39555f7dd7aca9edcf39d9d67dab5a855c72c8fb3cf771db68decb5104e54",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260309234506",
+      "local_path": "supabase/migrations/20260309234509_b70a9e0c-7de5-42b7-992e-d1ba3ff9f27d.sql",
+      "local_sha256": "0f22ed3a393726536a6c2b522aeb2b349a219e0e2c85cfd6e5432025bc5c49b5",
+      "remote_name": "",
+      "remote_statements_sha256": "0f22ed3a393726536a6c2b522aeb2b349a219e0e2c85cfd6e5432025bc5c49b5",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260309235210",
+      "local_path": "supabase/migrations/20260309235211_d7702c73-dbb8-4cb6-9361-2960865ee527.sql",
+      "local_sha256": "d72a678bf932a5dedf916ee40b423b1bece998863378b2718646fa69e5febd2e",
+      "remote_name": "",
+      "remote_statements_sha256": "d72a678bf932a5dedf916ee40b423b1bece998863378b2718646fa69e5febd2e",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260310175655",
+      "local_path": "supabase/migrations/20260310175657_8de52466-488f-4ddd-9870-10a74b01fc13.sql",
+      "local_sha256": "2673a8a001cab51eb32312adbea42926bf8ab2853682679c79047f5b4cae2cb4",
+      "remote_name": "",
+      "remote_statements_sha256": "2673a8a001cab51eb32312adbea42926bf8ab2853682679c79047f5b4cae2cb4",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260402202026",
+      "local_path": "supabase/migrations/20260402202027_3a6b27fe-2540-42c3-9db2-358678e9db34.sql",
+      "local_sha256": "7bd2727a0cb5c801219652d43326ab3793c521bae667eb00a36e86b51f9b0aab",
+      "remote_name": "",
+      "remote_statements_sha256": "7bd2727a0cb5c801219652d43326ab3793c521bae667eb00a36e86b51f9b0aab",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260402220436",
+      "local_path": "supabase/migrations/20260402220437_f0000314-46ef-4219-ba2b-59c93fe2aac1.sql",
+      "local_sha256": "5911eb5699bff94b756061d29d9e1d0a4d0b7eb97d2af22b3abf1f51896ced72",
+      "remote_name": "",
+      "remote_statements_sha256": "5911eb5699bff94b756061d29d9e1d0a4d0b7eb97d2af22b3abf1f51896ced72",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260427013437",
+      "local_path": "supabase/migrations/20260427013439_97db731b-0337-4979-89eb-e669ae47c966.sql",
+      "local_sha256": "ee4461cd5abbf6065323fd06a6a5c8a7410d905240675a57f69ac7759ad7a227",
+      "remote_name": "",
+      "remote_statements_sha256": "ee4461cd5abbf6065323fd06a6a5c8a7410d905240675a57f69ac7759ad7a227",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260428041249",
+      "local_path": "supabase/migrations/20260428041251_89a94036-1b8a-4b93-a445-c251bdcd2a23.sql",
+      "local_sha256": "e04c19a3c32ffd7a4a5f9658803b2cd8d460da556da6bf4e78eb701321817594",
+      "remote_name": "",
+      "remote_statements_sha256": "e04c19a3c32ffd7a4a5f9658803b2cd8d460da556da6bf4e78eb701321817594",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260504232353",
+      "local_path": "supabase/migrations/20260504232354_af48322d-137f-457d-b07c-a10aab40dd6f.sql",
+      "local_sha256": "4182b7f4df49e2d5ee39b746d2b85f70c259ecbaa7ba71c6193172e5cf022f3f",
+      "remote_name": "",
+      "remote_statements_sha256": "4182b7f4df49e2d5ee39b746d2b85f70c259ecbaa7ba71c6193172e5cf022f3f",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260504234402",
+      "local_path": "supabase/migrations/20260504234405_69c5b733-b603-40af-85dc-1cd1e46104f6.sql",
+      "local_sha256": "b2507702915a6f21d5222a4bd965d0340ea667105fc92bec741b29fd666853b7",
+      "remote_name": "",
+      "remote_statements_sha256": "b2507702915a6f21d5222a4bd965d0340ea667105fc92bec741b29fd666853b7",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260505022449",
+      "local_path": "supabase/migrations/20260505022451_4daa3d28-efa6-4993-b8c8-6fc678fe0f37.sql",
+      "local_sha256": "6cbda43a1a1a551fa1e9a8a054db3f9f5a3640dd71d9a9e90d39809c968932d1",
+      "remote_name": "",
+      "remote_statements_sha256": "476cf9eeeff88851da6f141505262908027c4a656bc2d3de7b2621fd0d82afe6",
+      "match_mode": "published_sanitization"
+    },
+    {
+      "remote_version": "20260505022541",
+      "local_path": "supabase/migrations/20260505022542_b2913727-2ed9-4c6b-adba-24e4e708b78a.sql",
+      "local_sha256": "b6fb094d260030f836d3f98a2c9d650aaf6b34e6c370a3332d72ccc2346aec7f",
+      "remote_name": "",
+      "remote_statements_sha256": "bd667ae7a8841f383dae06210e020eb243d3c82880da431efa6d569c343d0580",
+      "match_mode": "published_sanitization"
+    },
+    {
+      "remote_version": "20260505032733",
+      "local_path": "supabase/migrations/20260505032735_2041947d-cc3f-435e-9add-74999e01749a.sql",
+      "local_sha256": "4f787751ed1e2e6e27ffeafed849e374e252b35e2cf6b6a10a677c1539952100",
+      "remote_name": "",
+      "remote_statements_sha256": "4f787751ed1e2e6e27ffeafed849e374e252b35e2cf6b6a10a677c1539952100",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260506023731",
+      "local_path": "supabase/migrations/20260506023733_a808b9b5-ef7f-426d-8380-eb696d5bcb27.sql",
+      "local_sha256": "d57cc93a0be01514176ece05cbdd49a73f769c622eafe8098bb06d98d6369239",
+      "remote_name": "",
+      "remote_statements_sha256": "d57cc93a0be01514176ece05cbdd49a73f769c622eafe8098bb06d98d6369239",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260506025339",
+      "local_path": "supabase/migrations/20260506025340_5dd14bb1-de6f-4de9-b85c-5aa5fb518837.sql",
+      "local_sha256": "e2acc6ab3a0cddf8cc8f038073d5ffb1a5bee6c742141873aacfcb480f204b38",
+      "remote_name": "",
+      "remote_statements_sha256": "e2acc6ab3a0cddf8cc8f038073d5ffb1a5bee6c742141873aacfcb480f204b38",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260506030314",
+      "local_path": "supabase/migrations/20260506030316_f06cde50-80d2-4f98-97a9-2501bd07503a.sql",
+      "local_sha256": "5ff74c9e757a84abef2d9e597b58d713bb28c929476dc4478146efc5e6803642",
+      "remote_name": "",
+      "remote_statements_sha256": "5ff74c9e757a84abef2d9e597b58d713bb28c929476dc4478146efc5e6803642",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260506210540",
+      "local_path": "supabase/migrations/20260506210543_082828e0-ba9b-46d7-b6f0-2a552f741be0.sql",
+      "local_sha256": "3d5572a845878db2f18e5d94a2b7d26ad5396295a2067032c53c2f8805a12fd7",
+      "remote_name": "",
+      "remote_statements_sha256": "3d5572a845878db2f18e5d94a2b7d26ad5396295a2067032c53c2f8805a12fd7",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260506222625",
+      "local_path": "supabase/migrations/20260506222627_7d213814-5376-4e3d-b418-06caa6dce661.sql",
+      "local_sha256": "da4906a3241036f29f4a54b0730c6431d7c35a8f8f8e85b0df884677901377bb",
+      "remote_name": "",
+      "remote_statements_sha256": "da4906a3241036f29f4a54b0730c6431d7c35a8f8f8e85b0df884677901377bb",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260507012016",
+      "local_path": "supabase/migrations/20260507012017_ebe93716-9b09-4ad8-995a-d2827b10b434.sql",
+      "local_sha256": "2893fee8f1bc190b939c0c3219afad00a91fa52a9132376614bc1f19625f3548",
+      "remote_name": "",
+      "remote_statements_sha256": "2893fee8f1bc190b939c0c3219afad00a91fa52a9132376614bc1f19625f3548",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260528141030",
+      "local_path": "supabase/migrations/20260528141030_email_infra.sql",
+      "local_sha256": "89c19e347c2914e34d3cc6b2b2079615c275e6c072295dec67bdfd141d434f9d",
+      "remote_name": "email_infra",
+      "remote_statements_sha256": "9047071be0f2f174a2db38a9900936fa58db8a7b7da7248ad26c10950a74c4d4",
+      "match_mode": "ledger_marker"
+    },
+    {
+      "remote_version": "20260528160825",
+      "local_path": "supabase/migrations/20260528160827_43fcec5f-0100-47a4-9457-4593baa4c426.sql",
+      "local_sha256": "3adb155b03b3749e10a653fdc40e09a593d61953f4b2fbe6c8b19608e734b058",
+      "remote_name": "",
+      "remote_statements_sha256": "3adb155b03b3749e10a653fdc40e09a593d61953f4b2fbe6c8b19608e734b058",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260528163619",
+      "local_path": "supabase/migrations/20260528163622_b27ffa65-a154-4bb5-bb92-1478927a8a75.sql",
+      "local_sha256": "0efdae4d2c7da9cda7aa3e322e0dcff2d6718fab8004f290698afdd7a46d8254",
+      "remote_name": "",
+      "remote_statements_sha256": "0efdae4d2c7da9cda7aa3e322e0dcff2d6718fab8004f290698afdd7a46d8254",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260528164351",
+      "local_path": "supabase/migrations/20260528164353_85d90548-43c5-4cb4-838c-b38b5b028046.sql",
+      "local_sha256": "344d83b5b0ab1a87f1342ecc5df433e8a6eda3f549cd3d44500ebcc21d00cb28",
+      "remote_name": "",
+      "remote_statements_sha256": "344d83b5b0ab1a87f1342ecc5df433e8a6eda3f549cd3d44500ebcc21d00cb28",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260528191842",
+      "local_path": "supabase/migrations/20260528191845_724408be-f9a0-4eb9-8735-2ea655a13c11.sql",
+      "local_sha256": "605ab2dbf1a4c83209380b1d7ddf5909a8e3154c558b26913459d31ad6d7496d",
+      "remote_name": "",
+      "remote_statements_sha256": "605ab2dbf1a4c83209380b1d7ddf5909a8e3154c558b26913459d31ad6d7496d",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260602170331",
+      "local_path": "supabase/migrations/20260602170333_7c98eef7-e7b8-4083-91bc-d8e19c7f68d8.sql",
+      "local_sha256": "ad786c943e05ce76b35eea6b3bc1c7de98e9c7e8c8d5e98a9e590810c64d4ad1",
+      "remote_name": "",
+      "remote_statements_sha256": "ad786c943e05ce76b35eea6b3bc1c7de98e9c7e8c8d5e98a9e590810c64d4ad1",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260603173814",
+      "local_path": "supabase/migrations/20260603173816_cd4db186-fa09-4a54-a419-851528998796.sql",
+      "local_sha256": "602cc3e849163a2604cc5bb3f2243dee99ca58c6ee1cf136e22a1b389c032e54",
+      "remote_name": "",
+      "remote_statements_sha256": "602cc3e849163a2604cc5bb3f2243dee99ca58c6ee1cf136e22a1b389c032e54",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260603180204",
+      "local_path": "supabase/migrations/20260603180207_14e5b3bd-fd5b-4891-98ae-ae41fb25533e.sql",
+      "local_sha256": "8025d96722dbddaf691284e2c426edfad7be3961c0d7d0383ed299cdc19c95dc",
+      "remote_name": "",
+      "remote_statements_sha256": "8025d96722dbddaf691284e2c426edfad7be3961c0d7d0383ed299cdc19c95dc",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260603190453",
+      "local_path": "supabase/migrations/20260603190456_572b3561-c0a9-4261-bb2b-05da556fe679.sql",
+      "local_sha256": "b18d7d2fe97a926a080d739bcf4cfef6c50e68cdd1af2b1c681d3e8a693341ab",
+      "remote_name": "",
+      "remote_statements_sha256": "b18d7d2fe97a926a080d739bcf4cfef6c50e68cdd1af2b1c681d3e8a693341ab",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260617175440",
+      "local_path": "supabase/migrations/20260617175443_08b8e733-587e-4f8d-9d31-17e0512edc16.sql",
+      "local_sha256": "fd916b4ea35e3b76529602c970b26ecf0c027c450c54e3de9248b897d78a25ad",
+      "remote_name": "",
+      "remote_statements_sha256": "fd916b4ea35e3b76529602c970b26ecf0c027c450c54e3de9248b897d78a25ad",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260617181753",
+      "local_path": "supabase/migrations/20260617181756_1d001c0a-b701-4742-946e-4ee2808c9f9e.sql",
+      "local_sha256": "ba140cbd7509541571772373e185e765e0b07f7e63456518a5a0b45eded115ba",
+      "remote_name": "",
+      "remote_statements_sha256": "ba140cbd7509541571772373e185e765e0b07f7e63456518a5a0b45eded115ba",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260623213507",
+      "local_path": "supabase/migrations/20260623213509_c025e880-fd17-4223-983b-b9963a4b6c86.sql",
+      "local_sha256": "2e995454a5f15e05b5ac69559f9a8dd007596369a69aa6fce83cc608ef03bafb",
+      "remote_name": "",
+      "remote_statements_sha256": "2e995454a5f15e05b5ac69559f9a8dd007596369a69aa6fce83cc608ef03bafb",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260624133400",
+      "local_path": "supabase/migrations/20260624133402_71626283-f80f-407a-943a-eac6edf1cf6c.sql",
+      "local_sha256": "d00584117044fe2194b5a6670ea02154b22f4f82100a6061d87056012234d509",
+      "remote_name": "",
+      "remote_statements_sha256": "d00584117044fe2194b5a6670ea02154b22f4f82100a6061d87056012234d509",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260706223107",
+      "local_path": "supabase/migrations/20260706223105_d3dc44bc-156d-4ebc-863e-87bdec5b720d.sql",
+      "local_sha256": "c7bfb2ce418f22717a0e0bf8a349a5e238b22cea193121a30b6ac0b994c29418",
+      "remote_name": "20260706223105_d3dc44bc-156d-4ebc-863e-87bdec5b720d",
+      "remote_statements_sha256": "c7bfb2ce418f22717a0e0bf8a349a5e238b22cea193121a30b6ac0b994c29418",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709141034",
+      "local_path": "supabase/migrations/20260709141033_23edd711-9038-423b-9d6c-1551bab8748b.sql",
+      "local_sha256": "7ca9622b84d59d8dc02ee5e5e27307ff45bffc9fb830ab34b38e65077008315d",
+      "remote_name": "20260709141033_23edd711-9038-423b-9d6c-1551bab8748b",
+      "remote_statements_sha256": "7ca9622b84d59d8dc02ee5e5e27307ff45bffc9fb830ab34b38e65077008315d",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709153647",
+      "local_path": "supabase/migrations/20260709153643_48d70471-a51b-465d-8564-a292948982c6.sql",
+      "local_sha256": "b45a36457afff6f35948c4e47173b0cb522a2a9edc7bf1b5574dd94d00e88366",
+      "remote_name": "20260709153643_48d70471-a51b-465d-8564-a292948982c6",
+      "remote_statements_sha256": "b45a36457afff6f35948c4e47173b0cb522a2a9edc7bf1b5574dd94d00e88366",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709172326",
+      "local_path": "supabase/migrations/20260709172324_948eab87-207e-400b-82f4-797178e2c4b5.sql",
+      "local_sha256": "e6fd549397e56dc347f239b439c949ba61de0536ec66881da5569d8258c1bcf2",
+      "remote_name": "20260709172324_948eab87-207e-400b-82f4-797178e2c4b5",
+      "remote_statements_sha256": "e6fd549397e56dc347f239b439c949ba61de0536ec66881da5569d8258c1bcf2",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709173026",
+      "local_path": "supabase/migrations/20260709173021_5ff6cd9b-a7b1-4e37-a014-8b86a58102fb.sql",
+      "local_sha256": "000c709808b0fd3f5226362fd086a40a24700daf2d4cc12450fd4352580886d2",
+      "remote_name": "20260709173021_5ff6cd9b-a7b1-4e37-a014-8b86a58102fb",
+      "remote_statements_sha256": "000c709808b0fd3f5226362fd086a40a24700daf2d4cc12450fd4352580886d2",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709173838",
+      "local_path": "supabase/migrations/20260709173836_1219116d-c06b-4bae-806d-3998405c9f57.sql",
+      "local_sha256": "17456d08c90238a73cbff99de8d984c4c56d9f069627e35e06edd625fb9e8804",
+      "remote_name": "20260709173836_1219116d-c06b-4bae-806d-3998405c9f57",
+      "remote_statements_sha256": "17456d08c90238a73cbff99de8d984c4c56d9f069627e35e06edd625fb9e8804",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709175902",
+      "local_path": "supabase/migrations/20260709175901_0fbb2227-e1d7-477e-a7f7-096a9afdcf06.sql",
+      "local_sha256": "5761febb2269178d14babbf2d575b2ff5b50a8ee083e1ac7b6cfc4197ecbfca4",
+      "remote_name": "20260709175901_0fbb2227-e1d7-477e-a7f7-096a9afdcf06",
+      "remote_statements_sha256": "5761febb2269178d14babbf2d575b2ff5b50a8ee083e1ac7b6cfc4197ecbfca4",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709180117",
+      "local_path": "supabase/migrations/20260709180114_6030fc9e-c0ee-485d-8a39-a4faf20f2d81.sql",
+      "local_sha256": "f383aff749028e7cda9e4c4be16bf284627aa8c2b446da71362eaec83f4ff495",
+      "remote_name": "20260709180114_6030fc9e-c0ee-485d-8a39-a4faf20f2d81",
+      "remote_statements_sha256": "f383aff749028e7cda9e4c4be16bf284627aa8c2b446da71362eaec83f4ff495",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709184144",
+      "local_path": "supabase/migrations/20260709184142_b6841611-17af-40d7-90fb-681fbde2c284.sql",
+      "local_sha256": "52681be3bc6f90717e338dc91cbe060737fc18b2d99271ae57f2018c9a014fa5",
+      "remote_name": "20260709184142_b6841611-17af-40d7-90fb-681fbde2c284",
+      "remote_statements_sha256": "52681be3bc6f90717e338dc91cbe060737fc18b2d99271ae57f2018c9a014fa5",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709190053",
+      "local_path": "supabase/migrations/20260709190045_e7d0852a-7fa3-4661-b70a-38ef12bc03a4.sql",
+      "local_sha256": "c16d4db6ffbc6453ef821854eba4f714974b88e1d1aa1e5ce4fdebe5514b8129",
+      "remote_name": "20260709190045_e7d0852a-7fa3-4661-b70a-38ef12bc03a4",
+      "remote_statements_sha256": "c16d4db6ffbc6453ef821854eba4f714974b88e1d1aa1e5ce4fdebe5514b8129",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260709191836",
+      "local_path": "supabase/migrations/20260709191834_9cef1185-2727-4faa-9b4a-9324c8fb9cba.sql",
+      "local_sha256": "5ff75494a3913a54e53619c2a1e29a879fd2817edd55e94bee0676830fd82250",
+      "remote_name": "20260709191834_9cef1185-2727-4faa-9b4a-9324c8fb9cba",
+      "remote_statements_sha256": "5ff75494a3913a54e53619c2a1e29a879fd2817edd55e94bee0676830fd82250",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260711190254",
+      "local_path": "supabase/migrations/20260711190250_7df180d3-8be0-4f93-87f4-1712ad51f433.sql",
+      "local_sha256": "346dc6877f013cb0458f6ae3d530e6c781b84ef0aafee4ab6eed0f948e712c8c",
+      "remote_name": "20260711190250_7df180d3-8be0-4f93-87f4-1712ad51f433",
+      "remote_statements_sha256": "346dc6877f013cb0458f6ae3d530e6c781b84ef0aafee4ab6eed0f948e712c8c",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260712183607",
+      "local_path": "supabase/migrations/20260712183604_f3976c84-1d30-4e56-b4cd-e0ac38e818b5.sql",
+      "local_sha256": "d66395c3baee8bebf19d3651c5af3eab988ff143fb74446f373d9970116a983c",
+      "remote_name": "20260712183604_f3976c84-1d30-4e56-b4cd-e0ac38e818b5",
+      "remote_statements_sha256": "d66395c3baee8bebf19d3651c5af3eab988ff143fb74446f373d9970116a983c",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260712210755",
+      "local_path": "supabase/migrations/20260712210752_e8e9fbd1-09f2-46d3-897d-a819a9aeedb8.sql",
+      "local_sha256": "ee0fd6025b5af3f381a8fd2e1ab9aa05b9447540e09419a2c8098263eeecdafe",
+      "remote_name": "20260712210752_e8e9fbd1-09f2-46d3-897d-a819a9aeedb8",
+      "remote_statements_sha256": "ee0fd6025b5af3f381a8fd2e1ab9aa05b9447540e09419a2c8098263eeecdafe",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260712225346",
+      "local_path": "supabase/migrations/20260712225344_78bc04c3-7433-4b96-ad8f-3dfb8373ee61.sql",
+      "local_sha256": "320f75c9c9a08e1ce9ce82f9258c44cf00ef62d836cf5093d9d7590210767db5",
+      "remote_name": "20260712225344_78bc04c3-7433-4b96-ad8f-3dfb8373ee61",
+      "remote_statements_sha256": "320f75c9c9a08e1ce9ce82f9258c44cf00ef62d836cf5093d9d7590210767db5",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260714135007",
+      "local_path": "supabase/migrations/20260714135001_ddee07bf-a344-4fb0-8998-c642a8c4d36e.sql",
+      "local_sha256": "eb53c989269d17c2934d86759ecc092123c9c66ad194ce71ef8712cd6f0fc92a",
+      "remote_name": "20260714135001_ddee07bf-a344-4fb0-8998-c642a8c4d36e",
+      "remote_statements_sha256": "eb53c989269d17c2934d86759ecc092123c9c66ad194ce71ef8712cd6f0fc92a",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260714190935",
+      "local_path": "supabase/migrations/20260714190928_28fb38f3-b3ac-4ebc-a620-2d1885aa8091.sql",
+      "local_sha256": "88db0a1e07ca6a4c1e1fc8b10fbe977d46f05b95374bb5b3ec5c8f9b9c720ebd",
+      "remote_name": "20260714190928_28fb38f3-b3ac-4ebc-a620-2d1885aa8091",
+      "remote_statements_sha256": "88db0a1e07ca6a4c1e1fc8b10fbe977d46f05b95374bb5b3ec5c8f9b9c720ebd",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260714231848",
+      "local_path": "supabase/migrations/20260714231847_037d12fc-c10a-4a76-ba2b-923c68ad0ee6.sql",
+      "local_sha256": "c0b8ec9b9e3825906c482a07104776ea6d358fe58d332162cb17a2fb9f558128",
+      "remote_name": "20260714231847_037d12fc-c10a-4a76-ba2b-923c68ad0ee6",
+      "remote_statements_sha256": "c0b8ec9b9e3825906c482a07104776ea6d358fe58d332162cb17a2fb9f558128",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260715151731",
+      "local_path": "supabase/migrations/20260715151724_b23073b2-f83d-40de-b878-fcafa265d8f4.sql",
+      "local_sha256": "d8f5822a0b1189938312c650721622c5363283fd0056ca380d264be556632c0b",
+      "remote_name": "20260715151724_b23073b2-f83d-40de-b878-fcafa265d8f4",
+      "remote_statements_sha256": "d8f5822a0b1189938312c650721622c5363283fd0056ca380d264be556632c0b",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260715152056",
+      "local_path": "supabase/migrations/20260715152054_5eb014f1-5bb6-4f08-bf79-d7c9fdce4a94.sql",
+      "local_sha256": "6b726c144b4d809a65b9c5729cf1807abcbc8d8c79b24122cb38a423ad40b670",
+      "remote_name": "20260715152054_5eb014f1-5bb6-4f08-bf79-d7c9fdce4a94",
+      "remote_statements_sha256": "6b726c144b4d809a65b9c5729cf1807abcbc8d8c79b24122cb38a423ad40b670",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260716220255",
+      "local_path": "supabase/migrations/20260716220254_d72abfbe-d011-43a6-8ad9-c6332e212ef3.sql",
+      "local_sha256": "23592eff80e48567222c973199a70aaf1eaa13abd09c6381e397b9e5df592b08",
+      "remote_name": "20260716220254_d72abfbe-d011-43a6-8ad9-c6332e212ef3",
+      "remote_statements_sha256": "23592eff80e48567222c973199a70aaf1eaa13abd09c6381e397b9e5df592b08",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260717211353",
+      "local_path": "supabase/migrations/20260717211351_f3bf7079-3609-477b-90a6-02019c937c22.sql",
+      "local_sha256": "83592f4102171c3e032e338cd8e76c6e0c47d05df621f4e10c7a8d72fd7da85b",
+      "remote_name": "20260717211351_f3bf7079-3609-477b-90a6-02019c937c22",
+      "remote_statements_sha256": "83592f4102171c3e032e338cd8e76c6e0c47d05df621f4e10c7a8d72fd7da85b",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260720163308",
+      "local_path": "supabase/migrations/20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d.sql",
+      "local_sha256": "6758addc170dc6da4c1f152e1d4e07d95dd9a50f9396a9050d3124e791a7141f",
+      "remote_name": "20260720163307_ba44c9c5-a2a8-43ce-9493-c36a4a9c769d",
+      "remote_statements_sha256": "6758addc170dc6da4c1f152e1d4e07d95dd9a50f9396a9050d3124e791a7141f",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260724181056",
+      "local_path": "supabase/migrations/20260724181054_d5d6f980-b287-4437-ac34-955e39c24272.sql",
+      "local_sha256": "c56ce0318d296fca57bd46c2de8ad4890dae938a9c1127cd3322441dfc380c3a",
+      "remote_name": "20260724181054_d5d6f980-b287-4437-ac34-955e39c24272",
+      "remote_statements_sha256": "c56ce0318d296fca57bd46c2de8ad4890dae938a9c1127cd3322441dfc380c3a",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260724182936",
+      "local_path": "supabase/migrations/20260724182933_75e9ef71-b40e-4d7f-9ad1-a82a03d6582a.sql",
+      "local_sha256": "bcefcaee65ed173f17d69808873623dadaa1946abfc673d50381809e8996bc53",
+      "remote_name": "20260724182933_75e9ef71-b40e-4d7f-9ad1-a82a03d6582a",
+      "remote_statements_sha256": "bcefcaee65ed173f17d69808873623dadaa1946abfc673d50381809e8996bc53",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260727132145",
+      "local_path": "supabase/migrations/20260727132145_secure_file_approval_double_gate.sql",
+      "local_sha256": "e40f63e489dab573c55940299268f65164ad71cf86f4edd94de82ebe383cd048",
+      "remote_name": "20260727132145_secure_file_approval_double_gate",
+      "remote_statements_sha256": "e40f63e489dab573c55940299268f65164ad71cf86f4edd94de82ebe383cd048",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260727165809",
+      "local_path": "supabase/migrations/20260727165806_2d9d43c5-131a-4dbf-8e0b-1e452ab1452d.sql",
+      "local_sha256": "6e796e5bbd74a470368ede3b989709c3238b84c3f863d84a49be78c02115eb7f",
+      "remote_name": "20260727165806_2d9d43c5-131a-4dbf-8e0b-1e452ab1452d",
+      "remote_statements_sha256": "6e796e5bbd74a470368ede3b989709c3238b84c3f863d84a49be78c02115eb7f",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260727170257",
+      "local_path": "supabase/migrations/20260727170255_f9c52d42-ef4b-4ea9-94a0-e54c4af866de.sql",
+      "local_sha256": "89c6bd6993ff1e4c080cc56736bf3bb4b971166c78cc02d38d8c6d6363523efc",
+      "remote_name": "20260727170255_f9c52d42-ef4b-4ea9-94a0-e54c4af866de",
+      "remote_statements_sha256": "89c6bd6993ff1e4c080cc56736bf3bb4b971166c78cc02d38d8c6d6363523efc",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260728150756",
+      "local_path": "supabase/migrations/20260728150756_restore_files_column_permissions.sql",
+      "local_sha256": "4d900a39b5e5fdc8f240edd81db2a30b48faf956ffc66a5e502686966fda50d9",
+      "remote_name": "20260728150756_restore_files_column_permissions",
+      "remote_statements_sha256": "17524e83d290f830c38dc948186cdeb175cff4fc8811d9e918b2a69514760541",
+      "match_mode": "ledger_marker"
+    },
+    {
+      "remote_version": "20260728161129",
+      "local_path": "supabase/migrations/20260728161129_create_editorial_calendar.sql",
+      "local_sha256": "3eebbca18216f74a8f1222a6366c3bd6f15b0fa4311666333daf7cfa199c57cd",
+      "remote_name": "20260728161129_create_editorial_calendar",
+      "remote_statements_sha256": "3bb8900430868c74e4c42a5f8a8c416b4dc3a0842c098f71d70ba84e844f3812",
+      "match_mode": "ledger_marker"
+    },
+    {
+      "remote_version": "20260729144624",
+      "local_path": "supabase/migrations/20260729144624_add_task_delivery_type.sql",
+      "local_sha256": "1d66c43220a8c0807f55d780606273e182c6fcf61b7679732f001c226150b00d",
+      "remote_name": "20260729144624_add_task_delivery_type",
+      "remote_statements_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "match_mode": "ledger_marker"
+    },
+    {
+      "remote_version": "20260729233930",
+      "local_path": "supabase/migrations/20260729233930_fb88e549-12f5-4470-83e2-53115d155764.sql",
+      "local_sha256": "c997ecb61a0df4554fdffd3879f278016c2640a438fce8cb54e747937e4ca47c",
+      "remote_name": "fb88e549-12f5-4470-83e2-53115d155764",
+      "remote_statements_sha256": "c997ecb61a0df4554fdffd3879f278016c2640a438fce8cb54e747937e4ca47c",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260730010000",
+      "local_path": "supabase/migrations/20260730010000_fix_editorial_save_and_accounts.sql",
+      "local_sha256": "150395777cd1fac92156f208e13674bd7ac2ef12f75a21646770c59ca95f14e9",
+      "remote_name": "20260730010000_fix_editorial_save_and_accounts",
+      "remote_statements_sha256": "150395777cd1fac92156f208e13674bd7ac2ef12f75a21646770c59ca95f14e9",
+      "match_mode": "exact_statements"
+    },
+    {
+      "remote_version": "20260731175633",
+      "local_path": "supabase/migrations/20260731175633_meta_oauth_foundation.sql",
+      "local_sha256": "d9e82aa5ec57bbc5892c814659d17abab510197f207310ef14ef91f8f2daef08",
+      "remote_name": "20260731175633_meta_oauth_foundation",
+      "remote_statements_sha256": "9c90cc8daba95b3c7f58c6a481a7a2c8fa5f083d3426fbc88c3a6e6769fed3ba",
+      "match_mode": "ledger_marker"
+    },
+    {
+      "remote_version": "20260805204443",
+      "local_path": "supabase/migrations/20260805204443_social_account_audit_trail.sql",
+      "local_sha256": "8de6d6f599ee8988ea9216bc30ad2a9a5b34d63863739a12c510a6d3bc0b337a",
+      "remote_name": "20260805204443_social_account_audit_trail",
+      "remote_statements_sha256": "8de6d6f599ee8988ea9216bc30ad2a9a5b34d63863739a12c510a6d3bc0b337a",
+      "match_mode": "exact_statements"
+    }
+  ],
+  "schema_attestations": [
+    {
+      "local_path": "supabase/migrations/20260728234519_add_task_workstreams.sql",
+      "local_version": "20260728234519",
+      "local_sha256": "40085911eaf9d5c88c23a69dd3c6d5b1af293faa062b27fa78ffc09a0a7ae459",
+      "assertion_id": "task_workstreams",
+      "reason": "The production schema contains the workstream column, constraint, partial index, and valid data even though the historical runner did not record this local timestamp."
+    },
+    {
+      "local_path": "supabase/migrations/20260728235000_sync_editorial_tasks_bidirectionally.sql",
+      "local_version": "20260728235000",
+      "local_sha256": "1859dcf29a58dfa6ed674708aa02e69f9679b7f002f1aab068d84434258c56b7",
+      "assertion_id": "editorial_task_sync",
+      "reason": "The production schema contains the synchronized editorial functions and triggers even though the historical runner did not record this local timestamp."
+    }
+  ],
+  "audit": {
+    "attestation_query_path": "supabase/production-baseline-attestation.sql",
+    "attestation_query_sha256": "f90f1b730c52b49eca44dac657c495d2722bf8c960e48f85fea4fe1850277c3e",
+    "ledger_query_path": "supabase/production-migration-ledger.sql",
+    "ledger_query_sha256": "f47a52ff65c3a5b810abab0e3e925943242d9e81191006d68fedda24c8e96b4e",
+    "remote_entry_count": 96,
+    "local_pre_cutoff_count": 98,
+    "exact_statement_matches": 89,
+    "approved_sanitizations": 2,
+    "reviewed_ledger_markers": 5,
+    "reviewed_at": "2026-08-07"
+  }
+}

@@ -177,6 +177,10 @@ function inspectWorkflow(workflow, problems) {
     [/to_regclass\s*\(\s*["']public\.mcp_oauth_allowed_redirect_origins["']\s*\)/i, "OAuth preflight must verify the redirect-origin table"],
     [/to_regprocedure\s*\(\s*["']public\.is_allowed_mcp_oauth_client\(uuid\)["']\s*\)/i, "OAuth preflight must verify the client-binding function"],
     [/public\.is_allowed_mcp_oauth_client\s*\([\s\S]{0,160}00000000-0000-0000-0000-000000000000[\s\S]{0,80}is\s+false/i, "OAuth preflight must prove an unknown client is rejected"],
+    [/prepare-production-migration-view\.mjs[\s\S]{0,100}--ledger-sql-values/, "MCP deploy must use the audited production migration view"],
+    [/full\s+outer\s+join\s+applied_migrations/i, "MCP deploy must reject missing or unexpected migration ledger rows"],
+    [/applied\.migration_name\s+<>\s+expected\.migration_name/i, "MCP deploy must compare migration names"],
+    [/applied\.statements_sha256\s+<>\s+expected\.statements_sha256/i, "MCP deploy must compare migration statement hashes"],
     [/supabase_migrations\.schema_migrations/, "MCP deploy must prove every current-main migration is already applied"],
     [/test\s+"\$preflight_status"\s+=\s+"MCP_OAUTH_PREFLIGHT_READY"/, "OAuth preflight result must be asserted before deployment"],
     [/path:\s*control/, "current main must be checked out as the deployment control plane"],
@@ -349,6 +353,10 @@ jobs:
           curl "https://api.supabase.com/v1/projects/$SUPABASE_PROJECT_ID"
           supabase functions list --project-ref "$SUPABASE_PROJECT_ID"
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
+          node ../control/scripts/prepare-production-migration-view.mjs --ledger-sql-values
+          full outer join applied_migrations using (version)
+          applied.migration_name <> expected.migration_name
+          applied.statements_sha256 <> expected.statements_sha256
           supabase db query --linked --output csv "select case when to_regclass('public.mcp_oauth_allowed_redirect_origins') is not null and to_regprocedure('public.is_allowed_mcp_oauth_client(uuid)') is not null and public.is_allowed_mcp_oauth_client('00000000-0000-0000-0000-000000000000'::uuid) is false and not exists (select 1 from supabase_migrations.schema_migrations) then 'MCP_OAUTH_PREFLIGHT_READY' end"
           test "$preflight_status" = "MCP_OAUTH_PREFLIGHT_READY"
           test -n "$MCP_SMOKE_TOKEN"

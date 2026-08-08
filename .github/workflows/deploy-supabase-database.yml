@@ -137,7 +137,47 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_ID" \
             --password "$SUPABASE_DB_PASSWORD"
 
-      - name: Preview pending migrations
+      - name: Verify the audited Lovable baseline and build the production view
+        shell: bash
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          migration_ledger="$RUNNER_TEMP/production-migration-ledger.csv"
+          attestation_result="$RUNNER_TEMP/production-baseline-attestation.csv"
+          normalized_migrations="$RUNNER_TEMP/production-migrations"
+          repository_migrations="$RUNNER_TEMP/repository-migrations"
+          expected_versions="$RUNNER_TEMP/production-expected-versions.txt"
+
+          test ! -e "$normalized_migrations"
+          test ! -e "$repository_migrations"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-migration-ledger.sql)" \
+            > "$migration_ledger"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-baseline-attestation.sql)" \
+            > "$attestation_result"
+          attestation_status="$(
+            tr -d '\r' < "$attestation_result" \
+              | grep --fixed-strings --line-regexp "PRODUCTION_BASELINE_SCHEMA_READY"
+          )"
+          test "$attestation_status" = "PRODUCTION_BASELINE_SCHEMA_READY"
+
+          node scripts/prepare-production-migration-view.mjs \
+            --ledger-csv "$migration_ledger" \
+            --output-dir "$normalized_migrations"
+          node scripts/prepare-production-migration-view.mjs \
+            --list-versions \
+            > "$expected_versions"
+          test -s "$expected_versions"
+
+          mv supabase/migrations "$repository_migrations"
+          mv "$normalized_migrations" supabase/migrations
+
+      - name: Confirm the normalized migration view
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -147,13 +187,31 @@ jobs:
           supabase migration list --linked
           supabase db push --linked --dry-run
 
-      - name: Apply pending migrations without seed data
+      - name: Recheck the immutable baseline and apply pending migrations
         shell: bash
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
+          current_ledger="$RUNNER_TEMP/production-migration-ledger-current.csv"
+          attestation_result="$RUNNER_TEMP/production-baseline-attestation-current.csv"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-migration-ledger.sql)" \
+            > "$current_ledger"
+          cmp --silent \
+            "$RUNNER_TEMP/production-migration-ledger.csv" \
+            "$current_ledger"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-baseline-attestation.sql)" \
+            > "$attestation_result"
+          attestation_status="$(
+            tr -d '\r' < "$attestation_result" \
+              | grep --fixed-strings --line-regexp "PRODUCTION_BASELINE_SCHEMA_READY"
+          )"
+          test "$attestation_status" = "PRODUCTION_BASELINE_SCHEMA_READY"
           supabase db push --linked --yes
 
       - name: Verify migration ledger after release
@@ -165,15 +223,8 @@ jobs:
           set -euo pipefail
           supabase migration list --linked
           supabase db push --linked --dry-run
-          mapfile -t expected_migrations < <(
-            find supabase/migrations \
-              -maxdepth 1 \
-              -type f \
-              -name '*.sql' \
-              -printf '%f\n' \
-              | sed -nE 's/^([0-9]{14})_[A-Za-z0-9._-]+\.sql$/\1/p' \
-              | sort --unique
-          )
+          mapfile -t expected_migrations \
+            < "$RUNNER_TEMP/production-expected-versions.txt"
           test "${#expected_migrations[@]}" -gt 0
           for version in "${expected_migrations[@]}"; do
             [[ "$version" =~ ^[0-9]{14}$ ]]
@@ -199,6 +250,26 @@ jobs:
           )"
           test "$ledger_status" = "DATABASE_LEDGER_CURRENT"
 
+          final_migration_ledger="$RUNNER_TEMP/production-migration-ledger-final.csv"
+          final_attestation="$RUNNER_TEMP/production-baseline-attestation-final.csv"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-migration-ledger.sql)" \
+            > "$final_migration_ledger"
+          node scripts/prepare-production-migration-view.mjs \
+            --ledger-csv "$final_migration_ledger" \
+            --source-dir "$RUNNER_TEMP/repository-migrations" \
+            --output-dir "$RUNNER_TEMP/postflight-production-migrations"
+          supabase db query --linked \
+            --output csv \
+            "$(cat supabase/production-baseline-attestation.sql)" \
+            > "$final_attestation"
+          final_attestation_status="$(
+            tr -d '\r' < "$final_attestation" \
+              | grep --fixed-strings --line-regexp "PRODUCTION_BASELINE_SCHEMA_READY"
+          )"
+          test "$final_attestation_status" = "PRODUCTION_BASELINE_SCHEMA_READY"
+
       - name: Write release summary
         if: always()
         shell: bash
@@ -211,5 +282,6 @@ jobs:
             echo
             echo "- Status: \`$JOB_STATUS\`"
             echo "- Source SHA: \`$TARGET_SHA\`"
-            echo "- Strategy: forward-only migrations, no seed, no reset, no repair"
+            echo "- Strategy: audited production aliases, schema attestations, and forward-only migrations"
+            echo "- Forbidden operations: no seed, no reset, no repair, no include-all"
           } >> "$GITHUB_STEP_SUMMARY"

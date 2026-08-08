@@ -161,14 +161,28 @@ jobs:
             --project-ref "$SUPABASE_PROJECT_ID" \
             --password "$SUPABASE_DB_PASSWORD"
 
+          expected_ledger_file="$RUNNER_TEMP/public-edge-expected-migration-ledger.sql"
+          node scripts/prepare-production-migration-view.mjs \
+            --ledger-sql-values \
+            > "$expected_ledger_file"
+          test "$(wc -l < "$expected_ledger_file")" -gt 0
+          expected_ledger_sql="$(cat "$expected_ledger_file")"
+
           preflight_result="$RUNNER_TEMP/public-edge-preflight.csv"
           supabase db query --linked \
             --output csv \
-            "with required_migrations(version) as (
-              values
-                ('20260807221000'),
-                ('20260807222000'),
-                ('20260807223000')
+            "with expected_migrations(version, migration_name, statements_sha256) as (
+              values $expected_ledger_sql
+            ),
+            applied_migrations as (
+              select
+                version,
+                coalesce(name, '') as migration_name,
+                encode(
+                  digest(coalesce(array_to_string(statements, chr(30)), ''), 'sha256'),
+                  'hex'
+                ) as statements_sha256
+              from supabase_migrations.schema_migrations
             ),
             required_v2_rpcs(signature, grantee) as (
               values
@@ -197,11 +211,14 @@ jobs:
             )
             select case
               when not exists (
-                select required.version
-                from required_migrations as required
-                left join supabase_migrations.schema_migrations as applied
-                  on applied.version = required.version
-                where applied.version is null
+                select 1
+                from expected_migrations as expected
+                full outer join applied_migrations as applied
+                  using (version)
+                where expected.version is null
+                   or applied.version is null
+                   or applied.migration_name <> expected.migration_name
+                   or applied.statements_sha256 <> expected.statements_sha256
               )
                and to_regclass('app_private.first_access_tokens') is not null
                and to_regclass('app_private.quiz_invitation_tokens') is not null

@@ -131,6 +131,52 @@ O comando padrão do Supabase para aplicar migrations pendentes a um remoto vinc
 
 Nunca aplique `legacy_prerequisites.sql` ao banco de produção existente. Os objetos já fazem parte do estado real e migrations posteriores os endurecem. Nesse banco, aplique somente migrations novas ainda pendentes pelo workflow `Deploy Supabase Database`.
 
+### Baseline normalizado da produção Lovable
+
+O banco original de produção foi construído pelo executor histórico do Lovable.
+Antes do corte `20260807210000`, vários timestamps registrados remotamente não
+coincidem com o nome do arquivo local equivalente, embora representem o mesmo
+efeito publicado. Essa diferença histórica não é uma fila de migrations para
+reaplicar e não autoriza reescrever a ledger remota.
+
+O baseline normalizado é somente um controle de comparação, composto por:
+
+- `supabase/production-migration-baseline.json`, manifesto explícito e fixo de
+  96 aliases entre a versão remota e o arquivo local revisado. A fotografia
+  contém 89 correspondências exatas de statements, duas sanitizações históricas
+  já aprovadas e cinco marcadores de ledger revisados;
+- `supabase/production-migration-ledger.sql`, consulta somente leitura que
+  produz o fingerprint dos 96 registros históricos e de qualquer migration
+  forward já aplicada, sem inserir, atualizar ou remover linhas;
+- `supabase/production-baseline-attestation.sql`, atestação somente leitura para
+  `20260728234519_add_task_workstreams.sql` e
+  `20260728235000_sync_editorial_tasks_bidirectionally.sql`. Os efeitos dessas
+  duas migrations existem no schema de produção, mas o executor histórico não
+  criou as duas linhas correspondentes na ledger. Elas são absorvidas pelo
+  baseline apenas quando a estrutura, os dados e as permissões retornam o
+  sentinel exato `PRODUCTION_BASELINE_SCHEMA_READY`;
+- 12 migrations forward-only já versionadas a partir de `20260807210000`,
+  fixadas individualmente por versão, nome, hash do arquivo e hash do array de
+  statements da CLI. Cada migration futura posterior precisa ser acrescentada
+  explicitamente ao manifesto no mesmo PR.
+
+Todos os checks são fail-closed. Alias, quantidade, versão, caminho, hash,
+modo de correspondência, checksum das consultas, schema attestation ou sentinel
+ausente ou divergente interrompe o release. A correção suportada é revisar a
+causa e, quando o schema precisar mudar, criar uma nova migration forward-only.
+Não existe fallback que aceite uma correspondência aproximada.
+
+Esta normalização não usa e não autoriza `supabase migration repair`,
+`supabase db reset`, seed, `supabase db push --include-all` nem escrita manual
+em `supabase_migrations.schema_migrations`. Ela também não converte um banco
+existente em banco vazio e nunca aplica o bootstrap legado à produção atual.
+
+O baseline aprovado resolve somente a identidade do histórico já publicado.
+Ele não prova recuperabilidade nem conclui o gate privado de segurança. Cada
+release continua exigindo evidência real de backup restaurável do projeto exato
+e checklist privado realmente concluído antes de selecionar `BACKUP_VERIFIED`
+e `PRIVATE_SECURITY_CHECKLIST_VERIFIED`.
+
 ## Configuração portátil antes das funções
 
 ### IA
@@ -193,6 +239,8 @@ Pré-condições:
 - o gate privado de rotação ou aposentadoria de credenciais concluído, sem
   copiar valores ou detalhes do incidente para logs, documentação ou secrets;
 - SHA completo de 40 caracteres igual ao tip remoto atual de `main`;
+- baseline normalizado de produção validado integralmente, com os 96 aliases,
+  as duas schema attestations e todas as migrations a partir do corte;
 - migration `20260807210000_bind_mcp_oauth_clients.sql` presente nesse SHA.
 
 As migrations de segurança posteriores também respeitam EXPAND/CUTOVER. Em especial, `20260807222000_harden_public_tokens_private.sql` é uma EXPAND compatível: cria digests/RPCs v2 e mantém temporariamente os bearers e contratos v1 públicos para o runtime antigo continuar operando enquanto o banco é publicado primeiro. Só depois de publicar e testar todas as Edge Functions e telas v2 uma migration CUTOVER separada pode apagar esses valores, remover bridges/índices legados e tornar o caminho privado exclusivo. Após esse CUTOVER, rollback de aplicação nunca deve voltar a consultar `profiles.first_access_token` ou `quiz_submissions.token`; em incidente, pause os endpoints e reemita links, sem copiar plaintext de volta ao schema público.
@@ -206,11 +254,18 @@ No GitHub Actions, execute `Deploy Supabase Database` com:
 | `backup_confirmation` | `BACKUP_VERIFIED` |
 | `private_security_confirmation` | `PRIVATE_SECURITY_CHECKLIST_VERIFIED` |
 
-O workflow confirma o projeto, rejeita o bootstrap temporário dentro da pasta de migrations, mostra a ledger, executa dry-run, aplica somente migrations pendentes com `supabase db push --linked` e repete a verificação. Ele nunca executa reset, seed ou migration repair.
+O workflow confirma o projeto, rejeita o bootstrap temporário dentro da pasta de
+migrations e valida o fingerprint legado e as duas attestations antes de qualquer
+push. Somente depois dos sentinels exatos ele mostra a ledger, executa dry-run,
+aplica as migrations posteriores ao corte com `supabase db push --linked` e
+repete a verificação. Ele nunca executa reset, seed, migration repair,
+`--include-all` nem escrita manual na ledger.
 
 O banco é forward-only. Não existe operação de rollback destrutivo: qualquer correção usa uma nova migration revisada, outro SHA no tip de `main` e um novo backup confirmado.
 
-Depois do sucesso, confirme que `20260807210000` consta na ledger e que os três checks da consulta de segurança retornam `true`.
+Depois do sucesso, confirme que todas as migrations versionadas a partir de
+`20260807210000` constam na ledger, que o baseline continua íntegro e que os três
+checks da consulta de segurança retornam `true`.
 
 ### 2. Release das cinco Edge Functions não-MCP
 
