@@ -92,6 +92,13 @@ jobs:
       - name: Run pgTAP database tests
         run: supabase test db
 
+      - name: Remove CI-only legacy prerequisites migration
+        if: always()
+        run: |
+          if [[ -e supabase/migrations/20260528163000_legacy_prerequisites.sql ]]; then
+            unlink supabase/migrations/20260528163000_legacy_prerequisites.sql
+          fi
+
       - name: Run unit tests
         run: npm test -- --run
 

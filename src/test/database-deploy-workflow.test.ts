@@ -56,7 +56,7 @@ describe("protected Supabase database release", () => {
     expect(workflow).toContain("supabase db push --linked --yes");
   });
 
-  it("proves every local migration version exists in the remote ledger after push", () => {
+  it("proves every audited production version exists in the remote ledger after push", () => {
     const verification = workflow.slice(
       workflow.indexOf("Verify migration ledger after release"),
       workflow.indexOf("Write release summary"),
@@ -64,7 +64,11 @@ describe("protected Supabase database release", () => {
     expect(verification).toContain("supabase_migrations.schema_migrations");
     expect(verification).toContain("DATABASE_LEDGER_CURRENT");
     expect(verification).toContain('test "$ledger_status" = "DATABASE_LEDGER_CURRENT"');
-    expect(verification).toMatch(/find supabase\/migrations/);
+    expect(workflow).toContain("prepare-production-migration-view.mjs");
+    expect(workflow).toContain("production-migration-ledger.sql");
+    expect(workflow).toContain("PRODUCTION_BASELINE_SCHEMA_READY");
+    expect(verification).toContain("production-expected-versions.txt");
+    expect(verification).not.toMatch(/find supabase\/migrations/);
   });
 
   it("never injects the fresh-database bootstrap into production migrations", () => {
@@ -121,7 +125,11 @@ describe("protected Supabase database release", () => {
     expect(mcpWorkflow).toContain("--output csv");
     expect(mcpWorkflow).toContain("supabase_migrations.schema_migrations");
     expect(mcpWorkflow).toContain("expected_migrations");
-    expect(mcpWorkflow).toContain("find ../control/supabase/migrations");
+    expect(mcpWorkflow).toContain("prepare-production-migration-view.mjs");
+    expect(mcpWorkflow).toContain("--ledger-sql-values");
+    expect(mcpWorkflow).toMatch(/full outer join applied_migrations/);
+    expect(mcpWorkflow).toContain("applied.migration_name <> expected.migration_name");
+    expect(mcpWorkflow).toContain("applied.statements_sha256 <> expected.statements_sha256");
     expect(resultAssertion).toBeGreaterThan(unknownClientCheck);
     expect(secretMutation).toBeGreaterThan(resultAssertion);
     expect(secretRemoval).toBeGreaterThan(resultAssertion);

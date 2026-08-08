@@ -126,13 +126,12 @@ describe("protected public Edge release", () => {
       workflow.indexOf("Deploy the exact five-function allowlist"),
     );
 
-    for (const version of [
-      "20260807221000",
-      "20260807222000",
-      "20260807223000",
-    ]) {
-      expect(preflight).toContain(`('${version}')`);
-    }
+    expect(preflight).toContain("prepare-production-migration-view.mjs");
+    expect(preflight).toContain("--ledger-sql-values");
+    expect(preflight).toContain("expected_migrations(version, migration_name, statements_sha256)");
+    expect(preflight).toMatch(/full outer join applied_migrations/);
+    expect(preflight).toContain("applied.migration_name <> expected.migration_name");
+    expect(preflight).toContain("applied.statements_sha256 <> expected.statements_sha256");
     for (const contract of expectedRpcContracts) {
       expect(preflight).toContain(`('${contract}',`);
     }
