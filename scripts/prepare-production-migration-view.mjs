@@ -1159,6 +1159,7 @@ export function parseArgs(argv) {
   const args = {
     listVersions: false,
     ledgerSqlValues: false,
+    listShadowFiles: false,
     ledgerCsvPath: undefined,
     outputDir: undefined,
     repoRoot: defaultRepoRoot,
@@ -1191,6 +1192,12 @@ export function parseArgs(argv) {
       seen.add(argument)
       continue
     }
+    if (argument === '--list-shadow-files') {
+      if (seen.has(argument)) fail(`duplicate argument ${argument}`)
+      args.listShadowFiles = true
+      seen.add(argument)
+      continue
+    }
     const key = valueFlags.get(argument)
     if (!key) fail(`unknown argument ${argument}`)
     if (seen.has(argument)) fail(`duplicate argument ${argument}`)
@@ -1215,10 +1222,12 @@ export function parseArgs(argv) {
     ? resolve(args.checksumFile)
     : resolve(args.repoRoot, migrationManifestPath)
 
-  if (args.listVersions && args.ledgerSqlValues) {
-    fail('--list-versions and --ledger-sql-values are mutually exclusive')
+  const listingModes = [args.listVersions, args.ledgerSqlValues, args.listShadowFiles]
+    .filter(Boolean).length
+  if (listingModes > 1) {
+    fail('--list-versions, --ledger-sql-values and --list-shadow-files are mutually exclusive')
   }
-  if (args.listVersions || args.ledgerSqlValues) {
+  if (listingModes === 1) {
     if (args.ledgerCsvPath || args.outputDir) {
       fail('listing modes cannot be combined with --ledger-csv or --output-dir')
     }
@@ -1245,6 +1254,10 @@ export function runCli(argv = process.argv.slice(2)) {
   }
   if (args.ledgerSqlValues) {
     process.stdout.write(`${formatProductionLedgerSqlValues(planOptions)}\n`)
+    return
+  }
+  if (args.listShadowFiles) {
+    process.stdout.write(`${listShadowMigrationPaths(planOptions).join('\n')}\n`)
     return
   }
   buildProductionMigrationView({
