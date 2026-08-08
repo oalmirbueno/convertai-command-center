@@ -1,57 +1,54 @@
-# Padrão mobile app-like em toda a plataforma
+# Release e7b5984 pelo ambiente Lovable: o que é possível e o que não é
 
-O problema é o mesmo em quase todas as páginas: a página inteira rola no mobile, então o topo (título, abas, filtros) sobe junto e a experiência parece uma página web em vez de um app. A correção é padronizar um shell mobile com header fixo, abas fixas e apenas o conteúdo interno com scroll — e ajustar Kanban e Financeiro para deslizar cards no eixo horizontal como um app nativo.
+Resposta objetiva: **não é possível executar a release inteira "sem edição" a partir deste ambiente.** As Edge Functions podem ser implantadas; as 12 migrations **não** podem ser aplicadas pelo runner de arquivos versionados. Nada foi alterado nesta verificação.
 
-## 1. Shell mobile padrão (base de tudo)
+## Estado verificado agora (somente leitura)
 
-Criar um wrapper reutilizável `MobilePageShell` (usado apenas em `md:hidden`) com:
+- Os 12 arquivos de migration existem no projeto: `20260807210000`, `211000`, `212000`, `213000`, `215000`, `216000`, `217000`, `219000`, `220000`, `221000`, `222000`, `223000`.
+- As 7 funções existem em `supabase/functions/`: `admin-reset-client-access`, `client-first-access`, `submit-quiz`, `workspace-inbox`, `api-gateway`, `mcp-server`, `mcp-oauth-metadata`. Todas já têm `verify_jwt` definido em `supabase/config.toml`.
+- Banco vinculado: `public.mcp_oauth_clients` **não existe** e a RPC `issue_first_access_token_service` **não existe** — indicativo de que o lote de 07/08 ainda não foi aplicado.
+- O ledger `supabase_migrations.schema_migrations` é inacessível pelo papel de leitura deste ambiente (permission denied), então a confirmação definitiva de pendência depende do runner oficial.
+- **HEAD do checkout deste ambiente é `d89dfec3`, não `e7b5984a`.** O ambiente não está sincronizado no commit da release.
 
-- Header sticky logo abaixo da TopBar do app (respeita `safe-area-inset-top` + 64px).
-- Faixa de abas/filtros sticky abaixo do header, com scroll horizontal quando estourar largura.
-- Área de conteúdo com `overflow-y-auto`, altura calculada por `100dvh - top - bottom nav`, com `overscroll-behavior: contain` para não puxar a página inteira.
-- Padding inferior dinâmico usando `env(safe-area-inset-bottom) + 64px` (altura da MobileBottomNav).
+## Bloqueios (ações externas indispensáveis)
 
-Aplicar em: Dashboard (revisar), Projetos, Kanban, Clientes, Relatórios, Aprovações, Pedidos, Briefings, Quiz, Equipe, Timeline, Financeiro, Arquivos, Workspace, Cofre, Config, Perfil.
+1. **Sincronizar o projeto Lovable no commit `e7b5984a`.** Enquanto o checkout estiver em `d89dfec3`, qualquer deploy publicaria bytes diferentes do commit aprovado. Isso é uma ação de plataforma (sync/merge da main), não executável por edição de arquivo.
+2. **Runner de migrations por arquivo não existe aqui.** O ambiente Lovable só aplica SQL pela ferramenta de migration, que recebe SQL inline e é aprovada uma a uma pelo usuário; ela grava no ledger, mas registra a versão gerada pela plataforma, não os 12 timestamps versionados. Aplicar os arquivos com `20260807210000...223000` preservando versão, ordem e ledger exige o caminho externo já existente no repositório: o workflow **`.github/workflows/deploy-supabase-database.yml`** (`supabase db push --linked`, forward-only), disparado manualmente no GitHub.
 
-O desktop continua exatamente como está — o shell só troca o layout quando `md:hidden`.
+## O que este ambiente consegue fazer sem editar arquivos
 
-## 2. Kanban mobile
+Deploy das 7 Edge Functions, exatamente como estão no checkout, via a ferramenta de deploy do backend vinculado (`ref` atual do projeto), preservando o `verify_jwt` já declarado em `config.toml`:
 
-- Fixar header do projeto e a barra de colunas no topo. Só o conteúdo de cada coluna rola verticalmente.
-- Tornar as colunas um carrossel horizontal com snap (`snap-x snap-mandatory`), uma coluna por viewport, indicadores de posição no rodapé.
-- Habilitar arrastar card entre colunas por long-press: usar sensor de toque com delay (250ms) + tolerância, para não conflitar com o scroll vertical. Card em drag ganha elevação e overlay; soltar em cima de outra coluna via auto-scroll horizontal do carrossel.
-- Drawer do card em modal bottom-sheet, altura máxima 92dvh, com header e footer fixos e miolo scrollável. Fechar por arrastar para baixo ou pelo X.
+| Função | verify_jwt (config.toml) |
+| --- | --- |
+| admin-reset-client-access | true |
+| client-first-access | false |
+| submit-quiz | false |
+| workspace-inbox | false |
+| api-gateway | false |
+| mcp-server | false |
+| mcp-oauth-metadata | false |
 
-## 3. Financeiro mobile
+Gates que se aplicam a esse deploy: código idêntico ao checkout (sem reescrita), dependências relativas de `_shared` incluídas no bundle, nenhuma migration/secret/bucket tocado, e smoke test somente leitura após o deploy.
 
-- Reorganizar KPIs como carrossel horizontal de cards com snap (1.1 card visível por vez), em vez de empilhar verticalmente.
-- Abas (Recorrente / Projetos / Ads / Investidor / Capital) fixas no topo.
-- Tabelas viram lista de cards colapsáveis, cada card com ações principais no rodapé.
-- Formulário "Novo lançamento" em bottom-sheet full height, sem sair da página.
+## Sequência correta da release
 
-## 4. Correções pontuais adicionais
+```text
+1. Sync do projeto Lovable -> commit e7b5984a            [externo: plataforma]
+2. GitHub Actions: Deploy Supabase Database              [externo: manual]
+   inputs: target_sha=e7b5984a, APPLY_DATABASE_PRODUCTION,
+           BACKUP_VERIFIED, PRIVATE_SECURITY_CHECKLIST_VERIFIED
+   -> aplica as 12 migrations em ordem, ledger registrado
+3. Aqui: deploy das 7 Edge Functions                     [posso executar]
+4. Publish do frontend                                   [externo: manual]
+```
 
-- Aprovações, Pedidos, Relatórios: botão "Voltar" fixo no header do detalhe (não usar back do browser como única saída).
-- Cofre e Config: agrupar seções em abas horizontais fixas, cada seção com scroll interno.
-- Garantir que ao abrir qualquer detalhe (drawer, modal, sheet) o scroll da página-pai fique travado (`overflow: hidden` no body enquanto aberto).
+A ordem importa: `admin-reset-client-access`, `client-first-access`, `submit-quiz`, `workspace-inbox` e `api-gateway` dependem de objetos criados pelas migrations do passo 2 (tokens de primeiro acesso, quiz invitations, escopo de tenant do gateway). Implantá-las antes deixaria as funções falhando em runtime.
 
-## Detalhes técnicos
+## Se preferir sem o workflow do GitHub
 
-- Novo componente `src/components/shared/MobilePageShell.tsx` expondo `<Shell.Header>`, `<Shell.Tabs>`, `<Shell.Body>`. Usa `100dvh` e CSS vars para as safe-areas.
-- Kanban: substituir DnD atual no mobile por `@dnd-kit` com `TouchSensor({ activationConstraint: { delay: 250, tolerance: 8 } })`. Carrossel com `scroll-snap-type: x mandatory` e `scroll-snap-align: center` em cada coluna.
-- Financeiro: KPIs em `flex overflow-x-auto snap-x` com cards `min-w-[85%] snap-center`.
-- Bottom-sheets: usar `Sheet` do shadcn com `side="bottom"` e `h-[92dvh]`, header/footer com `shrink-0` e miolo `overflow-y-auto`.
-- Regra global: nenhuma página mobile deve rolar como um todo — apenas o `<Shell.Body>`. `main` do `AppLayout` mantém padding, mas cada página mobile passa a controlar sua altura via shell.
+Alternativa única disponível aqui: aplicar o mesmo SQL pela ferramenta de migration da Lovable, em 12 chamadas aprovadas por você. Consequência aceita explicitamente: os arquivos não são executados por caminho e o ledger receberá versões geradas pela plataforma, divergindo dos timestamps `20260807*`. Isso quebra a verificação append-only de `scripts/verify-migration-integrity.mjs` e o gate de baseline do workflow. Não recomendo, e não farei sem sua autorização explícita.
 
-## Fora de escopo
+## Próximo passo que peço
 
-- Alterações de desktop.
-- Redesign visual (cores, tipografia). Apenas layout/interação.
-- Novos recursos de negócio.
-
-## Ordem de entrega sugerida
-
-1. `MobilePageShell` + aplicar em Projetos, Clientes, Relatórios, Aprovações, Pedidos, Briefings, Quiz, Equipe, Timeline, Cofre, Config (varredura rápida, mesmo padrão).
-2. Kanban mobile (carrossel + long-press drag + bottom-sheet do card).
-3. Financeiro mobile (KPIs em carrossel + abas fixas + cards colapsáveis + bottom-sheet de lançamento).
-4. Passada final travando scroll do body em todos os drawers/modais abertos.
+Confirme qual caminho quer: (A) você dispara o workflow do banco e eu faço só o passo 3, ou (B) autoriza as 12 migrations inline com a divergência de ledger acima.
