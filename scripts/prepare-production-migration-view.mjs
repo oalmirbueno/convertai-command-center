@@ -954,7 +954,12 @@ export function loadProductionMigrationPlan({
 
 
 export function validateRemoteLedger(plan, remoteEntries) {
-  if (!plan || !Array.isArray(plan.legacyEntries) || !Array.isArray(plan.forwardMigrations)) {
+  if (
+    !plan
+    || !Array.isArray(plan.legacyEntries)
+    || !Array.isArray(plan.forwardMigrations)
+    || !Array.isArray(plan.forwardLedger)
+  ) {
     fail('production migration plan is invalid')
   }
   if (!Array.isArray(remoteEntries)) fail('remote migration entries must be an array')
@@ -963,6 +968,13 @@ export function validateRemoteLedger(plan, remoteEntries) {
   const recordedAttestation = remoteEntries.find(entry => attestedVersions.has(entry.remoteVersion))
   if (recordedAttestation) {
     fail(`schema-attested version unexpectedly exists in the remote ledger: ${recordedAttestation.remoteVersion}`)
+  }
+  const aliasedCanonicalVersions = new Set(
+    plan.forwardLedger.filter(entry => entry.alias).map(entry => entry.canonical.version),
+  )
+  const recordedCanonical = remoteEntries.find(entry => aliasedCanonicalVersions.has(entry.remoteVersion))
+  if (recordedCanonical) {
+    fail(`aliased canonical version unexpectedly exists in the remote ledger: ${recordedCanonical.remoteVersion}`)
   }
   if (remoteEntries.length < legacy.length) {
     fail(`remote ledger has ${remoteEntries.length} rows; expected at least ${legacy.length}`)
@@ -980,12 +992,12 @@ export function validateRemoteLedger(plan, remoteEntries) {
   }
 
   const appliedForwardRows = remoteEntries.slice(legacy.length)
-  if (appliedForwardRows.length > plan.forwardMigrations.length) {
+  if (appliedForwardRows.length > plan.forwardLedger.length) {
     fail('remote ledger contains more forward migrations than the canonical source')
   }
   for (let index = 0; index < appliedForwardRows.length; index += 1) {
     const actual = appliedForwardRows[index]
-    const expected = plan.forwardMigrations[index]
+    const expected = plan.forwardLedger[index]
     if (actual.remoteVersion !== expected.version) {
       fail(`remote forward ledger is not a canonical prefix at ${actual.remoteVersion}`)
     }
@@ -996,11 +1008,17 @@ export function validateRemoteLedger(plan, remoteEntries) {
       fail(`remote forward statement hash mismatch at version ${expected.version}`)
     }
   }
+  const applied = plan.forwardLedger.slice(0, appliedForwardRows.length)
   return {
-    appliedForward: plan.forwardMigrations.slice(0, appliedForwardRows.length),
-    pendingForward: plan.forwardMigrations.slice(appliedForwardRows.length),
+    appliedForward: applied.map(entry => entry.canonical),
+    appliedLedger: applied,
+    appliedAliases: applied.filter(entry => entry.alias).map(entry => entry.alias),
+    pendingForward: plan.forwardLedger
+      .slice(appliedForwardRows.length)
+      .map(entry => entry.canonical),
   }
 }
+
 
 export function createSentinelSql(version) {
   assertVersion(version, 'sentinel version')
