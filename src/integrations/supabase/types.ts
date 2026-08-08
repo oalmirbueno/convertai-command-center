@@ -49,6 +49,30 @@ export type Database = {
           },
         ]
       }
+      ai_usage_hourly: {
+        Row: {
+          request_count: number
+          updated_at: string
+          user_id: string
+          window_start: string
+          workload: string
+        }
+        Insert: {
+          request_count?: number
+          updated_at?: string
+          user_id: string
+          window_start: string
+          workload: string
+        }
+        Update: {
+          request_count?: number
+          updated_at?: string
+          user_id?: string
+          window_start?: string
+          workload?: string
+        }
+        Relationships: []
+      }
       api_audit_log: {
         Row: {
           action: string
@@ -85,7 +109,6 @@ export type Database = {
       api_keys: {
         Row: {
           audience: string | null
-          client_scope_mode: string
           created_at: string
           created_by: string | null
           expires_at: string | null
@@ -101,7 +124,6 @@ export type Database = {
         }
         Insert: {
           audience?: string | null
-          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -117,7 +139,6 @@ export type Database = {
         }
         Update: {
           audience?: string | null
-          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -1746,6 +1767,27 @@ export type Database = {
         }
         Relationships: []
       }
+      mcp_oauth_allowed_redirect_origins: {
+        Row: {
+          created_at: string
+          description: string | null
+          enabled: boolean
+          origin: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          origin: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          enabled?: boolean
+          origin?: string
+        }
+        Relationships: []
+      }
       milestones: {
         Row: {
           created_at: string
@@ -1804,6 +1846,27 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      notification_dispatch_hourly: {
+        Row: {
+          request_count: number
+          updated_at: string
+          user_id: string
+          window_start: string
+        }
+        Insert: {
+          request_count?: number
+          updated_at?: string
+          user_id: string
+          window_start: string
+        }
+        Update: {
+          request_count?: number
+          updated_at?: string
+          user_id?: string
+          window_start?: string
+        }
+        Relationships: []
       }
       notifications: {
         Row: {
@@ -2312,11 +2375,11 @@ export type Database = {
           icp_fit_score: number | null
           id: string
           invitation_expires_at: string | null
+          last_action_at: string | null
           lead_company: string | null
           lead_email: string | null
           lead_name: string | null
           lead_whatsapp: string | null
-          last_action_at: string | null
           main_pains: string | null
           maturity_digital: string | null
           origin: string | null
@@ -2340,11 +2403,11 @@ export type Database = {
           icp_fit_score?: number | null
           id?: string
           invitation_expires_at?: string | null
+          last_action_at?: string | null
           lead_company?: string | null
           lead_email?: string | null
           lead_name?: string | null
           lead_whatsapp?: string | null
-          last_action_at?: string | null
           main_pains?: string | null
           maturity_digital?: string | null
           origin?: string | null
@@ -2368,11 +2431,11 @@ export type Database = {
           icp_fit_score?: number | null
           id?: string
           invitation_expires_at?: string | null
+          last_action_at?: string | null
           lead_company?: string | null
           lead_email?: string | null
           lead_name?: string | null
           lead_whatsapp?: string | null
-          last_action_at?: string | null
           main_pains?: string | null
           maturity_digital?: string | null
           origin?: string | null
@@ -3271,6 +3334,47 @@ export type Database = {
           },
         ]
       }
+      workspace_inbox_scan_events: {
+        Row: {
+          actor_id: string | null
+          created_at: string
+          id: string
+          method: string
+          next_status: string
+          node_id: string
+          previous_status: string | null
+          reference: string | null
+        }
+        Insert: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          method: string
+          next_status: string
+          node_id: string
+          previous_status?: string | null
+          reference?: string | null
+        }
+        Update: {
+          actor_id?: string | null
+          created_at?: string
+          id?: string
+          method?: string
+          next_status?: string
+          node_id?: string
+          previous_status?: string | null
+          reference?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "workspace_inbox_scan_events_node_id_fkey"
+            columns: ["node_id"]
+            isOneToOne: false
+            referencedRelation: "workspace_nodes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       workspace_inbox_upload_reservations: {
         Row: {
           completed_at: string | null
@@ -3335,11 +3439,11 @@ export type Database = {
           created_by: string | null
           duration_sec: number | null
           id: string
+          inbox_scan_status: string | null
           inbox_token: string | null
           inbox_token_created_at: string | null
           inbox_token_expires_at: string | null
           inbox_token_generation: string | null
-          inbox_scan_status: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime: string | null
           name: string
@@ -3358,11 +3462,11 @@ export type Database = {
           created_by?: string | null
           duration_sec?: number | null
           id?: string
+          inbox_scan_status?: string | null
           inbox_token?: string | null
           inbox_token_created_at?: string | null
           inbox_token_expires_at?: string | null
           inbox_token_generation?: string | null
-          inbox_scan_status?: string | null
           kind: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name: string
@@ -3381,11 +3485,11 @@ export type Database = {
           created_by?: string | null
           duration_sec?: number | null
           id?: string
+          inbox_scan_status?: string | null
           inbox_token?: string | null
           inbox_token_created_at?: string | null
           inbox_token_expires_at?: string | null
           inbox_token_generation?: string | null
-          inbox_scan_status?: string | null
           kind?: Database["public"]["Enums"]["workspace_kind"]
           mime?: string | null
           name?: string
@@ -3585,6 +3689,24 @@ export type Database = {
         }
         Returns: undefined
       }
+      claim_ai_usage: { Args: { _workload: string }; Returns: boolean }
+      claim_first_access_token: {
+        Args: { p_token_hash_hex: string }
+        Returns: {
+          claim_id: string
+          email: string
+          profile_id: string
+        }[]
+      }
+      claim_notification_dispatch: { Args: never; Returns: boolean }
+      complete_contract_signature: {
+        Args: {
+          p_signature_ip: string
+          p_signature_name: string
+          p_token: string
+        }
+        Returns: string
+      }
       complete_workspace_inbox_upload: {
         Args: {
           p_mime: string
@@ -3595,29 +3717,9 @@ export type Database = {
         }
         Returns: string
       }
-      configure_api_gateway_key_scope: {
-        Args: {
-          p_client_ids?: string[]
-          p_key_id: string
-          p_scope_mode: string
-        }
-        Returns: undefined
-      }
-      consume_api_gateway_rate_limit: {
-        Args: { _key_fingerprint: string }
-        Returns: {
-          is_allowed: boolean
-          remaining: number
-          retry_after_seconds: number
-        }[]
-      }
-      complete_contract_signature: {
-        Args: {
-          p_signature_ip: string
-          p_signature_name: string
-          p_token: string
-        }
-        Returns: string
+      consume_first_access_claim: {
+        Args: { p_claim_id: string }
+        Returns: boolean
       }
       create_and_link_editorial_account: {
         Args: {
@@ -3685,68 +3787,6 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
-      }
-      claim_first_access_token: {
-        Args: { p_token_hash_hex: string }
-        Returns: {
-          claim_id: string
-          email: string
-          profile_id: string
-        }[]
-      }
-      consume_first_access_claim: {
-        Args: { p_claim_id: string }
-        Returns: boolean
-      }
-      issue_first_access_token: {
-        Args: { p_profile_id: string }
-        Returns: { expires_at: string; token: string }[]
-      }
-      issue_first_access_token_service: {
-        Args: { p_profile_id: string }
-        Returns: { expires_at: string; token: string }[]
-      }
-      issue_quiz_invitation: {
-        Args: never
-        Returns: string
-      }
-      issue_quiz_invitation_v2: {
-        Args: never
-        Returns: {
-          expires_at: string
-          submission_id: string
-          token: string
-        }[]
-      }
-      load_quiz_invitation: {
-        Args: { p_token_hash_hex: string }
-        Returns: Json
-      }
-      release_first_access_claim: {
-        Args: { p_claim_id: string }
-        Returns: boolean
-      }
-      save_quiz_invitation: {
-        Args: { p_responses: Json; p_token_hash_hex: string }
-        Returns: Json
-      }
-      submit_quiz_invitation: {
-        Args: {
-          p_plan: string
-          p_responses: Json
-          p_score: number
-          p_token_hash_hex: string
-        }
-        Returns: Json
-      }
-      validate_first_access_token: {
-        Args: { p_token_hash_hex: string }
-        Returns: {
-          email: string
-          expires_at: string
-          profile_id: string
-          status: string
-        }[]
       }
       decide_file_approval: {
         Args: {
@@ -3853,10 +3893,6 @@ export type Database = {
       }
       files_reference_path: { Args: { _url: string }; Returns: string }
       get_admin_user_id: { Args: never; Returns: string }
-      inspect_workspace_inbox: {
-        Args: { p_token: string }
-        Returns: Json
-      }
       get_editorial_approval_preview: {
         Args: { p_file_id: string }
         Returns: {
@@ -3875,7 +3911,39 @@ export type Database = {
         }
         Returns: boolean
       }
+      inspect_workspace_inbox: { Args: { p_token: string }; Returns: Json }
+      is_allowed_mcp_oauth_client: {
+        Args: { _client_id: string }
+        Returns: boolean
+      }
       is_staff: { Args: { _user_id: string }; Returns: boolean }
+      issue_first_access_token: {
+        Args: { p_profile_id: string }
+        Returns: {
+          expires_at: string
+          token: string
+        }[]
+      }
+      issue_first_access_token_service: {
+        Args: { p_profile_id: string }
+        Returns: {
+          expires_at: string
+          token: string
+        }[]
+      }
+      issue_quiz_invitation: { Args: never; Returns: string }
+      issue_quiz_invitation_v2: {
+        Args: never
+        Returns: {
+          expires_at: string
+          submission_id: string
+          token: string
+        }[]
+      }
+      load_quiz_invitation: {
+        Args: { p_token_hash_hex: string }
+        Returns: Json
+      }
       manage_workspace_inbox_token: {
         Args: { p_action?: string; p_folder_id: string }
         Returns: Json
@@ -3958,6 +4026,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      release_first_access_claim: {
+        Args: { p_claim_id: string }
+        Returns: boolean
+      }
       replace_managed_user_role: {
         Args: {
           _actor_id: string
@@ -4022,6 +4094,15 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      reserve_workspace_inbox_upload: {
+        Args: {
+          p_extension: string
+          p_request_id: string
+          p_size_bytes: number
+          p_token: string
+        }
+        Returns: Json
       }
       review_file_agency: {
         Args: { p_decision: string; p_feedback?: string; p_file_id: string }
@@ -4092,6 +4173,10 @@ export type Database = {
         Args: { p_expected_version?: number; p_payload: Json }
         Returns: Json
       }
+      save_quiz_invitation: {
+        Args: { p_responses: Json; p_token_hash_hex: string }
+        Returns: Json
+      }
       show_limit: { Args: never; Returns: number }
       show_trgm: { Args: { "": string }; Returns: string[] }
       social_meta_connect_resource: {
@@ -4123,6 +4208,10 @@ export type Database = {
         }
         Returns: Json
       }
+      social_meta_oauth_register_redirect_uri: {
+        Args: { _redirect_uri: string }
+        Returns: undefined
+      }
       social_meta_oauth_store_resources: {
         Args: {
           _actor_id: string
@@ -4146,6 +4235,15 @@ export type Database = {
       storage_object_write_allowed: {
         Args: { _bucket: string; _name: string }
         Returns: boolean
+      }
+      submit_quiz_invitation: {
+        Args: {
+          p_plan: string
+          p_responses: Json
+          p_score: number
+          p_token_hash_hex: string
+        }
+        Returns: Json
       }
       transition_editorial_publication: {
         Args: {
@@ -4191,7 +4289,7 @@ export type Database = {
         Returns: {
           id: string
           name: string
-          origin: string | null
+          origin: string
           scopes: string[]
         }[]
       }
@@ -4199,24 +4297,25 @@ export type Database = {
         Args: { _audience: string; _key_hash: string }
         Returns: {
           audience: string
-          client_ids: string[]
-          client_scope_mode: string
-          created_by: string | null
+          created_by: string
           id: string
           name: string
-          origin: string | null
-          owner_is_admin: boolean
+          origin: string
           scopes: string[]
         }[]
       }
-      reserve_workspace_inbox_upload: {
-        Args: {
-          p_extension: string
-          p_request_id: string
-          p_size_bytes: number
-          p_token: string
-        }
-        Returns: Json
+      validate_first_access_token: {
+        Args: { p_token_hash_hex: string }
+        Returns: {
+          email: string
+          expires_at: string
+          profile_id: string
+          status: string
+        }[]
+      }
+      workspace_storage_object_is_releasable: {
+        Args: { _name: string }
+        Returns: boolean
       }
     }
     Enums: {
