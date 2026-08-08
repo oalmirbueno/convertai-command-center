@@ -1083,19 +1083,27 @@ export function buildProductionMigrationView({
     ledgerCsvPath,
   )
   const reconciliation = validateRemoteLedger(plan, remoteEntries)
-  const appliedForwardVersions = new Set(
-    reconciliation.appliedForward.map(source => source.version),
+  const appliedCanonicalPaths = new Set(
+    reconciliation.appliedForward.map(source => source.relativePath),
   )
   const files = plan.legacyEntries.map(entry => ({
     filename: `${entry.remote_version}_production_ledger_sentinel.sql`,
     bytes: createSentinelSql(entry.remote_version),
   }))
-  for (const source of plan.forwardMigrations) {
+  for (const entry of plan.forwardLedger) {
+    if (!appliedCanonicalPaths.has(entry.canonical.relativePath)) {
+      // Not in the remote ledger yet: the canonical SQL is the only thing that
+      // may still execute.
+      files.push({ filename: entry.canonical.filename, bytes: entry.canonical.bytes })
+      continue
+    }
+    // Already applied — emit a sentinel for the version the remote ledger
+    // actually recorded (the runner alias when one exists).
     files.push({
-      filename: source.filename,
-      bytes: appliedForwardVersions.has(source.version)
-        ? createSentinelSql(source.version)
-        : source.bytes,
+      filename: entry.alias
+        ? `${entry.version}_production_ledger_sentinel.sql`
+        : entry.canonical.filename,
+      bytes: createSentinelSql(entry.version),
     })
   }
   files.sort((left, right) => left.filename.localeCompare(right.filename))
@@ -1103,6 +1111,7 @@ export function buildProductionMigrationView({
   return {
     aliases: plan.legacyEntries.length,
     appliedForward: reconciliation.appliedForward.length,
+    appliedAliases: reconciliation.appliedAliases.length,
     pendingForward: reconciliation.pendingForward.length,
     files: files.length,
   }
@@ -1110,6 +1119,10 @@ export function buildProductionMigrationView({
 
 export function listProductionVersions(options = {}) {
   return loadProductionMigrationPlan(options).listedVersions
+}
+
+export function listShadowMigrationPaths(options = {}) {
+  return loadProductionMigrationPlan(options).shadowPaths
 }
 
 export function listProductionLedgerEntries(options = {}) {
@@ -1120,13 +1133,14 @@ export function listProductionLedgerEntries(options = {}) {
       name: entry.remote_name,
       statementsSha256: entry.remote_statements_sha256,
     })),
-    ...plan.manifest.forward_migrations.map(entry => ({
+    ...plan.forwardLedger.map(entry => ({
       version: entry.version,
-      name: entry.remote_name,
-      statementsSha256: entry.remote_statements_sha256,
+      name: entry.name,
+      statementsSha256: entry.statementsSha256,
     })),
   ].sort((left, right) => left.version.localeCompare(right.version))
 }
+
 
 function quoteSqlText(value) {
   if (typeof value !== 'string' || /[\u0000-\u001f\u007f]/.test(value)) {
