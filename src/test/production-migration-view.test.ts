@@ -70,13 +70,14 @@ function remoteRows(appliedForward = 0): LedgerRow[] {
       remoteName: entry.remote_name,
       remoteStatementsSha256: entry.remote_statements_sha256,
     })),
-    ...plan.manifest.forward_migrations.slice(0, appliedForward).map((entry) => ({
+    ...plan.forwardLedger.slice(0, appliedForward).map((entry) => ({
       remoteVersion: entry.version,
-      remoteName: entry.remote_name,
-      remoteStatementsSha256: entry.remote_statements_sha256,
+      remoteName: entry.name,
+      remoteStatementsSha256: entry.statementsSha256,
     })),
   ];
 }
+
 
 function buildFixture(appliedForward = 0) {
   const root = temporaryRoot();
