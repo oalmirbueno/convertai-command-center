@@ -684,6 +684,8 @@ export function loadProductionMigrationPlan({
 
   const legacyEntries = manifest.remote_legacy_entries
   const forwardEntries = manifest.forward_migrations
+  const aliasEntries = manifest.applied_forward_aliases
+
   const attestations = manifest.schema_attestations
   if (legacyEntries.length !== 96) fail('version 1 requires exactly 96 remote legacy entries')
   if (attestations.length !== 2) fail('version 1 requires exactly 2 schema attestations')
