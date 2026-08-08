@@ -371,13 +371,14 @@ describe("production migration view", () => {
     const skippedForward = [
       ...valid,
       {
-        remoteVersion: plan.forwardMigrations[1].version,
-        remoteName: plan.forwardMigrations[1].name,
-        remoteStatementsSha256: plan.forwardMigrations[1].statementsSha256,
+        remoteVersion: plan.forwardLedger[1].version,
+        remoteName: plan.forwardLedger[1].name,
+        remoteStatementsSha256: plan.forwardLedger[1].statementsSha256,
       },
     ];
     expect(() => validateRemoteLedger(plan, skippedForward))
       .toThrow(/not a canonical prefix/);
+
 
     const attested = [
       ...valid,
