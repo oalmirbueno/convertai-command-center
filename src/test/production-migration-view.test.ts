@@ -111,16 +111,16 @@ describe("production migration view", () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 + 2 + 12 contract and lists only deployable versions", () => {
+  it("validates the explicit 96 + 2 + 24 contract and lists only deployable versions", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(12);
-    expect(plan.forwardMigrations).toHaveLength(12);
-    expect(versions).toHaveLength(108);
+    expect(plan.manifest.forward_migrations).toHaveLength(24);
+    expect(plan.forwardMigrations).toHaveLength(24);
+    expect(versions).toHaveLength(120);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
 
@@ -133,7 +133,7 @@ describe("production migration view", () => {
     expect(cli.stdout).toBe(`${versions.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(108);
+    expect(sqlValues.split("\n")).toHaveLength(120);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     expect(sqlValues).toContain("'20260807223000','harden_api_gateway_tenant_scope'");
     const sqlCli = spawnSync(process.execPath, [scriptPath, "--ledger-sql-values"], {
@@ -153,10 +153,10 @@ describe("production migration view", () => {
     expect(result).toEqual({
       aliases: 96,
       appliedForward: 0,
-      pendingForward: 12,
-      files: 108,
+      pendingForward: 24,
+      files: 120,
     });
-    expect(filenames).toHaveLength(108);
+    expect(filenames).toHaveLength(120);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
       .toHaveLength(96);
     for (const attestation of plan.attestations) {
@@ -175,7 +175,7 @@ describe("production migration view", () => {
     const { outputDir, result } = buildFixture(2);
 
     expect(result.appliedForward).toBe(2);
-    expect(result.pendingForward).toBe(10);
+    expect(result.pendingForward).toBe(22);
     for (const forward of plan.forwardMigrations.slice(0, 2)) {
       expect(readFileSync(join(outputDir, forward.filename), "utf8"))
         .toContain(`migration sentinel ${forward.version}`);
@@ -188,7 +188,7 @@ describe("production migration view", () => {
     const root = temporaryRoot();
     const sourceDir = join(root, "repository-migrations");
     cpSync(resolve(repoRoot, "supabase/migrations"), sourceDir, { recursive: true });
-    expect(listProductionVersions({ sourceDir })).toHaveLength(108);
+    expect(listProductionVersions({ sourceDir })).toHaveLength(120);
   });
 
   it("rejects missing, altered, non-prefix, and schema-attested remote rows", () => {
