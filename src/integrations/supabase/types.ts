@@ -109,6 +109,7 @@ export type Database = {
       api_keys: {
         Row: {
           audience: string | null
+          client_scope_mode: string
           created_at: string
           created_by: string | null
           expires_at: string | null
@@ -124,6 +125,7 @@ export type Database = {
         }
         Insert: {
           audience?: string | null
+          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -139,6 +141,7 @@ export type Database = {
         }
         Update: {
           audience?: string | null
+          client_scope_mode?: string
           created_at?: string
           created_by?: string | null
           expires_at?: string | null
@@ -3717,6 +3720,22 @@ export type Database = {
         }
         Returns: string
       }
+      configure_api_gateway_key_scope: {
+        Args: {
+          p_client_ids?: string[]
+          p_key_id: string
+          p_scope_mode: string
+        }
+        Returns: undefined
+      }
+      consume_api_gateway_rate_limit: {
+        Args: { _key_fingerprint: string }
+        Returns: {
+          is_allowed: boolean
+          remaining: number
+          retry_after_seconds: number
+        }[]
+      }
       consume_first_access_claim: {
         Args: { p_claim_id: string }
         Returns: boolean
@@ -4297,10 +4316,13 @@ export type Database = {
         Args: { _audience: string; _key_hash: string }
         Returns: {
           audience: string
+          client_ids: string[]
+          client_scope_mode: string
           created_by: string
           id: string
           name: string
           origin: string
+          owner_is_admin: boolean
           scopes: string[]
         }[]
       }
