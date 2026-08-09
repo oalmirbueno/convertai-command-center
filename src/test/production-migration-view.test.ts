@@ -260,13 +260,13 @@ describe("production migration view", () => {
     })).toThrow(/forward statement SHA-256 mismatch/);
   });
 
-  it("accepts the live 109-row raw ledger and rejects normalized rows", () => {
+  it("accepts the live 110-row raw ledger and rejects normalized rows", () => {
     const plan = loadProductionMigrationPlan();
-    const rows = remoteRows(13);
-    expect(rows).toHaveLength(109);
+    const rows = remoteRows(14);
+    expect(rows).toHaveLength(110);
     const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
     expect(reconciliation.pendingForward).toHaveLength(0);
-    expect(reconciliation.appliedForward).toHaveLength(13);
+    expect(reconciliation.appliedForward).toHaveLength(14);
     expect(reconciliation.appliedAliases).toHaveLength(12);
 
     const normalizedAlias = structuredClone(rows);
@@ -275,12 +275,15 @@ describe("production migration view", () => {
     expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(normalizedAlias))))
       .toThrow(/forward statement hash mismatch/);
 
-    const normalizedDirect = structuredClone(rows);
-    normalizedDirect[108].remoteStatementsSha256 =
-      plan.forwardMigrations.at(-1)!.statementsSha256;
-    expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(normalizedDirect))))
-      .toThrow(/forward statement hash mismatch/);
+    for (const index of [108, 109]) {
+      const normalizedDirect = structuredClone(rows);
+      normalizedDirect[index].remoteStatementsSha256 =
+        plan.forwardMigrations[plan.forwardMigrations.length - 110 + index].statementsSha256;
+      expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(normalizedDirect))))
+        .toThrow(/forward statement hash mismatch/);
+    }
   });
+
 
 
   it("emits legacy sentinels, omits attestations, and copies pending forward SQL byte-for-byte", () => {
