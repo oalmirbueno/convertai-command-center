@@ -23,6 +23,10 @@ export const READ_LIMITS = {
   queryTimeoutMs: 8000,
 } as const;
 
+// Keep UUID filters below conservative proxy/request-line limits. Supporting
+// a larger client set requires a versioned RPC/view rather than a giant URL.
+const MAX_CLIENT_IDS_PER_POSTGREST_FILTER = 100;
+
 function enrichFile<T extends Record<string, any>>(f: T): T & {
   approval_state: 'approved' | 'pending' | 'rejected' | 'not_required';
   requires_approval: boolean;
@@ -154,21 +158,54 @@ export async function listClients(
   const offset = clampOffset(opts.offset);
   const q = opts.query ? esc(opts.query) : '';
 
-  // Use the FK join as the role gate so filtering, count and range happen in a
-  // single PostgREST query. A preliminary user_roles scan would silently stop
-  // at the API row ceiling before profile pagination even began.
+  if (!ctx.dataScope.unrestricted && ctx.dataScope.clientIds.length === 0) {
+    return { items: [], ...pageMeta(0, limit, offset) };
+  }
+
+  // profiles.id and user_roles.user_id both reference auth.users(id), but
+  // there is no direct FK between the two public tables. PostgREST therefore
+  // cannot embed user_roles from profiles. Resolve the role gate explicitly
+  // and page through every role row so the API row ceiling cannot truncate it.
+  const clientIdSet = new Set<string>();
+  let roleOffset = 0;
+  while (true) {
+    let rolesQb = db()
+      .from('user_roles')
+      .select('user_id', { count: 'exact' })
+      .eq('role', 'client')
+      .order('user_id', { ascending: true });
+    if (!ctx.dataScope.unrestricted) {
+      rolesQb = rolesQb.in('user_id', ctx.dataScope.clientIds);
+    }
+
+    const { data: roleRows, error: roleError, count: roleCount } = await withTimeout(
+      rolesQb.range(roleOffset, roleOffset + READ_LIMITS.maxPageSize - 1),
+    );
+    if (roleError) throw new Error(`user_roles: ${roleError.message}`);
+
+    for (const row of roleRows ?? []) {
+      if (isUuid(row.user_id)) clientIdSet.add(row.user_id);
+    }
+    const returned = roleRows?.length ?? 0;
+    roleOffset += returned;
+    if (returned < READ_LIMITS.maxPageSize || (roleCount !== null && roleOffset >= roleCount)) {
+      break;
+    }
+  }
+
+  const clientIds = [...clientIdSet];
+  if (clientIds.length === 0) {
+    return { items: [], ...pageMeta(0, limit, offset) };
+  }
+  if (clientIds.length > MAX_CLIENT_IDS_PER_POSTGREST_FILTER) {
+    throw new Error('list_clients: client role set exceeds the safe PostgREST filter size');
+  }
+
   let qb = db()
     .from('profiles')
-    .select(`${F.client}, client_roles:user_roles!inner(role)`, { count: 'exact' })
-    .eq('client_roles.role', 'client')
+    .select(F.client, { count: 'exact' })
+    .in('id', clientIds)
     .is('deleted_at', null);
-
-  if (!ctx.dataScope.unrestricted) {
-    if (ctx.dataScope.clientIds.length === 0) {
-      return { items: [], ...pageMeta(0, limit, offset) };
-    }
-    qb = qb.in('id', ctx.dataScope.clientIds);
-  }
 
   if (q) {
     qb = qb.or(
@@ -181,8 +218,7 @@ export async function listClients(
       .range(offset, offset + limit - 1),
   );
   if (error) throw new Error(`profiles: ${error.message}`);
-  const items = (data ?? []).map(({ client_roles: _roles, ...profile }: any) => profile);
-  return { items, ...pageMeta(count, limit, offset) };
+  return { items: data ?? [], ...pageMeta(count, limit, offset) };
 }
 
 // ─── get_client_context ──────────────────────────────────────
