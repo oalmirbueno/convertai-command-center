@@ -28,6 +28,10 @@ const migrationFilenamePattern = /^([0-9]{14})_([A-Za-z0-9._-]+)\.sql$/
 const versionPattern = /^[0-9]{14}$/
 const sha256Pattern = /^[0-9a-f]{64}$/
 const statementSeparator = '\x1e'
+// How the official ledger query hashed a forward migration's statements.
+// "supabase_cli_split": the CLI-split/trimmed statement text.
+// "runner_exact_sql": the raw SQL file bytes, exactly as the runner stored them.
+export const forwardRemoteHashModes = ['supabase_cli_split', 'runner_exact_sql']
 
 function fail(message) {
   throw new Error(`production migration view: ${message}`)
