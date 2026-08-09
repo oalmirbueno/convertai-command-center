@@ -600,6 +600,17 @@ SELECT is(
   false,
   'anon keeps no table-level read on profiles'
 );
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM aclexplode(COALESCE(cls.relacl, ARRAY[]::aclitem[])) AS acl
+    WHERE acl.privilege_type = 'SELECT'
+      AND pg_get_userbyid(acl.grantee) IN ('authenticated', 'anon', 'service_role')
+    FROM_DUMMY
+  ),
+  0,
+  'the profiles grant stays column-scoped without table-level SELECT'
+);
 SELECT ok(
   EXISTS (
     SELECT 1
