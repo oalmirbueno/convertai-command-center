@@ -28,6 +28,10 @@ const migrationFilenamePattern = /^([0-9]{14})_([A-Za-z0-9._-]+)\.sql$/
 const versionPattern = /^[0-9]{14}$/
 const sha256Pattern = /^[0-9a-f]{64}$/
 const statementSeparator = '\x1e'
+// How the official ledger query hashed a forward migration's statements.
+// "supabase_cli_split": the CLI-split/trimmed statement text.
+// "runner_exact_sql": the raw SQL file bytes, exactly as the runner stored them.
+export const forwardRemoteHashModes = ['supabase_cli_split', 'runner_exact_sql']
 
 function fail(message) {
   throw new Error(`production migration view: ${message}`)
@@ -415,7 +419,14 @@ export function parseProductionMigrationManifest(input, source = productionManif
     const label = `${source} forward_migrations[${index}]`
     assertExactKeys(
       entry,
-      ['version', 'path', 'local_sha256', 'remote_name', 'remote_statements_sha256'],
+      [
+        'version',
+        'path',
+        'local_sha256',
+        'remote_name',
+        'remote_statements_sha256',
+        'remote_hash_mode',
+      ],
       label,
     )
     assertVersion(entry.version, `${label} version`)
@@ -429,6 +440,9 @@ export function parseProductionMigrationManifest(input, source = productionManif
       fail(`${label} remote_name is invalid`)
     }
     assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
+    if (!forwardRemoteHashModes.includes(entry.remote_hash_mode)) {
+      fail(`${label} remote_hash_mode is invalid`)
+    }
   })
 
   document.applied_forward_aliases.forEach((entry, index) => {
@@ -466,8 +480,11 @@ export function parseProductionMigrationManifest(input, source = productionManif
     ) {
       fail(`${label} remote_name is invalid`)
     }
-    if (entry.remote_statements_sha256 !== entry.shadow_statements_sha256) {
-      fail(`${label} remote statement hash must match the runner shadow file`)
+    // The official ledger query hashes the raw statement text without any
+    // normalization, so the remote hash of a runner-applied alias is the exact
+    // shadow file bytes, never the split/trim hash of those statements.
+    if (entry.remote_statements_sha256 !== entry.shadow_local_sha256) {
+      fail(`${label} remote statement hash must match the runner shadow file bytes`)
     }
   })
 
@@ -731,8 +748,18 @@ export function loadProductionMigrationPlan({
     if (source.name !== entry.remote_name) {
       fail(`forward remote name does not match the Supabase CLI filename name: ${entry.path}`)
     }
-    if (source.statementsSha256 !== entry.remote_statements_sha256) {
-      fail(`forward statement SHA-256 mismatch: ${entry.path}`)
+    // Explicit, fail-closed contract: no inference and no accepting both hash
+    // shapes. Each forward migration declares how the remote ledger hashed it.
+    if (entry.remote_hash_mode === 'supabase_cli_split') {
+      if (source.statementsSha256 !== entry.remote_statements_sha256) {
+        fail(`forward statement SHA-256 mismatch: ${entry.path}`)
+      }
+    } else if (entry.remote_hash_mode === 'runner_exact_sql') {
+      if (source.sha256 !== entry.remote_statements_sha256) {
+        fail(`forward raw SQL SHA-256 mismatch: ${entry.path}`)
+      }
+    } else {
+      fail(`forward remote_hash_mode is invalid: ${entry.path}`)
     }
     return source
   })
@@ -899,23 +926,29 @@ export function loadProductionMigrationPlan({
   const aliasByCanonicalPath = new Map(
     appliedAliases.map(alias => [alias.canonical.relativePath, alias]),
   )
+  const forwardEntryByPath = new Map(forwardEntries.map(entry => [entry.path, entry]))
   const forwardLedger = forwardMigrations.map(source => {
     const alias = aliasByCanonicalPath.get(source.relativePath)
-    return alias
-      ? {
-          canonical: source,
-          alias,
-          version: alias.remoteVersion,
-          name: alias.remoteName,
-          statementsSha256: alias.remoteStatementsSha256,
-        }
-      : {
-          canonical: source,
-          alias: null,
-          version: source.version,
-          name: source.name,
-          statementsSha256: source.statementsSha256,
-        }
+    if (alias) {
+      return {
+        canonical: source,
+        alias,
+        version: alias.remoteVersion,
+        name: alias.remoteName,
+        statementsSha256: alias.remoteStatementsSha256,
+      }
+    }
+    // Unaliased forwards are recorded under their own version; the expected
+    // ledger hash is the declared remote hash, never inferred from the source.
+    const entry = forwardEntryByPath.get(source.relativePath)
+    if (!entry) fail(`forward ledger entry is missing: ${source.relativePath}`)
+    return {
+      canonical: source,
+      alias: null,
+      version: source.version,
+      name: source.name,
+      statementsSha256: entry.remote_statements_sha256,
+    }
   })
   for (let index = 1; index < forwardLedger.length; index += 1) {
     if (forwardLedger[index - 1].version >= forwardLedger[index].version) {

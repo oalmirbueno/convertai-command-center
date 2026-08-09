@@ -7,91 +7,104 @@
       "path": "supabase/migrations/20260807210000_bind_mcp_oauth_clients.sql",
       "local_sha256": "901d6b81028f91230e1960b464db080f58193572195986c6c7025ab8cb5cb2b3",
       "remote_name": "bind_mcp_oauth_clients",
-      "remote_statements_sha256": "e939a7f9a741db2dc3f0b18a00dadba8a841054a47f5b02e280de6eda03138b6"
+      "remote_statements_sha256": "e939a7f9a741db2dc3f0b18a00dadba8a841054a47f5b02e280de6eda03138b6",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807211000",
       "path": "supabase/migrations/20260807211000_harden_notify_ops_sync_vault.sql",
       "local_sha256": "3d8230382a168e14536ccfb0b23ac0a397575347bb8bd6a5811813a12796ace8",
       "remote_name": "harden_notify_ops_sync_vault",
-      "remote_statements_sha256": "70629de632adc2a24a529095b92f0a4e0fd3a71bf6600a39904c5cc1cebf6218"
+      "remote_statements_sha256": "70629de632adc2a24a529095b92f0a4e0fd3a71bf6600a39904c5cc1cebf6218",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807212000",
       "path": "supabase/migrations/20260807212000_scope_api_gateway_keys.sql",
       "local_sha256": "4f58716d7b0d667dbe89c0b1ce81d205827a6b26615941b29843d7a7e26a2e1b",
       "remote_name": "scope_api_gateway_keys",
-      "remote_statements_sha256": "aea29ed7eaa015634697f9f88ffe90322b27674fa497000622962b3505069b6f"
+      "remote_statements_sha256": "aea29ed7eaa015634697f9f88ffe90322b27674fa497000622962b3505069b6f",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807213000",
       "path": "supabase/migrations/20260807213000_harden_workspace_inbox_tokens.sql",
       "local_sha256": "59ac159de461c4c4d0a89ff4f734f7b8eb3520160b82dbedace31c125599b1cc",
       "remote_name": "harden_workspace_inbox_tokens",
-      "remote_statements_sha256": "ebf8272d6f15a2a6b1266e84dfffcf33090bb5b21b7bcfeb360a1a4fecad8b18"
+      "remote_statements_sha256": "ebf8272d6f15a2a6b1266e84dfffcf33090bb5b21b7bcfeb360a1a4fecad8b18",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807215000",
       "path": "supabase/migrations/20260807215000_portable_meta_oauth_redirect.sql",
       "local_sha256": "a50111c5cfba9f2b3a1bc2791c80523c685f0faa0522b77dc1253992b694004b",
       "remote_name": "portable_meta_oauth_redirect",
-      "remote_statements_sha256": "a25bd73890cf4ed212efc9fa828a0082691af7b82b9fcd3ced152a91f1d6f2ec"
+      "remote_statements_sha256": "a25bd73890cf4ed212efc9fa828a0082691af7b82b9fcd3ced152a91f1d6f2ec",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807216000",
       "path": "supabase/migrations/20260807216000_harden_quiz_invitations.sql",
       "local_sha256": "350f09a75b5804f3518668312da266717a3aa3d55e87bab0ad1e1865f6e58df0",
       "remote_name": "harden_quiz_invitations",
-      "remote_statements_sha256": "38b1ef65851b8fe819690d03b917e162c795a4a2c42164b59592d596e2c5c339"
+      "remote_statements_sha256": "38b1ef65851b8fe819690d03b917e162c795a4a2c42164b59592d596e2c5c339",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807217000",
       "path": "supabase/migrations/20260807217000_expire_first_access_tokens.sql",
       "local_sha256": "a04de5def1b74a70133f6c105a93779284b3086593975ace61dbb4d113afcf91",
       "remote_name": "expire_first_access_tokens",
-      "remote_statements_sha256": "74ca11f9c493b1b3dafe11bb115f19c1a8dc56ae3e6509866e7c1f67fc09d648"
+      "remote_statements_sha256": "74ca11f9c493b1b3dafe11bb115f19c1a8dc56ae3e6509866e7c1f67fc09d648",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807219000",
       "path": "supabase/migrations/20260807219000_atomic_ai_usage_quota.sql",
       "local_sha256": "af15eec7bdd41474603a6c204c3c0af63ebc76de1c604ab2164b1e3ec5f1a1c2",
       "remote_name": "atomic_ai_usage_quota",
-      "remote_statements_sha256": "c4e44857dc917e60c3e40075522c85ef5124b5505eadfec71d19327f25d3bf60"
+      "remote_statements_sha256": "c4e44857dc917e60c3e40075522c85ef5124b5505eadfec71d19327f25d3bf60",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807220000",
       "path": "supabase/migrations/20260807220000_rate_limit_notification_dispatch.sql",
       "local_sha256": "9f48933a775f87304697cf6e79755500cca96295aa62c226a1092fe294a2eeb4",
       "remote_name": "rate_limit_notification_dispatch",
-      "remote_statements_sha256": "48506052cf244983783df0b7b8c5a55c3435313316b82dedcacd1bc8b278941a"
+      "remote_statements_sha256": "48506052cf244983783df0b7b8c5a55c3435313316b82dedcacd1bc8b278941a",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807221000",
       "path": "supabase/migrations/20260807221000_harden_workspace_quarantine_boundary.sql",
       "local_sha256": "38f427b9ca12e973eb6b34d365a6d18e0bd7707b5fbdb1ababf4546fc8c6e152",
       "remote_name": "harden_workspace_quarantine_boundary",
-      "remote_statements_sha256": "b94b265b746867ebf34d52d488bb4789773d175fe1d043f648eb72510caf9a2a"
+      "remote_statements_sha256": "b94b265b746867ebf34d52d488bb4789773d175fe1d043f648eb72510caf9a2a",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807222000",
       "path": "supabase/migrations/20260807222000_harden_public_tokens_private.sql",
       "local_sha256": "b6719efc4d75a830d15805387170e11f349b392ca4536aad57f70b6011259489",
       "remote_name": "harden_public_tokens_private",
-      "remote_statements_sha256": "3cd36e81baee0a2dd150f5609dbc513d0b4e9a96639493a3738f322ba007e677"
+      "remote_statements_sha256": "3cd36e81baee0a2dd150f5609dbc513d0b4e9a96639493a3738f322ba007e677",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260807223000",
       "path": "supabase/migrations/20260807223000_harden_api_gateway_tenant_scope.sql",
       "local_sha256": "c6538e58af092796eb10e50e5eb97a8ddb6bce17615692b1727352b3487d6224",
       "remote_name": "harden_api_gateway_tenant_scope",
-      "remote_statements_sha256": "284cb2ff9e2f425d66cc49c602b795827255a0e9aa2337c3fe518ec7647b62b8"
+      "remote_statements_sha256": "284cb2ff9e2f425d66cc49c602b795827255a0e9aa2337c3fe518ec7647b62b8",
+      "remote_hash_mode": "supabase_cli_split"
     },
     {
       "version": "20260809030446",
       "path": "supabase/migrations/20260809030446_46a2df40-b748-42ef-a18c-3b0c6466e6ec.sql",
       "local_sha256": "21391458d27641651e4c116e77a92062430c8b1dd44bdba171b0c652f0d06833",
       "remote_name": "46a2df40-b748-42ef-a18c-3b0c6466e6ec",
-      "remote_statements_sha256": "3ba673061202460cedbfddf8e099cf0dc9b9e60184a8ba8283b018fda2e09227"
+      "remote_statements_sha256": "21391458d27641651e4c116e77a92062430c8b1dd44bdba171b0c652f0d06833",
+      "remote_hash_mode": "runner_exact_sql"
     }
   ],
   "applied_forward_aliases": [
@@ -101,7 +114,7 @@
       "canonical_local_sha256": "901d6b81028f91230e1960b464db080f58193572195986c6c7025ab8cb5cb2b3",
       "remote_version": "20260808173913",
       "remote_name": "41230fab-db38-43ea-8fff-61eea801bb02",
-      "remote_statements_sha256": "e939a7f9a741db2dc3f0b18a00dadba8a841054a47f5b02e280de6eda03138b6",
+      "remote_statements_sha256": "9a573afc2af0c98665cb06adb4066faa42c1c01ca13ca8974d9b7eefe367fe5d",
       "shadow_path": "supabase/migrations/20260808173913_41230fab-db38-43ea-8fff-61eea801bb02.sql",
       "shadow_local_sha256": "9a573afc2af0c98665cb06adb4066faa42c1c01ca13ca8974d9b7eefe367fe5d",
       "shadow_statements_sha256": "e939a7f9a741db2dc3f0b18a00dadba8a841054a47f5b02e280de6eda03138b6"
@@ -112,7 +125,7 @@
       "canonical_local_sha256": "3d8230382a168e14536ccfb0b23ac0a397575347bb8bd6a5811813a12796ace8",
       "remote_version": "20260808173948",
       "remote_name": "a9f5e1ac-bc1b-4c3d-9c86-371abc7983cf",
-      "remote_statements_sha256": "94d3c3359f73c4d39b9d16ced408c4b3386280708e143f4f9e2048af6d08b5f9",
+      "remote_statements_sha256": "cf7c6b49d77c5d80e3869985809ab84c477f1d9d4d1de474a370b2d1fc60d6a4",
       "shadow_path": "supabase/migrations/20260808173948_a9f5e1ac-bc1b-4c3d-9c86-371abc7983cf.sql",
       "shadow_local_sha256": "cf7c6b49d77c5d80e3869985809ab84c477f1d9d4d1de474a370b2d1fc60d6a4",
       "shadow_statements_sha256": "94d3c3359f73c4d39b9d16ced408c4b3386280708e143f4f9e2048af6d08b5f9"
@@ -123,7 +136,7 @@
       "canonical_local_sha256": "4f58716d7b0d667dbe89c0b1ce81d205827a6b26615941b29843d7a7e26a2e1b",
       "remote_version": "20260808174012",
       "remote_name": "5c7371cd-9ce2-4ed3-9f36-8d7b34f225e1",
-      "remote_statements_sha256": "b85cd8800a5357c7cf8b3e16021be1a492e2468120bfe1fad779fdd9fb2fa63c",
+      "remote_statements_sha256": "e68ebc32fbb0a60b23238f716a65ae8b653a20814a0db8850add9be4a2407aea",
       "shadow_path": "supabase/migrations/20260808174012_5c7371cd-9ce2-4ed3-9f36-8d7b34f225e1.sql",
       "shadow_local_sha256": "e68ebc32fbb0a60b23238f716a65ae8b653a20814a0db8850add9be4a2407aea",
       "shadow_statements_sha256": "b85cd8800a5357c7cf8b3e16021be1a492e2468120bfe1fad779fdd9fb2fa63c"
@@ -134,7 +147,7 @@
       "canonical_local_sha256": "59ac159de461c4c4d0a89ff4f734f7b8eb3520160b82dbedace31c125599b1cc",
       "remote_version": "20260808174209",
       "remote_name": "4856d729-ecd3-49c9-ba0f-66cc2e986db5",
-      "remote_statements_sha256": "1c74929a1731d6a739ffac079c35751d87db4346e43faa86a092c540bf71b7c2",
+      "remote_statements_sha256": "73ef54d6f265e9490e5a4581cd4fa5ae78405dbc259c760c961b328b96f6c845",
       "shadow_path": "supabase/migrations/20260808174209_4856d729-ecd3-49c9-ba0f-66cc2e986db5.sql",
       "shadow_local_sha256": "73ef54d6f265e9490e5a4581cd4fa5ae78405dbc259c760c961b328b96f6c845",
       "shadow_statements_sha256": "1c74929a1731d6a739ffac079c35751d87db4346e43faa86a092c540bf71b7c2"
@@ -145,7 +158,7 @@
       "canonical_local_sha256": "a50111c5cfba9f2b3a1bc2791c80523c685f0faa0522b77dc1253992b694004b",
       "remote_version": "20260808174255",
       "remote_name": "ed769177-67ec-4c91-8907-3df2c324c185",
-      "remote_statements_sha256": "a25bd73890cf4ed212efc9fa828a0082691af7b82b9fcd3ced152a91f1d6f2ec",
+      "remote_statements_sha256": "d94b165be0ab34f2be036e1cb923aa23799019a86afcfe1ecca5dbdfa761755f",
       "shadow_path": "supabase/migrations/20260808174255_ed769177-67ec-4c91-8907-3df2c324c185.sql",
       "shadow_local_sha256": "d94b165be0ab34f2be036e1cb923aa23799019a86afcfe1ecca5dbdfa761755f",
       "shadow_statements_sha256": "a25bd73890cf4ed212efc9fa828a0082691af7b82b9fcd3ced152a91f1d6f2ec"
@@ -156,7 +169,7 @@
       "canonical_local_sha256": "350f09a75b5804f3518668312da266717a3aa3d55e87bab0ad1e1865f6e58df0",
       "remote_version": "20260808174318",
       "remote_name": "26683b9f-5e85-409f-b735-0827a8b5b622",
-      "remote_statements_sha256": "38b1ef65851b8fe819690d03b917e162c795a4a2c42164b59592d596e2c5c339",
+      "remote_statements_sha256": "6e272f6fbd95219862c343722ddf7a2708e49b2ffb28561dbfdcc24400a0797b",
       "shadow_path": "supabase/migrations/20260808174318_26683b9f-5e85-409f-b735-0827a8b5b622.sql",
       "shadow_local_sha256": "6e272f6fbd95219862c343722ddf7a2708e49b2ffb28561dbfdcc24400a0797b",
       "shadow_statements_sha256": "38b1ef65851b8fe819690d03b917e162c795a4a2c42164b59592d596e2c5c339"
@@ -167,7 +180,7 @@
       "canonical_local_sha256": "a04de5def1b74a70133f6c105a93779284b3086593975ace61dbb4d113afcf91",
       "remote_version": "20260808174335",
       "remote_name": "04c8986a-e0a1-4ce6-9adb-5ec79c79316c",
-      "remote_statements_sha256": "74ca11f9c493b1b3dafe11bb115f19c1a8dc56ae3e6509866e7c1f67fc09d648",
+      "remote_statements_sha256": "e3a29ab0da871eec413c5216c042c03930a4206b9eb37bddda029df6e3d96105",
       "shadow_path": "supabase/migrations/20260808174335_04c8986a-e0a1-4ce6-9adb-5ec79c79316c.sql",
       "shadow_local_sha256": "e3a29ab0da871eec413c5216c042c03930a4206b9eb37bddda029df6e3d96105",
       "shadow_statements_sha256": "74ca11f9c493b1b3dafe11bb115f19c1a8dc56ae3e6509866e7c1f67fc09d648"
@@ -178,7 +191,7 @@
       "canonical_local_sha256": "af15eec7bdd41474603a6c204c3c0af63ebc76de1c604ab2164b1e3ec5f1a1c2",
       "remote_version": "20260808174402",
       "remote_name": "eedc80c4-dc93-40c1-ae67-6d81a6eb4fa2",
-      "remote_statements_sha256": "c4e44857dc917e60c3e40075522c85ef5124b5505eadfec71d19327f25d3bf60",
+      "remote_statements_sha256": "7184491c1ba03e08ec7b952b94dc35b5007d8cb4b4063b3997dd8343b42e6b08",
       "shadow_path": "supabase/migrations/20260808174402_eedc80c4-dc93-40c1-ae67-6d81a6eb4fa2.sql",
       "shadow_local_sha256": "7184491c1ba03e08ec7b952b94dc35b5007d8cb4b4063b3997dd8343b42e6b08",
       "shadow_statements_sha256": "c4e44857dc917e60c3e40075522c85ef5124b5505eadfec71d19327f25d3bf60"
@@ -189,7 +202,7 @@
       "canonical_local_sha256": "9f48933a775f87304697cf6e79755500cca96295aa62c226a1092fe294a2eeb4",
       "remote_version": "20260808174426",
       "remote_name": "1aec2cda-a9b2-4da2-a0af-aa153406bcf0",
-      "remote_statements_sha256": "48506052cf244983783df0b7b8c5a55c3435313316b82dedcacd1bc8b278941a",
+      "remote_statements_sha256": "a153cd5e59a57b59a28ab264ea5e33a7d4702355b5f8961a4ee5a0f7285b072c",
       "shadow_path": "supabase/migrations/20260808174426_1aec2cda-a9b2-4da2-a0af-aa153406bcf0.sql",
       "shadow_local_sha256": "a153cd5e59a57b59a28ab264ea5e33a7d4702355b5f8961a4ee5a0f7285b072c",
       "shadow_statements_sha256": "48506052cf244983783df0b7b8c5a55c3435313316b82dedcacd1bc8b278941a"
@@ -200,7 +213,7 @@
       "canonical_local_sha256": "38f427b9ca12e973eb6b34d365a6d18e0bd7707b5fbdb1ababf4546fc8c6e152",
       "remote_version": "20260808174519",
       "remote_name": "dd7ad63e-095f-4d06-9a38-c274a4ddd6c7",
-      "remote_statements_sha256": "cd31ce9e9419c98b40535a9aac5c299ba0cec482331d8e6ee9ec5ac3b58d5afd",
+      "remote_statements_sha256": "5d253018f470a44b4b211cdd554902cc5a914df06bb3bd3961bf2a1b74fafa55",
       "shadow_path": "supabase/migrations/20260808174519_dd7ad63e-095f-4d06-9a38-c274a4ddd6c7.sql",
       "shadow_local_sha256": "5d253018f470a44b4b211cdd554902cc5a914df06bb3bd3961bf2a1b74fafa55",
       "shadow_statements_sha256": "cd31ce9e9419c98b40535a9aac5c299ba0cec482331d8e6ee9ec5ac3b58d5afd"
@@ -211,7 +224,7 @@
       "canonical_local_sha256": "b6719efc4d75a830d15805387170e11f349b392ca4536aad57f70b6011259489",
       "remote_version": "20260808174817",
       "remote_name": "4300448e-1cea-4677-afe0-1221899428ae",
-      "remote_statements_sha256": "94d67d8285eb710d2e2ed3141966d5c6c89481b9ca4d04a94673408aa41e0e98",
+      "remote_statements_sha256": "db34713cd96d34e0d469a444e682aa8841d6de39a3a2d57cc30f6b949e93073c",
       "shadow_path": "supabase/migrations/20260808174817_4300448e-1cea-4677-afe0-1221899428ae.sql",
       "shadow_local_sha256": "db34713cd96d34e0d469a444e682aa8841d6de39a3a2d57cc30f6b949e93073c",
       "shadow_statements_sha256": "94d67d8285eb710d2e2ed3141966d5c6c89481b9ca4d04a94673408aa41e0e98"
@@ -222,7 +235,7 @@
       "canonical_local_sha256": "c6538e58af092796eb10e50e5eb97a8ddb6bce17615692b1727352b3487d6224",
       "remote_version": "20260808174956",
       "remote_name": "b8a85425-112d-4313-aae2-03f6dca66e75",
-      "remote_statements_sha256": "6c55ab568bae515b8ec416e830f855076dab9e9486c85ae559110fa49dba3923",
+      "remote_statements_sha256": "1e5519b159de83700bdc9563770491152f54f4d49630026451920b5cd0f8df17",
       "shadow_path": "supabase/migrations/20260808174956_b8a85425-112d-4313-aae2-03f6dca66e75.sql",
       "shadow_local_sha256": "1e5519b159de83700bdc9563770491152f54f4d49630026451920b5cd0f8df17",
       "shadow_statements_sha256": "6c55ab568bae515b8ec416e830f855076dab9e9486c85ae559110fa49dba3923"
