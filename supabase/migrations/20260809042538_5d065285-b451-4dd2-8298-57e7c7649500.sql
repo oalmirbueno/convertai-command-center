@@ -1,0 +1,1 @@
+GRANT SELECT (id, full_name, company_name) ON public.profiles TO authenticated, service_role;

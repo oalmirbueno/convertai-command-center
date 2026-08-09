@@ -129,6 +129,14 @@
       "remote_name": "0b76125d-0af9-4129-9310-c1988a116141",
       "remote_statements_sha256": "6b330467ac033ffafab47a3d866238ccfcd2032c9d83bb4eed7a0d4a1de0fe83",
       "remote_hash_mode": "runner_exact_sql"
+    },
+    {
+      "version": "20260809042538",
+      "path": "supabase/migrations/20260809042538_5d065285-b451-4dd2-8298-57e7c7649500.sql",
+      "local_sha256": "ef8b5e8497d14caffd11523edadf741c187b7f29e13a02b4be346c633b987bdc",
+      "remote_name": "5d065285-b451-4dd2-8298-57e7c7649500",
+      "remote_statements_sha256": "ef8b5e8497d14caffd11523edadf741c187b7f29e13a02b4be346c633b987bdc",
+      "remote_hash_mode": "runner_exact_sql"
     }
   ],
   "applied_forward_aliases": [
