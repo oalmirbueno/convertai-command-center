@@ -85,6 +85,13 @@
       "local_sha256": "c6538e58af092796eb10e50e5eb97a8ddb6bce17615692b1727352b3487d6224",
       "remote_name": "harden_api_gateway_tenant_scope",
       "remote_statements_sha256": "284cb2ff9e2f425d66cc49c602b795827255a0e9aa2337c3fe518ec7647b62b8"
+    },
+    {
+      "version": "20260809030446",
+      "path": "supabase/migrations/20260809030446_46a2df40-b748-42ef-a18c-3b0c6466e6ec.sql",
+      "local_sha256": "21391458d27641651e4c116e77a92062430c8b1dd44bdba171b0c652f0d06833",
+      "remote_name": "46a2df40-b748-42ef-a18c-3b0c6466e6ec",
+      "remote_statements_sha256": "3ba673061202460cedbfddf8e099cf0dc9b9e60184a8ba8283b018fda2e09227"
     }
   ],
   "applied_forward_aliases": [
