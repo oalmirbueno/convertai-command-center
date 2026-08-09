@@ -252,7 +252,10 @@ describe("production migration view", () => {
       .toThrow(/remote statement hash must match the runner shadow file bytes/);
 
     const directSplit = read();
-    const directIndex = directSplit.forward_migrations.length - 1;
+    const directIndex = directSplit.forward_migrations
+      .map((entry: { remote_hash_mode: string }) => entry.remote_hash_mode)
+      .lastIndexOf("runner_exact_sql");
+    expect(directIndex).toBeGreaterThanOrEqual(0);
     directSplit.forward_migrations[directIndex].remote_statements_sha256 =
       "3ba673061202460cedbfddf8e099cf0dc9b9e60184a8ba8283b018fda2e09227";
     expect(() => loadProductionMigrationPlan({ manifestFile: write("direct-split.json", directSplit) }))
