@@ -4,6 +4,7 @@
 
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import {
+  canGrantMcpOAuthAdmin,
   dataScopeAllowsClient,
   oauthScopesForStaff,
   validateOAuthJwtClaims,
@@ -428,7 +429,8 @@ export async function authenticate(req: Request): Promise<AuthResult> {
   if (claims) {
     const sub = String(claims.sub ?? '');
     const clientId = String(claims.client_id ?? claims.azp ?? '');
-    if (!(await isAllowedOAuthClient(clientId))) {
+    const oauthClientAllowed = await isAllowedOAuthClient(clientId);
+    if (!oauthClientAllowed) {
       return { ok: false, error: { kind: 'invalid' } };
     }
     if (!(await hasVerifiedSubject(token, sub))) {
@@ -440,11 +442,27 @@ export async function authenticate(req: Request): Promise<AuthResult> {
       ? [claims.scope, claims.scopes]
       : undefined;
     const dataScope = await dataScopeForUser(sub, 'oauth');
-    const scopes = oauthScopesForStaff(
-      await isStaffUser(sub),
-      claimedScopes,
-      dataScope.unrestricted,
+    // Full MCP access is never inferred from a generic OIDC consent or from
+    // the ChatGPT redirect origin alone. It requires all of: a verified OAuth
+    // subject, an allowed client, the canonical admin role, and an exact
+    // server-side user/client binding. The setting is portable across hosts
+    // and fails closed when absent or malformed.
+    const exactAdminBinding = canGrantMcpOAuthAdmin(
+      Deno.env.get('MCP_ADMIN_OAUTH_BINDINGS'),
+      {
+        userId: sub,
+        clientId,
+        hasAdminRole: dataScope.unrestricted,
+        isAllowedOAuthClient: oauthClientAllowed,
+      },
     );
+    const scopes = exactAdminBinding
+      ? ['admin']
+      : oauthScopesForStaff(
+        await isStaffUser(sub),
+        claimedScopes,
+        false,
+      );
     if (!scopes) return { ok: false, error: { kind: 'invalid' } };
     return {
       ok: true,
