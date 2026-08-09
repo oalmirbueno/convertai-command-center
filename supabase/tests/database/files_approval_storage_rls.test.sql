@@ -1381,6 +1381,53 @@ SELECT is(
 SELECT is(
   (
     SELECT count(*)::integer
+    FROM public.staff_files_secure
+    WHERE client_id = 'a0000000-0000-0000-0000-00000000000b'
+  ),
+  0,
+  'assigned design cannot cross-read Client B through the staff-only view'
+);
+SELECT ok(
+  (
+    SELECT count(*)::integer
+    FROM public.staff_files_secure AS staff_file
+    WHERE staff_file.client_id = 'a0000000-0000-0000-0000-00000000000a'
+      AND staff_file.source IS NOT DISTINCT FROM staff_file.source
+      AND staff_file.extraction_status IS NOT DISTINCT FROM staff_file.extraction_status
+      AND staff_file.extraction_error IS NOT DISTINCT FROM staff_file.extraction_error
+      AND staff_file.agency_approval_status
+        IS NOT DISTINCT FROM staff_file.agency_approval_status
+  ) = 2,
+  'assigned design reads the technical columns through the staff-only view'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    'SELECT source FROM public.files LIMIT 1'
+  ),
+  'assigned design still cannot read a technical column directly on public.files'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      UPDATE public.staff_files_secure
+      SET file_name = 'renamed-through-the-view.pdf'
+      WHERE client_id = 'a0000000-0000-0000-0000-00000000000a'
+    $sql$
+  ),
+  'assigned design cannot write through the staff-only view'
+);
+SELECT ok(
+  pg_temp.statement_fails(
+    $sql$
+      DELETE FROM public.staff_files_secure
+      WHERE client_id = 'a0000000-0000-0000-0000-00000000000a'
+    $sql$
+  ),
+  'nobody can delete through the staff-only view'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
     FROM storage.objects
     WHERE bucket_id IN ('files', 'mcp-files')
       AND name LIKE 'a0000000-0000-0000-0000-00000000000a/%'
