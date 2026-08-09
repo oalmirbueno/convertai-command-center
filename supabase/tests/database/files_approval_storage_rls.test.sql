@@ -595,25 +595,42 @@ SELECT is(
 SELECT is(
   (
     SELECT count(*)::integer
-    FROM unnest(ARRAY[
-      'portal_password',
-      'first_access_token',
-      'first_access_expires_at',
-      'first_access_attempts',
-      'first_access_last_attempt_at',
-      'ops_client_id',
-      'sync_status',
-      'sync_error'
-    ]) AS sensitive_column
-    WHERE has_column_privilege(
-      'authenticated',
-      'public.profiles',
-      sensitive_column,
-      'SELECT'
-    )
+    FROM pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.profiles'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND NOT (
+        attribute.attname = ANY(ARRAY[
+          'id',
+          'full_name',
+          'email',
+          'company_name',
+          'avatar_url',
+          'plan_renewal_date',
+          'plan_status',
+          'services_config',
+          'onboarding_done',
+          'created_at',
+          'updated_at',
+          'phone',
+          'plan_name',
+          'plan_value',
+          'client_type',
+          'brand',
+          'first_access_used_at',
+          'overdue_since',
+          'deleted_at'
+        ])
+      )
+      AND has_column_privilege(
+        'authenticated',
+        'public.profiles',
+        attribute.attname,
+        'SELECT'
+      )
   ),
   0,
-  'authenticated cannot read credential or sync-internal profile columns'
+  'authenticated cannot read any profile column outside the browser allowlist'
 );
 SELECT is(
   has_table_privilege('anon', 'public.profiles', 'SELECT'),
