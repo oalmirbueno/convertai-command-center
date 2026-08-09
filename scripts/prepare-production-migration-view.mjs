@@ -922,23 +922,29 @@ export function loadProductionMigrationPlan({
   const aliasByCanonicalPath = new Map(
     appliedAliases.map(alias => [alias.canonical.relativePath, alias]),
   )
+  const forwardEntryByPath = new Map(forwardEntries.map(entry => [entry.path, entry]))
   const forwardLedger = forwardMigrations.map(source => {
     const alias = aliasByCanonicalPath.get(source.relativePath)
-    return alias
-      ? {
-          canonical: source,
-          alias,
-          version: alias.remoteVersion,
-          name: alias.remoteName,
-          statementsSha256: alias.remoteStatementsSha256,
-        }
-      : {
-          canonical: source,
-          alias: null,
-          version: source.version,
-          name: source.name,
-          statementsSha256: source.statementsSha256,
-        }
+    if (alias) {
+      return {
+        canonical: source,
+        alias,
+        version: alias.remoteVersion,
+        name: alias.remoteName,
+        statementsSha256: alias.remoteStatementsSha256,
+      }
+    }
+    // Unaliased forwards are recorded under their own version; the expected
+    // ledger hash is the declared remote hash, never inferred from the source.
+    const entry = forwardEntryByPath.get(source.relativePath)
+    if (!entry) fail(`forward ledger entry is missing: ${source.relativePath}`)
+    return {
+      canonical: source,
+      alias: null,
+      version: source.version,
+      name: source.name,
+      statementsSha256: entry.remote_statements_sha256,
+    }
   })
   for (let index = 1; index < forwardLedger.length; index += 1) {
     if (forwardLedger[index - 1].version >= forwardLedger[index].version) {
