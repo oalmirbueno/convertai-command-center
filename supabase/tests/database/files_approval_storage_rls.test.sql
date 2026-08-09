@@ -346,6 +346,211 @@ SELECT ok(
   to_regclass('public.staff_files_secure') IS NOT NULL,
   'assigned staff file view exists'
 );
+
+-- ---------------------------------------------------------------------------
+-- Privileged boundary behind the staff-only file view
+-- ---------------------------------------------------------------------------
+SELECT ok(
+  EXISTS (SELECT 1 FROM pg_namespace WHERE nspname = 'app_private'),
+  'the private boundary schema exists'
+);
+SELECT is(
+  has_schema_privilege('anon', 'app_private', 'USAGE'),
+  false,
+  'anon has no USAGE on the private boundary schema'
+);
+SELECT is(
+  has_schema_privilege('authenticated', 'app_private', 'USAGE'),
+  false,
+  'authenticated has no USAGE on the private boundary schema'
+);
+SELECT is(
+  has_schema_privilege('service_role', 'app_private', 'USAGE'),
+  false,
+  'service_role has no USAGE on the private boundary schema'
+);
+SELECT ok(
+  (
+    SELECT nspacl::text
+    FROM pg_namespace
+    WHERE nspname = 'app_private'
+  ) NOT LIKE '%=%/%,%',
+  'the private boundary schema grants nothing beyond its owner'
+);
+SELECT ok(
+  to_regprocedure('app_private.staff_files_secure_rows()') IS NOT NULL,
+  'the privileged staff file row source exists'
+);
+SELECT is(
+  (
+    SELECT proretset
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  true,
+  'the privileged row source returns a set'
+);
+SELECT is(
+  (
+    SELECT prorettype
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  'public.files'::regtype::oid,
+  'the privileged row source returns public.files rows'
+);
+SELECT is(
+  (
+    SELECT prosecdef
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  true,
+  'the privileged row source is SECURITY DEFINER'
+);
+SELECT is(
+  (
+    SELECT provolatile::text
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  's',
+  'the privileged row source is STABLE'
+);
+SELECT is(
+  (
+    SELECT pg_get_userbyid(proowner)
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  'postgres',
+  'the privileged row source is owned by postgres'
+);
+SELECT is(
+  (
+    SELECT proconfig
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  ARRAY['search_path='],
+  'the privileged row source pins an empty search_path'
+);
+SELECT is(
+  (
+    SELECT pronargs
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ),
+  0::smallint,
+  'the privileged row source accepts no caller-supplied identity'
+);
+SELECT is(
+  has_function_privilege('anon', 'app_private.staff_files_secure_rows()', 'EXECUTE'),
+  false,
+  'anon cannot execute the privileged row source'
+);
+SELECT is(
+  has_function_privilege('authenticated', 'app_private.staff_files_secure_rows()', 'EXECUTE'),
+  true,
+  'authenticated can execute the privileged row source'
+);
+SELECT is(
+  has_function_privilege('service_role', 'app_private.staff_files_secure_rows()', 'EXECUTE'),
+  true,
+  'service_role can execute the privileged row source'
+);
+SELECT ok(
+  (
+    SELECT proacl::text
+    FROM pg_proc
+    WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
+  ) NOT LIKE '%=X%*%',
+  'the privileged row source grants no grant option'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_proc AS proc,
+      LATERAL aclexplode(proc.proacl) AS acl
+    WHERE proc.oid = to_regprocedure('app_private.staff_files_secure_rows()')
+      AND acl.grantee = 0
+  ),
+  'the privileged row source grants nothing to PUBLIC'
+);
+SELECT ok(
+  (
+    SELECT reloptions
+    FROM pg_class
+    WHERE oid = 'public.staff_files_secure'::regclass
+  ) @> ARRAY['security_barrier=true', 'security_invoker=true'],
+  'the staff-only file view stays a security barrier and invoker view'
+);
+SELECT ok(
+  pg_get_viewdef('public.staff_files_secure'::regclass, true)
+    LIKE '%app_private.staff_files_secure_rows()%',
+  'the staff-only file view reads through the privileged row source'
+);
+SELECT ok(
+  pg_get_viewdef('public.staff_files_secure'::regclass, true) LIKE '%is_staff(auth.uid())%',
+  'the staff-only file view keeps its staff filter as defence in depth'
+);
+SELECT ok(
+  pg_get_viewdef('public.staff_files_secure'::regclass, true)
+    LIKE '%can_access_client(file_row.client_id)%',
+  'the staff-only file view keeps its client-scope filter as defence in depth'
+);
+SELECT is(
+  has_table_privilege('authenticated', 'public.staff_files_secure', 'SELECT'),
+  true,
+  'authenticated can select the staff-only file view'
+);
+SELECT is(
+  has_table_privilege('anon', 'public.staff_files_secure', 'SELECT'),
+  false,
+  'anon cannot select the staff-only file view'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_class AS view_class,
+      LATERAL aclexplode(view_class.relacl) AS acl
+    WHERE view_class.oid = 'public.staff_files_secure'::regclass
+      AND acl.grantee = 0
+  ),
+  'the staff-only file view grants nothing to PUBLIC'
+);
+SELECT is(
+  has_table_privilege('authenticated', 'public.files', 'SELECT'),
+  false,
+  'authenticated keeps no table-level SELECT on public.files'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM unnest(ARRAY[
+      'sha256',
+      'tags',
+      'sensitivity',
+      'extraction_status',
+      'extraction_error',
+      'extracted_metadata',
+      'source',
+      'idempotency_key',
+      'agency_approval_status',
+      'agency_feedback',
+      'agency_reviewed_by',
+      'agency_reviewed_at'
+    ]) AS technical_column
+    WHERE has_column_privilege(
+      'authenticated',
+      'public.files',
+      technical_column,
+      'SELECT'
+    )
+  ),
+  0,
+  'authenticated keeps no SELECT on the 12 technical file columns'
+);
 SELECT ok(
   EXISTS (
     SELECT 1
