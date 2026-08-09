@@ -476,8 +476,11 @@ export function parseProductionMigrationManifest(input, source = productionManif
     ) {
       fail(`${label} remote_name is invalid`)
     }
-    if (entry.remote_statements_sha256 !== entry.shadow_statements_sha256) {
-      fail(`${label} remote statement hash must match the runner shadow file`)
+    // The official ledger query hashes the raw statement text without any
+    // normalization, so the remote hash of a runner-applied alias is the exact
+    // shadow file bytes, never the split/trim hash of those statements.
+    if (entry.remote_statements_sha256 !== entry.shadow_local_sha256) {
+      fail(`${label} remote statement hash must match the runner shadow file bytes`)
     }
   })
 
