@@ -415,7 +415,14 @@ export function parseProductionMigrationManifest(input, source = productionManif
     const label = `${source} forward_migrations[${index}]`
     assertExactKeys(
       entry,
-      ['version', 'path', 'local_sha256', 'remote_name', 'remote_statements_sha256'],
+      [
+        'version',
+        'path',
+        'local_sha256',
+        'remote_name',
+        'remote_statements_sha256',
+        'remote_hash_mode',
+      ],
       label,
     )
     assertVersion(entry.version, `${label} version`)
@@ -429,6 +436,9 @@ export function parseProductionMigrationManifest(input, source = productionManif
       fail(`${label} remote_name is invalid`)
     }
     assertHash(entry.remote_statements_sha256, `${label} remote_statements_sha256`)
+    if (!forwardRemoteHashModes.includes(entry.remote_hash_mode)) {
+      fail(`${label} remote_hash_mode is invalid`)
+    }
   })
 
   document.applied_forward_aliases.forEach((entry, index) => {
