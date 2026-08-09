@@ -551,12 +551,37 @@ SELECT is(
   0,
   'authenticated keeps no SELECT on the 12 technical file columns'
 );
--- The staff view joins client identity from public.profiles. Only the three
--- columns it reads are granted, and only to authenticated/service_role.
+-- Browser reads are restricted to the exact PROFILE_SAFE_SELECT allowlist.
+-- The service role remains a trusted server-side principal; anon/PUBLIC get no SELECT.
+SELECT is(
+  has_table_privilege('authenticated', 'public.profiles', 'SELECT'),
+  false,
+  'authenticated has no table-level SELECT on profiles'
+);
 SELECT is(
   (
     SELECT count(*)::integer
-    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
+    FROM unnest(ARRAY[
+      'id',
+      'full_name',
+      'email',
+      'company_name',
+      'avatar_url',
+      'plan_renewal_date',
+      'plan_status',
+      'services_config',
+      'onboarding_done',
+      'created_at',
+      'updated_at',
+      'phone',
+      'plan_name',
+      'plan_value',
+      'client_type',
+      'brand',
+      'first_access_used_at',
+      'overdue_since',
+      'deleted_at'
+    ]) AS profile_column
     WHERE has_column_privilege(
       'authenticated',
       'public.profiles',
@@ -564,53 +589,69 @@ SELECT is(
       'SELECT'
     )
   ),
-  3,
-  'authenticated can read the three profile columns used by the staff view'
+  19,
+  'authenticated can read exactly the browser profile allowlist'
 );
 SELECT is(
   (
     SELECT count(*)::integer
-    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
+    FROM unnest(ARRAY[
+      'portal_password',
+      'first_access_token',
+      'first_access_expires_at',
+      'first_access_attempts',
+      'first_access_last_attempt_at',
+      'ops_client_id',
+      'sync_status',
+      'sync_error'
+    ]) AS sensitive_column
     WHERE has_column_privilege(
-      'service_role',
+      'authenticated',
       'public.profiles',
-      profile_column,
-      'SELECT'
-    )
-  ),
-  3,
-  'service_role can read the three profile columns used by the staff view'
-);
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
-    WHERE has_column_privilege(
-      'anon',
-      'public.profiles',
-      profile_column,
+      sensitive_column,
       'SELECT'
     )
   ),
   0,
-  'anon gains no profile column privileges from the staff view grant'
+  'authenticated cannot read credential or sync-internal profile columns'
 );
 SELECT is(
   has_table_privilege('anon', 'public.profiles', 'SELECT'),
   false,
-  'anon keeps no table-level read on profiles'
+  'anon has no table-level SELECT on profiles'
 );
 SELECT is(
   (
     SELECT count(*)::integer
-    FROM pg_class AS cls
-    CROSS JOIN LATERAL aclexplode(COALESCE(cls.relacl, ARRAY[]::aclitem[])) AS acl
-    WHERE cls.oid = 'public.profiles'::regclass
-      AND acl.privilege_type = 'SELECT'
-      AND pg_get_userbyid(acl.grantee) IN ('authenticated', 'anon')
+    FROM pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.profiles'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND has_column_privilege(
+        'anon',
+        'public.profiles',
+        attribute.attname,
+        'SELECT'
+      )
   ),
   0,
-  'the profiles grant stays column-scoped without table-level SELECT'
+  'anon has no profile column SELECT'
+);
+SELECT ok(
+  NOT EXISTS (
+    SELECT 1
+    FROM pg_class AS profiles_class,
+      LATERAL aclexplode(COALESCE(profiles_class.relacl, ARRAY[]::aclitem[])) AS acl
+    WHERE profiles_class.oid = 'public.profiles'::regclass
+      AND acl.grantee = 0
+      AND acl.privilege_type = 'SELECT'
+  ),
+  'PUBLIC has no table-level SELECT on profiles'
+);
+SELECT is(
+  has_table_privilege('service_role', 'public.profiles', 'SELECT'),
+  true,
+  'service_role keeps trusted server-side SELECT on profiles'
 );
 SELECT ok(
   EXISTS (
@@ -1332,6 +1373,12 @@ SELECT ok(
   ),
   'client cannot query a technical file source column'
 );
+SELECT ok(
+  pg_temp.statement_fails(
+    'SELECT portal_password, first_access_token FROM public.profiles LIMIT 1'
+  ),
+  'client cannot query credential-bearing profile columns'
+);
 SELECT is(
   (
     SELECT count(*)::integer
@@ -1468,6 +1515,19 @@ SELECT ok(
         IS NOT DISTINCT FROM staff_file.agency_approval_status
   ) = 2,
   'assigned design reads the technical columns through the staff-only view'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.staff_files_secure AS staff_file
+    WHERE staff_file.client_id = 'a0000000-0000-0000-0000-00000000000a'
+      AND staff_file.uploader ? 'full_name'
+      AND staff_file.project ? 'name'
+      AND staff_file.client ? 'full_name'
+      AND staff_file.client ? 'company_name'
+  ),
+  2,
+  'assigned design reads all three JSON enrichments through the staff-only view'
 );
 SELECT ok(
   pg_temp.statement_fails(
