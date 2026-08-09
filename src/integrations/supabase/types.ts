@@ -710,13 +710,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "editorial_posts_primary_file_id_fkey"
-            columns: ["primary_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "editorial_posts_project_fk"
             columns: ["project_id", "client_id"]
             isOneToOne: false
@@ -902,13 +895,6 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "editorial_publications_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
             referencedColumns: ["id"]
           },
           {
@@ -1263,13 +1249,6 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "file_approval_events_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
         ]
       }
       file_content_chunks: {
@@ -1326,13 +1305,6 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "file_content_chunks_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
         ]
       }
       file_processing_jobs: {
@@ -1384,13 +1356,6 @@ export type Database = {
             columns: ["file_id"]
             isOneToOne: false
             referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "file_processing_jobs_file_id_fkey"
-            columns: ["file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
             referencedColumns: ["id"]
           },
         ]
@@ -1570,13 +1535,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
-            foreignKeyName: "files_parent_file_id_fkey"
-            columns: ["parent_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "files_project_id_fkey"
             columns: ["project_id"]
             isOneToOne: false
@@ -1588,13 +1546,6 @@ export type Database = {
             columns: ["revision_of_file_id"]
             isOneToOne: false
             referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_revision_of_file_id_fkey"
-            columns: ["revision_of_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
             referencedColumns: ["id"]
           },
           {
@@ -3520,13 +3471,6 @@ export type Database = {
             referencedRelation: "files"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "workspace_nodes_sent_for_approval_file_id_fkey"
-            columns: ["sent_for_approval_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
         ]
       }
     }
@@ -3583,71 +3527,7 @@ export type Database = {
           version: number | null
           visibility: string | null
         }
-        Relationships: [
-          {
-            foreignKeyName: "files_agency_reviewed_by_fkey"
-            columns: ["agency_reviewed_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_client_decided_by_fkey"
-            columns: ["client_decided_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_parent_file_id_fkey"
-            columns: ["parent_file_id"]
-            isOneToOne: false
-            referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_parent_file_id_fkey"
-            columns: ["parent_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_project_id_fkey"
-            columns: ["project_id"]
-            isOneToOne: false
-            referencedRelation: "projects"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_revision_of_file_id_fkey"
-            columns: ["revision_of_file_id"]
-            isOneToOne: false
-            referencedRelation: "files"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_revision_of_file_id_fkey"
-            columns: ["revision_of_file_id"]
-            isOneToOne: false
-            referencedRelation: "staff_files_secure"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "files_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
     }
     Functions: {
