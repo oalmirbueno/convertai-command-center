@@ -1,5 +1,5 @@
 // Aceleriq OS — MCP Server (Streamable HTTP / JSON-RPC 2.0)
-// Deployment marker: exact OAuth admin binding published 2026-08-09.
+// Deployment marker: OAuth admin hotfix release 2 (2026-08-09).
 // Round 2: foundation only (aceleriq_health, aceleriq_capabilities).
 // Bearer auth via public.api_keys. Audit via public.mcp_audit_log.
 // Does NOT modify api-gateway or any existing function.
