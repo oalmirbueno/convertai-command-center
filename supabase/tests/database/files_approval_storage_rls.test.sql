@@ -432,7 +432,7 @@ SELECT is(
     FROM pg_proc
     WHERE oid = to_regprocedure('app_private.staff_files_secure_rows()')
   ),
-  ARRAY['search_path='],
+  ARRAY['search_path=""'],
   'the privileged row source pins an empty search_path'
 );
 SELECT is(
