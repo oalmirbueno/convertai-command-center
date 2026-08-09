@@ -112,32 +112,33 @@ describe("production migration view", () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 + 2 + 13 canonical + 12 alias contract", () => {
+  it("validates the explicit 96 + 2 + 14 canonical + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(13);
-    expect(plan.forwardMigrations).toHaveLength(13);
+    expect(plan.manifest.forward_migrations).toHaveLength(14);
+    expect(plan.forwardMigrations).toHaveLength(14);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(13);
-    expect(versions).toHaveLength(109);
+    expect(plan.forwardLedger).toHaveLength(14);
+    expect(versions).toHaveLength(110);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
     // Aliased canonical versions are never remote rows; the unaliased forward
-    // migration is recorded under its own canonical version.
+    // migrations are recorded under their own canonical versions.
     for (const alias of plan.appliedAliases) {
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(1);
+    expect(unaliased).toHaveLength(2);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
+
     for (const alias of plan.appliedAliases) {
       expect(versions).toContain(alias.remoteVersion);
     }
@@ -158,7 +159,7 @@ describe("production migration view", () => {
     expect(shadowCli.stdout).toBe(`${plan.shadowPaths.join("\n")}\n`);
 
     const sqlValues = formatProductionLedgerSqlValues();
-    expect(sqlValues.split("\n")).toHaveLength(109);
+    expect(sqlValues.split("\n")).toHaveLength(110);
     expect(sqlValues).toMatch(/^\('20260223193632','',[0-9a-f']+\),/);
     const lastAlias = plan.appliedAliases.at(-1)!;
     expect(sqlValues).toContain(`'${lastAlias.remoteVersion}','${lastAlias.remoteName}'`);
@@ -180,18 +181,26 @@ describe("production migration view", () => {
     expect(entries.filter((entry) => entry.remote_hash_mode === "supabase_cli_split"))
       .toHaveLength(12);
     const direct = entries.filter((entry) => entry.remote_hash_mode === "runner_exact_sql");
-    expect(direct).toHaveLength(1);
-    expect(direct[0].version).toBe("20260809030446");
+    expect(direct).toHaveLength(2);
+    expect(direct.map((entry) => entry.version)).toEqual([
+      "20260809030446",
+      "20260809032942",
+    ]);
     expect(direct[0].remote_statements_sha256)
       .toBe("21391458d27641651e4c116e77a92062430c8b1dd44bdba171b0c652f0d06833");
+    expect(direct[1].remote_statements_sha256)
+      .toBe("be2e27a8f095691a56f01176014fc05594c457f3f2373f4c18ecd51a43c0743d");
 
-    // The direct runner row is the raw SQL bytes, never the split/trim hash.
-    const directSource = plan.forwardMigrations.at(-1)!;
-    expect(direct[0].remote_statements_sha256).toBe(directSource.sha256);
-    expect(direct[0].remote_statements_sha256).not.toBe(directSource.statementsSha256);
-    const directLedger = plan.forwardLedger.at(-1)!;
-    expect(directLedger.alias).toBeNull();
-    expect(directLedger.statementsSha256).toBe(directSource.sha256);
+    // Every direct runner row is the raw SQL bytes, never the split/trim hash.
+    for (const [offset, entry] of direct.entries()) {
+      const source = plan.forwardMigrations[plan.forwardMigrations.length - direct.length + offset];
+      expect(entry.remote_statements_sha256).toBe(source.sha256);
+      expect(entry.remote_statements_sha256).not.toBe(source.statementsSha256);
+      const ledgerEntry = plan.forwardLedger[plan.forwardLedger.length - direct.length + offset];
+      expect(ledgerEntry.alias).toBeNull();
+      expect(ledgerEntry.statementsSha256).toBe(source.sha256);
+    }
+
 
     // Every alias row is the raw shadow file bytes, never the split/trim hash.
     for (const [index, entry] of aliasEntries.entries()) {
