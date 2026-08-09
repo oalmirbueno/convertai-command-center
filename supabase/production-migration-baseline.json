@@ -137,6 +137,14 @@
       "remote_name": "5d065285-b451-4dd2-8298-57e7c7649500",
       "remote_statements_sha256": "ef8b5e8497d14caffd11523edadf741c187b7f29e13a02b4be346c633b987bdc",
       "remote_hash_mode": "runner_exact_sql"
+    },
+    {
+      "version": "20260809044000",
+      "path": "supabase/migrations/20260809044000_profile_select_allowlist.sql",
+      "local_sha256": "9ab8adbf1f74d296c9f982e7cfb4577987cf36c87383d692e252e163bcb7d26e",
+      "remote_name": "profile_select_allowlist",
+      "remote_statements_sha256": "41221be91e56af92df0d9a7def323865242759c03fc07b2d7a533eb360e00ef1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
