@@ -1433,6 +1433,45 @@ SELECT ok(
   ),
   'nobody can delete through the staff-only view'
 );
+
+-- The administrator keeps the full expected set through the privileged source.
+SELECT pg_temp.act_as('a0000000-0000-0000-0000-000000000001');
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.staff_files_secure
+    WHERE client_id = 'a0000000-0000-0000-0000-00000000000a'
+  ),
+  2,
+  'administrator reads the Client A set through the staff-only view'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.staff_files_secure AS staff_file
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.files AS file_row
+      WHERE file_row.id = staff_file.id
+    )
+  ),
+  0,
+  'the staff-only view never exposes a row the administrator cannot reach on files'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.files AS file_row
+    WHERE NOT EXISTS (
+      SELECT 1
+      FROM public.staff_files_secure AS staff_file
+      WHERE staff_file.id = file_row.id
+    )
+  ),
+  0,
+  'the staff-only view exposes the administrator the exact expected file set'
+);
+SELECT pg_temp.act_as('a0000000-0000-0000-0000-000000000003');
 SELECT is(
   (
     SELECT count(*)::integer
