@@ -1243,6 +1243,14 @@ SELECT is(
   0,
   'unassigned manager cannot read reports from either client'
 );
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM public.staff_files_secure
+  ),
+  0,
+  'unassigned manager reads nothing through the staff-only file view'
+);
 
 -- ---------------------------------------------------------------------------
 -- Client isolation and assignment-aware staff access
