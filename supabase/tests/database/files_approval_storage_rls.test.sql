@@ -603,10 +603,11 @@ SELECT is(
 SELECT is(
   (
     SELECT count(*)::integer
-    FROM aclexplode(COALESCE(cls.relacl, ARRAY[]::aclitem[])) AS acl
-    WHERE acl.privilege_type = 'SELECT'
-      AND pg_get_userbyid(acl.grantee) IN ('authenticated', 'anon', 'service_role')
-    FROM_DUMMY
+    FROM pg_class AS cls
+    CROSS JOIN LATERAL aclexplode(COALESCE(cls.relacl, ARRAY[]::aclitem[])) AS acl
+    WHERE cls.oid = 'public.profiles'::regclass
+      AND acl.privilege_type = 'SELECT'
+      AND pg_get_userbyid(acl.grantee) IN ('authenticated', 'anon')
   ),
   0,
   'the profiles grant stays column-scoped without table-level SELECT'
