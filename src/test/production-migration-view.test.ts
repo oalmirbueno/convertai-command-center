@@ -415,7 +415,10 @@ describe("production migration view", () => {
       .toThrow(/not paired with the canonical forward migration in order/);
 
     const drifted = read();
+    // Both stay in lockstep so the file-level shadow hash check is the one that
+    // fails, keeping the original coverage intact under the raw-hash contract.
     drifted.applied_forward_aliases[0].shadow_local_sha256 = "0".repeat(64);
+    drifted.applied_forward_aliases[0].remote_statements_sha256 = "0".repeat(64);
     const driftedPath = join(root, "drifted-alias.json");
     writeFileSync(driftedPath, JSON.stringify(drifted));
     expect(() => loadProductionMigrationPlan({ manifestFile: driftedPath }))
