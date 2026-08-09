@@ -49,6 +49,51 @@ export function validateOAuthJwtClaims(
   return audiences.includes(acceptedAudience);
 }
 
+/**
+ * Matches a server-side allowlist of exact OAuth admin bindings.
+ *
+ * Format: `user_uuid:client_uuid[,user_uuid:client_uuid]`. A missing setting
+ * or any invalid/partial entry invalidates the whole allowlist and fails closed.
+ */
+export const MAX_MCP_ADMIN_OAUTH_BINDINGS = 64;
+export const MAX_MCP_ADMIN_OAUTH_BINDINGS_LENGTH = 8_192;
+
+export type McpAdminOAuthBindingContext = {
+  userId: string;
+  clientId: string;
+  hasAdminRole: boolean;
+  isAllowedOAuthClient: boolean;
+};
+
+export function canGrantMcpOAuthAdmin(
+  configuredBindings: string | null | undefined,
+  context: McpAdminOAuthBindingContext,
+): boolean {
+  if (!context.hasAdminRole || !context.isAllowedOAuthClient) return false;
+  if (!UUID_RE.test(context.userId) || !UUID_RE.test(context.clientId)) return false;
+  if (!configuredBindings?.trim()) return false;
+  if (configuredBindings.length > MAX_MCP_ADMIN_OAUTH_BINDINGS_LENGTH) return false;
+
+  const entries = configuredBindings.split(',');
+  if (entries.length === 0 || entries.length > MAX_MCP_ADMIN_OAUTH_BINDINGS) return false;
+
+  const bindings = new Set<string>();
+  for (const rawEntry of entries) {
+    const parts = rawEntry.trim().split(':');
+    if (parts.length !== 2) return false;
+
+    const userId = parts[0].trim().toLowerCase();
+    const clientId = parts[1].trim().toLowerCase();
+    // One malformed entry invalidates the whole configuration.
+    if (!UUID_RE.test(userId) || !UUID_RE.test(clientId)) return false;
+    bindings.add(`${userId}:${clientId}`);
+  }
+
+  return bindings.has(
+    `${context.userId.toLowerCase()}:${context.clientId.toLowerCase()}`,
+  );
+}
+
 export const OAUTH_STAFF_SCOPES = [
   'aceleriq:read',
   'aceleriq:write',

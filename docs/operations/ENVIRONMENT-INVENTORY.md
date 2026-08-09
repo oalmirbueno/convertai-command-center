@@ -10,6 +10,9 @@ permanecem no gerenciador privado aprovado.
 - nomes de variáveis públicas do navegador em `.env.example`, sempre sem valor
   real;
 - nomes de entradas exigidas pelos workflows, sem conteúdo;
+- `MCP_ADMIN_OAUTH_BINDINGS`, somente como nome e formato público
+  `user_uuid:client_uuid[,user_uuid:client_uuid]`; os pares reais ficam no
+  gerenciador privado do ambiente;
 - validações de formato, menor privilégio e ordem de release;
 - placeholders neutros em documentação e testes.
 
