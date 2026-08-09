@@ -553,4 +553,44 @@ describe("production migration view", () => {
     expect(() => loadProductionMigrationPlan({ exceptionsFile: changedExceptions }))
       .toThrow(/published sanitization is not exact/);
   });
+
+  it("keeps a future supabase_cli_split forward pending until its split hash lands", () => {
+    const plan = loadProductionMigrationPlan();
+    const canonical = plan.forwardMigrations[0];
+    const syntheticPlan = {
+      ...plan,
+      forwardLedger: [
+        ...plan.forwardLedger,
+        {
+          canonical: { ...canonical, version: "20260810120000" },
+          alias: null,
+          version: "20260810120000",
+          name: "future_split_forward",
+          // supabase_cli_split declares the split/trim hash as the remote hash.
+          statementsSha256: canonical.statementsSha256,
+        },
+      ],
+    };
+
+    const live = parseRemoteLedgerCsv(ledgerCsv(remoteRows(13)));
+    const pending = validateRemoteLedger(syntheticPlan, live);
+    expect(pending.pendingForward).toHaveLength(1);
+    expect(pending.pendingForward[0].bytes).toEqual(canonical.bytes);
+
+    const withSplit = [...live, {
+      remoteVersion: "20260810120000",
+      remoteName: "future_split_forward",
+      remoteStatementsSha256: canonical.statementsSha256,
+    }];
+    expect(validateRemoteLedger(syntheticPlan, withSplit).pendingForward).toHaveLength(0);
+
+    const withRaw = [...live, {
+      remoteVersion: "20260810120000",
+      remoteName: "future_split_forward",
+      remoteStatementsSha256: canonical.sha256,
+    }];
+    expect(() => validateRemoteLedger(syntheticPlan, withRaw))
+      .toThrow(/forward statement hash mismatch/);
+  });
 });
+
