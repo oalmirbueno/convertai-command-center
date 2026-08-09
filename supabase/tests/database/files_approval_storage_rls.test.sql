@@ -1058,12 +1058,10 @@ SELECT ok(
   ),
   'client cannot query a technical file source column'
 );
-SELECT is(
-  (
-    SELECT count(*)::integer
-    FROM public.staff_files_secure
+SELECT ok(
+  pg_temp.statement_fails(
+    'SELECT count(*) FROM public.staff_files_secure'
   ),
-  0,
   'client cannot read the staff-only file view'
 );
 SELECT is(
