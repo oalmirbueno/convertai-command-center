@@ -172,6 +172,108 @@ describe("production migration view", () => {
     expect(sqlCli.stdout).toBe(`${sqlValues}\n`);
   });
 
+  it("declares an exact remote hash mode per forward migration and uses raw ledger hashes", () => {
+    const plan = loadProductionMigrationPlan();
+    const entries = plan.manifest.forward_migrations as Array<Record<string, string>>;
+    const aliasEntries = plan.manifest.applied_forward_aliases as Array<Record<string, string>>;
+
+    expect(entries.filter((entry) => entry.remote_hash_mode === "supabase_cli_split"))
+      .toHaveLength(12);
+    const direct = entries.filter((entry) => entry.remote_hash_mode === "runner_exact_sql");
+    expect(direct).toHaveLength(1);
+    expect(direct[0].version).toBe("20260809030446");
+    expect(direct[0].remote_statements_sha256)
+      .toBe("21391458d27641651e4c116e77a92062430c8b1dd44bdba171b0c652f0d06833");
+
+    // The direct runner row is the raw SQL bytes, never the split/trim hash.
+    const directSource = plan.forwardMigrations.at(-1)!;
+    expect(direct[0].remote_statements_sha256).toBe(directSource.sha256);
+    expect(direct[0].remote_statements_sha256).not.toBe(directSource.statementsSha256);
+    const directLedger = plan.forwardLedger.at(-1)!;
+    expect(directLedger.alias).toBeNull();
+    expect(directLedger.statementsSha256).toBe(directSource.sha256);
+
+    // Every alias row is the raw shadow file bytes, never the split/trim hash.
+    for (const [index, entry] of aliasEntries.entries()) {
+      expect(entry.remote_statements_sha256).toBe(entry.shadow_local_sha256);
+      expect(entry.remote_statements_sha256).not.toBe(entry.shadow_statements_sha256);
+      expect(plan.appliedAliases[index].remoteStatementsSha256).toBe(entry.shadow_local_sha256);
+      expect(plan.appliedAliases[index].shadow.sha256).toBe(entry.shadow_local_sha256);
+      expect(plan.appliedAliases[index].shadow.statementsSha256)
+        .toBe(entry.shadow_statements_sha256);
+    }
+  });
+
+  it("rejects normalized hashes, invalid modes, and swapped modes", () => {
+    const root = temporaryRoot();
+    const read = () => JSON.parse(readFileSync(manifestPath, "utf8"));
+    const write = (name: string, document: unknown) => {
+      const path = join(root, name);
+      writeFileSync(path, JSON.stringify(document));
+      return path;
+    };
+
+    const aliasSplit = read();
+    aliasSplit.applied_forward_aliases[0].remote_statements_sha256 =
+      aliasSplit.applied_forward_aliases[0].shadow_statements_sha256;
+    expect(() => loadProductionMigrationPlan({ manifestFile: write("alias-split.json", aliasSplit) }))
+      .toThrow(/remote statement hash must match the runner shadow file bytes/);
+
+    const directSplit = read();
+    const directIndex = directSplit.forward_migrations.length - 1;
+    directSplit.forward_migrations[directIndex].remote_statements_sha256 =
+      "3ba673061202460cedbfddf8e099cf0dc9b9e60184a8ba8283b018fda2e09227";
+    expect(() => loadProductionMigrationPlan({ manifestFile: write("direct-split.json", directSplit) }))
+      .toThrow(/forward raw SQL SHA-256 mismatch/);
+
+    const invalidMode = read();
+    invalidMode.forward_migrations[0].remote_hash_mode = "either";
+    expect(() => loadProductionMigrationPlan({ manifestFile: write("invalid-mode.json", invalidMode) }))
+      .toThrow(/remote_hash_mode is invalid/);
+
+    const missingMode = read();
+    delete missingMode.forward_migrations[0].remote_hash_mode;
+    expect(() => loadProductionMigrationPlan({ manifestFile: write("missing-mode.json", missingMode) }))
+      .toThrow(/has an invalid contract/);
+
+    // Swapping the declared mode without swapping the hash must fail closed in
+    // both directions — no fallback and no accepting both hash shapes.
+    const swappedCanonical = read();
+    swappedCanonical.forward_migrations[0].remote_hash_mode = "runner_exact_sql";
+    expect(() => loadProductionMigrationPlan({
+      manifestFile: write("swapped-canonical.json", swappedCanonical),
+    })).toThrow(/forward raw SQL SHA-256 mismatch/);
+
+    const swappedDirect = read();
+    swappedDirect.forward_migrations[directIndex].remote_hash_mode = "supabase_cli_split";
+    expect(() => loadProductionMigrationPlan({
+      manifestFile: write("swapped-direct.json", swappedDirect),
+    })).toThrow(/forward statement SHA-256 mismatch/);
+  });
+
+  it("accepts the live 109-row raw ledger and rejects normalized rows", () => {
+    const plan = loadProductionMigrationPlan();
+    const rows = remoteRows(13);
+    expect(rows).toHaveLength(109);
+    const reconciliation = validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(rows)));
+    expect(reconciliation.pendingForward).toHaveLength(0);
+    expect(reconciliation.appliedForward).toHaveLength(13);
+    expect(reconciliation.appliedAliases).toHaveLength(12);
+
+    const normalizedAlias = structuredClone(rows);
+    normalizedAlias[96].remoteStatementsSha256 =
+      plan.appliedAliases[0].shadow.statementsSha256;
+    expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(normalizedAlias))))
+      .toThrow(/forward statement hash mismatch/);
+
+    const normalizedDirect = structuredClone(rows);
+    normalizedDirect[108].remoteStatementsSha256 =
+      plan.forwardMigrations.at(-1)!.statementsSha256;
+    expect(() => validateRemoteLedger(plan, parseRemoteLedgerCsv(ledgerCsv(normalizedDirect))))
+      .toThrow(/forward statement hash mismatch/);
+  });
+
+
   it("emits legacy sentinels, omits attestations, and copies pending forward SQL byte-for-byte", () => {
     const plan = loadProductionMigrationPlan();
     const { outputDir, result } = buildFixture();
