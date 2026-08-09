@@ -744,8 +744,18 @@ export function loadProductionMigrationPlan({
     if (source.name !== entry.remote_name) {
       fail(`forward remote name does not match the Supabase CLI filename name: ${entry.path}`)
     }
-    if (source.statementsSha256 !== entry.remote_statements_sha256) {
-      fail(`forward statement SHA-256 mismatch: ${entry.path}`)
+    // Explicit, fail-closed contract: no inference and no accepting both hash
+    // shapes. Each forward migration declares how the remote ledger hashed it.
+    if (entry.remote_hash_mode === 'supabase_cli_split') {
+      if (source.statementsSha256 !== entry.remote_statements_sha256) {
+        fail(`forward statement SHA-256 mismatch: ${entry.path}`)
+      }
+    } else if (entry.remote_hash_mode === 'runner_exact_sql') {
+      if (source.sha256 !== entry.remote_statements_sha256) {
+        fail(`forward raw SQL SHA-256 mismatch: ${entry.path}`)
+      }
+    } else {
+      fail(`forward remote_hash_mode is invalid: ${entry.path}`)
     }
     return source
   })
