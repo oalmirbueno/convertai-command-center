@@ -551,6 +551,55 @@ SELECT is(
   0,
   'authenticated keeps no SELECT on the 12 technical file columns'
 );
+-- The staff view joins client identity from public.profiles. Only the three
+-- columns it reads are granted, and only to authenticated/service_role.
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
+    WHERE has_column_privilege(
+      'authenticated',
+      'public.profiles',
+      profile_column,
+      'SELECT'
+    )
+  ),
+  3,
+  'authenticated can read the three profile columns used by the staff view'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
+    WHERE has_column_privilege(
+      'service_role',
+      'public.profiles',
+      profile_column,
+      'SELECT'
+    )
+  ),
+  3,
+  'service_role can read the three profile columns used by the staff view'
+);
+SELECT is(
+  (
+    SELECT count(*)::integer
+    FROM unnest(ARRAY['id', 'full_name', 'company_name']) AS profile_column
+    WHERE has_column_privilege(
+      'anon',
+      'public.profiles',
+      profile_column,
+      'SELECT'
+    )
+  ),
+  0,
+  'anon gains no profile column privileges from the staff view grant'
+);
+SELECT is(
+  has_table_privilege('anon', 'public.profiles', 'SELECT'),
+  false,
+  'anon keeps no table-level read on profiles'
+);
 SELECT ok(
   EXISTS (
     SELECT 1
