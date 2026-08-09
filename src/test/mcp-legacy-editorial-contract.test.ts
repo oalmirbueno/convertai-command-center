@@ -119,9 +119,13 @@ describe("legacy MCP editorial contract", () => {
     );
 
     expect(clientsSource).toContain("ctx.dataScope.unrestricted");
-    expect(clientsSource).toContain("client_roles:user_roles!inner(role)");
-    expect(clientsSource).toContain("qb.in('id', ctx.dataScope.clientIds)");
-    expect(clientsSource).not.toContain("from('user_roles').select('user_id')");
+    expect(clientsSource).toContain(".from('user_roles')");
+    expect(clientsSource).toContain(".select('user_id', { count: 'exact' })");
+    expect(clientsSource).toContain("rolesQb.in('user_id', ctx.dataScope.clientIds)");
+    expect(clientsSource).toContain("rolesQb.range(roleOffset, roleOffset + READ_LIMITS.maxPageSize - 1)");
+    expect(clientsSource).toContain("clientIds.length > MAX_CLIENT_IDS_PER_POSTGREST_FILTER");
+    expect(clientsSource).toContain(".in('id', clientIds)");
+    expect(clientsSource).not.toContain("user_roles!inner");
     expect(clientContextSource).toContain("assertClientAccess(ctx, id)");
     expect(projectsSource).toContain("assertClientAccess(ctx, opts.client_id)");
     expect(projectsSource).toContain("qb.in('client_id', ctx.dataScope.clientIds)");
