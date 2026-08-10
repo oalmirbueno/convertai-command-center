@@ -27,6 +27,7 @@ const QuizPublicPage = lazy(() => import("@/pages/QuizPublicPage"));
 const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
+const AdminFinanceiroV2 = lazy(() => import("@/pages/AdminFinanceiroV2"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
 const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = lazy(() => import("@/pages/AdminReports"));
@@ -132,7 +133,8 @@ function AppRoutes() {
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/ver-como-cliente" element={<ProtectedRoute><AppLayout><AdminViewAsClient /></AppLayout></ProtectedRoute>} />
-      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminFinanceiroV2 /> : ["design", "traffic", "manager"].includes(profile?.role || "") ? <Navigate to="/dashboard" replace /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro/classico" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" ? <AdminFinanceiro /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/financeiro/projecao" element={<ProtectedRoute><AppLayout><AdminProjection /></AppLayout></ProtectedRoute>} />
       <Route path="/api-docs" element={<ProtectedRoute><AppLayout><ApiDocs /></AppLayout></ProtectedRoute>} />
       <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
