@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
+import { ClientsFinanceSection } from "@/features/finance-v2/ClientsFinanceSection";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -353,6 +354,11 @@ export default function Clients() {
               />
             </div>
           ))}
+        </div>
+      )}
+      {isAdmin && (
+        <div className="mt-6 border-t border-border/60 pt-6">
+          <ClientsFinanceSection />
         </div>
       )}
       </div>
