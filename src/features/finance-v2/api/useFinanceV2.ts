@@ -149,5 +149,23 @@ export const useUpsertFixedCost = () =>
   useAdminRpc<UpsertFixedCostArgs>("finance_upsert_fixed_cost");
 export const useUpdateFinanceSettings = () =>
   useAdminRpc<UpdateSettingsArgs>("finance_update_settings");
-export const useGenerateMonthlyBilling = () =>
-  useAdminRpc<{ p_through?: string }>("finance_generate_monthly_billing");
+export interface GenerateBillingResult {
+  through: string;
+  generated_count: number;
+  existing_count: number;
+  skipped_closed_count: number;
+  billing_ids: string[];
+}
+
+export function useGenerateMonthlyBilling() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { p_through?: string }) =>
+      (await call(
+        "finance_generate_monthly_billing",
+        args,
+      )) as GenerateBillingResult,
+    onSuccess: () =>
+      queryClient.invalidateQueries({ queryKey: ["finance-v2"] }),
+  });
+}
