@@ -20,6 +20,7 @@ import InvestorCapital from "@/components/finance/InvestorCapital";
 import FixedCosts from "@/components/finance/FixedCosts";
 import PlansPricing from "@/components/finance/PlansPricing";
 import ManagementSummary from "@/components/finance/ManagementSummary";
+import AdsInvestment from "@/components/finance/AdsInvestment";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -132,6 +133,7 @@ function LegacyFinanceiro() {
   const [receivedCollapsed, setReceivedCollapsed] = useState(false);
   const [indivCollapsed, setIndivCollapsed] = useState(true);
   const [renewalsView, setRenewalsView] = useState<"mensalistas" | "avulsos">("mensalistas");
+  const [walletsOpen, setWalletsOpen] = useState(false);
   const [selMonth, setSelMonth] = useState<number>(new Date().getMonth());
   const [selYear, setSelYear] = useState<number>(new Date().getFullYear());
 
@@ -1360,8 +1362,24 @@ function LegacyFinanceiro() {
           )}
         </TabsContent>
 
-        {/* Tab: Ads Wallet */}
+        {/* Tab: Ads · Investimento da Aceleriq */}
         <TabsContent value="ads" className="space-y-4">
+          {isAdmin && <AdsInvestment billing={billing || []} projectPayments={projectPayments || []} />}
+
+          {isAdmin && (
+            <button
+              onClick={() => setWalletsOpen((v) => !v)}
+              className="w-full flex items-center gap-2 bg-transparent border-none cursor-pointer p-0 text-left"
+            >
+              <DollarSign className="w-3.5 h-3.5 text-info" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                Wallets de clientes ({Object.entries(walletsByClient).length})
+              </span>
+              <span className="text-[10px] text-muted-foreground ml-auto">{walletsOpen ? "▾ recolher" : "▸ expandir"}</span>
+            </button>
+          )}
+
+          {(!isAdmin || walletsOpen) && (<>
           {/* Total Geral Ads */}
           {isAdmin && Object.entries(walletsByClient).length > 0 && (
             <div className="bg-card border border-border rounded-xl p-5">
@@ -1438,6 +1456,7 @@ function LegacyFinanceiro() {
               ))}
             </div>
           )}
+          </>)}
         </TabsContent>
 
         {/* Tab: Renewals & Avulsos */}

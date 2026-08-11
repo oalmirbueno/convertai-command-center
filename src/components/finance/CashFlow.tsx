@@ -15,6 +15,7 @@ import {
   Briefcase,
 } from "lucide-react";
 import NewIncomeModal from "./NewIncomeModal";
+import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -23,6 +24,15 @@ const fmtCompact = (v: number) => {
   return fmt(v);
 };
 const MONTH_LABELS = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "Nov", "Dez"];
+
+// Valor efetivamente recebido de uma fatura/parcela, respeitando pagamentos parciais.
+const receivedAmountOf = (row: any): number => {
+  const total = Number(row?.amount) || 0;
+  const paid = Number(row?.paid_amount) || 0;
+  if (row?.status === "partial") return Math.min(paid, total);
+  if (row?.status === "paid") return paid > 0 && paid < total ? paid : total;
+  return 0;
+};
 
 const INVESTOR_LEGACY = "investidor";
 const INV_PREFIX = "inv_";
@@ -120,6 +130,65 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   // Separar despesas operacionais de aportes de investidor (capital, não despesa)
   const expenses = useMemo(() => (allExpenses || []).filter((e: any) => !isInvestor(e)), [allExpenses]);
   const investorEntries = useMemo(() => (allExpenses || []).filter(isInvestor), [allExpenses]);
+
+  // ───────── Saldo em caixa real ─────────
+  // saldo = base de meses anteriores (conciliada) + tudo que entrou − tudo que saiu.
+  // A base anterior absorve custos antigos não lançados, sem reescrever o histórico.
+  const { data: financeSettings } = useFinanceSettings();
+  const { updateSettings } = useFinanceMutations();
+  const [reconcileOpen, setReconcileOpen] = useState(false);
+  const [reconcileInput, setReconcileInput] = useState("");
+
+  const openingBalance = financeSettings?.openingBalance ?? 0;
+  const allTimeReceived = useMemo(() => {
+    const bills = (billing || [])
+      .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
+      .reduce((s: number, b: any) => s + receivedAmountOf(b), 0);
+    const inst = (projectPayments || []).reduce(
+      (s: number, pp: any) =>
+        s +
+        (pp.installments || [])
+          .filter((i: any) => i.status === "paid" || i.status === "partial")
+          .reduce((x: number, i: any) => x + receivedAmountOf(i), 0),
+      0
+    );
+    return bills + inst;
+  }, [billing, projectPayments]);
+  const allTimePaidOut = useMemo(
+    () => (expenses || []).filter((e: any) => e.status === "paid").reduce((s: number, e: any) => s + Number(e.amount || 0), 0),
+    [expenses]
+  );
+  const cashBalance = openingBalance + allTimeReceived - allTimePaidOut;
+
+  const reconcileBalance = async () => {
+    if (!financeSettings) { toast.error("Configurações financeiras indisponíveis"); return; }
+    const real = parseFloat(reconcileInput.replace(",", "."));
+    if (!Number.isFinite(real)) { toast.error("Informe o saldo real da conta"); return; }
+    const newOpening = real - (allTimeReceived - allTimePaidOut);
+    try {
+      await updateSettings.mutateAsync({
+        currency: financeSettings.currency,
+        openingBalance: newOpening,
+        reserveTarget: financeSettings.reserveTarget,
+        defaultDueDay: financeSettings.defaultDueDay,
+        forecastMonths: financeSettings.forecastMonths,
+        monthlyGoal: financeSettings.monthlyGoal,
+        growthRetentionRate: financeSettings.growthRetentionRate,
+        minimumReserveMonths: financeSettings.minimumReserveMonths,
+        desiredMinimumMargin: financeSettings.desiredMinimumMargin,
+        currentProLabore: financeSettings.currentProLabore,
+        targetProLabore: financeSettings.targetProLabore,
+        defaultDirectCost: financeSettings.defaultDirectCost,
+        allocationMethod: financeSettings.allocationMethod,
+        includeProLaboreInAllocation: financeSettings.includeProLaboreInAllocation,
+      });
+      toast.success(`Saldo conciliado: ${fmt(real)} em caixa`);
+      setReconcileOpen(false);
+      setReconcileInput("");
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao conciliar saldo");
+    }
+  };
 
   // ───────── Build cash flow series ─────────
   const series = useMemo(() => {
@@ -480,6 +549,54 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         )}
       </div>
 
+
+      {/* CAIXA DA ACELERIQ */}
+      <div className="flex items-end justify-between flex-wrap gap-2">
+        <SectionHeader title="Caixa da Aceleriq" subtitle="Saldo real na conta · base anterior conciliada + entradas − saídas" />
+        <button
+          onClick={() => { setReconcileInput(""); setReconcileOpen(true); }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+        >
+          <Wallet className="w-3.5 h-3.5" /> Conciliar saldo
+        </button>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KpiCard icon={<Wallet className="w-4 h-4" />} label="Saldo em caixa hoje" value={fmt(cashBalance)}
+          hint="Confira com o extrato e concilie" tone={cashBalance >= 0 ? "primary" : "danger"} />
+        <KpiCard icon={<Calendar className="w-4 h-4" />} label="Base de meses anteriores" value={fmt(openingBalance)}
+          hint="Ajustada na conciliação" tone="warning" />
+        <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Entradas (histórico)" value={fmt(allTimeReceived)}
+          hint="Tudo que já foi recebido" tone="success" />
+        <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas (histórico)" value={fmt(allTimePaidOut)}
+          hint="Despesas pagas registradas" tone="danger" />
+      </div>
+
+      {/* Modal conciliar saldo */}
+      <Dialog open={reconcileOpen} onOpenChange={setReconcileOpen}>
+        <DialogContent className="bg-card border-border max-w-md">
+          <DialogHeader><DialogTitle className="text-foreground">Conciliar saldo em caixa</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="bg-secondary/50 rounded-lg p-3 space-y-1">
+              <p className="text-[12px] text-muted-foreground">Saldo calculado pelo painel: <span className="font-mono text-foreground">{fmt(cashBalance)}</span></p>
+              <p className="text-[11px] text-muted-foreground">Entradas {fmt(allTimeReceived)} − Saídas {fmt(allTimePaidOut)} + Base anterior {fmt(openingBalance)}</p>
+            </div>
+            <div>
+              <label className="text-xs text-muted-foreground">Saldo real na conta hoje (R$)</label>
+              <Input type="number" step="0.01" value={reconcileInput} onChange={(e) => setReconcileInput(e.target.value)} className="mt-1" placeholder="Ex: 5882.07" />
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              A diferença (custos antigos não lançados, tarifas etc.) vai para a "base de meses anteriores" — nenhum lançamento é alterado ou apagado. Repita a conciliação sempre que quiser bater o painel com o extrato.
+            </p>
+            <button
+              onClick={reconcileBalance}
+              disabled={updateSettings.isPending}
+              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
+            >
+              Conciliar com este saldo
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* RESUMO DO MÊS */}
       <SectionHeader title="Resumo do mês" subtitle="Indicadores operacionais. Investimento não entra aqui." />

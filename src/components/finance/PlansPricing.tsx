@@ -13,7 +13,7 @@ import {
   calculateGrossedUpAmount,
   type FinancePlan,
 } from "@/hooks/useFinanceV2";
-import { DIRECTOR_PLAN_CATALOG, DEFAULT_TAX_RATE } from "@/lib/directorPlan";
+import { DIRECTOR_PLAN_CATALOG, ONE_OFF_CATALOG, DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pctLabel = (v: number | null | undefined) =>
@@ -254,7 +254,7 @@ export default function PlansPricing() {
 
       {/* Ações */}
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <span className="text-sm text-muted-foreground">Catálogo de planos · preço-base antes do gross-up tributário</span>
+        <span className="text-sm text-muted-foreground">Planos recorrentes · preço-base antes do gross-up tributário</span>
         <div className="flex gap-2">
           {missingSeeds.length > 0 && (
             <button
@@ -386,6 +386,51 @@ export default function PlansPricing() {
           </div>
         </div>
       )}
+
+      {/* Avulsos · tabela oficial do Plano Diretor */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <div className="px-5 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+            Avulsos · tabela do Plano Diretor
+          </span>
+          <span className="text-[10px] text-muted-foreground">Não entram no MRR · mudança de escopo vira nova etapa e novo preço</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-[12px]">
+            <thead>
+              <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                <th className="text-left px-4 sm:px-5 py-2 font-medium">Entrega</th>
+                <th className="text-right px-3 py-2 font-medium">Lançamento</th>
+                <th className="text-right px-3 py-2 font-medium">Padrão</th>
+                <th className="text-right px-3 py-2 font-medium hidden sm:table-cell">Cobrança final*</th>
+                <th className="text-right px-3 py-2 font-medium hidden md:table-cell">Limite</th>
+                <th className="text-right px-4 sm:px-5 py-2 font-medium">Pagamento</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {ONE_OFF_CATALOG.map((o) => (
+                <tr key={o.name}>
+                  <td className="px-4 sm:px-5 py-2 text-foreground">{o.name}</td>
+                  <td className="px-3 py-2 text-right font-mono text-foreground whitespace-nowrap">
+                    {o.fromPrice ? "a partir de " : ""}{fmt(o.launchPrice)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">
+                    {o.fromPrice ? "a partir de " : ""}{fmt(o.standardPrice)}
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-info whitespace-nowrap hidden sm:table-cell">
+                    {fmt(calculateGrossedUpAmount(o.launchPrice, DEFAULT_TAX_RATE))}
+                  </td>
+                  <td className="px-3 py-2 text-right text-muted-foreground whitespace-nowrap hidden md:table-cell">{o.limit}</td>
+                  <td className="px-4 sm:px-5 py-2 text-right text-muted-foreground whitespace-nowrap">{o.payment}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
+          *Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no cadastro do cliente — o valor entra no fluxo de caixa normalmente.
+        </p>
+      </div>
 
       {/* Precificador */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">

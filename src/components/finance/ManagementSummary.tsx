@@ -155,6 +155,56 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             <span className="text-[12px] font-medium text-foreground flex-1">Resultado do mês</span>
             <span className={`text-base font-mono font-semibold ${result >= 0 ? "text-success" : "text-destructive"}`}>{fmt(result)}</span>
           </div>
+
+          {/* Cascata de cobertura: cada real que entra vai cobrindo a estrutura na ordem */}
+          {(() => {
+            let available = Math.max(operationalReceived, 0);
+            const buckets = [
+              { label: "Custos diretos", target: directCosts },
+              { label: "Custos fixos", target: fixedCostsValue },
+              { label: "Pró-labore", target: proLabore },
+            ].map((b) => {
+              const covered = Math.min(available, Math.max(b.target, 0));
+              available -= covered;
+              return { ...b, covered, pct: b.target > 0 ? covered / b.target : 1 };
+            });
+            const profit = available;
+            return (
+              <div className="pt-3 space-y-2">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
+                  Cobertura automática · para onde vai o que entrou
+                </p>
+                {buckets.map((b) => (
+                  <div key={b.label} className="space-y-0.5">
+                    <div className="flex items-center gap-2 text-[11px]">
+                      <span className="text-muted-foreground flex-1">{b.label}</span>
+                      <span className={`font-mono ${b.pct >= 1 ? "text-success" : "text-warning"}`}>
+                        {fmt(b.covered)} de {fmt(b.target)}
+                      </span>
+                    </div>
+                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${b.pct >= 1 ? "bg-success" : "bg-warning"}`}
+                        style={{ width: `${Math.round(Math.min(b.pct, 1) * 100)}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+                <div className="flex items-center gap-2 text-[11px] pt-1">
+                  <span className="text-muted-foreground flex-1">Lucro / reserva do mês (sobra após a estrutura)</span>
+                  <span className={`font-mono font-medium ${profit > 0 ? "text-success" : "text-muted-foreground"}`}>{fmt(profit)}</span>
+                </div>
+                {grossReceived > 0 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    De cada R$ 1,00 recebido este mês: {Math.round((taxReserve / grossReceived) * 100)}% reserva tributária
+                    {" · "}{Math.round((buckets.reduce((s, b) => s + b.covered, 0) / grossReceived) * 100)}% estrutura
+                    {" · "}{Math.max(Math.round((profit / grossReceived) * 100), 0)}% lucro/reserva.
+                  </p>
+                )}
+              </div>
+            );
+          })()}
+
           <p className="text-[10px] text-muted-foreground pt-1">
             Custos diretos usam a estimativa padrão de {fmt(defaultDirectCost)}/cliente (marcada como estimada). Pró-labore e custos fixos são descontados uma única vez.
           </p>

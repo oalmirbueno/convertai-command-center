@@ -66,6 +66,36 @@ export const DIRECTOR_PLAN_CATALOG: DirectorPlanSeed[] = [
   { name: "Engenharia / OS", code: "engenharia-os", launchPrice: 6997, standardPrice: 7997, setupFee: 2497, contractMonths: 12, description: "Operação integrada e dados." },
 ];
 
+export interface OneOffSeed {
+  name: string;
+  /** Preço de lançamento (antes do gross-up). */
+  launchPrice: number;
+  /** Preço padrão (fase seguinte). */
+  standardPrice: number;
+  /** Limite de horas/escopo travado. */
+  limit: string;
+  /** Condição de pagamento oficial. */
+  payment: string;
+  /** true quando o preço é "a partir de". */
+  fromPrice?: boolean;
+}
+
+/** Tabela de avulsos do Plano Diretor. Não entram no MRR; prazo, horas e revisão travados. */
+export const ONE_OFF_CATALOG: OneOffSeed[] = [
+  { name: "Diagnóstico express", launchPrice: 497, standardPrice: 697, limit: "3 h", payment: "100% antecipado" },
+  { name: "Diagnóstico completo", launchPrice: 697, standardPrice: 997, limit: "6 h", payment: "100% antecipado" },
+  { name: "Pacote de conteúdo", launchPrice: 997, standardPrice: 1297, limit: "9 h", payment: "100% antecipado" },
+  { name: "Landing page express", launchPrice: 1297, standardPrice: 1697, limit: "11 h", payment: "60/40" },
+  { name: "Landing page estratégica", launchPrice: 1797, standardPrice: 2497, limit: "17 h", payment: "60/40" },
+  { name: "Site institucional enxuto", launchPrice: 2197, standardPrice: 2997, limit: "18 h", payment: "50/30/20" },
+  { name: "Automação simples", launchPrice: 1297, standardPrice: 1797, limit: "9 h", payment: "60/40" },
+  { name: "Implantação de CRM", launchPrice: 1497, standardPrice: 1997, limit: "11 h", payment: "60/40" },
+  { name: "Dashboard inicial", launchPrice: 1497, standardPrice: 1997, limit: "11 h", payment: "60/40" },
+  { name: "Identidade visual essencial", launchPrice: 1497, standardPrice: 1997, limit: "15 h", payment: "60/40" },
+  { name: "Vídeo com IA", launchPrice: 797, standardPrice: 1297, limit: "8 h", payment: "100% antecipado" },
+  { name: "Sistema customizado", launchPrice: 2997, standardPrice: 4997, limit: "Descoberta", payment: "Por marcos", fromPrice: true },
+];
+
 /**
  * Alíquota ilustrativa da fase atual (6%). É apenas o fallback de exibição:
  * a alíquota oficial de cada plano é editável no catálogo (Planos & Preços)
