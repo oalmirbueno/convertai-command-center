@@ -25,6 +25,11 @@ import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 import { isInternalClient } from "@/lib/clientFlags";
+import { useBilling } from "@/hooks/useFinancialData";
+import { useFinancePlans } from "@/hooks/useFinanceV2";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -581,18 +586,21 @@ export default function Clients() {
       && termStatus === "active"
       && !summary.reviewRequired;
   });
-  const kpiSource = firstValue(financialPayload, ["kpis", "totals", "aggregates", "summary"])
-    ?? financialPayload;
-  const readKpi = (paths: string[]) => firstNumber(kpiSource, paths) ?? firstNumber(financialPayload, paths);
-  const sumFinancial = (
-    summaries: ClientFinancialView[],
-    key: "planAmount" | "finalPlanAmount" | "receivableAmount" | "overdueAmount",
-  ) => {
-    const values = summaries
-      .map((summary) => summary[key])
-      .filter((value): value is number => value != null && Number.isFinite(value));
-    return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
-  };
+  // KPIs calculados da MESMA fonte real do Financeiro (mensalistas + cobranças),
+  // para os cards ficarem sempre sincronizados com a operação.
+  const { data: kpiBilling } = useBilling();
+  const { data: kpiPayments } = useQuery({
+    queryKey: ["all-project-payments-finance"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("project_payments")
+        .select("*, project:projects!project_payments_project_id_fkey(name, project_type, billing_mode, brand), client:profiles!project_payments_client_id_fkey(full_name, company_name, client_type, brand), installments:payment_installments(*)");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
+  const { data: catalogPlansKpi } = useFinancePlans();
 
   // Contagem oficial: só recorrentes + híbridos ativos. Avulsos e empresas do
   // grupo não entram (aparecem em seções próprias na lista).
@@ -602,43 +610,60 @@ export default function Clients() {
       (client.client_type || "recurring") !== "one_off" &&
       !isInternalClient(client)
   ).length;
-  const operationalMrr = readKpi([
-    "mrr_operational",
-    "operational_mrr",
-    "operationalMrr",
-    "monthly_operational_revenue",
-    "monthlyOperationalRevenue",
-  ]) ?? sumFinancial(recurringFinancialViews, "planAmount");
-  const grossBilling = readKpi([
-    "gross_recurring_billing",
-    "grossRecurringBilling",
-    "gross_recurring_revenue",
-    "grossRecurringRevenue",
-    "gross_mrr",
-    "grossMrr",
-    "mrr_final",
-    "final_mrr",
-  ]) ?? sumFinancial(recurringFinancialViews, "finalPlanAmount");
-  const receivableTotal = readKpi([
-    "accounts_receivable",
-    "accountsReceivable",
-    "receivable_total",
-    "receivableTotal",
-    "amount_receivable",
-    "amountReceivable",
-    "outstanding_total",
-    "outstandingTotal",
-  ]) ?? sumFinancial(financialViews, "receivableAmount");
-  const overdueTotal = readKpi([
-    "overdue_amount",
-    "overdueAmount",
-    "overdue_total",
-    "overdueTotal",
-    "delinquent_amount",
-    "delinquentAmount",
-    "delinquent_total",
-    "delinquentTotal",
-  ]) ?? sumFinancial(financialViews, "overdueAmount");
+
+  // Mensalistas = MRR. Faturamento bruto = soma cobrada; operacional = após a
+  // reserva tributária (alíquota do plano no catálogo, senão 6% ilustrativa).
+  const payingClients = clientRows.filter(
+    (client) =>
+      (client.plan_status || "active") === "active" &&
+      (client.client_type || "recurring") !== "one_off" &&
+      !isInternalClient(client) &&
+      Number((client as any).plan_value) > 0
+  );
+  const taxRateForClient = (client: ClientRecord) => {
+    const key = (client.plan_name || "").trim().toLowerCase();
+    const plan = (catalogPlansKpi || []).find((p) => p.name.trim().toLowerCase() === key);
+    const rate = plan?.currentVersion?.taxRate;
+    return rate === null || rate === undefined ? DEFAULT_TAX_RATE : rate;
+  };
+  const grossBilling = payingClients.reduce((sum, client) => sum + Number((client as any).plan_value || 0), 0);
+  const operationalMrr = payingClients.reduce(
+    (sum, client) => sum + Number((client as any).plan_value || 0) * (1 - taxRateForClient(client)),
+    0
+  );
+
+  const kpiToday = parseAppDate(todayBR());
+  const kpiPausedIds = new Set(
+    clientRows
+      .filter((client) => client.plan_status === "standby" || client.plan_status === "inactive" || isInternalClient(client))
+      .map((client) => client.id)
+  );
+  const kpiPendingBills = (kpiBilling || []).filter(
+    (b: any) =>
+      b.status === "pending" &&
+      b.type !== "ads_recharge" &&
+      !(b.type === "renewal" && kpiPausedIds.has(b.client_id))
+  );
+  const installmentRemaining = (i: any) => Math.max((Number(i.amount) || 0) - (Number(i.paid_amount) || 0), 0);
+  const kpiPendingInstallments = (kpiPayments || []).flatMap((pp: any) =>
+    (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial")
+  );
+  const receivableTotal =
+    kpiPendingBills.reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0) +
+    kpiPendingInstallments.reduce((sum: number, i: any) => sum + installmentRemaining(i), 0);
+  const overdueTotal =
+    kpiPendingBills
+      .filter((b: any) => {
+        const due = parseAppDate(b.due_date);
+        return !!due && !!kpiToday && due < kpiToday;
+      })
+      .reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0) +
+    kpiPendingInstallments
+      .filter((i: any) => {
+        const due = parseAppDate(i.due_date);
+        return !!due && !!kpiToday && due < kpiToday;
+      })
+      .reduce((sum: number, i: any) => sum + installmentRemaining(i), 0);
   const kpiCards = [
     {
       label: "Clientes ativos",
@@ -649,28 +674,28 @@ export default function Clients() {
       loading: isLoading,
     },
     {
-      label: "MRR operacional",
-      value: formatCurrency(operationalMrr),
-      helper: "antes dos impostos",
-      icon: DollarSign,
-      tone: "text-primary",
-      loading: financialLoading,
-    },
-    {
       label: "Faturamento bruto",
       value: formatCurrency(grossBilling),
-      helper: "recorrente final",
+      helper: `mensalidades de ${payingClients.length} mensalista(s)`,
       icon: Receipt,
       tone: "text-foreground",
-      loading: financialLoading,
+      loading: isLoading,
+    },
+    {
+      label: "MRR operacional",
+      value: formatCurrency(operationalMrr),
+      helper: "após reserva tributária",
+      icon: DollarSign,
+      tone: "text-primary",
+      loading: isLoading,
     },
     {
       label: "A receber",
       value: formatCurrency(receivableTotal),
-      helper: "saldo em aberto",
+      helper: "cobranças + parcelas em aberto",
       icon: Wallet,
       tone: "text-warning",
-      loading: financialLoading,
+      loading: isLoading,
     },
     {
       label: "Inadimplente",
@@ -678,7 +703,7 @@ export default function Clients() {
       helper: "saldo vencido",
       icon: AlertCircle,
       tone: overdueTotal && overdueTotal > 0 ? "text-destructive" : "text-muted-foreground",
-      loading: financialLoading,
+      loading: isLoading,
     },
   ];
 

@@ -297,9 +297,14 @@ export default function EditorialCalendar() {
   const effectiveRole = isImpersonating ? "client" : profile?.role;
   const todayKey = dateKeyInTimeZone(new Date()) || "2026-01-01";
   const requestedView = searchParams.get("view") as EditorialView | null;
+  // Cliente no mobile abre direto em lista: nada de calendário mensal espremido.
+  const defaultView: EditorialView =
+    effectiveRole === "client" && typeof window !== "undefined" && window.innerWidth < 768
+      ? "list"
+      : "month";
   const view = validViews.includes(requestedView || ("" as EditorialView))
     ? (requestedView as EditorialView)
-    : "month";
+    : defaultView;
   const dateKey = normalizeEditorialDateParam(
     searchParams.get("date"),
     todayKey,
@@ -1266,19 +1271,25 @@ export default function EditorialCalendar() {
               </span>
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-[0.16em] text-primary">
-                  {view === "board"
-                    ? "Conteúdos em produção"
-                    : "Agenda editorial"}
+                  {effectiveRole === "client"
+                    ? "Calendário de Conteúdo"
+                    : view === "board"
+                      ? "Conteúdos em produção"
+                      : "Agenda editorial"}
                 </p>
                 <h1 className="mt-0.5 text-xl font-semibold text-foreground">
-                  {view === "board"
-                    ? "Criação e revisão em um fluxo organizado"
-                    : "Conteúdo no dia certo, na conta certa"}
+                  {effectiveRole === "client"
+                    ? "Seu conteúdo planejado, aprovado e publicado"
+                    : view === "board"
+                      ? "Criação e revisão em um fluxo organizado"
+                      : "Conteúdo no dia certo, na conta certa"}
                 </h1>
                 <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                  {view === "board"
-                    ? "Prepare o conteúdo e leve até a aprovação"
-                    : "Veja prazos de produção e publicações agendadas sem misturar outras tarefas"}
+                  {effectiveRole === "client"
+                    ? "Acompanhe o que está aprovado, programado e no ar. Aprovações acontecem na área de Aprovações."
+                    : view === "board"
+                      ? "Prepare o conteúdo e leve até a aprovação"
+                      : "Veja prazos de produção e publicações agendadas sem misturar outras tarefas"}
                 </p>
               </div>
             </div>

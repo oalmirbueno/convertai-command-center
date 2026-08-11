@@ -26,6 +26,8 @@ export interface DashboardData {
   approvedFiles: number;
   totalFiles: number;
   recentUpdates: any[];
+  contentPublications: any[];
+  latestReport: any | null;
   onSelectProject: (p: any) => void;
 }
 
@@ -33,6 +35,13 @@ export const typeLabels: Record<string, string> = {
   social_media: "Social Media", traffic: "Tráfego", automation: "Automação",
   site: "Site", landing_page: "Landing Page", event: "Evento", other: "Outro",
 };
+
+/**
+ * Frentes recorrentes (ciclo mensal) x projetos com começo e fim (marcos + %).
+ * Um cliente híbrido mostra os dois modelos ao mesmo tempo, cada um na sua frente.
+ */
+export const RECURRING_PROJECT_TYPES = ["social_media", "traffic"];
+export const isRecurringProject = (p: any) => RECURRING_PROJECT_TYPES.includes(p?.project_type);
 
 export function relativeTime(dateStr: string): string {
   const now = new Date();
@@ -94,7 +103,7 @@ export function useClientDashboardData(clientId: string) {
     queryFn: async () => {
       if (!projectIds.length) return [];
       const { data } = await supabase.from("milestones")
-        .select("id, project_id, title, status, target_date, completed_at, project:projects!milestones_project_id_fkey(name)")
+        .select("id, project_id, title, status, target_date, project:projects!milestones_project_id_fkey(name)")
         .in("project_id", projectIds).is("deleted_at", null).order("target_date", { ascending: true });
       return data || [];
     },
@@ -123,7 +132,7 @@ export function useClientDashboardData(clientId: string) {
     queryKey: ["client-delivered-files", clientId],
     queryFn: async () => {
       const { data } = await supabase.from("files")
-        .select("id, file_name, created_at, version, approval_status, visibility, project:projects!files_project_id_fkey(name)")
+        .select("id, file_name, created_at, version, approval_status, visibility, project_id, project:projects!files_project_id_fkey(name)")
         .eq("client_id", clientId)
         .in("visibility", ["client_shared", "approval"])
         .eq("status", "ready")
@@ -131,6 +140,39 @@ export function useClientDashboardData(clientId: string) {
         .is("parent_file_id", null)
         .order("created_at", { ascending: false });
       return data || [];
+    },
+    enabled: !!user && !!clientId,
+  });
+
+  // Publicações de conteúdo visíveis ao cliente (RLS libera apenas o que está
+  // programado/publicado com aprovação completa — nada interno vaza).
+  const { data: contentPublications } = useQuery({
+    queryKey: ["client-content-publications", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("editorial_publications")
+        .select("id, post_id, project_id, platform, status, scheduled_at, scheduled_timezone, published_at, permalink")
+        .eq("client_id", clientId)
+        .in("status", ["scheduled", "published"])
+        .order("scheduled_at", { ascending: true });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: !!user && !!clientId,
+  });
+
+  // Última atualização publicada pela Aceleriq (relatórios/rituais publicados).
+  const { data: latestReport } = useQuery({
+    queryKey: ["client-latest-report", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("reports")
+        .select("id, title, summary, highlights, next_steps, period_start, period_end, created_at, status")
+        .eq("client_id", clientId)
+        .eq("status", "published")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) return null;
+      return data || null;
     },
     enabled: !!user && !!clientId,
   });
@@ -173,6 +215,8 @@ export function useClientDashboardData(clientId: string) {
       approvedFiles,
       totalFiles,
       recentUpdates: [],
+      contentPublications: contentPublications || [],
+      latestReport: latestReport || null,
     },
   };
 }

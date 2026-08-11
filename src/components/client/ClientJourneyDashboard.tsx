@@ -1,10 +1,18 @@
+import { useNavigate } from "react-router-dom";
 import {
   ArrowUpRight,
   Briefcase,
   CalendarDays,
+  CalendarCheck,
   CheckCircle2,
   FileCheck,
+  FileText,
+  FolderOpen,
+  Inbox,
   PackageCheck,
+  Repeat,
+  Send,
+  ShieldCheck,
   Target,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -13,6 +21,7 @@ import { FadeUp, StaggerContainer } from "./motion";
 import {
   daysUntil,
   formatDateShort,
+  isRecurringProject,
   typeLabels,
   useClientDashboardData,
 } from "./dashboardHelpers";
@@ -32,17 +41,32 @@ const projectStatusLabel: Record<string, string> = {
   paused: "Pausado",
 };
 
+const platformLabel: Record<string, string> = {
+  instagram: "Instagram",
+  facebook: "Facebook",
+  tiktok: "TikTok",
+  youtube: "YouTube",
+  linkedin: "LinkedIn",
+  google_business: "Google",
+};
+
+const isSameMonth = (value: string | null | undefined, ref: Date) => {
+  if (!value) return false;
+  const d = new Date(value);
+  return d.getMonth() === ref.getMonth() && d.getFullYear() === ref.getFullYear();
+};
+
 export default function ClientJourneyDashboard({
   clientId,
   clientName,
   onSelectProject,
   isImpersonation,
 }: Props) {
+  const navigate = useNavigate();
   const { loadingProjects, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
     doneProjects,
-    avgProgress,
     milestones,
     completedMilestonesCount,
     totalMilestones,
@@ -50,9 +74,32 @@ export default function ClientJourneyDashboard({
     deliveredFiles,
     approvedFiles,
     totalFiles,
-  } = data;
+    contentPublications,
+    latestReport,
+  } = data as any;
   const firstName = clientName.split(" ")[0] || "cliente";
-  const dashboardProjects = [...activeProjects, ...doneProjects];
+
+  // Frentes: recorrente (ciclo mensal) x projeto com começo e fim (marcos + %).
+  const recurringFronts = activeProjects.filter((p: any) => isRecurringProject(p));
+  const closedProjects = activeProjects.filter((p: any) => !isRecurringProject(p));
+  const closedAvgProgress = closedProjects.length > 0
+    ? Math.round(closedProjects.reduce((s: number, p: any) => s + (p.progress || 0), 0) / closedProjects.length)
+    : 0;
+
+  const now = new Date();
+  const monthDelivered = (deliveredFiles || []).filter((f: any) => isSameMonth(f.created_at, now));
+  const publications = contentPublications || [];
+  const scheduled = publications.filter((p: any) => p.status === "scheduled");
+  const published = publications.filter((p: any) => p.status === "published");
+  const publishedThisMonth = published.filter((p: any) => isSameMonth(p.published_at || p.scheduled_at, now));
+  const nextPublication = scheduled
+    .filter((p: any) => p.scheduled_at && new Date(p.scheduled_at) >= now)
+    .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0] || null;
+  const hasContentFront = recurringFronts.length > 0 || publications.length > 0;
+
+  const upcomingMilestones = (milestones || [])
+    .filter((m: any) => m.status !== "completed" && m.target_date)
+    .slice(0, 4);
 
   if (loadingProjects) {
     return (
@@ -70,6 +117,7 @@ export default function ClientJourneyDashboard({
 
   return (
     <StaggerContainer className="space-y-8">
+      {/* 1 · Boas-vindas e contexto */}
       <FadeUp>
         <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
@@ -87,10 +135,7 @@ export default function ClientJourneyDashboard({
                 Bem-vindo de volta, {firstName}
               </h1>
               <p className="mt-3 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                Acompanhe seus projetos, etapas e entregas liberadas pela Aceleriq.
-                {pendingFiles.length > 0
-                  ? ` ${pendingFiles.length} ${pendingFiles.length === 1 ? "entrega aguarda" : "entregas aguardam"} sua decisão.`
-                  : ""}
+                Acompanhe suas frentes, entregas e publicações liberadas pela Aceleriq.
               </p>
               {isImpersonation && (
                 <p className="mt-3 text-xs text-sky-600">
@@ -98,23 +143,50 @@ export default function ClientJourneyDashboard({
                 </p>
               )}
             </div>
-            {activeProjects.length > 0 && (
+            {closedProjects.length > 0 && (
               <div className="hidden shrink-0 flex-col items-center gap-1.5 sm:flex">
-                <CircularProgress progress={avgProgress} size={80} strokeWidth={5} />
-                <span className="text-[10px] text-muted-foreground">Progresso geral</span>
+                <CircularProgress progress={closedAvgProgress} size={80} strokeWidth={5} />
+                <span className="text-[10px] text-muted-foreground">Projetos com prazo</span>
               </div>
             )}
           </div>
         </div>
       </FadeUp>
 
+      {/* 2 · Ação necessária (pendências que dependem do cliente) */}
+      {pendingFiles.length > 0 && (
+        <FadeUp>
+          <button
+            type="button"
+            onClick={() => navigate("/aprovacoes")}
+            className="flex w-full items-center gap-4 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5 text-left transition-colors hover:border-amber-500/60"
+          >
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15">
+              <FileCheck className="h-5 w-5 text-amber-500" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-foreground">
+                {pendingFiles.length === 1
+                  ? "1 entrega aguarda a sua aprovação"
+                  : `${pendingFiles.length} entregas aguardam a sua aprovação`}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Sua decisão libera a produção para o próximo passo.
+              </p>
+            </div>
+            <ArrowUpRight className="h-4 w-4 shrink-0 text-amber-500" />
+          </button>
+        </FadeUp>
+      )}
+
+      {/* 3 · Métricas gerais */}
       <FadeUp>
         <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {[
             {
-              label: "Projetos ativos",
+              label: "Frentes ativas",
               value: activeProjects.length,
-              detail: doneProjects.length ? `${doneProjects.length} concluído(s)` : "Nenhum concluído",
+              detail: doneProjects.length ? `${doneProjects.length} concluída(s)` : "Nenhuma concluída",
               icon: Briefcase,
               color: "text-primary",
               bg: "bg-primary/10",
@@ -158,90 +230,304 @@ export default function ClientJourneyDashboard({
         </div>
       </FadeUp>
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <FadeUp className="lg:col-span-2">
-          <section className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-foreground">Projetos</h2>
-              <span className="text-xs text-muted-foreground">
-                {activeProjects.length} ativo(s)
-                {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
-              </span>
+      {/* 4 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
+      {hasContentFront && (
+        <FadeUp>
+          <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                <CalendarCheck className="h-4 w-4 text-primary" />
+                Conteúdos deste ciclo
+              </h2>
+              <button
+                type="button"
+                onClick={() => navigate("/calendario")}
+                className="flex items-center gap-1 text-xs font-medium text-primary transition-opacity hover:opacity-80"
+              >
+                Ver calendário completo
+                <ArrowUpRight className="h-3.5 w-3.5" />
+              </button>
             </div>
-            {dashboardProjects.length === 0 ? (
-              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
-                Novos projetos aparecerão aqui quando forem iniciados.
-              </div>
-            ) : (
-              dashboardProjects.map((project: any) => {
-                const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
-                const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
-                const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
-                return (
-                  <button
-                    key={project.id}
-                    type="button"
-                    onClick={() => onSelectProject(project)}
-                    className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
-                  >
-                    <div className="flex items-start gap-4">
-                      <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center justify-between gap-3">
-                          <div>
-                            <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                              {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
-                            </p>
-                            <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
-                          </div>
-                          <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                        </div>
-                        <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                          <span className="flex items-center gap-1">
-                            <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                            {completed}/{projectMilestones.length} etapas
-                          </span>
-                          {project.deadline && (
-                            <span>
-                              {deadlineDistance !== null && deadlineDistance < 0
-                                ? "Prazo em atualização"
-                                : `Previsão ${formatDateShort(project.deadline)}`}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-                );
-              })
+            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {[
+                {
+                  label: "Aguardando aprovação",
+                  value: pendingFiles.length,
+                  tone: pendingFiles.length > 0 ? "text-amber-500" : "text-muted-foreground",
+                },
+                { label: "Programados", value: scheduled.length, tone: "text-sky-500" },
+                { label: "Publicados no mês", value: publishedThisMonth.length, tone: "text-emerald-500" },
+                { label: "Publicados no total", value: published.length, tone: "text-foreground" },
+              ].map((item) => (
+                <div key={item.label} className="rounded-xl border border-border/70 bg-secondary/30 p-3">
+                  <p className={`text-xl font-bold tabular-nums ${item.tone}`}>{item.value}</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">{item.label}</p>
+                </div>
+              ))}
+            </div>
+            {nextPublication && (
+              <p className="mt-4 flex items-center gap-2 text-xs text-muted-foreground">
+                <Send className="h-3.5 w-3.5 text-sky-500" />
+                Próxima publicação:
+                <span className="font-medium text-foreground">
+                  {new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", {
+                    weekday: "short",
+                    day: "2-digit",
+                    month: "short",
+                  })}
+                  {" às "}
+                  {new Date(nextPublication.scheduled_at).toLocaleTimeString("pt-BR", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                {nextPublication.platform && (
+                  <span className="rounded-full bg-secondary px-2 py-0.5 text-[10px]">
+                    {platformLabel[nextPublication.platform] || nextPublication.platform}
+                  </span>
+                )}
+              </p>
             )}
           </section>
         </FadeUp>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <FadeUp className="lg:col-span-2">
+          <div className="space-y-6">
+            {/* 5 · Frentes recorrentes: ciclo mensal, sem porcentagem eterna */}
+            {recurringFronts.length > 0 && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
+                    <Repeat className="h-4 w-4 text-primary" />
+                    Frentes recorrentes
+                  </h2>
+                  <span className="text-xs text-muted-foreground">Ciclo mensal</span>
+                </div>
+                {recurringFronts.map((project: any) => {
+                  const projectDeliveredMonth = monthDelivered.filter((f: any) => f.project_id === project.id).length;
+                  const projectPending = pendingFiles.filter((f: any) => f.project?.name === project.name).length;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => onSelectProject(project)}
+                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0">
+                          <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                            {typeLabels[project.project_type] || "Recorrente"} · {projectStatusLabel[project.status] || project.status}
+                          </p>
+                          <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
+                        </div>
+                        <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                      </div>
+                      <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1.5 text-[11px] text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <PackageCheck className="h-3 w-3 text-emerald-500" />
+                          {projectDeliveredMonth} entrega(s) liberada(s) neste mês
+                        </span>
+                        {projectPending > 0 && (
+                          <span className="flex items-center gap-1 text-amber-500">
+                            <FileCheck className="h-3 w-3" />
+                            {projectPending} aguardando sua aprovação
+                          </span>
+                        )}
+                        {nextPublication && (
+                          <span className="flex items-center gap-1">
+                            <Send className="h-3 w-3 text-sky-500" />
+                            Próxima publicação {formatDateShort(nextPublication.scheduled_at)}
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  );
+                })}
+              </section>
+            )}
+
+            {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
+            {(closedProjects.length > 0 || doneProjects.length > 0) && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-foreground">Projetos com prazo</h2>
+                  <span className="text-xs text-muted-foreground">
+                    {closedProjects.length} ativo(s)
+                    {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
+                  </span>
+                </div>
+                {[...closedProjects, ...doneProjects].map((project: any) => {
+                  const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
+                  const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
+                  const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => onSelectProject(project)}
+                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
+                    >
+                      <div className="flex items-start gap-4">
+                        <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                                {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
+                            </div>
+                            <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              {completed}/{projectMilestones.length} etapas
+                            </span>
+                            {project.deadline && (
+                              <span>
+                                {deadlineDistance !== null && deadlineDistance < 0
+                                  ? "Prazo em atualização"
+                                  : `Previsão ${formatDateShort(project.deadline)}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </section>
+            )}
+
+            {activeProjects.length === 0 && doneProjects.length === 0 && (
+              <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
+                Novos projetos aparecerão aqui quando forem iniciados.
+              </div>
+            )}
+          </div>
+        </FadeUp>
 
         <FadeUp>
-          <section className="space-y-3">
-            <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
-            <div className="rounded-xl border border-border bg-card p-4">
-              {deliveredFiles.length === 0 ? (
-                <p className="py-6 text-center text-xs text-muted-foreground">
-                  Nenhuma entrega liberada ainda.
-                </p>
-              ) : (
-                <div className="space-y-3">
-                  {deliveredFiles.slice(0, 6).map((file: any) => (
-                    <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                      <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
-                      <p className="mt-0.5 text-[10px] text-muted-foreground">
-                        {file.project?.name || "Entrega"} · v{file.version || 1}
-                      </p>
-                    </div>
-                  ))}
+          <div className="space-y-6">
+            {/* 7 · Próximas entregas (etapas com data) */}
+            {upcomingMilestones.length > 0 && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-foreground">Próximas entregas</h2>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  <div className="space-y-3">
+                    {upcomingMilestones.map((milestone: any) => (
+                      <div key={milestone.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                        <p className="truncate text-xs font-medium text-foreground">{milestone.title}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {milestone.project?.name || "Projeto"} · previsão {formatDateShort(milestone.target_date)}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              )}
-            </div>
-          </section>
+              </section>
+            )}
+
+            {/* 8 · Resultados explicados e próximos passos (última atualização publicada) */}
+            {latestReport && (
+              <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-foreground">Última atualização da Aceleriq</h2>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/relatorios/${latestReport.id}`)}
+                  className="group w-full rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/30"
+                >
+                  <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    {latestReport.title}
+                  </p>
+                  {latestReport.summary && (
+                    <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
+                      {latestReport.summary}
+                    </p>
+                  )}
+                  {latestReport.next_steps && (
+                    <p className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">
+                      <span className="font-medium text-foreground">Próximos passos: </span>
+                      {latestReport.next_steps}
+                    </p>
+                  )}
+                  <p className="mt-2 flex items-center gap-1 text-[10px] text-primary">
+                    Ver atualização completa
+                    <ArrowUpRight className="h-3 w-3" />
+                  </p>
+                </button>
+              </section>
+            )}
+
+            {/* 9 · Entregas recentes (histórico de valor) */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
+              <div className="rounded-xl border border-border bg-card p-4">
+                {deliveredFiles.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Nenhuma entrega liberada ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {deliveredFiles.slice(0, 6).map((file: any) => (
+                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {file.project?.name || "Entrega"} · v{file.version || 1}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          </div>
         </FadeUp>
       </div>
+
+      {/* 10 · Evolução acumulada + atalhos */}
+      <FadeUp>
+        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+              Evolução acumulada:
+            </span>
+            <span><span className="font-semibold text-foreground">{totalFiles}</span> entregas liberadas</span>
+            <span><span className="font-semibold text-foreground">{approvedFiles}</span> aprovadas</span>
+            {published.length > 0 && (
+              <span><span className="font-semibold text-foreground">{published.length}</span> publicações realizadas</span>
+            )}
+            {doneProjects.length > 0 && (
+              <span><span className="font-semibold text-foreground">{doneProjects.length}</span> projetos concluídos</span>
+            )}
+          </div>
+          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+            {[
+              { label: "Projetos", icon: Briefcase, to: "/projetos" },
+              { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
+              { label: "Calendário", icon: CalendarDays, to: "/calendario" },
+              { label: "Relatórios", icon: FileText, to: "/relatorios" },
+              { label: "Cofre", icon: FolderOpen, to: "/cofre" },
+              { label: "Pedidos", icon: Inbox, to: "/pedidos" },
+            ].map((shortcut) => (
+              <button
+                key={shortcut.to}
+                type="button"
+                onClick={() => navigate(shortcut.to)}
+                className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-secondary/30 px-2 py-3 text-[10px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
+              >
+                <shortcut.icon className="h-4 w-4" />
+                {shortcut.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </FadeUp>
     </StaggerContainer>
   );
 }

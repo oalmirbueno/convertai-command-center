@@ -21,6 +21,7 @@ import { PipelineBar } from "@/components/admin/ProjectPipeline";
 import SecondBrainPulseWidget from "@/components/dashboard/SecondBrainPulseWidget";
 import { projectHasLinkedRequestTasks } from "@/lib/requestTaskWorkflow";
 import { appPublicUrl } from "@/lib/publicUrl";
+import { isInternalClient } from "@/lib/clientFlags";
 
 const statusDotColors: Record<string, string> = {
   active: "bg-info pulse-dot",
@@ -112,7 +113,7 @@ export default function AdminDashboard() {
 
   // Clients with upcoming renewal (next 7 days) or expired
   const clientsRenewalAlert = (clients || []).filter((c: any) => {
-    if (!c.plan_renewal_date) return false;
+    if (!c.plan_renewal_date || isInternalClient(c)) return false;
     const renewal = new Date(c.plan_renewal_date + "T00:00:00");
     const diffDays = Math.ceil((renewal.getTime() - now.getTime()) / 86400000);
     return diffDays <= 7;
@@ -128,7 +129,7 @@ export default function AdminDashboard() {
   // Ignore renewal charges for clients in Standby/Inactive so pending totals stay in sync with client status
   const pausedClientIds = new Set(
     (clients || [])
-      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive")
+      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive" || isInternalClient(c))
       .map((c: any) => c.id)
   );
   const pendingBills = (billing || []).filter(
@@ -213,7 +214,7 @@ export default function AdminDashboard() {
 
   const stats = [
     { label: "Projetos Ativos", value: String(activeProjects.length), color: "bg-primary" },
-    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active").length), color: "bg-success" },
+    { label: "Clientes Ativos", value: String((clients || []).filter((c: any) => c.plan_status === "active" && (c.client_type || "recurring") !== "one_off" && !isInternalClient(c)).length), color: "bg-success" },
     { label: "Tarefas Pendentes", value: String((allTasks || []).filter((t: any) => t.status !== "done").length), color: "bg-warning" },
     { label: "Em Revisão", value: String(projects?.filter((p: any) => p.status === "review").length || 0), color: "bg-info" },
   ];
