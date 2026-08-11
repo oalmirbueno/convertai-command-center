@@ -60,8 +60,19 @@ function requireProductionUrl(name: string, value: string | undefined): string {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
+  const define: Record<string, string> = {};
+
   if (command === "build") {
-    const env = loadEnv(mode, process.cwd(), "");
+    const fileEnv = loadEnv(mode, process.cwd(), "");
+    const defaults = loadPublicEnvDefaults();
+    const env: Record<string, string | undefined> = { ...defaults, ...fileEnv };
+
+    for (const key of PUBLIC_ENV_KEYS) {
+      if (!fileEnv[key]?.trim() && env[key]) {
+        define[`import.meta.env.${key}`] = JSON.stringify(env[key]);
+      }
+    }
+
     requireProductionUrl("VITE_SUPABASE_URL", env.VITE_SUPABASE_URL);
     requireProductionUrl("VITE_APP_PUBLIC_URL", env.VITE_APP_PUBLIC_URL);
     if (!env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim()) {
@@ -70,6 +81,8 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
+    define,
+
     server: {
       host: "::",
       port: 8080,
