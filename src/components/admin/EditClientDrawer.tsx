@@ -632,7 +632,7 @@ export default function EditClientDrawer({
                               due_date: todayStr,
                               paid_date: todayStr,
                               paid_amount: planValNum,
-                              description: "Mensalidade — Retomada de Standby (pago)",
+                              description: "Mensalidade · Retomada de Standby (pago)",
                               status: "paid",
                             },
                             {
@@ -706,7 +706,7 @@ export default function EditClientDrawer({
                 <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
                 <div className="grid grid-cols-3 gap-1.5">
                   {[
-                    { v: "", label: "—" },
+                    { v: "", label: "-" },
                     { v: "aceleriq", label: "AcelerIQ" },
                     { v: "sitebolt", label: "SiteBolt" },
                   ].map((opt) => (
@@ -792,7 +792,7 @@ export default function EditClientDrawer({
                 <div className="flex items-center justify-between gap-3 bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5">
                   <div className="min-w-0">
                     <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
-                    <p className="text-[10px] text-muted-foreground">Cadastro só para organização — fica fora de cobranças, alertas de atraso, "sem plano" e MRR.</p>
+                    <p className="text-[10px] text-muted-foreground">Cadastro só para organização · fica fora de cobranças, alertas de atraso, "sem plano" e MRR.</p>
                   </div>
                   <Switch
                     checked={Boolean(services.internal_company)}

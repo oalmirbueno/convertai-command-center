@@ -2,7 +2,7 @@
  * Parâmetros oficiais do Plano Diretor Financeiro (sócio único, v2.0 · 06/08/2026).
  *
  * Fonte: Aceleriq_Plano_Diretor_Financeiro_Socio_Unico_2026.pdf.
- * Nada aqui é aplicado automaticamente — a escada de pró-labore gera apenas
+ * Nada aqui é aplicado automaticamente · a escada de pró-labore gera apenas
  * SUGESTÃO; a tabela de planos é usada como seed opcional do catálogo.
  */
 

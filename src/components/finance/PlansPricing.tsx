@@ -18,7 +18,7 @@ import { isInternalClient } from "@/lib/clientFlags";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pctLabel = (v: number | null | undefined) =>
-  v === null || v === undefined ? "—" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
+  v === null || v === undefined ? "-" : `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
 
 const monthFirst = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
 
@@ -404,7 +404,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
               </div>
             </div>
             <p className="text-[10px] text-muted-foreground px-4 sm:px-5 py-2.5 border-t border-border">
-              Rateio automático e sincronizado: a estrutura ({fmt(allocBase)}) é dividida igualmente entre os {contributorsCount} clientes que geram receita agora — se um cliente sai ou entra, a margem de todos recalcula na hora. Recorrentes entram pelo valor do plano; avulsos pelo que foi recebido no mês corrente. Margem abaixo de 20% aparece em amarelo (piso do Plano Diretor).
+              Rateio automático e sincronizado: a estrutura ({fmt(allocBase)}) é dividida igualmente entre os {contributorsCount} clientes que geram receita agora · se um cliente sai ou entra, a margem de todos recalcula na hora. Recorrentes entram pelo valor do plano; avulsos pelo que foi recebido no mês corrente. Margem abaixo de 20% aparece em amarelo (piso do Plano Diretor).
             </p>
           </>
         )}
@@ -592,7 +592,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
           </table>
         </div>
         <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
-          *Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no cadastro do cliente — o valor entra no fluxo de caixa normalmente.
+          *Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no cadastro do cliente · o valor entra no fluxo de caixa normalmente.
         </p>
         </>)}
       </div>
@@ -638,7 +638,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial: {fmt(allocBase)} de estrutura ÷ {contributorsCount} cliente(s) com receita. O rateio é análise — no resultado global o custo fixo é descontado uma única vez.
+          Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial: {fmt(allocBase)} de estrutura ÷ {contributorsCount} cliente(s) com receita. O rateio é análise · no resultado global o custo fixo é descontado uma única vez.
         </p>
         </>)}
       </div>

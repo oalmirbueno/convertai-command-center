@@ -3,13 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 
 /**
- * Caixinhas de reserva da Aceleriq — dinheiro separado dentro do caixa:
+ * Caixinhas de reserva da Aceleriq · dinheiro separado dentro do caixa:
  * - tax: reserva tributária (imposto separado do gross-up);
  * - clients: custos de clientes / investimento (colchão para colocar no cliente);
  * - safety: reserva segura da agência (emergência).
  *
  * Guardadas em profiles.services_config.finance_boxes do próprio admin
- * (jsonb já existente — sem migration). Saldo livre = caixa − caixinhas.
+ * (jsonb já existente · sem migration). Saldo livre = caixa − caixinhas.
  */
 export interface FinanceBoxes {
   tax: number;

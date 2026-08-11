@@ -101,7 +101,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
     }
     setSaving(true);
     try {
-      // Random unknown password — the client will set their own via first-access link.
+      // Random unknown password · the client will set their own via first-access link.
       const password = generatePassword();
 
       // Use edge function to create user server-side (avoids session swap)
@@ -167,7 +167,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
           due_date: todayStr,
           paid_date: todayStr,
           paid_amount: planValueNum,
-          description: `Mensalidade — ${company.trim() || fullName.trim()} (pago no cadastro)`,
+          description: `Mensalidade · ${company.trim() || fullName.trim()} (pago no cadastro)`,
           status: "paid",
         }];
         if (planRenewalDate && planRenewalDate > todayStr) {
@@ -176,7 +176,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
             type: "renewal",
             amount: planValueNum,
             due_date: planRenewalDate,
-            description: `Mensalidade — ${company.trim() || fullName.trim()}`,
+            description: `Mensalidade · ${company.trim() || fullName.trim()}`,
             status: "pending",
           });
         }
@@ -211,8 +211,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
             paid_date: isFirst ? todayIso : null,
             paid_amount: isFirst ? amount : null,
             description: n === 1
-              ? `Projeto — ${company.trim() || fullName.trim()} (pago no cadastro)`
-              : `Projeto — Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
+              ? `Projeto · ${company.trim() || fullName.trim()} (pago no cadastro)`
+              : `Projeto · Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
             status: isFirst ? "paid" : "pending",
           };
         });
@@ -403,7 +403,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
               <div className="flex items-center justify-between gap-3 bg-secondary/40 border border-border rounded-xl px-3.5 py-2.5">
                 <div className="min-w-0">
                   <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
-                  <p className="text-[10px] text-muted-foreground">Cadastro só para organização — sem mensalidade, fora de cobranças e alertas.</p>
+                  <p className="text-[10px] text-muted-foreground">Cadastro só para organização · sem mensalidade, fora de cobranças e alertas.</p>
                 </div>
                 <Switch checked={internalCompany} onCheckedChange={setInternalCompany} />
               </div>
@@ -438,7 +438,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
                           );
                         })}
                       </select>
-                      <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche o valor automaticamente — e ele continua editável.</p>
+                      <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche o valor automaticamente · e ele continua editável.</p>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
@@ -502,7 +502,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
                           {(() => {
                             const v = parseFloat(projectValue) || 0;
                             const n = Math.max(parseInt(installmentsCount) || 1, 1);
-                            return v > 0 ? `${n}× R$ ${(v / n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—";
+                            return v > 0 ? `${n}× R$ ${(v / n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "-";
                           })()}
                         </p>
                       </div>

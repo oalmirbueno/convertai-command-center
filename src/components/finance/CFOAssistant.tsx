@@ -228,7 +228,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       recs.push({
         severity: "critical",
         title: `${fmt(a.overdueTotal)} atrasados em ${a.overdue.length} cobrança(s)`,
-        detail: `Cobre hoje: ${names}${a.overdue.length > 4 ? "…" : ""}. Dinheiro atrasado é a receita mais barata de recuperar — use a mensagem pronta de cobrança abaixo.`,
+        detail: `Cobre hoje: ${names}${a.overdue.length > 4 ? "…" : ""}. Dinheiro atrasado é a receita mais barata de recuperar · use a mensagem pronta de cobrança abaixo.`,
       });
     }
 
@@ -245,7 +245,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       recs.push({
         severity: "attention",
         title: `${fmt(total)}/mês deixados na mesa por preços abaixo da tabela`,
-        detail: `${a.belowTable.map((r: any) => `${r.client.company_name || r.client.full_name} (${fmt(Number(r.client.plan_value))} → tabela ${fmt(r.version.amount)})`).slice(0, 3).join("; ")}. Aplique o degrau "Agora" com aditivo simples — mensagem pronta de reajuste abaixo.`,
+        detail: `${a.belowTable.map((r: any) => `${r.client.company_name || r.client.full_name} (${fmt(Number(r.client.plan_value))} → tabela ${fmt(r.version.amount)})`).slice(0, 3).join("; ")}. Aplique o degrau "Agora" com aditivo simples · mensagem pronta de reajuste abaixo.`,
       });
     }
 
@@ -257,16 +257,16 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
         .join(" · ");
       recs.push({
         severity: "attention",
-        title: `Meta de ${fmt(a.goal)}: entrou ${fmt(a.operational)} até o dia ${a.dayOfMonth} — faltam ${fmt(a.realGoalGap)}`,
+        title: `Meta de ${fmt(a.goal)}: entrou ${fmt(a.operational)} até o dia ${a.dayOfMonth} · faltam ${fmt(a.realGoalGap)}`,
         detail: `${a.projectedGap > 0
           ? `Se o ritmo continuar (média diária × ${a.daysInMonth} dias), o mês fecha em ~${fmt(a.projectedOperational)} e ainda faltariam ${fmt(a.projectedGap)}.`
-          : `Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} e alcança a meta — mas só conta quando cair na conta.`} Para fechar o que falta de verdade: ${combos}. Diagnóstico express é a porta de entrada oficial — 100% antecipado e abre relação para o plano recorrente.`,
+          : `Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} e alcança a meta · mas só conta quando cair na conta.`} Para fechar o que falta de verdade: ${combos}. Diagnóstico express é a porta de entrada oficial · 100% antecipado e abre relação para o plano recorrente.`,
       });
     } else if (a.monthlyGoal) {
       recs.push({
         severity: "good",
         title: `Meta batida: entrou ${fmt(a.operational)} contra meta de ${fmt(a.monthlyGoal)}`,
-        detail: "Hora de subir o funil: 5 empresas do ICP por dia e 3 follow-ups, como manda o ritual comercial — e considerar o próximo degrau de meta.",
+        detail: "Hora de subir o funil: 5 empresas do ICP por dia e 3 follow-ups, como manda o ritual comercial · e considerar o próximo degrau de meta.",
       });
     }
 
@@ -274,7 +274,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       recs.push({
         severity: "attention",
         title: `Caixinha de reserva tributária desatualizada: guardado ${fmt(financeBoxes.tax)}, estimado do mês ${fmt(a.taxReserve)}`,
-        detail: "Atualize a caixinha no Fluxo de Caixa para o imposto não se misturar com o dinheiro da operação — tributo não financia a operação.",
+        detail: "Atualize a caixinha no Fluxo de Caixa para o imposto não se misturar com o dinheiro da operação · tributo não financia a operação.",
       });
     }
 
@@ -291,7 +291,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       recs.push({
         severity: "good",
         title: `Próximo degrau do pró-labore: ${fmt(tier.proLabore)} em ${fmt(tier.revenue)} operacionais`,
-        detail: `Hoje o proporcional é ${fmt(a.proLaboreProp)}. Faltam ${fmt(Math.max(tier.revenue - a.operational, 0))} operacionais/mês para o degrau cheio — o gap cabe em ${Math.ceil(Math.max(tier.revenue - a.operational, 0) / 997)} contratos de Start Assistido (${fmt(997)}).`,
+        detail: `Hoje o proporcional é ${fmt(a.proLaboreProp)}. Faltam ${fmt(Math.max(tier.revenue - a.operational, 0))} operacionais/mês para o degrau cheio · o gap cabe em ${Math.ceil(Math.max(tier.revenue - a.operational, 0) / 997)} contratos de Start Assistido (${fmt(997)}).`,
       });
     }
 
@@ -341,9 +341,9 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
     // resumo executivo
     const status = a.profit >= 0 ? `LUCRO de ${fmt(a.profit)}` : `resultado parcial de ${fmt(a.profit)} (faltam ${fmt(a.structureGap)} para cobrir a estrutura)`;
     const boxesLine = financeBoxes
-      ? `\n\nCAIXA\n• Saldo em caixa: ${fmt(a.cashBalance)}\n• Caixinhas — tributária: ${fmt(financeBoxes.tax)} · clientes/investimento: ${fmt(financeBoxes.clients)} · reserva segura: ${fmt(financeBoxes.safety)}\n• Disponível livre: ${fmt(a.cashBalance - boxesTotal(financeBoxes))}`
+      ? `\n\nCAIXA\n• Saldo em caixa: ${fmt(a.cashBalance)}\n• Caixinhas · tributária: ${fmt(financeBoxes.tax)} · clientes/investimento: ${fmt(financeBoxes.clients)} · reserva segura: ${fmt(financeBoxes.safety)}\n• Disponível livre: ${fmt(a.cashBalance - boxesTotal(financeBoxes))}`
       : `\n\nCAIXA\n• Saldo em caixa: ${fmt(a.cashBalance)}`;
-    return `RESUMO EXECUTIVO · ${a.monthLabel} (até dia ${a.dayOfMonth})\n\nENTRADAS\n• Recebido bruto: ${fmt(a.grossReceived)}\n• Reserva tributária separada: ${fmt(a.taxReserve)}\n• Receita operacional: ${fmt(a.operational)}\n• Meta: ${fmt(a.goal)} — ${a.realGoalGap > 0 ? `faltam ${fmt(a.realGoalGap)}` : "batida"}\n• Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} (estimativa)\n\nESTRUTURA\n• Custos fixos: ${fmt(a.fixedCosts)}\n• Pró-labore proporcional: ${fmt(a.proLaboreProp)} (oficial: ${fmt(a.proLaboreOfficial)})\n• Reserva clientes/investimento: ${fmt(a.clientReserve)} de ${fmt(a.clientReserveTarget)}\n\nRESULTADO: ${status}${boxesLine}\n\nCARTEIRA\n• MRR: ${fmt(a.mrr)} em ${a.activeRecurring.length} clientes ativos\n• Atrasados: ${fmt(a.overdueTotal)} (${a.overdue.length} cobranças)\n• Sem plano definido: ${a.noPlan.length} cliente(s)\n\nPRÓXIMOS PASSOS\n${recommendations.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join("\n")}`;
+    return `RESUMO EXECUTIVO · ${a.monthLabel} (até dia ${a.dayOfMonth})\n\nENTRADAS\n• Recebido bruto: ${fmt(a.grossReceived)}\n• Reserva tributária separada: ${fmt(a.taxReserve)}\n• Receita operacional: ${fmt(a.operational)}\n• Meta: ${fmt(a.goal)} · ${a.realGoalGap > 0 ? `faltam ${fmt(a.realGoalGap)}` : "batida"}\n• Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} (estimativa)\n\nESTRUTURA\n• Custos fixos: ${fmt(a.fixedCosts)}\n• Pró-labore proporcional: ${fmt(a.proLaboreProp)} (oficial: ${fmt(a.proLaboreOfficial)})\n• Reserva clientes/investimento: ${fmt(a.clientReserve)} de ${fmt(a.clientReserveTarget)}\n\nRESULTADO: ${status}${boxesLine}\n\nCARTEIRA\n• MRR: ${fmt(a.mrr)} em ${a.activeRecurring.length} clientes ativos\n• Atrasados: ${fmt(a.overdueTotal)} (${a.overdue.length} cobranças)\n• Sem plano definido: ${a.noPlan.length} cliente(s)\n\nPRÓXIMOS PASSOS\n${recommendations.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join("\n")}`;
   };
 
   const generateResponse = (type?: string, clientId?: string) => {
@@ -357,7 +357,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       await navigator.clipboard.writeText(responseText);
       toast.success("Copiado! É só colar.");
     } catch {
-      toast.error("Não consegui copiar automaticamente — selecione o texto e copie.");
+      toast.error("Não consegui copiar automaticamente · selecione o texto e copie.");
     }
   };
 
@@ -437,7 +437,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
 </div>
 <h2>Clientes recorrentes</h2>
 <table><tr><th>Cliente</th><th>Plano</th><th class="n">Valor/mês</th><th class="n">Renovação</th></tr>
-${a.activeRecurring.map((c: any) => `<tr><td>${(c.company_name || c.full_name || "-").replace(/</g, "&lt;")}</td><td>${(c.plan_name || "—").replace(/</g, "&lt;")}</td><td class="n">${fmt(Number(c.plan_value))}</td><td class="n">${c.plan_renewal_date ? (parseDate(c.plan_renewal_date)?.toLocaleDateString("pt-BR") || "—") : "—"}</td></tr>`).join("")}
+${a.activeRecurring.map((c: any) => `<tr><td>${(c.company_name || c.full_name || "-").replace(/</g, "&lt;")}</td><td>${(c.plan_name || "-").replace(/</g, "&lt;")}</td><td class="n">${fmt(Number(c.plan_value))}</td><td class="n">${c.plan_renewal_date ? (parseDate(c.plan_renewal_date)?.toLocaleDateString("pt-BR") || "-") : "-"}</td></tr>`).join("")}
 </table>
 <h2>Recomendações do assistente</h2>
 ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevColor[r.severity]}"><b style="color:${sevColor[r.severity]};font-size:10px">${sevLabel[r.severity]}</b><br><b>${r.title.replace(/</g, "&lt;")}</b><br><span class="muted">${r.detail.replace(/</g, "&lt;")}</span></div>`).join("")}
@@ -512,7 +512,7 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
             {analysis.monthlyGoal ? <span className="text-muted-foreground font-normal"> · atual: {fmt(analysis.monthlyGoal)}</span> : <span className="text-warning font-normal"> · nenhuma meta definida</span>}
           </p>
           <p className="text-[10px] text-muted-foreground">
-            Cálculo: (custos fixos {fmt(analysis.fixedCosts)} + pró-labore {fmt(analysis.proLaboreOfficial)} + reserva de clientes {fmt(analysis.clientReserveTarget)}) × 1,4 de folga, arredondado — estrutura coberta com 40% de margem.
+            Cálculo: (custos fixos {fmt(analysis.fixedCosts)} + pró-labore {fmt(analysis.proLaboreOfficial)} + reserva de clientes {fmt(analysis.clientReserveTarget)}) × 1,4 de folga, arredondado · estrutura coberta com 40% de margem.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -594,7 +594,7 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
           value={responseText}
           onChange={(e) => setResponseText(e.target.value)}
           rows={9}
-          placeholder="Escolha um tipo de resposta acima — o texto vem pronto e você ajusta o que quiser."
+          placeholder="Escolha um tipo de resposta acima · o texto vem pronto e você ajusta o que quiser."
           className="w-full bg-secondary border border-border rounded-lg px-3 py-2.5 text-[13px] text-foreground resize-y leading-relaxed"
         />
         <div className="flex gap-2 flex-wrap">
@@ -624,7 +624,7 @@ ${recommendations.map((r) => `<div class="rec" style="border-left-color:${sevCol
         </div>
         <p className="text-[10px] text-muted-foreground flex items-center gap-1.5">
           <Landmark className="w-3 h-3 shrink-0" />
-          O texto do contador traz os números reais do mês, mas alíquotas, guias e obrigações são sempre validadas por ele — o assistente organiza, o contador confirma.
+          O texto do contador traz os números reais do mês, mas alíquotas, guias e obrigações são sempre validadas por ele · o assistente organiza, o contador confirma.
         </p>
       </div>
     </div>

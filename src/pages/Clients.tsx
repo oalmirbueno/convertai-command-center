@@ -471,11 +471,11 @@ function financialStatusMeta(status: string | null) {
 }
 
 function formatCurrency(value: number | null) {
-  return value == null ? "—" : currencyFormatter.format(value);
+  return value == null ? "-" : currencyFormatter.format(value);
 }
 
 function formatPercent(value: number | null) {
-  return value == null ? "—" : `${percentFormatter.format(value)}%`;
+  return value == null ? "-" : `${percentFormatter.format(value)}%`;
 }
 
 export default function Clients() {
@@ -540,6 +540,12 @@ export default function Clients() {
     return true;
   });
 
+  // Separação para a lista: clientes de verdade (recorrentes + híbridos),
+  // avulsos em seção própria e empresas do grupo fora da contagem.
+  const principais = filtered.filter((c) => !isInternalClient(c) && (c.client_type || "recurring") !== "one_off");
+  const avulsosList = filtered.filter((c) => !isInternalClient(c) && (c.client_type || "recurring") === "one_off");
+  const internasList = filtered.filter((c) => isInternalClient(c));
+
   const financialRows = useMemo(
     () => extractFinancialRows(financialPayload),
     [financialPayload],
@@ -558,6 +564,7 @@ export default function Clients() {
   );
   const recurringFinancialViews = financialViews.filter((summary) => {
     const client = clientsById.get(summary.clientId);
+    if (client && isInternalClient(client)) return false;
     const status = String(
       client?.plan_status
       ?? firstString(summary.raw, ["client_status", "clientStatus", "contract_status", "contractStatus"])
@@ -587,13 +594,14 @@ export default function Clients() {
     return values.length ? values.reduce((sum, value) => sum + value, 0) : null;
   };
 
-  const activeClientCount = readKpi([
-    "active_clients",
-    "activeClients",
-    "active_client_count",
-    "activeClientCount",
-    "clients_active",
-  ]) ?? clientRows.filter((client) => (client.plan_status || "active") === "active").length;
+  // Contagem oficial: só recorrentes + híbridos ativos. Avulsos e empresas do
+  // grupo não entram (aparecem em seções próprias na lista).
+  const activeClientCount = clientRows.filter(
+    (client) =>
+      (client.plan_status || "active") === "active" &&
+      (client.client_type || "recurring") !== "one_off" &&
+      !isInternalClient(client)
+  ).length;
   const operationalMrr = readKpi([
     "mrr_operational",
     "operational_mrr",
@@ -635,7 +643,7 @@ export default function Clients() {
     {
       label: "Clientes ativos",
       value: String(activeClientCount),
-      helper: "contratos ativos",
+      helper: "recorrentes + híbridos",
       icon: Users,
       tone: "text-success",
       loading: isLoading,
@@ -840,8 +848,9 @@ export default function Clients() {
           )}
         </div>
       ) : (
-        <div className="space-y-1 stagger-children">
-          {filtered.map((c) => {
+        <div className="space-y-4">
+          {(() => {
+            const renderClientRow = (c: any) => {
             const financial = financialByClient.get(String(c.id));
             const internal = isInternalClient(c);
             const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
@@ -1006,7 +1015,7 @@ export default function Clients() {
                     <div className="col-span-2 sm:col-span-1">
                       <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Vencimento / status</p>
                       <div className="mt-0.5 flex items-center gap-1.5">
-                        <span className="font-mono text-xs text-foreground">{financial?.dueLabel || "—"}</span>
+                        <span className="font-mono text-xs text-foreground">{financial?.dueLabel || "-"}</span>
                         <span className={`rounded-md border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${statusMeta.className}`}>
                           {statusMeta.label}
                         </span>
@@ -1016,7 +1025,45 @@ export default function Clients() {
                 )}
               </div>
             );
-          })}
+            };
+
+            return (
+              <>
+                <div className="space-y-1 stagger-children">
+                  {principais.map((c) => renderClientRow(c))}
+                  {principais.length === 0 && (
+                    <p className="py-3 text-center text-xs text-muted-foreground">Nenhum cliente recorrente ou híbrido nos filtros aplicados.</p>
+                  )}
+                </div>
+
+                {avulsosList.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 pt-2 flex-wrap">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">Avulsos ({avulsosList.length})</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        Total geral: {principais.length + avulsosList.length} clientes ({principais.length} recorrentes/híbridos + {avulsosList.length} avulsos)
+                      </span>
+                    </div>
+                    <div className="space-y-1 text-[13px]">
+                      {avulsosList.map((c) => renderClientRow(c))}
+                    </div>
+                  </div>
+                )}
+
+                {internasList.length > 0 && (
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2 px-1 pt-2 flex-wrap">
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-info">Empresas do grupo ({internasList.length})</span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">Organização interna · fora da contagem e das cobranças</span>
+                    </div>
+                    <div className="space-y-1">
+                      {internasList.map((c) => renderClientRow(c))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </div>
       )}
       </div>

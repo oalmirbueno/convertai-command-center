@@ -88,7 +88,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
   // Pró-labore proporcional ao que entrou (regra oficial da escada, sem saltos).
   const proLaboreProp = interpolateProLabore(operationalReceived);
   // O custo de clientes vira RESERVA para investimento: só é alocado do que
-  // sobra depois da estrutura — uma estimativa nunca joga a divisão pro negativo.
+  // sobra depois da estrutura · uma estimativa nunca joga a divisão pro negativo.
   const afterStructure = operationalReceived - fixedCostsValue - proLaboreProp;
   const clientReserveTarget = directCosts;
   const clientReserve = Math.min(Math.max(afterStructure, 0), clientReserveTarget);
@@ -204,7 +204,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             </span>
           </div>
           <p className="text-[10px] text-muted-foreground pl-5 -mt-0.5">
-            Essa linha é o que <span className="text-info">sobrou e foi guardado</span> (desconta antes do lucro) — não é falta. Se não sobrar nada, fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar.
+            Essa linha é o que <span className="text-info">sobrou e foi guardado</span> (desconta antes do lucro) · não é falta. Se não sobrar nada, fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar.
           </p>
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <span className="text-[12px] font-medium text-foreground flex-1">Lucro do mês</span>
@@ -257,19 +257,19 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
               </div>
             ) : (
               <p className="text-[10px] text-muted-foreground pt-2">
-                Nenhum valor recebido neste mês ainda — a divisão aparece automaticamente conforme o dinheiro entra.
+                Nenhum valor recebido neste mês ainda · a divisão aparece automaticamente conforme o dinheiro entra.
               </p>
             );
           })()}
 
           {isCurrentMonth && projectedOperational !== null && grossReceived > 0 && (
             <p className="text-[10px] text-muted-foreground pt-1">
-              Entrou {fmt(operationalReceived)} operacionais até o dia {dayOfMonth}. Se a média diária continuar, o mês fecha em ~{fmt(projectedOperational)} (estimativa — o que vale é o recebido), com pró-labore proporcional projetado de {fmt(projectedProLabore || 0)}.
+              Entrou {fmt(operationalReceived)} operacionais até o dia {dayOfMonth}. Se a média diária continuar, o mês fecha em ~{fmt(projectedOperational)} (estimativa · o que vale é o recebido), com pró-labore proporcional projetado de {fmt(projectedProLabore || 0)}.
             </p>
           )}
 
           <p className="text-[10px] text-muted-foreground pt-1">
-            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} — ajuste na aba Custos Fixos. A reserva de clientes ({activeClientsCount} × {fmt(defaultDirectCost)}) é separada só do que sobra, como colchão para custos e investimento — estimativa não gera negativo.
+            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} · ajuste na aba Custos Fixos. A reserva de clientes ({activeClientsCount} × {fmt(defaultDirectCost)}) é separada só do que sobra, como colchão para custos e investimento · estimativa não gera negativo.
           </p>
         </div>
 
@@ -338,7 +338,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
               {nextTier
                 ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)} operacionais.`
                 : "Topo da escada atingido."}
-              {" "}Nada muda sozinho — a retirada oficial você confirma na aba Custos Fixos.
+              {" "}Nada muda sozinho · a retirada oficial você confirma na aba Custos Fixos.
             </p>
           </div>
         </div>

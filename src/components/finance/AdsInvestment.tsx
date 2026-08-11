@@ -112,7 +112,7 @@ export default function AdsInvestment({ billing, projectPayments }: Props) {
         {[
           { label: "Investido este mês", value: fmt(curInvested), sub: "Marketing + tráfego pago", icon: Megaphone, color: "text-warning" },
           { label: "Receita recebida no mês", value: fmt(curReceived), sub: "Todas as entradas do mês", icon: TrendingUp, color: "text-success" },
-          { label: "Retorno / real investido (mês)", value: roiMonth === null ? "—" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento registrado no mês" : "Receita do mês ÷ investimento do mês", icon: Target, color: "text-info" },
+          { label: "Retorno / real investido (mês)", value: roiMonth === null ? "-" : `${roiMonth.toFixed(1)}x`, sub: roiMonth === null ? "Sem investimento registrado no mês" : "Receita do mês ÷ investimento do mês", icon: Target, color: "text-info" },
           { label: "Investido total", value: fmt(totalInvested), sub: roiTotal === null ? "Registre despesas de marketing/tráfego" : `Retorno acumulado ${roiTotal.toFixed(1)}x`, icon: Wallet, color: "text-foreground" },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4">
@@ -147,7 +147,7 @@ export default function AdsInvestment({ billing, projectPayments }: Props) {
           </ResponsiveContainer>
         </div>
         <p className="text-[10px] text-muted-foreground mt-2">
-          Investimento = despesas nas categorias "Marketing & Ads próprios" e "Tráfego pago" (lançadas no Fluxo de Caixa ou no Capital). O retorno compara com toda a receita recebida — é um termômetro de aquisição, não atribuição exata por campanha.
+          Investimento = despesas nas categorias "Marketing & Ads próprios" e "Tráfego pago" (lançadas no Fluxo de Caixa ou no Capital). O retorno compara com toda a receita recebida · é um termômetro de aquisição, não atribuição exata por campanha.
         </p>
       </div>
     </div>

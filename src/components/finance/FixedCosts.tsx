@@ -261,7 +261,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
         <p className="text-[11px] text-muted-foreground">
           Base: {fmt(monthlyOperationalRevenue)} de receita operacional.
           {" "}{nextTier ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)}.` : "Topo da escada atingido."}
-          {" "}Abaixo de R$ 10 mil o valor acompanha proporcionalmente o que entra; entre degraus soma a diferença proporcional. O reajuste nunca é automático — sempre exige a sua confirmação aqui.
+          {" "}Abaixo de R$ 10 mil o valor acompanha proporcionalmente o que entra; entre degraus soma a diferença proporcional. O reajuste nunca é automático · sempre exige a sua confirmação aqui.
         </p>
         <div className="flex gap-1 overflow-x-auto scrollbar-hidden pb-1">
           {PRO_LABORE_LADDER.map((t) => (
@@ -332,7 +332,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
 
         {recurringExpenses.length === 0 && (
           <p className="text-sm text-muted-foreground text-center py-6">
-            Nenhum custo fixo cadastrado. Vá adicionando conforme os custos forem entrando — eles passam a contar no fluxo de caixa e no resultado global automaticamente.
+            Nenhum custo fixo cadastrado. Vá adicionando conforme os custos forem entrando · eles passam a contar no fluxo de caixa e no resultado global automaticamente.
           </p>
         )}
 

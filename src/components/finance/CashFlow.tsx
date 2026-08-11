@@ -196,7 +196,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
     {
       key: "tax",
       label: "Reserva tributária",
-      hint: "Imposto separado no gross-up — não é dinheiro da operação",
+      hint: "Imposto separado no gross-up · não é dinheiro da operação",
       suggestion: Math.round(monthReceivedGross * DEFAULT_TAX_RATE * 100) / 100,
       suggestionLabel: "estimativa do mês",
     },
@@ -755,7 +755,7 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
               <Input type="number" step="0.01" value={reconcileInput} onChange={(e) => setReconcileInput(e.target.value)} className="mt-1" placeholder="Ex: 5882.07" />
             </div>
             <p className="text-[11px] text-muted-foreground">
-              A diferença (custos antigos não lançados, tarifas etc.) vai para a "base de meses anteriores" — nenhum lançamento é alterado ou apagado. Repita a conciliação sempre que quiser bater o painel com o extrato.
+              A diferença (custos antigos não lançados, tarifas etc.) vai para a "base de meses anteriores" · nenhum lançamento é alterado ou apagado. Repita a conciliação sempre que quiser bater o painel com o extrato.
             </p>
             <button
               onClick={reconcileBalance}
