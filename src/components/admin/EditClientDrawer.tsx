@@ -14,6 +14,7 @@ import BriefingPdfModal from "@/components/briefing/BriefingPdfModal";
 import ClientOnboardingPanel from "@/components/admin/ClientOnboardingPanel";
 import ClientConnectionsPanel from "@/components/admin/ClientConnectionsPanel";
 import { todayBR, toBRDateKey } from "@/lib/dateBR";
+import { useFinancePlans } from "@/hooks/useFinanceV2";
 
 
 
@@ -70,6 +71,15 @@ export default function EditClientDrawer({
   const [planName, setPlanName] = useState("");
   const [planValue, setPlanValue] = useState("");
   const [planStatus, setPlanStatus] = useState("active");
+  const { data: catalogPlans } = useFinancePlans();
+  const matchedCatalogPlan =
+    (catalogPlans || []).find((p) => p.name.trim().toLowerCase() === planName.trim().toLowerCase()) || null;
+  const matchedCatalogVersion = matchedCatalogPlan
+    ? matchedCatalogPlan.currentVersion || matchedCatalogPlan.versions[0] || null
+    : null;
+  const catalogPlanValue = matchedCatalogVersion
+    ? matchedCatalogVersion.finalAmount || matchedCatalogVersion.amount
+    : null;
   const [clientPassword, setClientPassword] = useState("");
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
@@ -735,6 +745,31 @@ export default function EditClientDrawer({
             {isAdmin && (
               <>
                 <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Plano do Catálogo</label>
+                  <select
+                    value={matchedCatalogPlan?.id || ""}
+                    onChange={(e) => {
+                      const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
+                      if (!plan) return;
+                      const version = plan.currentVersion || plan.versions[0] || null;
+                      setPlanName(plan.name);
+                      if (version) setPlanValue(String(version.finalAmount || version.amount));
+                    }}
+                    className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+                  >
+                    <option value="">Manual / fora do catálogo</option>
+                    {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
+                      const v = p.currentVersion || p.versions[0] || null;
+                      return (
+                        <option key={p.id} value={p.id}>
+                          {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
+                        </option>
+                      );
+                    })}
+                  </select>
+                  <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche nome e valor. O valor continua editável sem sair do plano.</p>
+                </div>
+                <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Nome do Plano</label>
                   <input value={planName} onChange={(e) => setPlanName(e.target.value)} placeholder="Ex: Básico, Pro, Premium"
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
@@ -743,6 +778,11 @@ export default function EditClientDrawer({
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Valor do Plano (R$)</label>
                   <input type="number" step="0.01" value={planValue} onChange={(e) => setPlanValue(e.target.value)} placeholder="Ex: 1500.00"
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                  {matchedCatalogPlan && catalogPlanValue !== null && planValue && Math.abs(parseFloat(planValue) - catalogPlanValue) > 0.009 && (
+                    <p className="text-[10px] text-info">
+                      Valor de tabela do plano: R$ {catalogPlanValue.toLocaleString("pt-BR", { minimumFractionDigits: 2 })} · este cliente usa um valor ajustado dentro do plano.
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Data de Vencimento</label>

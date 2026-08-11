@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Switch } from "@/components/ui/switch";
 import { fireWebhook, webhooks } from "@/lib/webhooks";
 import { APP_PUBLIC_URL as PORTAL_URL } from "@/lib/publicUrl";
+import { useFinancePlans } from "@/hooks/useFinanceV2";
 import type { Database } from "@/integrations/supabase/types";
 
 type ProfileUpdate = Database["public"]["Tables"]["profiles"]["Update"];
@@ -60,6 +61,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
   // Plano recorrente (mensalidade)
   const [planValue, setPlanValue] = useState("");
   const [planRenewalDate, setPlanRenewalDate] = useState("");
+  const [planName, setPlanName] = useState("");
+  const { data: catalogPlans } = useFinancePlans();
 
   // Projeto avulso (one_off)
   const [projectValue, setProjectValue] = useState("");
@@ -80,7 +83,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
     setClientType("recurring"); setBrand("");
     setServices({});
-    setPlanValue(""); setPlanRenewalDate("");
+    setPlanValue(""); setPlanRenewalDate(""); setPlanName("");
     setProjectValue(""); setPayMode("integral"); setInstallmentsCount("2"); setFirstDueDate("");
     setCreatedSuccess(false);
   };
@@ -141,7 +144,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
       };
       if (showRecurring && planValueNum > 0) {
         profileUpdate.plan_value = planValueNum;
-        profileUpdate.plan_name = "Mensalidade";
+        profileUpdate.plan_name = planName.trim() || "Mensalidade";
         profileUpdate.plan_status = "active";
         if (planRenewalDate) profileUpdate.plan_renewal_date = planRenewalDate;
       }
@@ -402,6 +405,31 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 {showRecurring && (
                   <div className="bg-secondary/40 border border-border rounded-xl p-3 space-y-3">
                     <p className="text-[11px] font-semibold text-foreground/80">Mensalidade (recorrente)</p>
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Plano</label>
+                      <select
+                        value={(catalogPlans || []).find((p) => p.name.trim().toLowerCase() === planName.trim().toLowerCase())?.id || ""}
+                        onChange={(e) => {
+                          const plan = (catalogPlans || []).find((p) => p.id === e.target.value);
+                          if (!plan) { setPlanName(""); return; }
+                          const v = plan.currentVersion || plan.versions[0] || null;
+                          setPlanName(plan.name);
+                          if (v) setPlanValue(String(v.finalAmount || v.amount));
+                        }}
+                        className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors"
+                      >
+                        <option value="">Mensalidade (sem plano do catálogo)</option>
+                        {(catalogPlans || []).filter((p) => p.isActive).map((p) => {
+                          const v = p.currentVersion || p.versions[0] || null;
+                          return (
+                            <option key={p.id} value={p.id}>
+                              {p.name}{v ? ` · R$ ${(v.finalAmount || v.amount).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                      <p className="text-[10px] text-muted-foreground">Selecionar um plano preenche o valor automaticamente — e ele continua editável.</p>
+                    </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div className="space-y-1.5">
                         <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor mensal (R$)</label>

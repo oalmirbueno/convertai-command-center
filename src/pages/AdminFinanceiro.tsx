@@ -14,11 +14,13 @@ import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from 
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CashFlow from "@/components/finance/CashFlow";
-import FinanceV2 from "@/components/finance/FinanceV2";
 import InvestorCapital from "@/components/finance/InvestorCapital";
+import FixedCosts from "@/components/finance/FixedCosts";
+import PlansPricing from "@/components/finance/PlansPricing";
+import ManagementSummary from "@/components/finance/ManagementSummary";
+import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
 
@@ -212,6 +214,21 @@ function LegacyFinanceiro() {
   const expectedMonthlyRevenue = (clients || [])
     .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
+
+  // Divisão automática · valores realmente recebidos no mês selecionado (planos + projetos)
+  const monthReceivedItems = [
+    ...monthPaidBills.map((b: any) => ({ clientId: b.client_id || null, amount: receivedOf(b) })),
+    ...(projectPayments || []).flatMap((pp: any) =>
+      (pp.installments || [])
+        .filter((i: any) => (i.status === "paid" || i.status === "partial") && isThisMonth(i.paid_date || i.due_date))
+        .map((i: any) => ({ clientId: pp.client_id || null, amount: receivedOf(i) }))
+    ),
+  ];
+  const monthGrossReceived = monthReceivedItems.reduce((s, it) => s + it.amount, 0);
+  const activeMensalistas = (clients || [])
+    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off").length;
+  // Referência para a escada de pró-labore: melhor entre o operacional recebido e o MRR
+  const ladderRevenue = Math.max(monthGrossReceived * (1 - DEFAULT_TAX_RATE), expectedMonthlyRevenue);
 
   // Projeção próximo mês
   const nextMonth = thisMonth === 11 ? 0 : thisMonth + 1;
@@ -1032,9 +1049,11 @@ function LegacyFinanceiro() {
         <TabsList className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md shrink-0">Mensalidades</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="fixedcosts" className="text-[13px] rounded-md shrink-0">Custos Fixos</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="plans" className="text-[13px] rounded-md shrink-0">Planos & Preços</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="capital" className="text-[13px] rounded-md shrink-0">Capital</TabsTrigger>}
           <TabsTrigger value="ads" className="text-[13px] rounded-md shrink-0">Ads Wallet</TabsTrigger>
-          {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md shrink-0">Renovações</TabsTrigger>}
           {isAdmin && <TabsTrigger value="audit" className="text-[13px] rounded-md shrink-0">Histórico</TabsTrigger>}
         </TabsList>
 
@@ -1050,8 +1069,29 @@ function LegacyFinanceiro() {
           </TabsContent>
         )}
 
+        {isAdmin && (
+          <TabsContent value="fixedcosts" className="space-y-6">
+            <FixedCosts monthlyOperationalRevenue={ladderRevenue} />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="plans" className="space-y-6">
+            <PlansPricing />
+          </TabsContent>
+        )}
+
         {/* Tab: Overview */}
         <TabsContent value="overview" className="space-y-6">
+          {isAdmin && (
+            <ManagementSummary
+              monthLabel={`${MONTHS_FULL[selMonth]} ${selYear}`}
+              receivedItems={monthReceivedItems}
+              expectedMonthlyRevenue={expectedMonthlyRevenue}
+              activeClientsCount={activeMensalistas}
+              clients={clients || []}
+            />
+          )}
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">Controle Financeiro</span>
             <div className="flex gap-2">
@@ -1999,40 +2039,9 @@ function LegacyFinanceiro() {
 
 export default function AdminFinanceiro() {
   const { profile, loading } = useAuth();
-  const [financeView, setFinanceView] = useState<"current" | "v2">("current");
 
   if (loading || !profile) {
     return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" role="status">Carregando financeiro…</div>;
-  }
-
-  if (profile.role === "admin" || profile.role === "manager") {
-    return (
-      <div className="space-y-4">
-        <div className="flex w-full items-center gap-1 rounded-lg border border-border bg-secondary/50 p-1 sm:ml-auto sm:w-fit" role="group" aria-label="Versão do financeiro">
-          <Button
-            type="button"
-            size="sm"
-            variant={financeView === "current" ? "default" : "ghost"}
-            className="min-h-11 flex-1 px-4 sm:flex-none"
-            aria-pressed={financeView === "current"}
-            onClick={() => setFinanceView("current")}
-          >
-            Financeiro
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant={financeView === "v2" ? "default" : "ghost"}
-            className="min-h-11 flex-1 px-4 sm:flex-none"
-            aria-pressed={financeView === "v2"}
-            onClick={() => setFinanceView("v2")}
-          >
-            Análises V2
-          </Button>
-        </div>
-        {financeView === "current" ? <LegacyFinanceiro /> : <FinanceV2 />}
-      </div>
-    );
   }
 
   return <LegacyFinanceiro />;
