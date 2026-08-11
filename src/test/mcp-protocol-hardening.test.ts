@@ -103,7 +103,7 @@ describe('canonical MCP transport hardening', () => {
   });
 
   it('wires every guard before dispatch and does not expose GET health', () => {
-    expect(server).toContain("Deno.env.get('MCP_ALLOWED_ORIGINS')");
+    expect(server).toMatch(/Deno\.env\.get\(["']MCP_ALLOWED_ORIGINS["']\)/);
     expect(server).toContain('isMcpOriginAllowed(req, MCP_ALLOWED_ORIGINS)');
     expect(server).toContain('isMcpProtocolVersionSupported(req)');
     expect(server).toContain('if (!acceptsMcpResponse(req))');

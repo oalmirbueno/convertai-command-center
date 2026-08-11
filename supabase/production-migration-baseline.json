@@ -145,6 +145,14 @@
       "remote_name": "profile_select_allowlist",
       "remote_statements_sha256": "41221be91e56af92df0d9a7def323865242759c03fc07b2d7a533eb360e00ef1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260810150000",
+      "path": "supabase/migrations/20260810150000_financial_v2_foundation.sql",
+      "local_sha256": "601515328528af9e7382a464590f5b4665735328fda6fb6dd837c7cf2512f918",
+      "remote_name": "financial_v2_foundation",
+      "remote_statements_sha256": "05f70730f0ac067fc9b3e1eaede2b2fc0e605f4a021112bcb4ccf77eec6865d2",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

@@ -25,7 +25,7 @@ describe("legacy MCP editorial contract", () => {
   it("publishes current ChatGPT OAuth discovery and reauthorization metadata", () => {
     expect(tools).toMatch(/annotations: t\.annotations,[\s\S]*?securitySchemes,[\s\S]*?_meta:/);
     expect(tools).toContain("securitySchemes,");
-    expect(server).toContain("'mcp/www_authenticate': [WWW_AUTH_TOOL_HEADER]");
+    expect(server).toMatch(/["']mcp\/www_authenticate["']:\s*\[WWW_AUTH_TOOL_HEADER\]/);
     expect(server).toContain('error="invalid_token"');
     expect(server).toContain('error_description="OAuth authorization required"');
     expect(server).toContain("shouldUseOAuthToolChallenge(");
@@ -99,7 +99,7 @@ describe("legacy MCP editorial contract", () => {
     expect(tools).toContain("(input, ctx) => listProjects(input, ctx)");
     expect(tools).toContain("(input, ctx) => getProject(input, ctx)");
     expect(server).toContain("canUseToolWithDataScope(ctx, tool)");
-    expect(server).toContain("errorCode: 'data_scope_denied'");
+    expect(server).toMatch(/errorCode:\s*["']data_scope_denied["']/);
 
     const clientsSource = reads.slice(
       reads.indexOf("export async function listClients"),
