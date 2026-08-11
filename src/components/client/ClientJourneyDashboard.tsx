@@ -1,4 +1,9 @@
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { notifyAdmin } from "@/lib/notifyHelpers";
+import { toast } from "sonner";
 import {
   ArrowUpRight,
   Briefcase,
@@ -63,6 +68,10 @@ export default function ClientJourneyDashboard({
   isImpersonation,
 }: Props) {
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [pulseScore, setPulseScore] = useState<number | null>(null);
+  const [pulseComment, setPulseComment] = useState("");
+  const [pulseSending, setPulseSending] = useState(false);
   const { loadingProjects, data } = useClientDashboardData(clientId);
   const {
     activeProjects,
@@ -89,6 +98,53 @@ export default function ClientJourneyDashboard({
     return due.getTime() < Date.now();
   });
   const overdueAmount = overdueBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
+
+  // Pulso Aceleriq: avaliação rápida do cliente (guardada no próprio cadastro).
+  const pulseHistory: any[] = Array.isArray(clientProfile?.services_config?.pulse_history)
+    ? clientProfile.services_config.pulse_history
+    : [];
+  const lastPulse = pulseHistory[pulseHistory.length - 1] || null;
+  const lastPulseDays = lastPulse?.date
+    ? Math.floor((Date.now() - new Date(lastPulse.date).getTime()) / 86400000)
+    : null;
+  const showPulse = !isImpersonation && (lastPulseDays === null || lastPulseDays >= 30);
+
+  const submitPulse = async () => {
+    if (pulseScore === null || pulseSending) return;
+    setPulseSending(true);
+    try {
+      const { data: fresh } = await supabase
+        .from("profiles")
+        .select("services_config")
+        .eq("id", clientId)
+        .maybeSingle();
+      const current = (fresh?.services_config as any) || {};
+      const history = Array.isArray(current.pulse_history) ? current.pulse_history : [];
+      const entry = {
+        date: new Date().toISOString(),
+        score: pulseScore,
+        comment: pulseComment.trim() || undefined,
+      };
+      const { error } = await supabase
+        .from("profiles")
+        .update({ services_config: { ...current, pulse_history: [...history, entry] } as any })
+        .eq("id", clientId);
+      if (error) throw error;
+      void notifyAdmin(
+        `Pulso respondido: ${clientName} avaliou a experiência com nota ${pulseScore}/5${pulseComment.trim() ? ` · "${pulseComment.trim().slice(0, 120)}"` : ""}`,
+        "pulse",
+        "/central"
+      );
+      toast.success("Obrigado pela avaliação! Ela nos ajuda a melhorar sempre.");
+      queryClient.invalidateQueries({ queryKey: ["client-profile-lite", clientId] });
+      setPulseScore(null);
+      setPulseComment("");
+    } catch {
+      toast.error("Não foi possível enviar agora. Tente novamente em instantes.");
+    } finally {
+      setPulseSending(false);
+    }
+  };
 
   // Frentes: recorrente (ciclo mensal) x projeto com começo e fim (marcos + %).
   const recurringFronts = activeProjects.filter((p: any) => isRecurringProject(p));
@@ -637,6 +693,55 @@ export default function ClientJourneyDashboard({
           </div>
         </FadeUp>
       </div>
+
+      {/* Pulso Aceleriq: avaliação rápida da experiência */}
+      {showPulse && (
+        <FadeUp>
+          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+            <p className="text-sm font-semibold text-foreground">Como está sendo a experiência com a Aceleriq?</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo.
+            </p>
+            <div className="mt-4 flex items-center gap-2">
+              {[1, 2, 3, 4, 5].map((score) => (
+                <button
+                  key={score}
+                  type="button"
+                  onClick={() => setPulseScore(score)}
+                  aria-label={`Nota ${score}`}
+                  className={`flex h-11 w-11 items-center justify-center rounded-xl border text-base font-semibold transition-colors ${
+                    pulseScore === score
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-secondary/30 text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                  }`}
+                >
+                  {score}
+                </button>
+              ))}
+              <span className="ml-1 text-[10px] text-muted-foreground hidden sm:inline">1 = precisa melhorar · 5 = excelente</span>
+            </div>
+            {pulseScore !== null && (
+              <div className="mt-3 space-y-2">
+                <textarea
+                  value={pulseComment}
+                  onChange={(e) => setPulseComment(e.target.value)}
+                  rows={2}
+                  placeholder="Quer contar algo para a gente? (opcional)"
+                  className="w-full rounded-lg border border-border bg-secondary/30 px-3 py-2 text-xs text-foreground resize-none"
+                />
+                <button
+                  type="button"
+                  onClick={submitPulse}
+                  disabled={pulseSending}
+                  className="rounded-lg bg-primary px-4 py-2 text-xs font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
+                >
+                  {pulseSending ? "Enviando…" : "Enviar avaliação"}
+                </button>
+              </div>
+            )}
+          </div>
+        </FadeUp>
+      )}
 
       {/* 10 · Evolução acumulada + atalhos */}
       <FadeUp>

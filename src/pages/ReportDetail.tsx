@@ -590,8 +590,8 @@ export default function ReportDetail() {
   /* ── Render ─────────────────────────────────────── */
   return (
     <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-6xl mx-auto w-full print-report">
-      <button onClick={() => navigate("/relatorios")} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
-        <ArrowLeft className="w-4 h-4" /> Voltar aos Relatórios
+      <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/relatorios"))} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
+        <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
       {/* ═══════════════ HERO HEADER ═══════════════ */}

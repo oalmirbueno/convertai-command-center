@@ -13,6 +13,7 @@ import {
 import { AlertTriangle, FileImage, FileText, Film, Archive, ExternalLink, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
+import { notifyAdmin } from "@/lib/notifyHelpers";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 
@@ -114,7 +115,7 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 }
 
 export default function ClientApprovals() {
-  const { clientId } = useClientIdentity();
+  const { clientId, profile } = useClientIdentity();
   const { data: files, isLoading } = useFiles(undefined, clientId || undefined);
   const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
@@ -184,6 +185,11 @@ export default function ClientApprovals() {
         decision: "approved",
       });
       toast({ title: "Aprovado com sucesso!" });
+      void notifyAdmin(
+        `Aprovação recebida: ${profile?.company_name || profile?.full_name || "Cliente"} aprovou "${file.file_name}". Pronto para agendar na Agenda.`,
+        "approval",
+        "/calendario"
+      );
     } catch (error: any) {
       toast({
         title: "Erro ao aprovar",
@@ -207,6 +213,11 @@ export default function ClientApprovals() {
         feedback: feedbackText,
       });
       toast({ title: "Feedback enviado" });
+      void notifyAdmin(
+        `Ajustes solicitados: ${profile?.company_name || profile?.full_name || "Cliente"} pediu mudanças em "${file.file_name}".`,
+        "approval",
+        "/aprovacoes"
+      );
     } catch (error: any) {
       toast({
         title: "Erro ao enviar feedback",

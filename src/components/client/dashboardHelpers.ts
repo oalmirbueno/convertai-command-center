@@ -165,7 +165,7 @@ export function useClientDashboardData(clientId: string) {
     queryKey: ["client-profile-lite", clientId],
     queryFn: async () => {
       const { data, error } = await supabase.from("profiles")
-        .select("id, plan_name, plan_value, plan_status, plan_renewal_date, client_type")
+        .select("id, plan_name, plan_value, plan_status, plan_renewal_date, client_type, services_config")
         .eq("id", clientId)
         .maybeSingle();
       if (error) return null;

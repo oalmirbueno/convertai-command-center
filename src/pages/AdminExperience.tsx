@@ -10,9 +10,10 @@ import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
 import {
   HeartPulse, AlertTriangle, Sparkles, FileText, Send, CheckCircle2,
-  Clock, ArrowUpRight, ShieldAlert, Plus,
+  Clock, ArrowUpRight, ShieldAlert, Radar, Star, UserCircle, Trash2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 
@@ -24,12 +25,14 @@ const daysSince = (value?: string | null): number | null => {
 };
 
 const RITUALS = [
-  { value: "rota_semana", label: "Rota da Semana (abertura)", cadence: "Semanal · segunda" },
-  { value: "meio_semana", label: "Check do Meio da Semana", cadence: "Semanal · quarta" },
-  { value: "prova_movimento", label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta" },
-  { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal" },
-  { value: "marco_90", label: "Marco 90", cadence: "Trimestral" },
+  { value: "rota_semana", label: "Rota da Semana (abertura)", cadence: "Semanal · segunda", why: "Abre a semana com foco e a única ação necessária do cliente" },
+  { value: "meio_semana", label: "Check do Meio da Semana", cadence: "Semanal · quarta", why: "Mantém o cliente por dentro do andamento no meio do ciclo" },
+  { value: "prova_movimento", label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta", why: "Fecha a semana provando o que avançou e o próximo passo" },
+  { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal", why: "Leva uma oportunidade proativa antes de o cliente pedir" },
+  { value: "marco_90", label: "Marco 90", cadence: "Trimestral", why: "Mostra o antes e depois do trimestre com evidências" },
 ] as const;
+
+const ritualMeta = (value?: string | null) => RITUALS.find((r) => r.value === value) || null;
 
 /** Ritual sugerido pelo dia da semana: segunda abre, quarta checa, sexta fecha. */
 const ritualForToday = (): string => {
@@ -39,13 +42,19 @@ const ritualForToday = (): string => {
   return "prova_movimento";
 };
 
-const ritualLabel = (value?: string | null) =>
-  RITUALS.find((r) => r.value === value)?.label || null;
+/** Última avaliação do Pulso guardada no cadastro do próprio cliente. */
+const latestPulse = (client: any): { score: number; date: string; comment?: string } | null => {
+  const history = client?.services_config?.pulse_history;
+  if (!Array.isArray(history) || history.length === 0) return null;
+  const last = history[history.length - 1];
+  if (!last || !Number.isFinite(Number(last.score))) return null;
+  return { score: Number(last.score), date: String(last.date || ""), comment: last.comment };
+};
 
 interface HealthFactor {
   label: string;
   weight: number;
-  earned: number | null; // null = sem dado (não entra no cálculo)
+  earned: number | null;
   note: string;
 }
 
@@ -55,6 +64,13 @@ interface ClientHealth {
   level: "healthy" | "attention" | "risk";
   factors: HealthFactor[];
   alerts: { kind: string; label: string }[];
+  pulse: { score: number; date: string; comment?: string } | null;
+}
+
+interface DraftPreview {
+  clientId: string;
+  clientName: string;
+  draft: any;
 }
 
 export default function AdminExperience() {
@@ -66,10 +82,16 @@ export default function AdminExperience() {
   const { data: projects } = useProjects();
   const { data: billing } = useBilling();
   const [generatorOpen, setGeneratorOpen] = useState(false);
-  const [genClientId, setGenClientId] = useState("");
-  const [genRitual, setGenRitual] = useState<string>("rota_semana");
+  const [genClientId, setGenClientId] = useState("__all__");
+  const [genRitual, setGenRitual] = useState<string>(ritualForToday());
+  const [genPreviews, setGenPreviews] = useState<DraftPreview[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
+  const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
+  const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
+
+  // Tudo com atualização automática: a Central reflete a movimentação em tempo real.
+  const LIVE = 20000;
 
   const { data: pendingApprovalFiles = [] } = useQuery({
     queryKey: ["exp-pending-approvals"],
@@ -86,6 +108,7 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: LIVE,
   });
 
   const { data: releasedFiles = [] } = useQuery({
@@ -101,18 +124,20 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: LIVE,
   });
 
   const { data: reports = [] } = useQuery({
     queryKey: ["exp-reports"],
     queryFn: async () => {
       const { data, error } = await supabase.from("reports")
-        .select("id, client_id, project_id, title, status, metrics, summary, created_at, period_start, period_end, client:profiles!reports_client_id_fkey(full_name, company_name)")
+        .select("id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, client:profiles!reports_client_id_fkey(full_name, company_name)")
         .order("created_at", { ascending: false })
-        .limit(120);
+        .limit(150);
       if (error) throw error;
       return data || [];
     },
+    refetchInterval: LIVE,
   });
 
   const portfolioClients = useMemo(
@@ -123,6 +148,11 @@ export default function AdminExperience() {
           (c.client_type || "recurring") !== "one_off" &&
           !isInternalClient(c)
       ),
+    [clients]
+  );
+
+  const oneOffClients = useMemo(
+    () => (clients || []).filter((c: any) => (c.client_type || "recurring") === "one_off" && !isInternalClient(c)),
     [clients]
   );
 
@@ -144,7 +174,6 @@ export default function AdminExperience() {
       const factors: HealthFactor[] = [];
       const alerts: { kind: string; label: string }[] = [];
 
-      // Financeiro em dia (peso 20)
       const overdue = (billing || []).filter((b: any) => {
         if (b.client_id !== client.id || b.status !== "pending" || b.type === "ads_recharge") return false;
         const due = new Date(`${b.due_date}T12:00:00`);
@@ -159,7 +188,6 @@ export default function AdminExperience() {
       });
       if (overdue.length > 0) alerts.push({ kind: "financeiro", label: `${fmt(overdueTotal)} vencidos` });
 
-      // Aprovações respondidas (peso 15)
       const clientPending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
       const oldestPendingDays = clientPending.length
         ? Math.max(...clientPending.map((f: any) => daysSince(f.created_at) || 0))
@@ -174,7 +202,6 @@ export default function AdminExperience() {
         alerts.push({ kind: "aprovacao", label: `Material parado há ${oldestPendingDays} dias` });
       }
 
-      // Entregas recentes (peso 25)
       const lastRelease = lastReleaseByClient.get(client.id) || null;
       const releaseDays = daysSince(lastRelease);
       factors.push({
@@ -187,7 +214,6 @@ export default function AdminExperience() {
         alerts.push({ kind: "risco", label: "45+ dias sem avanço percebido" });
       }
 
-      // Ritmo dos projetos (peso 15)
       const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at);
       const stalled = clientProjects.filter((p: any) => (daysSince(p.updated_at || p.created_at) || 0) >= 14 && (p.progress || 0) < 100);
       factors.push({
@@ -197,7 +223,6 @@ export default function AdminExperience() {
         note: clientProjects.length === 0 ? "Sem projeto ativo (sem dado)" : stalled.length === 0 ? "Tudo em movimento" : `${stalled.length} projeto(s) parados 14d+`,
       });
 
-      // Comunicação publicada (peso 10)
       const lastReport = lastPublishedReportByClient.get(client.id) || null;
       const reportDays = daysSince(lastReport);
       factors.push({
@@ -207,32 +232,95 @@ export default function AdminExperience() {
         note: reportDays === null ? "Nenhum relatório publicado" : `Último há ${reportDays}d`,
       });
 
-      // Percepção de valor e sentimento: sem fonte ainda (Pulso não coletado)
-      factors.push({ label: "Percepção de valor (Pulso)", weight: 15, earned: null, note: "Dado ainda não disponível" });
+      // Percepção de valor: agora com fonte real, o Pulso respondido pelo cliente.
+      const pulse = latestPulse(client);
+      const pulseAge = pulse ? daysSince(pulse.date) : null;
+      const pulseFresh = pulse && pulseAge !== null && pulseAge <= 60;
+      factors.push({
+        label: "Percepção de valor (Pulso)",
+        weight: 15,
+        earned: pulseFresh ? [0, 0, 3, 7, 12, 15][pulse!.score] ?? 7 : null,
+        note: pulseFresh
+          ? `Nota ${pulse!.score}/5 há ${pulseAge}d`
+          : pulse
+            ? `Nota antiga (${pulseAge}d) · pedir novo Pulso`
+            : "Cliente ainda não avaliou",
+      });
+      if (pulseFresh && pulse!.score <= 2) {
+        alerts.push({ kind: "pulso", label: `Pulso crítico: nota ${pulse!.score}/5, retornar em 24h` });
+      }
 
       const available = factors.filter((f) => f.earned !== null);
       const availableWeight = available.reduce((s, f) => s + f.weight, 0);
       const earned = available.reduce((s, f) => s + (f.earned || 0), 0);
       const score = availableWeight > 0 ? Math.round((earned / availableWeight) * 100) : null;
       const level: ClientHealth["level"] =
-        alerts.some((a) => a.kind === "risco") || (score !== null && score < 60)
+        alerts.some((a) => a.kind === "risco" || a.kind === "pulso") || (score !== null && score < 60)
           ? "risk"
           : score !== null && score < 80
             ? "attention"
             : "healthy";
 
-      return { client, score, level, factors, alerts };
+      return { client, score, level, factors, alerts, pulse };
     }).sort((a, b) => (a.score ?? 0) - (b.score ?? 0));
   }, [portfolioClients, billing, pendingApprovalFiles, releasedFiles, projects, reports]);
 
   const healthy = healthRows.filter((r) => r.level === "healthy").length;
   const attention = healthRows.filter((r) => r.level === "attention").length;
   const risk = healthRows.filter((r) => r.level === "risk").length;
+  const pulseAnswers = healthRows.filter((r) => r.pulse).length;
 
   const draftReports = (reports || []).filter((r: any) => r.status !== "published");
   const publishedReports = (reports || []).filter((r: any) => r.status === "published");
 
-  // ───────── Geração de rascunho com dados reais (revisão humana antes de publicar) ─────────
+  // ───────── Radar do mês: oportunidades com foco em retenção e expansão ─────────
+  const opportunities = useMemo(() => {
+    const out: { clientId: string; clientName: string; kind: string; title: string; detail: string }[] = [];
+    healthRows.forEach((row) => {
+      const name = row.client.company_name || row.client.full_name;
+      if (row.pulse && row.pulse.score >= 4 && (daysSince(row.pulse.date) ?? 99) <= 60) {
+        out.push({
+          clientId: row.client.id,
+          clientName: name,
+          kind: "depoimento",
+          title: `${name}: pedir depoimento ou indicação`,
+          detail: `Avaliou a experiência com nota ${row.pulse.score}/5. Momento ideal para pedir um depoimento ou uma indicação de empresa parecida.`,
+        });
+      }
+      const value = Number(row.client.plan_value || 0);
+      if (value > 0 && value < 997 && row.level === "healthy") {
+        out.push({
+          clientId: row.client.id,
+          clientName: name,
+          kind: "reajuste",
+          title: `${name}: plano abaixo da tabela de entrada`,
+          detail: `Mensalidade atual de ${fmt(value)} com relação saudável. Candidato ao degrau "Agora" da tabela oficial.`,
+        });
+      }
+    });
+    oneOffClients.forEach((client: any) => {
+      const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
+      const doneProjects = clientProjects.filter((p: any) => p.status === "done");
+      const lastDone = doneProjects
+        .map((p: any) => p.updated_at || p.created_at)
+        .sort()
+        .reverse()[0];
+      const age = daysSince(lastDone);
+      if (doneProjects.length > 0 && age !== null && age >= 21 && clientProjects.every((p: any) => p.status === "done")) {
+        const name = client.company_name || client.full_name;
+        out.push({
+          clientId: client.id,
+          clientName: name,
+          kind: "reativacao",
+          title: `${name}: projeto entregue há ${age} dias`,
+          detail: "Cliente avulso sem trabalho ativo. Oferecer manutenção recorrente ou um novo projeto (diagnóstico express como porta de entrada).",
+        });
+      }
+    });
+    return out;
+  }, [healthRows, oneOffClients, projects]);
+
+  // ───────── Rascunhos: montagem com dados reais ─────────
   const buildDraft = (client: any, ritual: string) => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
@@ -254,7 +342,7 @@ export default function AdminExperience() {
       period_end: now.toISOString().slice(0, 10),
       metrics: { ritual_type: ritual } as any,
       internal_notes:
-        "Rascunho gerado automaticamente pela Central de Experiência com dados reais do painel (entregas, aprovações e projetos). Revise, complete o resultado explicado e publique.",
+        "Rascunho gerado pela Central de Experiência com dados reais do painel (entregas, aprovações e projetos). Revise, complete e publique.",
     };
 
     if (ritual === "meio_semana") {
@@ -276,10 +364,13 @@ export default function AdminExperience() {
       };
     }
     if (ritual === "radar_aceleriq") {
+      const opp = opportunities.find((o) => o.clientId === client.id);
       return {
         ...base,
         title: `Radar Aceleriq · ${now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`,
-        summary: `Oportunidade proativa para ${name}: [REVISAR: descrever a oportunidade identificada, a recomendação e o impacto esperado]. Base do mês: ${released7d} entrega(s) na última semana e ${clientProjects.length} projeto(s) na operação.`,
+        summary: opp
+          ? `Oportunidade identificada para ${name}: ${opp.detail} [REVISAR: detalhar a recomendação e o impacto esperado]`
+          : `Oportunidade proativa para ${name}: [REVISAR: descrever a oportunidade, a recomendação e o impacto esperado]. Base do mês: ${released7d} entrega(s) na última semana e ${clientProjects.length} projeto(s) na operação.`,
         next_steps: "[REVISAR: recomendação prática e o que a Aceleriq fará se aprovado]",
         highlights: "1 oportunidade recomendada",
       };
@@ -289,7 +380,7 @@ export default function AdminExperience() {
         ...base,
         period_start: new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10),
         title: `Marco 90 · ${name}`,
-        summary: `Resumo do trimestre de ${name}: [REVISAR: antes → agora, evidências do período, travas encontradas]. Evolução registrada no painel: entregas liberadas, aprovações e etapas concluídas.`,
+        summary: `Resumo do trimestre de ${name}: [REVISAR: antes e agora, evidências do período, travas encontradas]. Evolução registrada no painel: entregas liberadas, aprovações e etapas concluídas.`,
         next_steps: "[REVISAR: o próximo nível para os próximos 90 dias]",
         highlights: "Marco trimestral",
       };
@@ -297,13 +388,12 @@ export default function AdminExperience() {
     return {
       ...base,
       title: `Rota da Semana · ${dateLabel}`,
-      summary: `Foco da semana para ${name}: [REVISAR: definir o foco única frase]. Em produção: ${clientProjects.filter((p: any) => p.status !== "done").length} frente(s). Na última semana foram liberadas ${released7d} entrega(s).${pending > 0 ? ` Ação necessária: ${pending} aprovação(ões) pendente(s).` : ""}`,
+      summary: `Foco da semana para ${name}: [REVISAR: definir o foco em uma frase]. Em produção: ${clientProjects.filter((p: any) => p.status !== "done").length} frente(s). Na última semana foram liberadas ${released7d} entrega(s).${pending > 0 ? ` Ação necessária: ${pending} aprovação(ões) pendente(s).` : ""}`,
       next_steps: pending > 0 ? "Aprovar os materiais pendentes." : "[REVISAR: única ação necessária do cliente nesta semana]",
       highlights: "Rota semanal",
     };
   };
 
-  // Evita duplicar: mesmo ritual, mesmo cliente, gerado nos últimos 3 dias.
   const hasRecentDraft = (clientId: string, ritual: string) =>
     (reports || []).some((r: any) => {
       if (r.client_id !== clientId) return false;
@@ -312,45 +402,70 @@ export default function AdminExperience() {
       return age !== null && age <= 3;
     });
 
-  const generateDraft = async () => {
+  // Passo 1: pré-visualizar. Nada é criado antes de você ver.
+  const previewDrafts = () => {
     const targets = genClientId === "__all__"
       ? portfolioClients
       : portfolioClients.filter((c: any) => c.id === genClientId);
     if (targets.length === 0) { toast.error("Selecione um cliente"); return; }
+    const previews: DraftPreview[] = targets
+      .filter((c: any) => !hasRecentDraft(c.id, genRitual))
+      .map((c: any) => ({
+        clientId: c.id,
+        clientName: c.company_name || c.full_name,
+        draft: buildDraft(c, genRitual),
+      }));
+    if (previews.length === 0) {
+      toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
+      return;
+    }
+    setGenPreviews(previews);
+  };
+
+  // Passo 2: confirmar e criar os rascunhos revisados.
+  const confirmDrafts = async () => {
+    if (!genPreviews || genPreviews.length === 0) return;
     setGenerating(true);
     let created = 0;
-    let skipped = 0;
     let failed = 0;
-    try {
-      for (const client of targets) {
-        if (hasRecentDraft(client.id, genRitual)) { skipped += 1; continue; }
-        const draft = buildDraft(client, genRitual);
-        const { error } = await supabase.from("reports").insert(draft as any);
-        if (error) failed += 1;
-        else created += 1;
-      }
-      if (created > 0) {
-        toast.success(
-          `${created} rascunho(s) gerados com o contexto de cada cliente${skipped > 0 ? ` · ${skipped} pulados (já gerados nos últimos dias)` : ""}${failed > 0 ? ` · ${failed} falharam` : ""}. Revise na fila antes de publicar.`
-        );
-      } else if (skipped > 0 && failed === 0) {
-        toast.info("Todos já tinham rascunho recente deste ritual. Nada foi duplicado.");
-      } else if (failed > 0) {
-        toast.error("Não foi possível gerar os rascunhos.");
-      }
+    for (const preview of genPreviews) {
+      const { error } = await supabase.from("reports").insert(preview.draft as any);
+      if (error) failed += 1;
+      else created += 1;
+    }
+    setGenerating(false);
+    if (created > 0) {
+      toast.success(`${created} rascunho(s) criados na fila de revisão${failed > 0 ? ` · ${failed} falharam` : ""}.`);
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
-      if (created > 0) setGeneratorOpen(false);
+      setGeneratorOpen(false);
+      setGenPreviews(null);
+    } else {
+      toast.error("Não foi possível criar os rascunhos.");
+    }
+  };
+
+  const saveDraftEdits = async (report: any) => {
+    const edits = draftEdits[report.id];
+    if (!edits) return;
+    try {
+      const { error } = await supabase.from("reports")
+        .update({ summary: edits.summary, next_steps: edits.next_steps })
+        .eq("id", report.id);
+      if (error) throw error;
+      toast.success("Rascunho atualizado");
+      queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
     } catch (err: any) {
-      toast.error(err.message || "Erro ao gerar rascunho");
-    } finally {
-      setGenerating(false);
+      toast.error(err.message || "Erro ao salvar");
     }
   };
 
   const publishDraft = async (report: any) => {
     try {
-      const { error } = await supabase.from("reports").update({ status: "published" }).eq("id", report.id);
+      const edits = draftEdits[report.id];
+      const payload: any = { status: "published" };
+      if (edits) { payload.summary = edits.summary; payload.next_steps = edits.next_steps; }
+      const { error } = await supabase.from("reports").update(payload).eq("id", report.id);
       if (error) throw error;
       await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/relatorios");
       toast.success("Publicado no portal do cliente e notificado.");
@@ -361,10 +476,19 @@ export default function AdminExperience() {
     }
   };
 
-  // Mensagem pronta para o grupo do cliente, montada na hora com a
-  // movimentação real do painel. O admin só copia e cola.
-  const buildGroupMessage = (row: ClientHealth) => {
-    const client = row.client;
+  const deleteDraft = async (report: any) => {
+    try {
+      const { error } = await supabase.from("reports").delete().eq("id", report.id).eq("status", "draft");
+      if (error) throw error;
+      toast.success("Rascunho removido");
+      queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao remover");
+    }
+  };
+
+  // Mensagem pronta para o grupo, montada na hora com a movimentação real.
+  const buildGroupMessage = (client: any) => {
     const name = client.company_name || client.full_name || "time";
     const released7 = (releasedFiles || []).filter(
       (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7
@@ -380,12 +504,8 @@ export default function AdminExperience() {
     lines.push(`${greeting}, time ${name}! 👋`);
     lines.push("");
     lines.push("Resumo rápido de como estamos:");
-    if (released7 > 0) {
-      lines.push(`✅ ${released7} entrega(s) nova(s) liberadas no painel nesta semana`);
-    }
-    if (activeProjs.length > 0) {
-      lines.push(`🚀 Em movimento: ${activeProjs.map((p: any) => p.name).slice(0, 3).join(", ")}`);
-    }
+    if (released7 > 0) lines.push(`✅ ${released7} entrega(s) nova(s) liberadas no painel nesta semana`);
+    if (activeProjs.length > 0) lines.push(`🚀 Em movimento: ${activeProjs.map((p: any) => p.name).slice(0, 3).join(", ")}`);
     if (pending.length > 0) {
       lines.push("");
       lines.push(`⏳ Dependendo de vocês: ${pending.length} material(is) aguardando aprovação (${pending.slice(0, 2).map((f: any) => f.file_name).join(", ")}${pending.length > 2 ? "…" : ""}).`);
@@ -398,10 +518,10 @@ export default function AdminExperience() {
     return lines.join("\n");
   };
 
-  const copyGroupMessage = async (row: ClientHealth) => {
+  const copyText = async (text: string, okMessage: string) => {
     try {
-      await navigator.clipboard.writeText(buildGroupMessage(row));
-      toast.success("Mensagem do grupo copiada! É só colar no WhatsApp.");
+      await navigator.clipboard.writeText(text);
+      toast.success(okMessage);
     } catch {
       toast.error("Não consegui copiar automaticamente.");
     }
@@ -413,30 +533,33 @@ export default function AdminExperience() {
     risk: { label: "Risco", cls: "text-destructive", dot: "bg-destructive" },
   };
 
+  const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
+
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-5 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <p className="heading-page">Central de Experiência</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Somente equipe · saúde da carteira, alertas, rituais e fila de revisão. Nada aqui aparece ao cliente.
+            Somente equipe · retenção, oportunidades e rituais em tempo real. Nada aqui aparece ao cliente.
           </p>
         </div>
         <button
-          onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGeneratorOpen(true); }}
+          onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
           <Sparkles className="w-4 h-4" /> Gerar mensagens de hoje
         </button>
       </div>
 
-      {/* Resumo da carteira */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      {/* Resumo vivo */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
         {[
-          { label: "Clientes saudáveis", value: healthy, color: "text-success", icon: HeartPulse },
+          { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse },
           { label: "Em atenção", value: attention, color: "text-warning", icon: Clock },
           { label: "Risco alto", value: risk, color: "text-destructive", icon: ShieldAlert },
           { label: "Rascunhos na fila", value: draftReports.length, color: "text-primary", icon: FileText },
+          { label: "Pulsos respondidos", value: pulseAnswers, color: "text-info", icon: Star },
         ].map((s) => (
           <div key={s.label} className="bg-card border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-1">
@@ -448,214 +571,425 @@ export default function AdminExperience() {
         ))}
       </div>
 
-      <div className="grid lg:grid-cols-2 gap-5 items-start">
-        {/* Saúde da carteira */}
-        <div className="bg-card border border-border rounded-xl overflow-hidden">
-          <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-            <HeartPulse className="w-3.5 h-3.5 text-primary" />
-            <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-              Saúde da carteira ({healthRows.length})
-            </span>
-            <span className="text-[10px] text-muted-foreground ml-auto">Nota interna e explicável · clique para ver os fatores</span>
-          </div>
-          <div className="divide-y divide-border max-h-[480px] overflow-y-auto">
-            {healthRows.length === 0 && (
-              <p className="p-8 text-center text-sm text-muted-foreground">Nenhum cliente ativo na carteira.</p>
-            )}
-            {healthRows.map((row) => {
-              const meta = levelMeta[row.level];
-              const open = expandedHealth === row.client.id;
-              return (
-                <div key={row.client.id}>
-                  <button
-                    onClick={() => setExpandedHealth(open ? null : row.client.id)}
-                    className="w-full flex items-center gap-3 px-5 py-3 text-left bg-transparent border-none cursor-pointer hover:bg-secondary/30 transition-colors"
-                  >
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
-                    <span className="text-[13px] text-foreground flex-1 truncate">
-                      {row.client.company_name || row.client.full_name}
-                    </span>
-                    {row.alerts.slice(0, 1).map((a) => (
-                      <span key={a.label} className="hidden sm:inline text-[9px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
-                        {a.label}
-                      </span>
-                    ))}
-                    <span className={`text-sm font-mono font-semibold ${meta.cls}`}>
-                      {row.score === null ? "s/ dado" : row.score}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground w-4">{open ? "▾" : "▸"}</span>
-                  </button>
-                  {open && (
-                    <div className="px-5 pb-3 space-y-1.5 bg-secondary/20">
-                      {row.factors.map((f) => (
-                        <div key={f.label} className="flex items-center gap-2 text-[11px]">
-                          <span className="text-muted-foreground flex-1">{f.label}</span>
-                          <span className="text-muted-foreground">{f.note}</span>
-                          <span className={`font-mono w-14 text-right ${f.earned === null ? "text-muted-foreground/60" : f.earned >= f.weight ? "text-success" : f.earned === 0 ? "text-destructive" : "text-warning"}`}>
-                            {f.earned === null ? "s/ dado" : `${f.earned}/${f.weight}`}
-                          </span>
-                        </div>
-                      ))}
-                      {row.alerts.length > 0 && (
-                        <div className="flex flex-wrap gap-1.5 pt-1">
-                          {row.alerts.map((a) => (
-                            <span key={a.label} className="text-[9px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive flex items-center gap-1">
-                              <AlertTriangle className="w-2.5 h-2.5" /> {a.label}
-                            </span>
-                          ))}
-                        </div>
-                      )}
-                      <div className="pt-2">
-                        <button
-                          onClick={() => copyGroupMessage(row)}
-                          className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
-                        >
-                          <Send className="w-3 h-3" /> Copiar mensagem do grupo (atualizada agora)
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
+      <Tabs defaultValue="carteira" className="space-y-4">
+        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
+          <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
+          <TabsTrigger value="avulsos" className="text-[13px] rounded-md shrink-0">Avulsos ({oneOffClients.length})</TabsTrigger>
+          <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar do mês ({opportunities.length})</TabsTrigger>
+          <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
+          <TabsTrigger value="historico" className="text-[13px] rounded-md shrink-0">Histórico ({publishedReports.length})</TabsTrigger>
+        </TabsList>
 
-        {/* Fila de rascunhos + histórico */}
-        <div className="space-y-5">
+        {/* ── Carteira recorrente ── */}
+        <TabsContent value="carteira">
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <HeartPulse className="w-3.5 h-3.5 text-primary" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Saúde da carteira recorrente</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">Nota interna e explicável · toque para abrir os fatores e ações</span>
+            </div>
+            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+              {healthRows.length === 0 && (
+                <p className="p-8 text-center text-sm text-muted-foreground">Nenhum cliente ativo na carteira.</p>
+              )}
+              {healthRows.map((row) => {
+                const meta = levelMeta[row.level];
+                const open = expandedHealth === row.client.id;
+                return (
+                  <div key={row.client.id}>
+                    <button
+                      onClick={() => setExpandedHealth(open ? null : row.client.id)}
+                      className="w-full flex items-center gap-3 px-5 py-3 text-left bg-transparent border-none cursor-pointer hover:bg-secondary/30 transition-colors"
+                    >
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${meta.dot}`} />
+                      <span className="text-[13px] text-foreground flex-1 truncate">
+                        {row.client.company_name || row.client.full_name}
+                        {row.pulse && (
+                          <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info align-middle">
+                            Pulso {row.pulse.score}/5
+                          </span>
+                        )}
+                      </span>
+                      {row.alerts.slice(0, 1).map((a) => (
+                        <span key={a.label} className="hidden sm:inline text-[9px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive">
+                          {a.label}
+                        </span>
+                      ))}
+                      <span className={`text-sm font-mono font-semibold ${meta.cls}`}>
+                        {row.score === null ? "s/ dado" : row.score}
+                      </span>
+                      <span className="text-[10px] text-muted-foreground w-4">{open ? "▾" : "▸"}</span>
+                    </button>
+                    {open && (
+                      <div className="px-5 pb-3 space-y-1.5 bg-secondary/20">
+                        {row.factors.map((f) => (
+                          <div key={f.label} className="flex items-center gap-2 text-[11px]">
+                            <span className="text-muted-foreground flex-1">{f.label}</span>
+                            <span className="text-muted-foreground">{f.note}</span>
+                            <span className={`font-mono w-14 text-right ${f.earned === null ? "text-muted-foreground/60" : f.earned >= f.weight ? "text-success" : f.earned === 0 ? "text-destructive" : "text-warning"}`}>
+                              {f.earned === null ? "s/ dado" : `${f.earned}/${f.weight}`}
+                            </span>
+                          </div>
+                        ))}
+                        {row.alerts.length > 0 && (
+                          <div className="flex flex-wrap gap-1.5 pt-1">
+                            {row.alerts.map((a) => (
+                              <span key={a.label} className="text-[9px] px-2 py-0.5 rounded-full bg-destructive/10 text-destructive flex items-center gap-1">
+                                <AlertTriangle className="w-2.5 h-2.5" /> {a.label}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap gap-2 pt-2">
+                          <button
+                            onClick={() => copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada! É só colar no WhatsApp.")}
+                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                          >
+                            <Send className="w-3 h-3" /> Copiar mensagem do grupo
+                          </button>
+                          <button
+                            onClick={() => openClientProfile(row.client.id)}
+                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                          >
+                            <UserCircle className="w-3 h-3" /> Abrir cadastro
+                          </button>
+                          <button
+                            onClick={() => { setGenClientId(row.client.id); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
+                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                          >
+                            <Sparkles className="w-3 h-3" /> Gerar ritual só deste cliente
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── Avulsos: experiência e reativação ── */}
+        <TabsContent value="avulsos">
+          <div className="bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <Clock className="w-3.5 h-3.5 text-info" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Clientes avulsos · pós-entrega e reativação</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">Cada avulso bem atendido é um recorrente em potencial</span>
+            </div>
+            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+              {oneOffClients.length === 0 && (
+                <p className="p-8 text-center text-sm text-muted-foreground">Nenhum cliente avulso cadastrado.</p>
+              )}
+              {oneOffClients.map((client: any) => {
+                const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
+                const activeCount = clientProjects.filter((p: any) => p.status !== "done").length;
+                const doneCount = clientProjects.filter((p: any) => p.status === "done").length;
+                const lastActivity = clientProjects
+                  .map((p: any) => p.updated_at || p.created_at)
+                  .sort()
+                  .reverse()[0];
+                const age = daysSince(lastActivity);
+                const idle = activeCount === 0 && doneCount > 0 && age !== null && age >= 21;
+                return (
+                  <div key={client.id} className="flex items-center gap-3 px-5 py-3 flex-wrap">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[13px] text-foreground truncate">{client.company_name || client.full_name}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {activeCount > 0
+                          ? `${activeCount} projeto(s) em andamento`
+                          : doneCount > 0
+                            ? `${doneCount} projeto(s) entregues · última movimentação há ${age ?? "?"}d`
+                            : "Sem projetos registrados"}
+                      </p>
+                    </div>
+                    {idle && (
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">Pronto para reativação</span>
+                    )}
+                    {activeCount > 0 && (
+                      <span className="text-[9px] px-2 py-0.5 rounded-full bg-success/10 text-success">Em atendimento</span>
+                    )}
+                    <button
+                      onClick={() =>
+                        copyText(
+                          `Oi, ${client.full_name?.split(" ")[0] || "tudo bem"}! Aqui é da Aceleriq. 😊\n\nSeu projeto com a gente foi entregue e queremos saber: como estão os resultados por aí?\n\nSe fizer sentido, temos duas formas de continuar te ajudando:\n1) Acompanhamento mensal para manter tudo evoluindo\n2) Um diagnóstico express (R$ 497) para mapear o próximo passo de maior impacto\n\nTopa conversar esta semana?`,
+                          "Mensagem de reativação copiada!"
+                        )
+                      }
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                    >
+                      Copiar mensagem
+                    </button>
+                    <button
+                      onClick={() => openClientProfile(client.id)}
+                      className="text-[11px] px-2.5 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                    >
+                      <UserCircle className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* ── Radar do mês ── */}
+        <TabsContent value="radar">
+          <div className="space-y-2">
+            {opportunities.length === 0 && (
+              <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
+                Nenhuma oportunidade detectada agora. O radar observa Pulsos altos (depoimento e indicação), planos abaixo da tabela e avulsos prontos para reativação.
+              </div>
+            )}
+            {opportunities.map((opp, i) => (
+              <div key={`${opp.clientId}-${opp.kind}-${i}`} className="bg-card border border-border rounded-xl p-4 flex gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
+                  <Radar className="w-4 h-4" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[13px] font-medium text-foreground">{opp.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">{opp.detail}</p>
+                  <div className="flex flex-wrap gap-2 mt-2">
+                    <button
+                      onClick={() => { setGenClientId(opp.clientId); setGenRitual("radar_aceleriq"); setGenPreviews(null); setGeneratorOpen(true); }}
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                    >
+                      Gerar Radar para o cliente
+                    </button>
+                    <button
+                      onClick={() => openClientProfile(opp.clientId)}
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                    >
+                      Abrir cadastro
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </TabsContent>
+
+        {/* ── Fila de revisão ── */}
+        <TabsContent value="fila">
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <FileText className="w-3.5 h-3.5 text-warning" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Fila de revisão · rascunhos ({draftReports.length})
-              </span>
-              <span className="text-[10px] text-muted-foreground ml-auto">Gerar → revisar → aprovar → publicar</span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Fila de revisão</span>
+              <span className="text-[10px] text-muted-foreground ml-auto">Toque em um rascunho para ler, editar e publicar</span>
             </div>
-            <div className="divide-y divide-border max-h-[300px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
               {draftReports.length === 0 && (
-                <p className="p-6 text-center text-xs text-muted-foreground">
-                  Nenhum rascunho na fila. Use "Gerar rascunho" para criar um ritual com dados reais.
+                <p className="p-8 text-center text-sm text-muted-foreground">
+                  Fila vazia. Use "Gerar mensagens de hoje" para criar os rituais do dia com os dados de cada cliente.
                 </p>
               )}
-              {draftReports.map((r: any) => (
-                <div key={r.id} className="flex items-center gap-3 px-5 py-3">
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[13px] text-foreground truncate">
-                      {r.title}
-                      {ritualLabel(r.metrics?.ritual_type) && (
-                        <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary align-middle">
-                          {ritualLabel(r.metrics?.ritual_type)}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => navigate(`/relatorios/${r.id}`)}
-                    className="text-[11px] px-2.5 py-1 rounded-full bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border-none"
-                  >
-                    Revisar
-                  </button>
-                  {isAdmin && (
+              {draftReports.map((r: any) => {
+                const meta = ritualMeta(r.metrics?.ritual_type);
+                const open = expandedDraft === r.id;
+                const edits = draftEdits[r.id] || { summary: r.summary || "", next_steps: r.next_steps || "" };
+                return (
+                  <div key={r.id}>
                     <button
-                      onClick={() => publishDraft(r)}
-                      className="text-[11px] px-2.5 py-1 rounded-full bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none flex items-center gap-1"
+                      onClick={() => setExpandedDraft(open ? null : r.id)}
+                      className="w-full flex items-center gap-3 px-5 py-3 text-left bg-transparent border-none cursor-pointer hover:bg-secondary/30 transition-colors"
                     >
-                      <Send className="w-3 h-3" /> Publicar
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[13px] text-foreground truncate">
+                          {r.title}
+                          {meta && (
+                            <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary align-middle">{meta.label}</span>
+                          )}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">
+                          {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                          {meta ? ` · ${meta.why}` : ""}
+                        </p>
+                      </div>
+                      <span className="text-[10px] text-muted-foreground">{open ? "▾ fechar" : "▸ revisar"}</span>
                     </button>
-                  )}
-                </div>
-              ))}
+                    {open && (
+                      <div className="px-5 pb-4 space-y-3 bg-secondary/20">
+                        {meta && (
+                          <p className="text-[10px] text-muted-foreground pt-2">
+                            Por que este rascunho existe: {meta.why}. Cadência: {meta.cadence}. Gerado com os dados reais do painel deste cliente.
+                          </p>
+                        )}
+                        <div>
+                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Mensagem ao cliente (resultado explicado)</label>
+                          <textarea
+                            value={edits.summary}
+                            onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, summary: e.target.value } }))}
+                            rows={4}
+                            className="w-full mt-1 bg-card border border-border rounded-lg px-3 py-2 text-[12px] text-foreground resize-y leading-relaxed"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Próxima etapa</label>
+                          <textarea
+                            value={edits.next_steps}
+                            onChange={(e) => setDraftEdits((prev) => ({ ...prev, [r.id]: { ...edits, next_steps: e.target.value } }))}
+                            rows={2}
+                            className="w-full mt-1 bg-card border border-border rounded-lg px-3 py-2 text-[12px] text-foreground resize-y leading-relaxed"
+                          />
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() => saveDraftEdits(r)}
+                            className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                          >
+                            Salvar edição
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => publishDraft(r)}
+                              className="inline-flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                            >
+                              <Send className="w-3 h-3" /> Publicar para o cliente
+                            </button>
+                          )}
+                          <button
+                            onClick={() => navigate(`/relatorios/${r.id}`)}
+                            className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                          >
+                            Abrir completo
+                          </button>
+                          {isAdmin && (
+                            <button
+                              onClick={() => deleteDraft(r)}
+                              className="inline-flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none ml-auto"
+                            >
+                              <Trash2 className="w-3 h-3" /> Descartar
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
+        </TabsContent>
 
+        {/* ── Histórico ── */}
+        <TabsContent value="historico">
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
-                Histórico do que foi enviado ({publishedReports.length})
-              </span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Tudo que já foi enviado aos clientes</span>
             </div>
-            <div className="divide-y divide-border max-h-[260px] overflow-y-auto">
+            <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
               {publishedReports.length === 0 && (
-                <p className="p-6 text-center text-xs text-muted-foreground">Nada publicado ainda.</p>
+                <p className="p-8 text-center text-sm text-muted-foreground">Nada publicado ainda.</p>
               )}
-              {publishedReports.slice(0, 20).map((r: any) => (
-                <button
-                  key={r.id}
-                  onClick={() => navigate(`/relatorios/${r.id}`)}
-                  className="w-full flex items-center gap-3 px-5 py-2.5 text-left bg-transparent border-none cursor-pointer hover:bg-secondary/30 transition-colors"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[12px] text-foreground truncate">
-                      {r.title}
-                      {ritualLabel(r.metrics?.ritual_type) && (
-                        <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success align-middle">
-                          {ritualLabel(r.metrics?.ritual_type)}
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
-                    </p>
-                  </div>
-                  <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-                </button>
-              ))}
+              {publishedReports.map((r: any) => {
+                const meta = ritualMeta(r.metrics?.ritual_type);
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => navigate(`/relatorios/${r.id}`)}
+                    className="w-full flex items-center gap-3 px-5 py-2.5 text-left bg-transparent border-none cursor-pointer hover:bg-secondary/30 transition-colors"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <p className="text-[12px] text-foreground truncate">
+                        {r.title}
+                        {meta && (
+                          <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success align-middle">{meta.label}</span>
+                        )}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {r.client?.company_name || r.client?.full_name} · {new Date(r.created_at).toLocaleDateString("pt-BR")}
+                      </p>
+                    </div>
+                    <ArrowUpRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+                  </button>
+                );
+              })}
             </div>
           </div>
-        </div>
-      </div>
+        </TabsContent>
+      </Tabs>
 
-      {/* Modal gerador de rascunho */}
-      <Dialog open={generatorOpen} onOpenChange={setGeneratorOpen}>
-        <DialogContent className="bg-card border-border max-w-md">
-          <DialogHeader><DialogTitle className="text-foreground">Gerar rascunho de ritual</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div>
-              <label className="text-xs text-muted-foreground">Cliente</label>
-              <select
-                value={genClientId}
-                onChange={(e) => setGenClientId(e.target.value)}
-                className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+      {/* Modal gerador: selecionar, PRÉ-VISUALIZAR e só então criar */}
+      <Dialog open={generatorOpen} onOpenChange={(v) => { setGeneratorOpen(v); if (!v) setGenPreviews(null); }}>
+        <DialogContent className="bg-card border-border max-w-lg max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="text-foreground">
+              {genPreviews ? `Pré-visualização (${genPreviews.length})` : "Gerar mensagens com dados reais"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {!genPreviews ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-muted-foreground">Para quem</label>
+                <select
+                  value={genClientId}
+                  onChange={(e) => setGenClientId(e.target.value)}
+                  className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+                >
+                  <option value="__all__">Todos os clientes da carteira ({portfolioClients.length})</option>
+                  {portfolioClients.map((c: any) => (
+                    <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs text-muted-foreground">Ritual</label>
+                <div className="mt-1 space-y-1.5">
+                  {RITUALS.map((r) => (
+                    <button
+                      key={r.value}
+                      onClick={() => setGenRitual(r.value)}
+                      className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left cursor-pointer transition-colors ${
+                        genRitual === r.value ? "border-primary bg-primary/10 text-foreground" : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <span className="text-[13px]">{r.label}</span>
+                      <span className="text-[10px]">{r.cadence}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <button
+                onClick={previewDrafts}
+                className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
               >
-                <option value="">Selecionar…</option>
-                <option value="__all__">Todos os clientes da carteira ({portfolioClients.length})</option>
-                {portfolioClients.map((c: any) => (
-                  <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
-                ))}
-              </select>
+                Ver antes de criar
+              </button>
+              <p className="text-[11px] text-muted-foreground">
+                Nada é criado nesta etapa. Você verá a mensagem de cada cliente antes de confirmar, e mesmo depois tudo fica na fila de revisão até você publicar.
+              </p>
             </div>
-            <div>
-              <label className="text-xs text-muted-foreground">Ritual</label>
-              <div className="mt-1 space-y-1.5">
-                {RITUALS.map((r) => (
-                  <button
-                    key={r.value}
-                    onClick={() => setGenRitual(r.value)}
-                    className={`w-full flex items-center justify-between px-3 py-2 rounded-lg border text-left cursor-pointer transition-colors ${
-                      genRitual === r.value ? "border-primary bg-primary/10 text-foreground" : "border-border bg-secondary/30 text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    <span className="text-[13px]">{r.label}</span>
-                    <span className="text-[10px]">{r.cadence}</span>
-                  </button>
-                ))}
+          ) : (
+            <div className="space-y-3">
+              {genPreviews.map((preview) => (
+                <div key={preview.clientId} className="rounded-lg border border-border bg-secondary/30 p-3">
+                  <p className="text-[12px] font-medium text-foreground">{preview.clientName}</p>
+                  <p className="text-[11px] font-medium text-primary mt-1">{preview.draft.title}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed whitespace-pre-wrap">{preview.draft.summary}</p>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    <span className="text-foreground font-medium">Próxima etapa: </span>{preview.draft.next_steps}
+                  </p>
+                </div>
+              ))}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setGenPreviews(null)}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] bg-secondary text-muted-foreground border border-border cursor-pointer"
+                >
+                  Voltar
+                </button>
+                <button
+                  onClick={confirmDrafts}
+                  disabled={generating}
+                  className="flex-1 py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50"
+                >
+                  {generating ? "Criando…" : `Criar ${genPreviews.length} rascunho(s)`}
+                </button>
               </div>
             </div>
-            <p className="text-[11px] text-muted-foreground">
-              O rascunho nasce com os dados reais do painel (entregas, aprovações, frentes) e marcações [REVISAR] onde falta contexto humano. Nada é enviado ao cliente sem revisão e publicação manual.
-            </p>
-            <button
-              onClick={generateDraft}
-              disabled={generating}
-              className="w-full py-2.5 rounded-xl text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" /> {generating ? "Gerando…" : "Gerar rascunho para revisão"}
-            </button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>
