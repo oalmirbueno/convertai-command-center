@@ -86,6 +86,7 @@ export default function EditClientDrawer({
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [renewalDate, setRenewalDate] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [resendingInvite, setResendingInvite] = useState(false);
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [avatarUrl, setAvatarUrl] = useState("");
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
@@ -798,6 +799,39 @@ export default function EditClientDrawer({
                     checked={Boolean(services.internal_company)}
                     onCheckedChange={(v) => setServices((prev) => ({ ...prev, internal_company: v }))}
                   />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</label>
+                  <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
+                    Cliente não recebeu o e-mail para criar a senha? Reenvie o convite aqui: um novo link seguro é gerado e enviado direto para o e-mail cadastrado.
+                  </p>
+                  <button
+                    type="button"
+                    disabled={resendingInvite}
+                    onClick={async () => {
+                      if (!client?.id || !client?.email) { toast.error("Cliente sem e-mail cadastrado"); return; }
+                      setResendingInvite(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+                          body: {
+                            profile_id: client.id,
+                            new_email: String(client.email).trim().toLowerCase(),
+                            new_full_name: (fullName || client.full_name || "").trim(),
+                          },
+                        });
+                        const result = (Array.isArray(data) ? data[0] : data) as any;
+                        if (error || result?.error) throw new Error(result?.error || error?.message);
+                        toast.success(`Convite reenviado para ${client.email}. Peça para o cliente conferir a caixa de entrada e o spam.`);
+                      } catch (err: any) {
+                        toast.error("Não foi possível reenviar agora. Tente novamente em instantes.");
+                      } finally {
+                        setResendingInvite(false);
+                      }
+                    }}
+                    className="w-full py-2.5 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                  >
+                    {resendingInvite ? "Reenviando convite…" : "Reenviar convite de primeiro acesso"}
+                  </button>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Segurança do Acesso</label>

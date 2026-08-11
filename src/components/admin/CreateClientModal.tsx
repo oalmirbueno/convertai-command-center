@@ -58,6 +58,10 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [services, setServices] = useState<Record<string, boolean>>({});
   const [internalCompany, setInternalCompany] = useState(false);
   const [createdSuccess, setCreatedSuccess] = useState(false);
+  const [createdUserId, setCreatedUserId] = useState("");
+  const [inviteUrl, setInviteUrl] = useState("");
+  const [emailWarning, setEmailWarning] = useState(false);
+  const [resendingInvite, setResendingInvite] = useState(false);
 
   // Plano recorrente (mensalidade)
   const [planValue, setPlanValue] = useState("");
@@ -87,6 +91,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
     setPlanValue(""); setPlanRenewalDate(""); setPlanName("");
     setProjectValue(""); setPayMode("integral"); setInstallmentsCount("2"); setFirstDueDate("");
     setCreatedSuccess(false);
+    setCreatedUserId(""); setInviteUrl(""); setEmailWarning(false); setResendingInvite(false);
   };
 
   const handleClose = () => {
@@ -237,6 +242,8 @@ export default function CreateClientModal({ open, onClose }: Props) {
       }
 
       const firstAccessUrl = `${PORTAL_URL}/primeiro-acesso?token=${firstAccessToken}`;
+      setCreatedUserId(newUserId);
+      setInviteUrl(firstAccessUrl);
       const { data: emailData, error: emailError } = await supabase.functions.invoke("send-transactional-email", {
         body: {
           templateName: "client-welcome",
@@ -251,9 +258,9 @@ export default function CreateClientModal({ open, onClose }: Props) {
         },
       });
       const emailResult = rpcRecord(emailData);
-      if (emailError || emailResult?.error) {
-        throw new Error("Cliente criado, mas não foi possível enviar o convite de primeiro acesso.");
-      }
+      // Falha de e-mail NUNCA deixa o cliente sem caminho: o cadastro segue,
+      // com aviso claro, link de primeiro acesso para copiar e reenvio em um clique.
+      setEmailWarning(Boolean(emailError || emailResult?.error));
 
       setCreatedSuccess(true);
       void queryClient.invalidateQueries({ queryKey: ["clients"] });
@@ -300,13 +307,66 @@ export default function CreateClientModal({ open, onClose }: Props) {
                 <p className="text-xs text-muted-foreground">{email}</p>
               </div>
 
-              <div className="bg-secondary border border-border rounded-xl p-4 space-y-2">
-                <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</p>
-                <p className="text-[13px] text-foreground leading-relaxed">
-                  Enviamos um e-mail de boas-vindas com um botão de <strong>primeiro acesso</strong>.
-                  O cliente clica, cria a própria senha e já entra no portal.
-                </p>
-              </div>
+              {emailWarning ? (
+                <div className="bg-destructive/5 border border-destructive/30 rounded-xl p-4 space-y-3">
+                  <p className="text-[11px] uppercase tracking-wider text-destructive font-medium">E-mail de convite não foi enviado</p>
+                  <p className="text-[13px] text-foreground leading-relaxed">
+                    O cliente foi criado, mas o e-mail de boas-vindas falhou. Você tem dois caminhos, use qualquer um:
+                  </p>
+                  <button
+                    onClick={async () => {
+                      setResendingInvite(true);
+                      try {
+                        const { data, error } = await supabase.functions.invoke("admin-reset-client-access", {
+                          body: { profile_id: createdUserId, new_email: email.trim().toLowerCase(), new_full_name: fullName.trim() },
+                        });
+                        const res = rpcRecord(data);
+                        if (error || res?.error) throw new Error();
+                        if (typeof res?.firstAccessUrl === "string") setInviteUrl(res.firstAccessUrl);
+                        setEmailWarning(false);
+                        toast.success("Convite reenviado por e-mail!");
+                      } catch {
+                        toast.error("Ainda não foi possível enviar. Copie o link abaixo e mande direto ao cliente.");
+                      } finally {
+                        setResendingInvite(false);
+                      }
+                    }}
+                    disabled={resendingInvite}
+                    className="w-full py-2 rounded-[10px] text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer disabled:opacity-50"
+                  >
+                    {resendingInvite ? "Reenviando…" : "1. Reenviar e-mail de convite"}
+                  </button>
+                  <button
+                    onClick={async () => {
+                      try { await navigator.clipboard.writeText(inviteUrl); toast.success("Link copiado! Envie ao cliente pelo WhatsApp."); }
+                      catch { toast.error("Selecione e copie o link manualmente."); }
+                    }}
+                    className="w-full py-2 rounded-[10px] text-[13px] font-medium bg-secondary text-foreground border border-border hover:border-primary/40 transition-colors cursor-pointer"
+                  >
+                    2. Copiar link de primeiro acesso
+                  </button>
+                  <p className="text-[10px] text-muted-foreground break-all">{inviteUrl}</p>
+                </div>
+              ) : (
+                <div className="bg-secondary border border-border rounded-xl p-4 space-y-2">
+                  <p className="text-[11px] uppercase tracking-wider text-muted-foreground">Convite de Primeiro Acesso</p>
+                  <p className="text-[13px] text-foreground leading-relaxed">
+                    Enviamos um e-mail de boas-vindas com um botão de <strong>primeiro acesso</strong>.
+                    O cliente clica, cria a própria senha e já entra no portal.
+                  </p>
+                  {inviteUrl && (
+                    <button
+                      onClick={async () => {
+                        try { await navigator.clipboard.writeText(inviteUrl); toast.success("Link copiado!"); }
+                        catch { toast.error("Selecione e copie o link manualmente."); }
+                      }}
+                      className="text-[11px] px-3 py-1.5 rounded-lg bg-card text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+                    >
+                      Copiar link de primeiro acesso (backup)
+                    </button>
+                  )}
+                </div>
+              )}
 
               <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
                 A senha criada pelo cliente permanece privada e protegida. Se necessário,
