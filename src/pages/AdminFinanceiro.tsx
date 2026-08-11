@@ -14,6 +14,7 @@ import { getProjectBrand, BrandFilter, BRAND_FILTERS, matchesBrandFilter } from 
 import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CashFlow from "@/components/finance/CashFlow";
 import FinanceV2 from "@/components/finance/FinanceV2";
@@ -1998,13 +1999,40 @@ function LegacyFinanceiro() {
 
 export default function AdminFinanceiro() {
   const { profile, loading } = useAuth();
+  const [financeView, setFinanceView] = useState<"current" | "v2">("current");
 
   if (loading || !profile) {
     return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" role="status">Carregando financeiro…</div>;
   }
 
   if (profile.role === "admin" || profile.role === "manager") {
-    return <FinanceV2 />;
+    return (
+      <div className="space-y-4">
+        <div className="flex w-full items-center gap-1 rounded-lg border border-border bg-secondary/50 p-1 sm:ml-auto sm:w-fit" role="group" aria-label="Versão do financeiro">
+          <Button
+            type="button"
+            size="sm"
+            variant={financeView === "current" ? "default" : "ghost"}
+            className="min-h-11 flex-1 px-4 sm:flex-none"
+            aria-pressed={financeView === "current"}
+            onClick={() => setFinanceView("current")}
+          >
+            Financeiro
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={financeView === "v2" ? "default" : "ghost"}
+            className="min-h-11 flex-1 px-4 sm:flex-none"
+            aria-pressed={financeView === "v2"}
+            onClick={() => setFinanceView("v2")}
+          >
+            Análises V2
+          </Button>
+        </div>
+        {financeView === "current" ? <LegacyFinanceiro /> : <FinanceV2 />}
+      </div>
+    );
   }
 
   return <LegacyFinanceiro />;
