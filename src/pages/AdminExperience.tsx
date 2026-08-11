@@ -87,6 +87,7 @@ export default function AdminExperience() {
   const [genPreviews, setGenPreviews] = useState<DraftPreview[] | null>(null);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
+  const [profileClientId, setProfileClientId] = useState("");
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
 
@@ -488,8 +489,19 @@ export default function AdminExperience() {
     }
   };
 
+  // Variação semanal: a mesma mensagem nunca se repete igual duas semanas seguidas.
+  const isoWeek = () => {
+    const d = new Date();
+    const start = new Date(d.getFullYear(), 0, 1);
+    return Math.ceil(((d.getTime() - start.getTime()) / 86400000 + start.getDay() + 1) / 7);
+  };
+  const pickVariant = (options: string[], seed: string) => {
+    const hash = seed.split("").reduce((s, c) => s + c.charCodeAt(0), 0);
+    return options[(hash + isoWeek()) % options.length];
+  };
+
   // Mensagem pronta para o grupo, montada na hora com a movimentação real.
-  const buildGroupMessage = (client: any) => {
+  const buildGroupMessage = (client: any, moment: "abertura" | "meio" | "fechamento" = "abertura") => {
     const name = client.company_name || client.full_name || "time";
     const released7 = (releasedFiles || []).filter(
       (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7
@@ -501,10 +513,32 @@ export default function AdminExperience() {
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
+    const openings: Record<string, string[]> = {
+      abertura: [
+        `${greeting}, time ${name}! 👋 Semana começando com o plano na mesa:`,
+        `${greeting}, ${name}! 🚀 Abrindo a semana com o foco alinhado:`,
+        `${greeting}, pessoal da ${name}! Nova semana, novo movimento:`,
+      ],
+      meio: [
+        `${greeting}, time ${name}! Passando no meio da semana para manter vocês por dentro:`,
+        `${greeting}, ${name}! 👋 Check rápido de quarta para ninguém ficar no escuro:`,
+        `${greeting}, pessoal! Meio de semana e o trabalho seguindo:`,
+      ],
+      fechamento: [
+        `${greeting}, time ${name}! Fechando a semana com o que avançou de verdade:`,
+        `${greeting}, ${name}! 👋 Sexta é dia de prova de movimento:`,
+        `${greeting}, pessoal da ${name}! Resumo do que construímos nesta semana:`,
+      ],
+    };
+    const closings = [
+      "Tudo detalhado no painel: aceleriq.online",
+      "Qualquer dúvida é só chamar. Painel sempre atualizado: aceleriq.online",
+      "Seguimos juntos! Acompanhe tudo em aceleriq.online",
+    ];
+
     const lines: string[] = [];
-    lines.push(`${greeting}, time ${name}! 👋`);
+    lines.push(pickVariant(openings[moment], client.id + moment));
     lines.push("");
-    lines.push("Resumo rápido de como estamos:");
     if (released7 > 0) lines.push(`✅ ${released7} entrega(s) nova(s) liberadas no painel nesta semana`);
     if (activeProjs.length > 0) lines.push(`🚀 Em movimento: ${activeProjs.map((p: any) => p.name).slice(0, 3).join(", ")}`);
     if (pending.length > 0) {
@@ -512,10 +546,10 @@ export default function AdminExperience() {
       lines.push(`⏳ Dependendo de vocês: ${pending.length} material(is) aguardando aprovação (${pending.slice(0, 2).map((f: any) => f.file_name).join(", ")}${pending.length > 2 ? "…" : ""}).`);
       lines.push("Consegue dar o ok hoje? Aprovou, a gente já agenda a publicação. 😉");
     } else if (released7 === 0 && activeProjs.length > 0) {
-      lines.push("Produção seguindo no ritmo planejado, sem pendências do lado de vocês.");
+      lines.push(moment === "fechamento" ? "Semana de bastidores: preparação rodando para as próximas entregas." : "Produção seguindo no ritmo planejado, sem pendências do lado de vocês.");
     }
     lines.push("");
-    lines.push("Tudo detalhado no painel: aceleriq.online");
+    lines.push(pickVariant(closings, client.id + moment + "x"));
     return lines.join("\n");
   };
 
@@ -618,6 +652,7 @@ export default function AdminExperience() {
       <Tabs defaultValue="carteira" className="space-y-4">
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
+          <TabsTrigger value="perfis" className="text-[13px] rounded-md shrink-0">Perfis</TabsTrigger>
           <TabsTrigger value="avulsos" className="text-[13px] rounded-md shrink-0">Avulsos ({oneOffClients.length})</TabsTrigger>
           <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar do mês ({opportunities.length})</TabsTrigger>
           <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
@@ -711,6 +746,117 @@ export default function AdminExperience() {
               })}
             </div>
           </div>
+        </TabsContent>
+
+        {/* ── Perfis: o plano de comunicação de cada cliente ── */}
+        <TabsContent value="perfis">
+          {(() => {
+            const selected = healthRows.find((r) => r.client.id === profileClientId) || healthRows[0] || null;
+            if (!selected) {
+              return <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">Nenhum cliente na carteira ainda.</div>;
+            }
+            const client = selected.client;
+            const clientProjs = (projects || []).filter((p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at);
+            const meta = levelMeta[selected.level];
+            const ritualStatus = (ritual: string) => {
+              const rows = (reports || []).filter((r: any) => r.client_id === client.id && (r.metrics as any)?.ritual_type === ritual);
+              const latest = rows[0];
+              if (!latest) return { label: "Ainda não gerado", cls: "bg-secondary text-muted-foreground" };
+              const age = daysSince(latest.created_at) ?? 0;
+              if (latest.status !== "published") return { label: `Rascunho na fila (${age}d)`, cls: "bg-warning/10 text-warning" };
+              return { label: `Publicado há ${age}d`, cls: "bg-success/10 text-success" };
+            };
+            return (
+              <div className="space-y-4">
+                <div className="flex items-center gap-3 flex-wrap">
+                  <select
+                    value={client.id}
+                    onChange={(e) => setProfileClientId(e.target.value)}
+                    className="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+                  >
+                    {healthRows.map((r) => (
+                      <option key={r.client.id} value={r.client.id}>{r.client.company_name || r.client.full_name}</option>
+                    ))}
+                  </select>
+                  <span className={`text-[11px] px-2.5 py-1 rounded-full ${meta.cls} bg-secondary/60`}>
+                    {meta.label} · nota {selected.score ?? "s/ dado"}
+                  </span>
+                  {selected.pulse && (
+                    <span className="text-[11px] px-2.5 py-1 rounded-full bg-info/10 text-info">Pulso {selected.pulse.score}/5</span>
+                  )}
+                  <button
+                    onClick={() => openClientProfile(client.id)}
+                    className="ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+                  >
+                    Abrir cadastro
+                  </button>
+                </div>
+
+                <div className="grid lg:grid-cols-2 gap-4 items-start">
+                  {/* Plano de mensagens do período */}
+                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                    <div className="px-5 py-3 border-b border-border">
+                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">O que enviar e quando · com o contexto deste cliente</span>
+                    </div>
+                    <div className="divide-y divide-border">
+                      {RITUALS.map((r) => {
+                        const status = ritualStatus(r.value);
+                        return (
+                          <div key={r.value} className="flex items-center gap-3 px-5 py-3 flex-wrap">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-[13px] text-foreground">{r.label}</p>
+                              <p className="text-[10px] text-muted-foreground">{r.cadence} · {r.why}</p>
+                            </div>
+                            <span className={`text-[9px] px-2 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>
+                            <button
+                              onClick={() => { setGenClientId(client.id); setGenRitual(r.value); setGenPreviews(null); setGeneratorOpen(true); }}
+                              className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                            >
+                              Gerar agora
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
+                      Cada geração usa a movimentação real deste cliente e varia o texto semana a semana. Você revisa e edita antes de qualquer coisa chegar nele.
+                    </p>
+                  </div>
+
+                  {/* Mensagens do grupo por momento + contexto */}
+                  <div className="space-y-4">
+                    <div className="bg-card border border-border rounded-xl p-5 space-y-2.5">
+                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Mensagem do grupo · escolha o momento</span>
+                      {[
+                        { moment: "abertura" as const, label: "Abertura da semana (segunda)" },
+                        { moment: "meio" as const, label: "Meio da semana (quarta)" },
+                        { moment: "fechamento" as const, label: "Fechamento (sexta)" },
+                      ].map((m) => (
+                        <button
+                          key={m.moment}
+                          onClick={() => copyText(buildGroupMessage(client, m.moment), `Mensagem de ${m.label.toLowerCase()} copiada!`)}
+                          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-border bg-secondary/30 text-left cursor-pointer hover:border-primary/40 transition-colors"
+                        >
+                          <span className="text-[12px] text-foreground">{m.label}</span>
+                          <span className="text-[10px] text-primary flex items-center gap-1"><Send className="w-3 h-3" /> Copiar</span>
+                        </button>
+                      ))}
+                      <p className="text-[10px] text-muted-foreground">Montada na hora com entregas, frentes e pendências reais. O texto varia a cada semana para nunca soar repetido.</p>
+                    </div>
+
+                    <div className="bg-card border border-border rounded-xl p-5 space-y-1.5">
+                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Contexto agora</span>
+                      <p className="text-[12px] text-muted-foreground">Plano: <span className="text-foreground">{client.plan_name || "Sem plano"}{client.plan_value ? ` · ${fmt(Number(client.plan_value))}/mês` : ""}</span></p>
+                      <p className="text-[12px] text-muted-foreground">Frentes ativas: <span className="text-foreground">{clientProjs.length > 0 ? clientProjs.map((p: any) => p.name).join(", ") : "nenhuma"}</span></p>
+                      {selected.factors.map((f) => (
+                        <p key={f.label} className="text-[11px] text-muted-foreground">{f.label}: <span className="text-foreground">{f.note}</span></p>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* ── Avulsos: experiência e reativação ── */}

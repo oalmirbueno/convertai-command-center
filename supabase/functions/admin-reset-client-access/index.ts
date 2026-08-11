@@ -143,6 +143,41 @@ Deno.serve(async (req) => {
       throw new Error("welcome_email_failed");
     }
 
+    // Verifica a ENTREGA real no log do despachante para o painel não mentir:
+    // "enfileirado" não é "entregue". Espera o dispatcher processar e lê o
+    // status final (sent / failed / dlq) com a mensagem de erro, se houver.
+    let delivery: { status: string; error: string | null } = {
+      status: "pending",
+      error: null,
+    };
+    const welcomeMessageId = typeof welcomeResult?.message_id === "string"
+      ? welcomeResult.message_id
+      : null;
+    if (welcomeMessageId) {
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        const { data: logRows } = await admin
+          .from("email_send_log")
+          .select("status, error_message, created_at")
+          .eq("message_id", welcomeMessageId)
+          .order("created_at", { ascending: false })
+          .limit(5);
+        const rows = Array.isArray(logRows) ? logRows : [];
+        const final = rows.find((row) =>
+          ["sent", "failed", "dlq", "bounced", "suppressed"].includes(
+            String(row.status),
+          )
+        );
+        if (final) {
+          delivery = {
+            status: String(final.status),
+            error: final.error_message ? String(final.error_message) : null,
+          };
+          break;
+        }
+      }
+    }
+
     let contractResult: unknown = null;
     if (sendContractId) {
       const { data, error } = await admin.functions.invoke(
@@ -158,7 +193,7 @@ Deno.serve(async (req) => {
       contractResult = data;
     }
 
-    return json({ success: true, firstAccessUrl, contractResult });
+    return json({ success: true, firstAccessUrl, contractResult, delivery });
   } catch (error) {
     console.error("admin-reset-client-access failed", {
       error: error instanceof Error ? error.message : "unknown_error",

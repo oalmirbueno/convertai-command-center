@@ -821,7 +821,14 @@ export default function EditClientDrawer({
                         });
                         const result = (Array.isArray(data) ? data[0] : data) as any;
                         if (error || result?.error) throw new Error(result?.error || error?.message);
-                        toast.success(`Convite reenviado para ${client.email}. Peça para o cliente conferir a caixa de entrada e o spam.`);
+                        const delivery = result?.delivery;
+                        if (delivery?.status === "sent") {
+                          toast.success(`E-mail ENTREGUE ao provedor com sucesso para ${client.email}. Peça para conferir a caixa de entrada e o spam.`);
+                        } else if (["failed", "dlq", "bounced", "suppressed"].includes(delivery?.status)) {
+                          toast.error(`O envio FALHOU no provedor: ${delivery?.error || delivery.status}. Verifique a chave do Resend e o domínio de envio.`);
+                        } else {
+                          toast.info(`Convite enfileirado para ${client.email}. A entrega será confirmada pelo despachante em instantes.`);
+                        }
                       } catch (err: any) {
                         toast.error("Não foi possível reenviar agora. Tente novamente em instantes.");
                       } finally {
