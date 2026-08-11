@@ -191,10 +191,21 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             <Scale className="w-3.5 h-3.5 shrink-0 text-info" />
             <span className="text-[12px] flex-1 text-muted-foreground">
               Reserva p/ custos de clientes e investimento
-              <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info align-middle">alvo {fmt(clientReserveTarget)}</span>
+              {clientReserve >= clientReserveTarget - 0.005 && clientReserveTarget > 0 ? (
+                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-success/10 text-success align-middle">completa · {fmt(clientReserveTarget)}</span>
+              ) : clientReserve > 0 ? (
+                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-warning/10 text-warning align-middle">parcial · faltam {fmt(clientReserveTarget - clientReserve)} do alvo {fmt(clientReserveTarget)}</span>
+              ) : (
+                <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-secondary text-muted-foreground align-middle">sem sobra ainda · alvo {fmt(clientReserveTarget)}</span>
+              )}
             </span>
-            <span className="text-[13px] font-mono text-info">− {fmt(clientReserve)}</span>
+            <span className="text-[13px] font-mono text-info">
+              {clientReserve > 0 ? `− ${fmt(clientReserve)}` : fmt(0)}
+            </span>
           </div>
+          <p className="text-[10px] text-muted-foreground pl-5 -mt-0.5">
+            Essa linha é o que <span className="text-info">sobrou e foi guardado</span> (desconta antes do lucro) — não é falta. Se não sobrar nada, fica R$ 0,00 e o alvo espera o próximo dinheiro que entrar.
+          </p>
           <div className="flex items-center gap-2 pt-2 border-t border-border">
             <span className="text-[12px] font-medium text-foreground flex-1">Lucro do mês</span>
             <span className={`text-base font-mono font-semibold ${result >= 0 ? "text-success" : "text-destructive"}`}>{fmt(result)}</span>
