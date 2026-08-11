@@ -24,11 +24,20 @@ const daysSince = (value?: string | null): number | null => {
 };
 
 const RITUALS = [
-  { value: "rota_semana", label: "Rota da Semana", cadence: "Semanal · segunda" },
-  { value: "prova_movimento", label: "Prova de Movimento", cadence: "Semanal · sexta" },
+  { value: "rota_semana", label: "Rota da Semana (abertura)", cadence: "Semanal · segunda" },
+  { value: "meio_semana", label: "Check do Meio da Semana", cadence: "Semanal · quarta" },
+  { value: "prova_movimento", label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta" },
   { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal" },
   { value: "marco_90", label: "Marco 90", cadence: "Trimestral" },
 ] as const;
+
+/** Ritual sugerido pelo dia da semana: segunda abre, quarta checa, sexta fecha. */
+const ritualForToday = (): string => {
+  const day = new Date().getDay();
+  if (day === 1 || day === 0) return "rota_semana";
+  if (day >= 2 && day <= 4) return "meio_semana";
+  return "prova_movimento";
+};
 
 const ritualLabel = (value?: string | null) =>
   RITUALS.find((r) => r.value === value)?.label || null;
@@ -248,6 +257,15 @@ export default function AdminExperience() {
         "Rascunho gerado automaticamente pela Central de Experiência com dados reais do painel (entregas, aprovações e projetos). Revise, complete o resultado explicado e publique.",
     };
 
+    if (ritual === "meio_semana") {
+      return {
+        ...base,
+        title: `Check do Meio da Semana · ${dateLabel}`,
+        summary: `Passando no meio da semana para manter você por dentro, ${name}: ${released7d} entrega(s) liberada(s) nos últimos dias${pending > 0 ? ` e ${pending} material(is) esperando a sua aprovação para seguirmos` : " e a produção segue no ritmo planejado"}. [REVISAR: acrescentar o andamento específico da semana]`,
+        next_steps: pending > 0 ? "Aprovar os materiais pendentes ainda hoje para não travar o cronograma." : "Nenhuma ação necessária agora. Seguimos com o planejado.",
+        highlights: "Check de meio de semana",
+      };
+    }
     if (ritual === "prova_movimento") {
       return {
         ...base,
@@ -285,18 +303,44 @@ export default function AdminExperience() {
     };
   };
 
+  // Evita duplicar: mesmo ritual, mesmo cliente, gerado nos últimos 3 dias.
+  const hasRecentDraft = (clientId: string, ritual: string) =>
+    (reports || []).some((r: any) => {
+      if (r.client_id !== clientId) return false;
+      if ((r.metrics as any)?.ritual_type !== ritual) return false;
+      const age = daysSince(r.created_at);
+      return age !== null && age <= 3;
+    });
+
   const generateDraft = async () => {
-    const client = portfolioClients.find((c: any) => c.id === genClientId);
-    if (!client) { toast.error("Selecione um cliente"); return; }
+    const targets = genClientId === "__all__"
+      ? portfolioClients
+      : portfolioClients.filter((c: any) => c.id === genClientId);
+    if (targets.length === 0) { toast.error("Selecione um cliente"); return; }
     setGenerating(true);
+    let created = 0;
+    let skipped = 0;
+    let failed = 0;
     try {
-      const draft = buildDraft(client, genRitual);
-      const { error } = await supabase.from("reports").insert(draft as any);
-      if (error) throw error;
-      toast.success("Rascunho gerado com dados reais. Revise antes de publicar.");
+      for (const client of targets) {
+        if (hasRecentDraft(client.id, genRitual)) { skipped += 1; continue; }
+        const draft = buildDraft(client, genRitual);
+        const { error } = await supabase.from("reports").insert(draft as any);
+        if (error) failed += 1;
+        else created += 1;
+      }
+      if (created > 0) {
+        toast.success(
+          `${created} rascunho(s) gerados com o contexto de cada cliente${skipped > 0 ? ` · ${skipped} pulados (já gerados nos últimos dias)` : ""}${failed > 0 ? ` · ${failed} falharam` : ""}. Revise na fila antes de publicar.`
+        );
+      } else if (skipped > 0 && failed === 0) {
+        toast.info("Todos já tinham rascunho recente deste ritual. Nada foi duplicado.");
+      } else if (failed > 0) {
+        toast.error("Não foi possível gerar os rascunhos.");
+      }
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
-      setGeneratorOpen(false);
+      if (created > 0) setGeneratorOpen(false);
     } catch (err: any) {
       toast.error(err.message || "Erro ao gerar rascunho");
     } finally {
@@ -333,10 +377,10 @@ export default function AdminExperience() {
           </p>
         </div>
         <button
-          onClick={() => { setGenClientId(""); setGeneratorOpen(true); }}
+          onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGeneratorOpen(true); }}
           className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
-          <Sparkles className="w-4 h-4" /> Gerar rascunho
+          <Sparkles className="w-4 h-4" /> Gerar mensagens de hoje
         </button>
       </div>
 
@@ -524,6 +568,7 @@ export default function AdminExperience() {
                 className="w-full mt-1 bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
               >
                 <option value="">Selecionar…</option>
+                <option value="__all__">Todos os clientes da carteira ({portfolioClients.length})</option>
                 {portfolioClients.map((c: any) => (
                   <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
                 ))}

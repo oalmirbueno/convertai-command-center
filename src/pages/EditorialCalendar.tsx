@@ -428,6 +428,71 @@ export default function EditorialCalendar() {
   const { savePost, transitionPublication } = useEditorialMutations();
   const [editorOpen, setEditorOpen] = useState(false);
   const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [batchScheduling, setBatchScheduling] = useState(false);
+
+  // Fluxo sincronizado: publicações PLANEJADAS cujo conteúdo o cliente já
+  // aprovou ficam prontas para confirmar o agendamento em um clique.
+  // Data/horário planejados são mantidos; se o horário já passou, vai para
+  // 1 hora a partir de agora.
+  const approvedReadyToSchedule = useMemo(() => {
+    if (!canUseTeamData || !permissions.canPublish) return [] as {
+      bundle: EditorialPostBundle;
+      publicationId: string;
+      version: number;
+      scheduledAt: string;
+    }[];
+    const out: { bundle: EditorialPostBundle; publicationId: string; version: number; scheduledAt: string }[] = [];
+    posts.forEach((bundle) => {
+      if (getEditorialApprovalStage(bundle) !== "approved") return;
+      bundle.publications.forEach((publicationBundle) => {
+        const publication = publicationBundle.publication;
+        if (publication.status === "planned" && publication.scheduled_at) {
+          out.push({
+            bundle,
+            publicationId: publication.id,
+            version: publication.version,
+            scheduledAt: publication.scheduled_at,
+          });
+        }
+      });
+    });
+    return out;
+  }, [posts, canUseTeamData, permissions.canPublish]);
+
+  const scheduleApprovedNow = useCallback(async () => {
+    if (batchScheduling || approvedReadyToSchedule.length === 0) return;
+    setBatchScheduling(true);
+    let scheduled = 0;
+    let failed = 0;
+    for (const item of approvedReadyToSchedule) {
+      const planned = new Date(item.scheduledAt);
+      const target = planned.getTime() > Date.now()
+        ? item.scheduledAt
+        : new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      try {
+        await transitionPublication.mutateAsync({
+          publicationId: item.publicationId,
+          action: "schedule",
+          expectedVersion: item.version,
+          scheduledAt: target,
+          timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+          deferRefresh: true,
+        });
+        scheduled += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    await queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+    if (scheduled > 0) {
+      toast.success(
+        `${scheduled} publicação(ões) aprovadas foram agendadas${failed > 0 ? ` · ${failed} falharam, tente novamente` : ""}.`,
+      );
+    } else if (failed > 0) {
+      toast.error("Não foi possível agendar. Atualize o calendário e tente novamente.");
+    }
+    setBatchScheduling(false);
+  }, [approvedReadyToSchedule, batchScheduling, queryClient, transitionPublication]);
   const [scheduleDefaultAt, setScheduleDefaultAt] = useState("");
   const [editingPost, setEditingPost] = useState<EditorialPostBundle | null>(
     null,
@@ -1303,6 +1368,32 @@ export default function EditorialCalendar() {
             </div>
           </div>
         </header>
+
+        {approvedReadyToSchedule.length > 0 && (
+          <div className="flex flex-wrap items-center gap-3 rounded-xl border border-success/30 bg-success/5 px-4 py-3">
+            <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-success/15 text-success">
+              <Send className="h-4 w-4" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-foreground">
+                {approvedReadyToSchedule.length === 1
+                  ? "1 conteúdo aprovado pelo cliente pronto para agendar"
+                  : `${approvedReadyToSchedule.length} conteúdos aprovados pelo cliente prontos para agendar`}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Mantém a data e o horário planejados; se o horário já passou, agenda para 1 hora a partir de agora.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => void scheduleApprovedNow()}
+              disabled={batchScheduling}
+              className="inline-flex items-center gap-1.5 rounded-lg border-none bg-success px-4 py-2 text-[12px] font-medium text-success-foreground transition-opacity hover:opacity-90 disabled:opacity-50 cursor-pointer"
+            >
+              {batchScheduling ? "Agendando…" : "Agendar aprovados"}
+            </button>
+          </div>
+        )}
 
         {editorialOptionsError && (
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-destructive/25 bg-destructive/5 p-4">
