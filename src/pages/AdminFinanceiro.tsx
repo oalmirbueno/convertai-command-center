@@ -24,6 +24,7 @@ import AdsInvestment from "@/components/finance/AdsInvestment";
 import CFOAssistant from "@/components/finance/CFOAssistant";
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { isInternalClient } from "@/lib/clientFlags";
+import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -253,6 +254,8 @@ function LegacyFinanceiro() {
     .filter((e: any) => e.status === "paid" && !isInvestorExpense(e))
     .reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
   const cashBalance = (financeSettings?.openingBalance ?? 0) + allTimeReceivedCash - allTimePaidOutCash;
+  const { data: financeBoxes } = useFinanceBoxes();
+  const reservedInBoxes = boxesTotal(financeBoxes);
 
   // Divisão automática · valores realmente recebidos no mês selecionado (planos + projetos)
   const monthReceivedItems = [
@@ -778,7 +781,15 @@ function LegacyFinanceiro() {
           : recSub;
 
         const cards = [
-          { label: "Saldo em Caixa", value: fmt(cashBalance), sub: "Base anterior + entradas − saídas · concilie no Fluxo de Caixa", icon: DollarSign, color: "text-primary" },
+          {
+            label: "Saldo em Caixa",
+            value: fmt(cashBalance),
+            sub: reservedInBoxes > 0
+              ? `Caixinhas guardam ${fmt(reservedInBoxes)} · livre ${fmt(cashBalance - reservedInBoxes)}`
+              : "Base anterior + entradas − saídas · concilie no Fluxo de Caixa",
+            icon: DollarSign,
+            color: "text-primary",
+          },
           ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" }] : [
             { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" },
           ]),
@@ -1100,7 +1111,11 @@ function LegacyFinanceiro() {
 
         {(isAdmin || profile?.role === "manager") && (
           <TabsContent value="cashflow" className="space-y-6">
-            <CashFlow billing={billing || []} projectPayments={projectPayments || []} />
+            <CashFlow
+              billing={billing || []}
+              projectPayments={projectPayments || []}
+              clientsReserveSuggestion={activeMensalistas * (financeSettings?.defaultDirectCost ?? 275)}
+            />
           </TabsContent>
         )}
 

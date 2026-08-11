@@ -16,6 +16,8 @@ import {
 } from "lucide-react";
 import NewIncomeModal from "./NewIncomeModal";
 import { useFinanceSettings, useFinanceMutations } from "@/hooks/useFinanceV2";
+import { useFinanceBoxes, boxesTotal, EMPTY_BOXES, type FinanceBoxes } from "@/hooks/useFinanceBoxes";
+import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 
 const fmt = (v: number) =>
   new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -85,9 +87,11 @@ const monthLabel = (key: string) => {
 interface Props {
   billing: any[];
   projectPayments: any[];
+  /** Sugestão para a caixinha de custos de clientes (nº de clientes × custo direto). */
+  clientsReserveSuggestion?: number;
 }
 
-export default function CashFlow({ billing = [], projectPayments = [] }: Props) {
+export default function CashFlow({ billing = [], projectPayments = [], clientsReserveSuggestion = 0 }: Props) {
   const qc = useQueryClient();
   const [period, setPeriod] = useState<6 | 12 | 24>(12);
   const [expenseModal, setExpenseModal] = useState<{ mode: "expense" | "investment"; data: any } | null>(null);
@@ -161,6 +165,68 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     [expenses]
   );
   const cashBalance = openingBalance + allTimeReceived - allTimePaidOut;
+
+  // ───────── Caixinhas de reserva ─────────
+  const { data: boxes = EMPTY_BOXES, save: saveBoxes } = useFinanceBoxes();
+  const [editingBox, setEditingBox] = useState<{ key: keyof FinanceBoxes; value: string } | null>(null);
+  const reservedTotal = boxesTotal(boxes);
+  const freeBalance = cashBalance - reservedTotal;
+
+  const monthReceivedGross = useMemo(() => {
+    const now = new Date();
+    const inMonth = (v?: string | null) => {
+      const d = parseDate(v);
+      return !!d && d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    };
+    const bills = (billing || [])
+      .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial") && inMonth(b.paid_date || b.due_date))
+      .reduce((s: number, b: any) => s + receivedAmountOf(b), 0);
+    const inst = (projectPayments || []).reduce(
+      (s: number, pp: any) =>
+        s +
+        (pp.installments || [])
+          .filter((i: any) => (i.status === "paid" || i.status === "partial") && inMonth(i.paid_date || i.due_date))
+          .reduce((x: number, i: any) => x + receivedAmountOf(i), 0),
+      0
+    );
+    return bills + inst;
+  }, [billing, projectPayments]);
+
+  const BOX_DEFS: { key: keyof FinanceBoxes; label: string; hint: string; suggestion: number; suggestionLabel: string }[] = [
+    {
+      key: "tax",
+      label: "Reserva tributária",
+      hint: "Imposto separado no gross-up — não é dinheiro da operação",
+      suggestion: Math.round(monthReceivedGross * DEFAULT_TAX_RATE * 100) / 100,
+      suggestionLabel: "estimativa do mês",
+    },
+    {
+      key: "clients",
+      label: "Custos de clientes / investimento",
+      hint: "Colchão para colocar no cliente quando precisar",
+      suggestion: clientsReserveSuggestion,
+      suggestionLabel: "alvo (clientes × custo direto)",
+    },
+    {
+      key: "safety",
+      label: "Reserva segura da agência",
+      hint: "Colchão de emergência da operação",
+      suggestion: financeSettings?.reserveTarget || 6300,
+      suggestionLabel: "Plano Diretor: R$ 6.300 iniciais",
+    },
+  ];
+
+  const saveBox = async (key: keyof FinanceBoxes, rawValue: string) => {
+    const value = parseFloat(rawValue.replace(",", "."));
+    if (!Number.isFinite(value) || value < 0) { toast.error("Informe um valor válido"); return; }
+    try {
+      await saveBoxes.mutateAsync({ ...boxes, [key]: Math.round(value * 100) / 100 });
+      toast.success("Caixinha atualizada");
+      setEditingBox(null);
+    } catch (err: any) {
+      toast.error(err.message || "Erro ao salvar caixinha");
+    }
+  };
 
   const reconcileBalance = async () => {
     if (!financeSettings) { toast.error("Configurações financeiras indisponíveis"); return; }
@@ -605,6 +671,74 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           hint="Tudo que já foi recebido" tone="success" />
         <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas (histórico)" value={fmt(allTimePaidOut)}
           hint="Despesas pagas registradas" tone="danger" />
+      </div>
+
+      {/* CAIXINHAS DE RESERVA */}
+      <div className="rounded-2xl border border-info/30 bg-card p-4 sm:p-5 space-y-3">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Wallet className="w-3.5 h-3.5 text-info shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
+            Caixinhas de reserva · dinheiro separado dentro do caixa
+          </span>
+          <span className="text-[10px] text-muted-foreground">Guardado {fmt(reservedTotal)} · você atualiza os valores</span>
+        </div>
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          {BOX_DEFS.map((b) => {
+            const value = Number(boxes[b.key]) || 0;
+            const isEditing = editingBox?.key === b.key;
+            return (
+              <div key={b.key} className="bg-secondary/30 border border-border rounded-xl p-3.5 flex flex-col gap-1.5">
+                <p className="text-[10px] uppercase tracking-wider text-muted-foreground">{b.label}</p>
+                {isEditing ? (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      type="number"
+                      step="0.01"
+                      autoFocus
+                      value={editingBox.value}
+                      onChange={(e) => setEditingBox({ key: b.key, value: e.target.value })}
+                      onKeyDown={(e) => { if (e.key === "Enter") saveBox(b.key, editingBox.value); if (e.key === "Escape") setEditingBox(null); }}
+                      className="h-8 text-sm font-mono"
+                    />
+                    <button
+                      onClick={() => saveBox(b.key, editingBox.value)}
+                      className="text-[11px] px-2 py-1.5 rounded-md bg-success/15 text-success cursor-pointer border-none shrink-0"
+                    >
+                      OK
+                    </button>
+                  </div>
+                ) : (
+                  <p className="text-lg font-mono font-semibold text-info">{fmt(value)}</p>
+                )}
+                <p className="text-[9px] text-muted-foreground leading-snug">{b.hint}</p>
+                <div className="flex items-center gap-1.5 mt-auto pt-1 flex-wrap">
+                  <button
+                    onClick={() => setEditingBox({ key: b.key, value: String(value || "") })}
+                    className="text-[10px] px-2 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+                  >
+                    Atualizar
+                  </button>
+                  {b.suggestion > 0 && Math.abs(b.suggestion - value) > 0.5 && (
+                    <button
+                      onClick={() => saveBox(b.key, String(b.suggestion))}
+                      title={b.suggestionLabel}
+                      className="text-[10px] px-2 py-1 rounded-md bg-info/10 text-info hover:bg-info/20 cursor-pointer border-none"
+                    >
+                      Usar {fmt(b.suggestion)}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          <div className={`border rounded-xl p-3.5 ${freeBalance >= 0 ? "bg-success/5 border-success/30" : "bg-destructive/5 border-destructive/30"}`}>
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Disponível livre</p>
+            <p className={`text-lg font-mono font-semibold mt-1 ${freeBalance >= 0 ? "text-success" : "text-destructive"}`}>{fmt(freeBalance)}</p>
+            <p className="text-[9px] text-muted-foreground leading-snug mt-1.5">
+              Saldo em caixa {fmt(cashBalance)} − caixinhas {fmt(reservedTotal)}. É o que pode ser usado sem tocar nas reservas.
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* Modal conciliar saldo */}

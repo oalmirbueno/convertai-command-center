@@ -12,6 +12,7 @@ import {
   DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier, ONE_OFF_CATALOG,
 } from "@/lib/directorPlan";
 import { isInternalClient } from "@/lib/clientFlags";
+import { useFinanceBoxes, boxesTotal } from "@/hooks/useFinanceBoxes";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -59,6 +60,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
   const [responseClientId, setResponseClientId] = useState("");
   const [responseText, setResponseText] = useState("");
   const [goalDraft, setGoalDraft] = useState("");
+  const { data: financeBoxes } = useFinanceBoxes();
 
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -159,22 +161,44 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
     const topClient = activeRecurring.reduce((top: any, c: any) => (Number(c.plan_value) > Number(top?.plan_value || 0) ? c : top), null);
     const concentration = topClient && mrr > 0 ? Number(topClient.plan_value) / mrr : 0;
 
-    // Projeção pelo ritmo
+    // Projeção pelo ritmo (estimativa: média diária × dias do mês)
     const projectedOperational = dayOfMonth > 0 ? (operational / dayOfMonth) * daysInMonth : operational;
 
     // Meta
     const monthlyGoal = settings?.monthlyGoal ?? null;
     const suggestedGoal = Math.max(10000, roundTo((fixedCosts + proLaboreOfficial + clientReserveTarget) * 1.4, 500));
+    const goal = monthlyGoal || suggestedGoal;
 
-    // Gap até cobrir estrutura e até a meta
+    // Gaps: o que vale é o RECEBIDO; a projeção é só estimativa secundária.
     const structureGap = Math.max(fixedCosts + proLaboreProp - operational, 0);
-    const goalGap = Math.max((monthlyGoal || suggestedGoal) - projectedOperational, 0);
+    const realGoalGap = Math.max(goal - operational, 0);
+    const projectedGap = Math.max(goal - projectedOperational, 0);
+
+    // Saldo em caixa (mesma fórmula do Fluxo de Caixa)
+    const isInvestorExp = (e: any) => {
+      const c = e?.category || "";
+      return c === "investidor" || c.startsWith("inv_");
+    };
+    const allTimeReceived =
+      (billing || [])
+        .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
+        .reduce((s: number, b: any) => s + receivedAmountOf(b), 0) +
+      (projectPayments || []).reduce(
+        (s: number, pp: any) =>
+          s + (pp.installments || []).filter((i: any) => i.status === "paid" || i.status === "partial").reduce((x: number, i: any) => x + receivedAmountOf(i), 0),
+        0
+      );
+    const allTimePaidOut = (allExpenses || [])
+      .filter((e: any) => e.status === "paid" && !isInvestorExp(e))
+      .reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+    const cashBalance = (settings?.openingBalance ?? 0) + allTimeReceived - allTimePaidOut;
 
     return {
       monthLabel, dayOfMonth, daysInMonth,
       grossReceived, taxReserve, operational, projectedOperational,
       fixedCosts, proLaboreOfficial, proLaboreProp, defaultDirectCost,
-      clientReserveTarget, clientReserve, profit, structureGap, goalGap,
+      clientReserveTarget, clientReserve, profit, structureGap,
+      goal, realGoalGap, projectedGap, cashBalance,
       mrr, activeRecurring, overdue, overdueTotal, noPlan, belowTable,
       topClient, concentration, monthlyGoal, suggestedGoal,
     };
@@ -225,23 +249,32 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       });
     }
 
-    if (a.goalGap > 0) {
-      const goal = a.monthlyGoal || a.suggestedGoal;
+    if (a.realGoalGap > 0) {
       const combos = ONE_OFF_CATALOG
         .filter((o) => !o.fromPrice)
         .slice(0, 3)
-        .map((o) => `${Math.ceil(a.goalGap / o.launchPrice)}× ${o.name} (${fmt(o.launchPrice)})`)
+        .map((o) => `${Math.ceil(a.realGoalGap / o.launchPrice)}× ${o.name} (${fmt(o.launchPrice)})`)
         .join(" · ");
       recs.push({
         severity: "attention",
-        title: `No ritmo atual, faltam ${fmt(a.goalGap)} para a meta de ${fmt(goal)}`,
-        detail: `Projeção do mês: ${fmt(a.projectedOperational)} operacionais. Iscas para fechar o gap: ${combos}. Diagnóstico express é a porta de entrada oficial — 100% antecipado e abre relação para o plano recorrente.`,
+        title: `Meta de ${fmt(a.goal)}: entrou ${fmt(a.operational)} até o dia ${a.dayOfMonth} — faltam ${fmt(a.realGoalGap)}`,
+        detail: `${a.projectedGap > 0
+          ? `Se o ritmo continuar (média diária × ${a.daysInMonth} dias), o mês fecha em ~${fmt(a.projectedOperational)} e ainda faltariam ${fmt(a.projectedGap)}.`
+          : `Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} e alcança a meta — mas só conta quando cair na conta.`} Para fechar o que falta de verdade: ${combos}. Diagnóstico express é a porta de entrada oficial — 100% antecipado e abre relação para o plano recorrente.`,
       });
     } else if (a.monthlyGoal) {
       recs.push({
         severity: "good",
-        title: "Ritmo do mês alcança a meta",
-        detail: `Projeção de ${fmt(a.projectedOperational)} contra meta de ${fmt(a.monthlyGoal)}. Hora de subir o funil: 5 empresas do ICP por dia e 3 follow-ups, como manda o ritual comercial.`,
+        title: `Meta batida: entrou ${fmt(a.operational)} contra meta de ${fmt(a.monthlyGoal)}`,
+        detail: "Hora de subir o funil: 5 empresas do ICP por dia e 3 follow-ups, como manda o ritual comercial — e considerar o próximo degrau de meta.",
+      });
+    }
+
+    if (financeBoxes && financeBoxes.tax + 0.5 < a.taxReserve) {
+      recs.push({
+        severity: "attention",
+        title: `Caixinha de reserva tributária desatualizada: guardado ${fmt(financeBoxes.tax)}, estimado do mês ${fmt(a.taxReserve)}`,
+        detail: "Atualize a caixinha no Fluxo de Caixa para o imposto não se misturar com o dinheiro da operação — tributo não financia a operação.",
       });
     }
 
@@ -264,7 +297,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
 
     const order: Record<Severity, number> = { critical: 0, attention: 1, good: 2 };
     return recs.sort((x, y) => order[x.severity] - order[y.severity]);
-  }, [analysis]);
+  }, [analysis, financeBoxes]);
 
   // ───────── Respostas prontas ─────────
   const RESPONSE_TYPES = [
@@ -307,7 +340,10 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
 
     // resumo executivo
     const status = a.profit >= 0 ? `LUCRO de ${fmt(a.profit)}` : `resultado parcial de ${fmt(a.profit)} (faltam ${fmt(a.structureGap)} para cobrir a estrutura)`;
-    return `RESUMO EXECUTIVO · ${a.monthLabel} (até dia ${a.dayOfMonth})\n\nENTRADAS\n• Recebido bruto: ${fmt(a.grossReceived)}\n• Reserva tributária separada: ${fmt(a.taxReserve)}\n• Receita operacional: ${fmt(a.operational)}\n• Projeção do mês (ritmo atual): ${fmt(a.projectedOperational)}\n\nESTRUTURA\n• Custos fixos: ${fmt(a.fixedCosts)}\n• Pró-labore proporcional: ${fmt(a.proLaboreProp)} (oficial: ${fmt(a.proLaboreOfficial)})\n• Reserva clientes/investimento: ${fmt(a.clientReserve)} de ${fmt(a.clientReserveTarget)}\n\nRESULTADO: ${status}\n\nCARTEIRA\n• MRR: ${fmt(a.mrr)} em ${a.activeRecurring.length} clientes ativos\n• Atrasados: ${fmt(a.overdueTotal)} (${a.overdue.length} cobranças)\n• Sem plano definido: ${a.noPlan.length} cliente(s)\n\nPRÓXIMOS PASSOS\n${recommendations.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join("\n")}`;
+    const boxesLine = financeBoxes
+      ? `\n\nCAIXA\n• Saldo em caixa: ${fmt(a.cashBalance)}\n• Caixinhas — tributária: ${fmt(financeBoxes.tax)} · clientes/investimento: ${fmt(financeBoxes.clients)} · reserva segura: ${fmt(financeBoxes.safety)}\n• Disponível livre: ${fmt(a.cashBalance - boxesTotal(financeBoxes))}`
+      : `\n\nCAIXA\n• Saldo em caixa: ${fmt(a.cashBalance)}`;
+    return `RESUMO EXECUTIVO · ${a.monthLabel} (até dia ${a.dayOfMonth})\n\nENTRADAS\n• Recebido bruto: ${fmt(a.grossReceived)}\n• Reserva tributária separada: ${fmt(a.taxReserve)}\n• Receita operacional: ${fmt(a.operational)}\n• Meta: ${fmt(a.goal)} — ${a.realGoalGap > 0 ? `faltam ${fmt(a.realGoalGap)}` : "batida"}\n• Se o ritmo continuar, o mês fecha em ~${fmt(a.projectedOperational)} (estimativa)\n\nESTRUTURA\n• Custos fixos: ${fmt(a.fixedCosts)}\n• Pró-labore proporcional: ${fmt(a.proLaboreProp)} (oficial: ${fmt(a.proLaboreOfficial)})\n• Reserva clientes/investimento: ${fmt(a.clientReserve)} de ${fmt(a.clientReserveTarget)}\n\nRESULTADO: ${status}${boxesLine}\n\nCARTEIRA\n• MRR: ${fmt(a.mrr)} em ${a.activeRecurring.length} clientes ativos\n• Atrasados: ${fmt(a.overdueTotal)} (${a.overdue.length} cobranças)\n• Sem plano definido: ${a.noPlan.length} cliente(s)\n\nPRÓXIMOS PASSOS\n${recommendations.slice(0, 3).map((r, i) => `${i + 1}. ${r.title}`).join("\n")}`;
   };
 
   const generateResponse = (type?: string, clientId?: string) => {
@@ -395,6 +431,9 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
   <div class="card">Atrasados<b style="color:${a.overdueTotal > 0 ? "#c62828" : "#1b7f3b"}">${fmt(a.overdueTotal)}</b></div>
   <div class="card">Sem plano definido<b>${a.noPlan.length}</b></div>
   <div class="card">Meta mensal<b>${a.monthlyGoal ? fmt(a.monthlyGoal) : "não definida"}</b></div>
+  <div class="card">Saldo em caixa<b>${fmt(a.cashBalance)}</b></div>
+  <div class="card">Caixinhas guardadas<b>${fmt(boxesTotal(financeBoxes))}</b></div>
+  <div class="card">Disponível livre<b>${fmt(a.cashBalance - boxesTotal(financeBoxes))}</b></div>
 </div>
 <h2>Clientes recorrentes</h2>
 <table><tr><th>Cliente</th><th>Plano</th><th class="n">Valor/mês</th><th class="n">Renovação</th></tr>

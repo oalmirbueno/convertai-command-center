@@ -264,7 +264,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
 
           {isCurrentMonth && projectedOperational !== null && grossReceived > 0 && (
             <p className="text-[10px] text-muted-foreground pt-1">
-              Ritmo do mês: {fmt(operationalReceived)} operacionais até o dia {dayOfMonth} → projeção de {fmt(projectedOperational)} até o fim do mês, com pró-labore projetado de {fmt(projectedProLabore || 0)}.
+              Entrou {fmt(operationalReceived)} operacionais até o dia {dayOfMonth}. Se a média diária continuar, o mês fecha em ~{fmt(projectedOperational)} (estimativa — o que vale é o recebido), com pró-labore proporcional projetado de {fmt(projectedProLabore || 0)}.
             </p>
           )}
 
