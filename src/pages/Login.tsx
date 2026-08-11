@@ -385,6 +385,25 @@ export default function Login() {
                 {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
                 {mode === "login" ? "Entrar" : "Criar minha conta"}
               </button>
+
+              {mode === "login" && (
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const target = email.trim().toLowerCase();
+                    if (!target) { setError("Digite seu e-mail acima para receber o link de recuperação."); return; }
+                    const { error: resetError } = await supabase.auth.resetPasswordForEmail(target, {
+                      redirectTo: `${window.location.origin}/redefinir-senha`,
+                    });
+                    if (resetError) setError("Não foi possível enviar o link agora. Tente novamente em instantes.");
+                    else setError("");
+                    if (!resetError) alert("Se este e-mail estiver cadastrado, você receberá um link para definir a senha. Confira a caixa de entrada e o spam.");
+                  }}
+                  className="w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-none pt-1"
+                >
+                  Esqueci minha senha / não recebi o convite
+                </button>
+              )}
             </form>
 
             {/* Divider */}

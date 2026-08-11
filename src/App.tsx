@@ -11,6 +11,7 @@ import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
 const Login = lazy(() => import("@/pages/Login"));
+const ResetPassword = lazy(() => import("@/pages/ResetPassword"));
 const AdminDashboard = lazy(() => import("@/pages/AdminDashboard"));
 const ClientDashboard = lazy(() => import("@/pages/ClientDashboard"));
 const Kanban = lazy(() => import("@/pages/Kanban"));
@@ -103,6 +104,7 @@ function AppRoutes() {
     <Suspense fallback={<LoadingScreen />}>
       <Routes>
       <Route path="/login" element={<Login />} />
+      <Route path="/redefinir-senha" element={<ResetPassword />} />
       <Route path="/oauth/consent" element={<OAuthConsent />} />
       {/* Compatibility alias for projects that still use Lovable's consent URL. */}
       <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
