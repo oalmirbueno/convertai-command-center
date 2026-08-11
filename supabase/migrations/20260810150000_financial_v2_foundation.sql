@@ -620,7 +620,13 @@ REVOKE ALL ON TABLE public.financial_entries FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.financial_settlements FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.financial_settings FROM PUBLIC, anon, authenticated;
 REVOKE ALL ON TABLE public.financial_period_closures FROM PUBLIC, anon, authenticated;
-REVOKE ALL ON TABLE app_private.financial_audit_log FROM PUBLIC, anon, authenticated;
+-- Keep the private boundary unreachable to API roles. Audit writes happen
+-- through owner-controlled triggers/functions, never by granting direct
+-- service_role access to app_private.
+REVOKE ALL ON TABLE app_private.financial_audit_log
+  FROM PUBLIC, anon, authenticated, service_role;
+REVOKE ALL ON SEQUENCE app_private.financial_audit_log_id_seq
+  FROM PUBLIC, anon, authenticated, service_role;
 
 GRANT SELECT ON TABLE public.financial_plans TO authenticated;
 GRANT SELECT ON TABLE public.financial_plan_versions TO authenticated;
@@ -638,9 +644,6 @@ GRANT ALL ON TABLE public.financial_entries TO service_role;
 GRANT ALL ON TABLE public.financial_settlements TO service_role;
 GRANT ALL ON TABLE public.financial_settings TO service_role;
 GRANT ALL ON TABLE public.financial_period_closures TO service_role;
-GRANT SELECT ON TABLE app_private.financial_audit_log TO service_role;
-GRANT USAGE, SELECT ON SEQUENCE app_private.financial_audit_log_id_seq TO service_role;
-GRANT USAGE ON SCHEMA app_private TO service_role;
 
 CREATE VIEW public.financial_entries_enriched
 WITH (security_invoker = true)

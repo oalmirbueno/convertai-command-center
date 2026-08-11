@@ -149,9 +149,9 @@
     {
       "version": "20260810150000",
       "path": "supabase/migrations/20260810150000_financial_v2_foundation.sql",
-      "local_sha256": "115039e28c4765858fecf3aabd3ddbeeb9a2a8c5cfd98a097cd1487cf9a74891",
+      "local_sha256": "601515328528af9e7382a464590f5b4665735328fda6fb6dd837c7cf2512f918",
       "remote_name": "financial_v2_foundation",
-      "remote_statements_sha256": "cd7af5d876e12fe8c7a8b454f1f826a1da32d7676b6b6d5208ecb4958e9025bf",
+      "remote_statements_sha256": "05f70730f0ac067fc9b3e1eaede2b2fc0e605f4a021112bcb4ccf77eec6865d2",
       "remote_hash_mode": "supabase_cli_split"
     }
   ],

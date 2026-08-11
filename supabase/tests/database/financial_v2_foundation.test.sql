@@ -211,6 +211,28 @@ SELECT is(
 );
 
 SELECT is(
+  has_schema_privilege('service_role', 'app_private', 'USAGE'),
+  false,
+  'service_role has no direct access to the private boundary schema'
+);
+
+SELECT is(
+  has_table_privilege(
+    'service_role', 'app_private.financial_audit_log', 'SELECT'
+  ),
+  false,
+  'service_role cannot inspect the private financial audit ledger'
+);
+
+SELECT is(
+  has_sequence_privilege(
+    'service_role', 'app_private.financial_audit_log_id_seq', 'USAGE'
+  ),
+  false,
+  'service_role cannot use the private financial audit sequence'
+);
+
+SELECT is(
   pg_temp.public_has_execute(
     'public.financial_generate_competence(date)'::regprocedure
   ),
@@ -447,6 +469,10 @@ CREATE TEMP TABLE financial_test_metrics (
   key text PRIMARY KEY,
   value numeric NOT NULL
 ) ON COMMIT DROP;
+
+GRANT SELECT, INSERT, UPDATE, DELETE
+  ON TABLE financial_test_state, financial_test_metrics
+  TO authenticated;
 
 SELECT pg_temp.act_as('f1000000-0000-0000-0000-00000000000a');
 
