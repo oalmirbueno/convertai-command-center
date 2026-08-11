@@ -42,6 +42,7 @@ const AdminQuizSubmissions = lazy(() => import("@/pages/AdminQuizSubmissions"));
 const AdminBackfillPage = lazy(() => import("@/pages/AdminBackfillPage"));
 const ClientVaultPage = lazy(() => import("@/pages/ClientVaultPage"));
 const Workspace = lazy(() => import("@/pages/Workspace"));
+const AdminExperience = lazy(() => import("@/pages/AdminExperience"));
 const UnsubscribePage = lazy(() => import("@/pages/UnsubscribePage"));
 const FirstAccess = lazy(() => import("@/pages/FirstAccess"));
 const AdminContracts = lazy(() => import("@/pages/AdminContracts"));
@@ -139,6 +140,7 @@ function AppRoutes() {
       <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
       <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
       <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
+      <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/contratos" element={<ProtectedRoute><AppLayout><AdminContracts /></AppLayout></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

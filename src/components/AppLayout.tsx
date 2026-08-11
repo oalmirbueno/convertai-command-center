@@ -15,6 +15,7 @@ import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
+  HeartPulse,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -37,6 +38,7 @@ const adminMainNav: NavItem[] = [
 ];
 
 const adminMoreNav: NavItem[] = [
+  { title: "Central", url: "/central", icon: HeartPulse },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
