@@ -44,7 +44,20 @@ const parsePct = (s: string): number | null => {
   return v > 1 ? v / 100 : v;
 };
 
-export default function PlansPricing() {
+const receivedAmountOf = (row: any): number => {
+  const total = Number(row?.amount) || 0;
+  const paid = Number(row?.paid_amount) || 0;
+  if (row?.status === "partial") return Math.min(paid, total);
+  if (row?.status === "paid") return paid > 0 && paid < total ? paid : total;
+  return 0;
+};
+
+interface Props {
+  billing?: any[];
+  projectPayments?: any[];
+}
+
+export default function PlansPricing({ billing = [], projectPayments = [] }: Props) {
   const { data: plans, isLoading } = useFinancePlans();
   const { data: settings } = useFinanceSettings();
   const { data: clients } = useClients();
@@ -57,6 +70,9 @@ export default function PlansPricing() {
   const [seedModal, setSeedModal] = useState(false);
   const [seeding, setSeeding] = useState(false);
   const [simulator, setSimulator] = useState({ amount: "1297", taxPct: "6", directCost: "275" });
+  const [marginOpen, setMarginOpen] = useState(true);
+  const [oneOffOpen, setOneOffOpen] = useState(true);
+  const [pricerOpen, setPricerOpen] = useState(true);
 
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -83,9 +99,71 @@ export default function PlansPricing() {
   const proLabore = settings?.currentProLabore ?? 3000;
   const includeProLabore = settings?.includeProLaboreInAllocation ?? false;
   const allocBase = monthlyFixed + (includeProLabore ? proLabore : 0);
-  const clientsForAllocation = Math.max(activeClients.length, 1);
-  const fixedPerClient = allocBase / clientsForAllocation;
   const defaultDirectCost = settings?.defaultDirectCost ?? 275;
+
+  // Receita avulsa recebida no mês corrente, por cliente.
+  const receivedByClient = useMemo(() => {
+    const now = new Date();
+    const inThisMonth = (v?: string | null) => {
+      if (!v) return false;
+      const d = /^\d{4}-\d{2}-\d{2}$/.test(v) ? new Date(`${v}T12:00:00`) : new Date(v);
+      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+    };
+    const map = new Map<string, number>();
+    (billing || [])
+      .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial") && inThisMonth(b.paid_date || b.due_date))
+      .forEach((b: any) => {
+        if (!b.client_id) return;
+        map.set(b.client_id, (map.get(b.client_id) || 0) + receivedAmountOf(b));
+      });
+    (projectPayments || []).forEach((pp: any) => {
+      (pp.installments || [])
+        .filter((i: any) => (i.status === "paid" || i.status === "partial") && inThisMonth(i.paid_date || i.due_date))
+        .forEach((i: any) => {
+          if (!pp.client_id) return;
+          map.set(pp.client_id, (map.get(pp.client_id) || 0) + receivedAmountOf(i));
+        });
+    });
+    return map;
+  }, [billing, projectPayments]);
+
+  // Margem em tempo real por cliente (recorrente pelo plano; avulso pelo que entrou no mês).
+  // O rateio divide a estrutura igualmente entre quem gera receita agora:
+  // se um cliente sai, o custo se redistribui na hora entre os ativos.
+  const baseMarginRows = useMemo(() => {
+    const rateByPlanName = new Map<string, number>();
+    (plans || []).forEach((p) => {
+      const rate = p.currentVersion?.taxRate;
+      if (rate !== null && rate !== undefined) rateByPlanName.set(normName(p.name), rate);
+    });
+    const rows: any[] = [];
+    (clients || []).forEach((c: any) => {
+      const isRecurring = c.client_type !== "one_off" && Number(c.plan_value) > 0 && c.plan_status === "active";
+      const oneOffRevenue = receivedByClient.get(c.id) || 0;
+      if (!isRecurring && oneOffRevenue <= 0.005) return;
+      const revenue = isRecurring ? Number(c.plan_value) : oneOffRevenue;
+      const taxRate = rateByPlanName.get(normName(c.plan_name)) ?? DEFAULT_TAX_RATE;
+      const taxReserve = revenue * taxRate;
+      rows.push({
+        id: c.id,
+        name: c.company_name || c.full_name || "-",
+        plan: isRecurring ? (c.plan_name || "Sem plano") : "Avulso",
+        type: isRecurring ? "recorrente" : "avulso",
+        revenue,
+        taxReserve,
+        operational: revenue - taxReserve,
+        directCost: defaultDirectCost,
+      });
+    });
+    return rows.sort((a, b) => b.revenue - a.revenue);
+  }, [clients, plans, receivedByClient, defaultDirectCost]);
+
+  const contributorsCount = Math.max(baseMarginRows.length, 1);
+  const fixedPerClient = allocBase / contributorsCount;
+  const marginRows = baseMarginRows.map((r) => {
+    const margin = r.operational - r.directCost - fixedPerClient;
+    return { ...r, rateio: fixedPerClient, margin, marginPct: r.operational > 0 ? margin / r.operational : 0 };
+  });
 
   const clientsByPlanName = useMemo(() => {
     const map = new Map<string, { count: number; mrr: number }>();
@@ -252,6 +330,84 @@ export default function PlansPricing() {
         ))}
       </div>
 
+      {/* Margem em tempo real por cliente */}
+      <div className="bg-card border border-border rounded-xl overflow-hidden">
+        <button
+          onClick={() => setMarginOpen((v) => !v)}
+          className="w-full px-4 sm:px-5 py-3 flex items-center gap-2 bg-transparent border-none cursor-pointer text-left"
+        >
+          <Users className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
+            Margem em tempo real por cliente ({marginRows.length})
+          </span>
+          <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            Estrutura {fmt(allocBase)} ÷ {contributorsCount} = {fmt(fixedPerClient)}/cliente
+          </span>
+          <span className="text-[10px] text-muted-foreground">{marginOpen ? "▾" : "▸"}</span>
+        </button>
+        {marginOpen && (
+          <>
+            <div className="border-t border-border overflow-x-auto">
+              <div className="max-h-[420px] overflow-y-auto">
+                <table className="w-full text-[12px] min-w-[640px]">
+                  <thead className="sticky top-0 bg-card z-10">
+                    <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
+                      <th className="text-left px-4 sm:px-5 py-2 font-medium">Cliente</th>
+                      <th className="text-left px-3 py-2 font-medium">Plano</th>
+                      <th className="text-right px-3 py-2 font-medium">Receita/mês</th>
+                      <th className="text-right px-3 py-2 font-medium">Reserva trib.</th>
+                      <th className="text-right px-3 py-2 font-medium">Custo direto</th>
+                      <th className="text-right px-3 py-2 font-medium">Rateio fixo</th>
+                      <th className="text-right px-4 sm:px-5 py-2 font-medium">Margem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {marginRows.length === 0 && (
+                      <tr><td colSpan={7} className="px-5 py-8 text-center text-muted-foreground">Nenhum cliente com receita ainda.</td></tr>
+                    )}
+                    {marginRows.map((r) => (
+                      <tr key={r.id}>
+                        <td className="px-4 sm:px-5 py-2 text-foreground whitespace-nowrap">
+                          {r.name}
+                          <span className={`ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full align-middle ${r.type === "recorrente" ? "bg-primary/10 text-primary" : "bg-info/10 text-info"}`}>
+                            {r.type === "recorrente" ? "Recorrente" : "Avulso"}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-muted-foreground whitespace-nowrap">{r.plan}</td>
+                        <td className="px-3 py-2 text-right font-mono text-foreground whitespace-nowrap">{fmt(r.revenue)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.taxReserve)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.directCost)}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(r.rateio)}</td>
+                        <td className={`px-4 sm:px-5 py-2 text-right font-mono font-medium whitespace-nowrap ${r.margin < 0 ? "text-destructive" : r.marginPct < 0.2 ? "text-warning" : "text-success"}`}>
+                          {fmt(r.margin)} ({Math.round(r.marginPct * 100)}%)
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  {marginRows.length > 0 && (
+                    <tfoot className="sticky bottom-0 bg-card">
+                      <tr className="border-t border-border">
+                        <td colSpan={2} className="px-4 sm:px-5 py-2 text-[11px] font-medium text-foreground">Total ({marginRows.length} clientes)</td>
+                        <td className="px-3 py-2 text-right font-mono font-medium text-foreground whitespace-nowrap">{fmt(marginRows.reduce((s, r) => s + r.revenue, 0))}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(marginRows.reduce((s, r) => s + r.taxReserve, 0))}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(marginRows.reduce((s, r) => s + r.directCost, 0))}</td>
+                        <td className="px-3 py-2 text-right font-mono text-muted-foreground whitespace-nowrap">− {fmt(allocBase)}</td>
+                        <td className={`px-4 sm:px-5 py-2 text-right font-mono font-semibold whitespace-nowrap ${marginRows.reduce((s, r) => s + r.margin, 0) >= 0 ? "text-success" : "text-destructive"}`}>
+                          {fmt(marginRows.reduce((s, r) => s + r.margin, 0))}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground px-4 sm:px-5 py-2.5 border-t border-border">
+              Rateio automático e sincronizado: a estrutura ({fmt(allocBase)}) é dividida igualmente entre os {contributorsCount} clientes que geram receita agora — se um cliente sai ou entra, a margem de todos recalcula na hora. Recorrentes entram pelo valor do plano; avulsos pelo que foi recebido no mês corrente. Margem abaixo de 20% aparece em amarelo (piso do Plano Diretor).
+            </p>
+          </>
+        )}
+      </div>
+
       {/* Ações */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <span className="text-sm text-muted-foreground">Planos recorrentes · preço-base antes do gross-up tributário</span>
@@ -389,13 +545,19 @@ export default function PlansPricing() {
 
       {/* Avulsos · tabela oficial do Plano Diretor */}
       <div className="bg-card border border-border rounded-xl overflow-hidden">
-        <div className="px-5 py-3 border-b border-border flex items-center justify-between flex-wrap gap-2">
+        <button
+          onClick={() => setOneOffOpen((v) => !v)}
+          className="w-full px-5 py-3 flex items-center justify-between flex-wrap gap-2 bg-transparent border-none cursor-pointer text-left"
+        >
           <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
             Avulsos · tabela do Plano Diretor
           </span>
-          <span className="text-[10px] text-muted-foreground">Não entram no MRR · mudança de escopo vira nova etapa e novo preço</span>
-        </div>
-        <div className="overflow-x-auto">
+          <span className="text-[10px] text-muted-foreground">
+            Não entram no MRR · mudança de escopo vira nova etapa e novo preço <span className="ml-1">{oneOffOpen ? "▾" : "▸"}</span>
+          </span>
+        </button>
+        {oneOffOpen && (<>
+        <div className="overflow-x-auto max-h-[420px] overflow-y-auto border-t border-border">
           <table className="w-full text-[12px]">
             <thead>
               <tr className="text-[10px] uppercase tracking-wider text-muted-foreground border-b border-border">
@@ -430,13 +592,22 @@ export default function PlansPricing() {
         <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
           *Cobrança final = preço de lançamento com gross-up na alíquota ilustrativa de {Math.round(DEFAULT_TAX_RATE * 100)}%. Para cobrar um avulso, use "Nova Cobrança" (Visão Geral) ou um projeto avulso no cadastro do cliente — o valor entra no fluxo de caixa normalmente.
         </p>
+        </>)}
       </div>
 
       {/* Precificador */}
       <div className="bg-card border border-border rounded-xl p-5 space-y-3">
-        <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
-          <Calculator className="w-3.5 h-3.5 text-primary" /> Precificador · componha um valor antes de fechar
-        </p>
+        <button
+          onClick={() => setPricerOpen((v) => !v)}
+          className="w-full flex items-center gap-2 bg-transparent border-none cursor-pointer text-left p-0"
+        >
+          <Calculator className="w-3.5 h-3.5 text-primary shrink-0" />
+          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex-1">
+            Precificador · componha um valor antes de fechar
+          </span>
+          <span className="text-[10px] text-muted-foreground">{pricerOpen ? "▾" : "▸"}</span>
+        </button>
+        {pricerOpen && (<>
         <div className="grid grid-cols-3 gap-3">
           <div>
             <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor operacional</label>
@@ -465,8 +636,9 @@ export default function PlansPricing() {
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground">
-          Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial: {fmt(allocBase)} de estrutura ÷ {clientsForAllocation} cliente(s) ativo(s). O rateio é análise — no resultado global o custo fixo é descontado uma única vez.
+          Fórmula oficial: cobrança final = valor operacional ÷ (1 − alíquota). Rateio gerencial: {fmt(allocBase)} de estrutura ÷ {contributorsCount} cliente(s) com receita. O rateio é análise — no resultado global o custo fixo é descontado uma única vez.
         </p>
+        </>)}
       </div>
 
       {/* Modal nova versão de preço */}

@@ -37,6 +37,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
   const { updateSettings } = useFinanceMutations();
   const [goalModal, setGoalModal] = useState(false);
   const [goalInput, setGoalInput] = useState("");
+  const [panelOpen, setPanelOpen] = useState(true);
 
   const { data: allExpenses = [] } = useQuery({
     queryKey: ["expenses"],
@@ -134,14 +135,20 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
 
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-4">
-      <div className="flex items-center justify-between flex-wrap gap-2">
+      <button
+        onClick={() => setPanelOpen((v) => !v)}
+        className="w-full flex items-center justify-between flex-wrap gap-2 bg-transparent border-none cursor-pointer text-left p-0"
+      >
         <p className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium flex items-center gap-2">
           <Landmark className="w-3.5 h-3.5 text-primary" />
           Gestão Financeira · Divisão automática de {monthLabel}
         </p>
-        <span className="text-[10px] text-muted-foreground">Alíquota do plano de cada cliente; sem plano, {pct(DEFAULT_TAX_RATE)} ilustrativa</span>
-      </div>
+        <span className="text-[10px] text-muted-foreground">
+          Alíquota do plano de cada cliente; sem plano, {pct(DEFAULT_TAX_RATE)} ilustrativa <span className="ml-1">{panelOpen ? "▾" : "▸"}</span>
+        </span>
+      </button>
 
+      {panelOpen && (
       <div className="grid md:grid-cols-2 gap-4">
         {/* Coluna 1: divisão do que entrou */}
         <div className="space-y-1.5">
@@ -317,6 +324,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
           </div>
         </div>
       </div>
+      )}
 
       {/* Modal meta mensal */}
       <Dialog open={goalModal} onOpenChange={setGoalModal}>

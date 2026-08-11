@@ -138,6 +138,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
   const { updateSettings } = useFinanceMutations();
   const [reconcileOpen, setReconcileOpen] = useState(false);
   const [reconcileInput, setReconcileInput] = useState("");
+  const [inflowsOpen, setInflowsOpen] = useState(true);
+  const [outflowsOpen, setOutflowsOpen] = useState(true);
 
   const openingBalance = financeSettings?.openingBalance ?? 0;
   const allTimeReceived = useMemo(() => {
@@ -790,7 +792,10 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
 
       {/* ENTRADAS */}
       <div className="rounded-2xl border border-success/30 bg-card overflow-hidden">
-        <div className="px-4 sm:px-5 py-3.5 border-b border-border bg-success/5 flex items-center gap-3 flex-wrap">
+        <button
+          onClick={() => setInflowsOpen((v) => !v)}
+          className="w-full px-4 sm:px-5 py-3.5 border-b border-border bg-success/5 flex items-center gap-3 flex-wrap bg-transparent cursor-pointer text-left border-x-0 border-t-0"
+        >
           <span className="w-8 h-8 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
             <ArrowUpRight className="w-4 h-4" />
           </span>
@@ -806,7 +811,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Recebido (histórico)</p>
             <p className="text-sm font-mono font-semibold text-success">{fmt(allTimeReceived)}</p>
           </div>
-        </div>
+          <span className="text-[10px] text-muted-foreground shrink-0">{inflowsOpen ? "▾" : "▸"}</span>
+        </button>
+        {inflowsOpen && (
         <Tabs defaultValue="ar">
           <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border">
             <TabsTrigger value="ar" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
@@ -818,7 +825,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </TabsList>
 
           <TabsContent value="ar" className="m-0">
-            <div className="divide-y divide-border">
+            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
               {accountsReceivable.length === 0 && (
                 <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a receber no momento</div>
               )}
@@ -873,11 +880,15 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             </div>
           </TabsContent>
         </Tabs>
+        )}
       </div>
 
       {/* SAÍDAS */}
       <div className="rounded-2xl border border-destructive/30 bg-card overflow-hidden">
-        <div className="px-4 sm:px-5 py-3.5 border-b border-border bg-destructive/5 flex items-center gap-3 flex-wrap">
+        <button
+          onClick={() => setOutflowsOpen((v) => !v)}
+          className="w-full px-4 sm:px-5 py-3.5 border-b border-border bg-destructive/5 flex items-center gap-3 flex-wrap bg-transparent cursor-pointer text-left border-x-0 border-t-0"
+        >
           <span className="w-8 h-8 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
             <ArrowDownRight className="w-4 h-4" />
           </span>
@@ -893,7 +904,9 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pago (histórico)</p>
             <p className="text-sm font-mono font-semibold text-destructive">{fmt(allTimePaidOut)}</p>
           </div>
-        </div>
+          <span className="text-[10px] text-muted-foreground shrink-0">{outflowsOpen ? "▾" : "▸"}</span>
+        </button>
+        {outflowsOpen && (
         <Tabs defaultValue="ap">
           <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border flex-wrap">
             <TabsTrigger value="ap" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
@@ -908,7 +921,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </TabsList>
 
         <TabsContent value="ap" className="m-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
             {accountsPayable.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a pagar 🎉</div>
             )}
@@ -948,7 +961,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </TabsContent>
 
         <TabsContent value="exp" className="m-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
             {expenses.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
                 Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
@@ -989,7 +1002,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
         </TabsContent>
 
         <TabsContent value="inv" className="m-0">
-          <div className="divide-y divide-border">
+          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
             {investorEntries.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
                 Nenhum investimento registrado. Use "+ Lançamento" e escolha Investimento.
@@ -1023,6 +1036,7 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </div>
         </TabsContent>
         </Tabs>
+        )}
       </div>
 
       {/* LAUNCHER · escolha do tipo de lançamento */}

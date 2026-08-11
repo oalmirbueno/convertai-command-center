@@ -1114,7 +1114,7 @@ function LegacyFinanceiro() {
 
         {isAdmin && (
           <TabsContent value="plans" className="space-y-6">
-            <PlansPricing />
+            <PlansPricing billing={billing || []} projectPayments={projectPayments || []} />
           </TabsContent>
         )}
 
