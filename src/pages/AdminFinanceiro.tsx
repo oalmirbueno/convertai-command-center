@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useQuery } from "@tanstack/react-query";
@@ -16,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import CashFlow from "@/components/finance/CashFlow";
+import FinanceV2 from "@/components/finance/FinanceV2";
 import InvestorCapital from "@/components/finance/InvestorCapital";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -74,7 +75,7 @@ const typeIcon = (type: string) => {
   return "AVU";
 };
 
-export default function AdminFinanceiro() {
+function LegacyFinanceiro() {
   const navigate = useNavigate();
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
@@ -105,7 +106,7 @@ export default function AdminFinanceiro() {
       if (error) throw error;
       // Fetch performer names
       const performerIds = [...new Set((data || []).map((l: any) => l.performed_by).filter(Boolean))];
-      let performers: Record<string, string> = {};
+      const performers: Record<string, string> = {};
       if (performerIds.length > 0) {
         const { data: profiles } = await supabase.from("profiles").select("id, full_name").in("id", performerIds);
         (profiles || []).forEach((p: any) => { performers[p.id] = p.full_name; });
@@ -135,58 +136,11 @@ export default function AdminFinanceiro() {
   const [rechargeForm, setRechargeForm] = useState({ amount: "", reason: "", period: "semanal" });
   const [addWalletForm, setAddWalletForm] = useState({ client_id: "", platform: "meta", balance: "0" });
   const [planForm, setPlanForm] = useState({ amount: "", renewal_date: "", description: "" });
-  const [syncing, setSyncing] = useState(false);
-  const autoSyncDone = useRef(false);
 
   const now = new Date();
   const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
   const thisMonth = now.getMonth();
   const thisYear = now.getFullYear();
-
-  // Auto-sync: create billing entries for clients with plan_value + plan_renewal_date but no billing record
-  const handleSyncBilling = async (silent = false) => {
-    if (!clients || !billing) return;
-    setSyncing(true);
-    let created = 0;
-    for (const c of clients as any[]) {
-      if (!c.plan_value || !c.plan_renewal_date) continue;
-      if (c.plan_status !== "active") continue;
-      if (c.client_type === "one_off") continue; // Avulsos nunca geram cobrança recorrente
-      const existingBill = (billing || []).find(
-        (b: any) => b.client_id === c.id && b.type === "renewal" && b.status === "pending"
-      );
-      if (!existingBill) {
-        await supabase.from("billing").insert({
-          client_id: c.id,
-          type: "renewal",
-          amount: Number(c.plan_value),
-          due_date: c.plan_renewal_date,
-          description: c.plan_name ? `Renovação · ${c.plan_name}` : "Renovação Mensal",
-        });
-        created++;
-      }
-    }
-    if (created > 0) {
-      queryClient.invalidateQueries({ queryKey: ["billing"] });
-      if (!silent) toast.success(`${created} cobrança(s) gerada(s) automaticamente`);
-    } else {
-      if (!silent) toast.info("Todas as cobranças já estão sincronizadas");
-    }
-    setSyncing(false);
-  };
-
-  // Auto-sync on first load when billing is empty but clients have plan data
-  useEffect(() => {
-    if (autoSyncDone.current || !isAdmin || !clients || !billing) return;
-    const activeWithPlan = (clients as any[]).filter(c => c.plan_value && c.plan_renewal_date && c.plan_status === "active" && c.client_type !== "one_off");
-    const hasPendingRenewals = (billing || []).some((b: any) => b.type === "renewal" && b.status === "pending");
-    if (activeWithPlan.length > 0 && !hasPendingRenewals) {
-      autoSyncDone.current = true;
-      handleSyncBilling(true);
-    } else {
-      autoSyncDone.current = true;
-    }
-  }, [clients, billing, isAdmin]);
 
   // Computed totals · combine billing + client plan data for accurate stats
   // "month" period is driven by the selected month/year (month picker)
@@ -1100,10 +1054,6 @@ export default function AdminFinanceiro() {
           <div className="flex items-center justify-between flex-wrap gap-2">
             <span className="text-sm text-muted-foreground">Controle Financeiro</span>
             <div className="flex gap-2">
-              <button onClick={() => handleSyncBilling()} disabled={syncing}
-                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border">
-                <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} /> Sincronizar
-              </button>
               <button onClick={() => setNewBillingOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
                 <Plus className="w-3 h-3" /> Nova Cobrança
@@ -2044,4 +1994,18 @@ export default function AdminFinanceiro() {
       </Dialog>
     </div>
   );
+}
+
+export default function AdminFinanceiro() {
+  const { profile, loading } = useAuth();
+
+  if (loading || !profile) {
+    return <div className="flex min-h-48 items-center justify-center text-sm text-muted-foreground" role="status">Carregando financeiro…</div>;
+  }
+
+  if (profile.role === "admin" || profile.role === "manager") {
+    return <FinanceV2 />;
+  }
+
+  return <LegacyFinanceiro />;
 }

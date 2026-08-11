@@ -70,7 +70,7 @@ jobs:
             node scripts/verify-migration-integrity.mjs --base-ref "$PR_BASE_SHA"
           fi
 
-      # The empty CI database applies the 12 canonical forward migrations. The
+      # The empty CI database applies the 19 canonical forward migrations. The
       # runner shadow files replay exactly the same SQL under the aliases that
       # production recorded, so they must not run a second time here. The list
       # is derived from the audited manifest, never hardcoded.
