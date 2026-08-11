@@ -24,6 +24,7 @@ import CreateClientModal from "@/components/admin/CreateClientModal";
 import EditClientDrawer from "@/components/admin/EditClientDrawer";
 import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
+import { isInternalClient } from "@/lib/clientFlags";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -842,17 +843,22 @@ export default function Clients() {
         <div className="space-y-1 stagger-children">
           {filtered.map((c) => {
             const financial = financialByClient.get(String(c.id));
-            const planName = financial?.planName || c.plan_name || "Sem plano";
-            const statusMeta = financial
-              ? financialStatusMeta(financial.billingStatus)
-              : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
-            const modeLabel = financial?.pricingMode === "linked"
-              ? "Vinculado"
-              : financial?.pricingMode === "custom"
-                ? "Personalizado"
-                : financial
-                  ? "Sem vínculo"
-                  : "Financeiro pendente";
+            const internal = isInternalClient(c);
+            const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
+            const statusMeta = internal
+              ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
+              : financial
+                ? financialStatusMeta(financial.billingStatus)
+                : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
+            const modeLabel = internal
+              ? "Sem cobrança"
+              : financial?.pricingMode === "linked"
+                ? "Vinculado"
+                : financial?.pricingMode === "custom"
+                  ? "Personalizado"
+                  : financial
+                    ? "Sem vínculo"
+                    : "Financeiro pendente";
 
             return (
               <div

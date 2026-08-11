@@ -56,6 +56,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [clientType, setClientType] = useState<"recurring" | "one_off" | "hybrid">("recurring");
   const [brand, setBrand] = useState<"aceleriq" | "sitebolt" | "">("");
   const [services, setServices] = useState<Record<string, boolean>>({});
+  const [internalCompany, setInternalCompany] = useState(false);
   const [createdSuccess, setCreatedSuccess] = useState(false);
 
   // Plano recorrente (mensalidade)
@@ -82,7 +83,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const reset = () => {
     setFullName(""); setCompany(""); setEmail(""); setPhone("");
     setClientType("recurring"); setBrand("");
-    setServices({});
+    setServices({}); setInternalCompany(false);
     setPlanValue(""); setPlanRenewalDate(""); setPlanName("");
     setProjectValue(""); setPayMode("integral"); setInstallmentsCount("2"); setFirstDueDate("");
     setCreatedSuccess(false);
@@ -138,7 +139,7 @@ export default function CreateClientModal({ open, onClose }: Props) {
       const profileUpdate: ProfileUpdate = {
         phone: phone.trim() || null,
         company_name: company.trim(),
-        services_config: services,
+        services_config: internalCompany ? { ...services, internal_company: true } : services,
         client_type: clientType,
         brand: brand || null,
       };
@@ -396,6 +397,15 @@ export default function CreateClientModal({ open, onClose }: Props) {
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* Empresa do grupo */}
+              <div className="flex items-center justify-between gap-3 bg-secondary/40 border border-border rounded-xl px-3.5 py-2.5">
+                <div className="min-w-0">
+                  <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
+                  <p className="text-[10px] text-muted-foreground">Cadastro só para organização — sem mensalidade, fora de cobranças e alertas.</p>
+                </div>
+                <Switch checked={internalCompany} onCheckedChange={setInternalCompany} />
               </div>
 
               {/* Plano & Cobrança */}

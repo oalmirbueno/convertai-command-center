@@ -14,6 +14,7 @@ import {
   type FinancePlan,
 } from "@/hooks/useFinanceV2";
 import { DIRECTOR_PLAN_CATALOG, ONE_OFF_CATALOG, DEFAULT_TAX_RATE } from "@/lib/directorPlan";
+import { isInternalClient } from "@/lib/clientFlags";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pctLabel = (v: number | null | undefined) =>
@@ -84,7 +85,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
   });
 
   const activeClients = useMemo(
-    () => (clients || []).filter((c: any) => c.plan_status === "active" && c.client_type !== "one_off"),
+    () => (clients || []).filter((c: any) => c.plan_status === "active" && c.client_type !== "one_off" && !isInternalClient(c)),
     [clients]
   );
 
@@ -138,6 +139,7 @@ export default function PlansPricing({ billing = [], projectPayments = [] }: Pro
     });
     const rows: any[] = [];
     (clients || []).forEach((c: any) => {
+      if (isInternalClient(c)) return;
       const isRecurring = c.client_type !== "one_off" && Number(c.plan_value) > 0 && c.plan_status === "active";
       const oneOffRevenue = receivedByClient.get(c.id) || 0;
       if (!isRecurring && oneOffRevenue <= 0.005) return;

@@ -23,6 +23,7 @@ import ManagementSummary from "@/components/finance/ManagementSummary";
 import AdsInvestment from "@/components/finance/AdsInvestment";
 import CFOAssistant from "@/components/finance/CFOAssistant";
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
+import { isInternalClient } from "@/lib/clientFlags";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -168,10 +169,11 @@ function LegacyFinanceiro() {
   };
   const isCurrentMonthSelected = selMonth === thisMonth && selYear === thisYear;
 
-  // Standby/inactive clients: pause their recurring pending charges from the finance view
+  // Standby/inactive clients: pause their recurring pending charges from the finance view.
+  // Empresas do grupo (internas) também ficam fora de qualquer cobrança recorrente.
   const pausedClientIds = new Set(
     (clients || [])
-      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive")
+      .filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive" || isInternalClient(c))
       .map((c: any) => c.id)
   );
   const isPausedRenewal = (b: any) => b.type === "renewal" && pausedClientIds.has(b.client_id);
@@ -196,7 +198,7 @@ function LegacyFinanceiro() {
   const pendingBillsInActivePeriod = pendingBills.filter((b: any) => isInActivePeriod(b.due_date));
   const clientsWithPlanNotInBilling = (clients || []).filter((c: any) =>
     c.plan_value && c.plan_status === "active" &&
-    c.client_type !== "one_off" &&
+    c.client_type !== "one_off" && !isInternalClient(c) &&
     isInActivePeriod(c.plan_renewal_date) &&
     !pendingBills.some((b: any) => b.client_id === c.id && b.type === "renewal") &&
     !hasPaidRenewalInActiveMonth(c.id)
@@ -224,9 +226,9 @@ function LegacyFinanceiro() {
     ? monthlyRevenue
     : paidBills.filter((b: any) => b.type !== "ads_recharge").reduce((s: number, b: any) => s + receivedOf(b), 0);
 
-  // Receita Mensal Esperada = soma dos plan_value de clientes ativos
+  // Receita Mensal Esperada = soma dos plan_value de clientes ativos (fora empresas internas)
   const expectedMonthlyRevenue = (clients || [])
-    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off")
+    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off" && !isInternalClient(c))
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
 
   // Saldo em caixa real · mesma fórmula do bloco "Caixa da Aceleriq" no Fluxo de Caixa:
@@ -263,7 +265,7 @@ function LegacyFinanceiro() {
   ];
   const monthGrossReceived = monthReceivedItems.reduce((s, it) => s + it.amount, 0);
   const activeMensalistas = (clients || [])
-    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off").length;
+    .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off" && !isInternalClient(c)).length;
   // Referência para a escada de pró-labore: melhor entre o operacional recebido e o MRR
   const ladderRevenue = Math.max(monthGrossReceived * (1 - DEFAULT_TAX_RATE), expectedMonthlyRevenue);
 
@@ -1526,7 +1528,7 @@ function LegacyFinanceiro() {
           </div>
 
           {renewalsView === "mensalistas" && (() => {
-            const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0);
+            const mensalistas = (clients || []).filter((c: any) => c.plan_value && Number(c.plan_value) > 0 && !isInternalClient(c));
             if (mensalistas.length === 0) {
               return <p className="text-sm text-muted-foreground text-center py-8">Nenhum cliente mensalista. Edite um cliente e adicione o valor do plano para marcá-lo como mensalista.</p>;
             }
@@ -1619,7 +1621,7 @@ function LegacyFinanceiro() {
             // (project_payments ou billing avulso). Antes só considerávamos project_payments,
             // o que escondia recebimentos como o de Itamar (lançado via billing).
             const isAvulsoClient = (c: any) =>
-              !!c && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
+              !!c && !isInternalClient(c) && (c.client_type === "one_off" || !c.plan_value || Number(c.plan_value) === 0);
 
             const billingByClient = new Map<string, any[]>();
             (billing || []).forEach((b: any) => {

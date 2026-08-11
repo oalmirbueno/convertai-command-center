@@ -11,6 +11,7 @@ import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hook
 import {
   DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier, ONE_OFF_CATALOG,
 } from "@/lib/directorPlan";
+import { isInternalClient } from "@/lib/clientFlags";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
 const MONTHS_FULL = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
@@ -116,8 +117,8 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
     const proLaboreProp = interpolateProLabore(operational);
     const defaultDirectCost = settings?.defaultDirectCost ?? 275;
 
-    // Carteira
-    const activeRecurring = (clients || []).filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off");
+    // Carteira (empresas do grupo ficam fora de tudo)
+    const activeRecurring = (clients || []).filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off" && !isInternalClient(c));
     const mrr = activeRecurring.reduce((s: number, c: any) => s + Number(c.plan_value || 0), 0);
     const clientReserveTarget = activeRecurring.length * defaultDirectCost;
 
@@ -126,7 +127,7 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
     const profit = afterStructure - clientReserve;
 
     // Atrasados (billing pendente vencido, excluindo pausados)
-    const pausedIds = new Set((clients || []).filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive").map((c: any) => c.id));
+    const pausedIds = new Set((clients || []).filter((c: any) => c.plan_status === "standby" || c.plan_status === "inactive" || isInternalClient(c)).map((c: any) => c.id));
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const overdue = (billing || [])
       .filter((b: any) => {
@@ -138,9 +139,9 @@ export default function CFOAssistant({ billing, projectPayments, clients }: Prop
       .map((b: any) => ({ ...b, clientRow: clientById.get(b.client_id) }));
     const overdueTotal = overdue.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
 
-    // Clientes sem plano/valor
+    // Clientes sem plano/valor (empresas internas não são pendência)
     const noPlan = (clients || []).filter(
-      (c: any) => c.client_type !== "one_off" && (c.plan_status || "active") === "active" && (!c.plan_value || Number(c.plan_value) === 0)
+      (c: any) => c.client_type !== "one_off" && (c.plan_status || "active") === "active" && (!c.plan_value || Number(c.plan_value) === 0) && !isInternalClient(c)
     );
 
     // Abaixo da tabela do catálogo

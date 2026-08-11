@@ -789,6 +789,16 @@ export default function EditClientDrawer({
                   <input type="date" value={renewalDate} onChange={(e) => setRenewalDate(e.target.value)}
                     className="w-full bg-secondary border border-border rounded-[10px] px-3.5 py-2.5 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
                 </div>
+                <div className="flex items-center justify-between gap-3 bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5">
+                  <div className="min-w-0">
+                    <p className="text-[12px] text-foreground font-medium">Empresa do grupo (interna)</p>
+                    <p className="text-[10px] text-muted-foreground">Cadastro só para organização — fica fora de cobranças, alertas de atraso, "sem plano" e MRR.</p>
+                  </div>
+                  <Switch
+                    checked={Boolean(services.internal_company)}
+                    onCheckedChange={(v) => setServices((prev) => ({ ...prev, internal_company: v }))}
+                  />
+                </div>
                 <div className="space-y-1.5">
                   <label className="text-[11px] uppercase tracking-wider text-muted-foreground">Segurança do Acesso</label>
                   <p className="text-[12px] text-muted-foreground bg-secondary/60 border border-border rounded-[10px] px-3.5 py-2.5 leading-relaxed">
