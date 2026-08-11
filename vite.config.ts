@@ -1,6 +1,36 @@
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
+import { readFileSync } from "fs";
+
+const PUBLIC_ENV_KEYS = [
+  "VITE_SUPABASE_URL",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_SUPABASE_PROJECT_ID",
+  "VITE_APP_PUBLIC_URL",
+] as const;
+
+// Fallback público e versionado: o ambiente de build de produção não recebe o
+// arquivo .env local (ignorado pelo Git). Estes valores são públicos por design
+// (URL do projeto e chave publishable); segredos continuam fora do repositório.
+function loadPublicEnvDefaults(): Record<string, string> {
+  try {
+    const raw = readFileSync(
+      path.resolve(__dirname, "config/public-env.production.json"),
+      "utf8",
+    ) as string;
+    const parsed = JSON.parse(raw) as Record<string, string>;
+    return Object.fromEntries(
+      PUBLIC_ENV_KEYS.filter((key) => typeof parsed[key] === "string").map((key) => [
+        key,
+        parsed[key],
+      ]),
+    );
+  } catch {
+    return {};
+  }
+}
+
 
 function requireProductionUrl(name: string, value: string | undefined): string {
   const configured = value?.trim();
@@ -30,8 +60,19 @@ function requireProductionUrl(name: string, value: string | undefined): string {
 
 // https://vitejs.dev/config/
 export default defineConfig(({ command, mode }) => {
+  const define: Record<string, string> = {};
+
   if (command === "build") {
-    const env = loadEnv(mode, process.cwd(), "");
+    const fileEnv = loadEnv(mode, process.cwd(), "");
+    const defaults = loadPublicEnvDefaults();
+    const env: Record<string, string | undefined> = { ...defaults, ...fileEnv };
+
+    for (const key of PUBLIC_ENV_KEYS) {
+      if (!fileEnv[key]?.trim() && env[key]) {
+        define[`import.meta.env.${key}`] = JSON.stringify(env[key]);
+      }
+    }
+
     requireProductionUrl("VITE_SUPABASE_URL", env.VITE_SUPABASE_URL);
     requireProductionUrl("VITE_APP_PUBLIC_URL", env.VITE_APP_PUBLIC_URL);
     if (!env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim()) {
@@ -40,6 +81,8 @@ export default defineConfig(({ command, mode }) => {
   }
 
   return {
+    define,
+
     server: {
       host: "::",
       port: 8080,

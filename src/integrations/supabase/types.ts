@@ -1557,6 +1557,646 @@ export type Database = {
           },
         ]
       }
+      financial_client_terms: {
+        Row: {
+          amount_kind: string
+          billing_period: string
+          client_id: string | null
+          contract_started_on: string | null
+          created_at: string
+          created_by: string | null
+          custom_justification: string | null
+          direct_cost_amount: number
+          direct_cost_estimated: boolean
+          due_day: number
+          ends_on: string | null
+          final_amount: number
+          id: string
+          legacy_source_id: string | null
+          next_adjustment_on: string | null
+          notes: string | null
+          operational_amount: number
+          payment_method: string | null
+          plan_version_id: string | null
+          pricing_mode: string
+          project_id: string | null
+          review_required: boolean
+          source_system: string
+          starts_on: string
+          status: string
+          tax_rate: number | null
+          updated_at: string
+        }
+        Insert: {
+          amount_kind?: string
+          billing_period?: string
+          client_id?: string | null
+          contract_started_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_justification?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          due_day?: number
+          ends_on?: string | null
+          final_amount: number
+          id?: string
+          legacy_source_id?: string | null
+          next_adjustment_on?: string | null
+          notes?: string | null
+          operational_amount: number
+          payment_method?: string | null
+          plan_version_id?: string | null
+          pricing_mode?: string
+          project_id?: string | null
+          review_required?: boolean
+          source_system?: string
+          starts_on: string
+          status?: string
+          tax_rate?: number | null
+          updated_at?: string
+        }
+        Update: {
+          amount_kind?: string
+          billing_period?: string
+          client_id?: string | null
+          contract_started_on?: string | null
+          created_at?: string
+          created_by?: string | null
+          custom_justification?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          due_day?: number
+          ends_on?: string | null
+          final_amount?: number
+          id?: string
+          legacy_source_id?: string | null
+          next_adjustment_on?: string | null
+          notes?: string | null
+          operational_amount?: number
+          payment_method?: string | null
+          plan_version_id?: string | null
+          pricing_mode?: string
+          project_id?: string | null
+          review_required?: boolean
+          source_system?: string
+          starts_on?: string
+          status?: string
+          tax_rate?: number | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_client_terms_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_client_terms_plan_version_id_fkey"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plan_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_client_terms_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_entries: {
+        Row: {
+          amount: number
+          brand: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          category: string | null
+          client_id: string | null
+          competence: string
+          competence_source: string
+          created_at: string
+          created_by: string | null
+          description: string
+          direct_cost_amount: number
+          direct_cost_estimated: boolean
+          direction: string
+          due_date: string
+          id: string
+          idempotency_key: string
+          kind: string
+          legacy_source_id: string | null
+          legacy_source_table: string | null
+          operational_amount: number
+          plan_version_id: string | null
+          project_id: string | null
+          recurring_rule_id: string | null
+          source_system: string
+          status: string
+          tax_rate: number | null
+          tax_reserve: number
+          term_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          brand?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          category?: string | null
+          client_id?: string | null
+          competence: string
+          competence_source?: string
+          created_at?: string
+          created_by?: string | null
+          description: string
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          direction: string
+          due_date: string
+          id?: string
+          idempotency_key: string
+          kind: string
+          legacy_source_id?: string | null
+          legacy_source_table?: string | null
+          operational_amount?: number
+          plan_version_id?: string | null
+          project_id?: string | null
+          recurring_rule_id?: string | null
+          source_system?: string
+          status?: string
+          tax_rate?: number | null
+          tax_reserve?: number
+          term_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          brand?: string | null
+          cancellation_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          category?: string | null
+          client_id?: string | null
+          competence?: string
+          competence_source?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          direction?: string
+          due_date?: string
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          legacy_source_id?: string | null
+          legacy_source_table?: string | null
+          operational_amount?: number
+          plan_version_id?: string | null
+          project_id?: string | null
+          recurring_rule_id?: string | null
+          source_system?: string
+          status?: string
+          tax_rate?: number | null
+          tax_reserve?: number
+          term_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_plan_version_id_fkey"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plan_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_recurring_rule_id_fkey"
+            columns: ["recurring_rule_id"]
+            isOneToOne: false
+            referencedRelation: "financial_recurring_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "financial_client_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_period_closures: {
+        Row: {
+          close_reason: string | null
+          closed_at: string | null
+          closed_by: string | null
+          competence: string
+          period_status: string
+          reopen_reason: string | null
+          reopened_at: string | null
+          reopened_by: string | null
+          updated_at: string
+        }
+        Insert: {
+          close_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          competence: string
+          period_status?: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          updated_at?: string
+        }
+        Update: {
+          close_reason?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          competence?: string
+          period_status?: string
+          reopen_reason?: string | null
+          reopened_at?: string | null
+          reopened_by?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      financial_plan_versions: {
+        Row: {
+          amount_kind: string
+          billing_period: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          direct_cost_amount: number
+          direct_cost_estimated: boolean
+          final_amount: number
+          id: string
+          is_active: boolean
+          operational_amount: number
+          plan_id: string
+          setup_fee: number
+          tax_rate: number | null
+          updated_at: string
+          valid_from: string
+          valid_to: string | null
+          version: number
+        }
+        Insert: {
+          amount_kind?: string
+          billing_period?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          final_amount: number
+          id?: string
+          is_active?: boolean
+          operational_amount: number
+          plan_id: string
+          setup_fee?: number
+          tax_rate?: number | null
+          updated_at?: string
+          valid_from: string
+          valid_to?: string | null
+          version: number
+        }
+        Update: {
+          amount_kind?: string
+          billing_period?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          final_amount?: number
+          id?: string
+          is_active?: boolean
+          operational_amount?: number
+          plan_id?: string
+          setup_fee?: number
+          tax_rate?: number | null
+          updated_at?: string
+          valid_from?: string
+          valid_to?: string | null
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_plan_versions_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_plans: {
+        Row: {
+          archived_at: string | null
+          code: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          operational_scope: Json
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          operational_scope?: Json
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          code?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          operational_scope?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      financial_recurring_rules: {
+        Row: {
+          amount: number
+          brand: string | null
+          category: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          direct_cost_amount: number
+          direct_cost_estimated: boolean
+          direction: string
+          due_day: number
+          ends_on: string | null
+          frequency: string
+          id: string
+          is_active: boolean
+          kind: string
+          name: string
+          operational_amount: number
+          stable_code: string | null
+          starts_on: string
+          tax_rate: number | null
+          term_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount: number
+          brand?: string | null
+          category?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          direction: string
+          due_day?: number
+          ends_on?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name: string
+          operational_amount?: number
+          stable_code?: string | null
+          starts_on: string
+          tax_rate?: number | null
+          term_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount?: number
+          brand?: string | null
+          category?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          direct_cost_amount?: number
+          direct_cost_estimated?: boolean
+          direction?: string
+          due_day?: number
+          ends_on?: string | null
+          frequency?: string
+          id?: string
+          is_active?: boolean
+          kind?: string
+          name?: string
+          operational_amount?: number
+          stable_code?: string | null
+          starts_on?: string
+          tax_rate?: number | null
+          term_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_recurring_rules_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_recurring_rules_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "financial_client_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      financial_settings: {
+        Row: {
+          allocation_method: string
+          created_at: string
+          currency: string
+          current_pro_labore: number
+          default_direct_cost: number
+          default_direct_cost_estimated: boolean
+          default_due_day: number
+          desired_minimum_margin: number | null
+          forecast_months: number
+          growth_retention_rate: number | null
+          id: string
+          include_pro_labore_in_allocation: boolean
+          minimum_reserve_months: number | null
+          monthly_goal: number | null
+          opening_balance: number | null
+          owner_name: string
+          owner_profit_share: number
+          reserve_target: number | null
+          settings_key: string
+          target_pro_labore: number
+          timezone: string
+          tools_systems_cost: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          allocation_method?: string
+          created_at?: string
+          currency?: string
+          current_pro_labore?: number
+          default_direct_cost?: number
+          default_direct_cost_estimated?: boolean
+          default_due_day?: number
+          desired_minimum_margin?: number | null
+          forecast_months?: number
+          growth_retention_rate?: number | null
+          id?: string
+          include_pro_labore_in_allocation?: boolean
+          minimum_reserve_months?: number | null
+          monthly_goal?: number | null
+          opening_balance?: number | null
+          owner_name?: string
+          owner_profit_share?: number
+          reserve_target?: number | null
+          settings_key?: string
+          target_pro_labore?: number
+          timezone?: string
+          tools_systems_cost?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          allocation_method?: string
+          created_at?: string
+          currency?: string
+          current_pro_labore?: number
+          default_direct_cost?: number
+          default_direct_cost_estimated?: boolean
+          default_due_day?: number
+          desired_minimum_margin?: number | null
+          forecast_months?: number
+          growth_retention_rate?: number | null
+          id?: string
+          include_pro_labore_in_allocation?: boolean
+          minimum_reserve_months?: number | null
+          monthly_goal?: number | null
+          opening_balance?: number | null
+          owner_name?: string
+          owner_profit_share?: number
+          reserve_target?: number | null
+          settings_key?: string
+          target_pro_labore?: number
+          timezone?: string
+          tools_systems_cost?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      financial_settlements: {
+        Row: {
+          account_name: string | null
+          amount: number
+          created_at: string
+          created_by: string | null
+          entry_id: string
+          id: string
+          idempotency_key: string
+          kind: string
+          method: string | null
+          notes: string | null
+          reversal_of_id: string | null
+          settled_on: string
+          tax_reserve_amount: number
+        }
+        Insert: {
+          account_name?: string | null
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          entry_id: string
+          id?: string
+          idempotency_key: string
+          kind?: string
+          method?: string | null
+          notes?: string | null
+          reversal_of_id?: string | null
+          settled_on: string
+          tax_reserve_amount?: number
+        }
+        Update: {
+          account_name?: string | null
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          entry_id?: string
+          id?: string
+          idempotency_key?: string
+          kind?: string
+          method?: string | null
+          notes?: string | null
+          reversal_of_id?: string | null
+          settled_on?: string
+          tax_reserve_amount?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_settlements_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_settlements_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "financial_entries_enriched"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_settlements_reversal_of_id_fkey"
+            columns: ["reversal_of_id"]
+            isOneToOne: true
+            referencedRelation: "financial_settlements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       integration_configs: {
         Row: {
           auth_header: string
@@ -3475,6 +4115,84 @@ export type Database = {
       }
     }
     Views: {
+      financial_entries_enriched: {
+        Row: {
+          amount: number | null
+          brand: string | null
+          cancellation_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          category: string | null
+          client_id: string | null
+          company_name: string | null
+          competence: string | null
+          competence_source: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string | null
+          direct_cost_amount: number | null
+          direct_cost_estimated: boolean | null
+          direction: string | null
+          due_date: string | null
+          full_name: string | null
+          id: string | null
+          idempotency_key: string | null
+          kind: string | null
+          legacy_source_id: string | null
+          legacy_source_table: string | null
+          operational_amount: number | null
+          outstanding_amount: number | null
+          plan_version_id: string | null
+          project_id: string | null
+          recurring_rule_id: string | null
+          settled_amount: number | null
+          settled_at: string | null
+          settlement_status: string | null
+          source_system: string | null
+          status: string | null
+          tax_rate: number | null
+          tax_reserve: number | null
+          term_id: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "financial_entries_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_plan_version_id_fkey"
+            columns: ["plan_version_id"]
+            isOneToOne: false
+            referencedRelation: "financial_plan_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_recurring_rule_id_fkey"
+            columns: ["recurring_rule_id"]
+            isOneToOne: false
+            referencedRelation: "financial_recurring_rules"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "financial_entries_term_id_fkey"
+            columns: ["term_id"]
+            isOneToOne: false
+            referencedRelation: "financial_client_terms"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       staff_files_secure: {
         Row: {
           agency_approval_status: string | null
@@ -3791,6 +4509,161 @@ export type Database = {
         Returns: boolean
       }
       files_reference_path: { Args: { _url: string }; Returns: string }
+      financial_archive_plan: { Args: { p_plan_id: string }; Returns: Json }
+      financial_archive_recurring_rule: {
+        Args: { p_rule_id: string }
+        Returns: Json
+      }
+      financial_assign_client_plan: {
+        Args: {
+          p_client_id: string
+          p_direct_cost?: number
+          p_due_day?: number
+          p_effective_from: string
+          p_justification?: string
+          p_operational_amount?: number
+          p_payment_method?: string
+          p_plan_version_id: string
+          p_pricing_mode?: string
+          p_tax_rate?: number
+        }
+        Returns: Json
+      }
+      financial_cancel_entry: {
+        Args: { p_entry_id: string; p_reason: string }
+        Returns: Json
+      }
+      financial_cash_flow_v2: {
+        Args: { p_competence: string; p_mode: string }
+        Returns: Json
+      }
+      financial_client_summaries_v2: {
+        Args: never
+        Returns: {
+          billing_period: string
+          billing_status: string
+          client_id: string
+          client_name: string
+          contribution_margin_percent: number
+          direct_cost: number
+          direct_cost_estimated: boolean
+          due_day: number
+          final_amount: number
+          final_plan_amount: number
+          next_due_date: string
+          open_amount: number
+          operational_amount: number
+          overdue_amount: number
+          plan_amount: number
+          plan_name: string
+          pricing_mode: string
+          review_required: boolean
+          settled_amount: number
+          status: string
+          tax_rate: number
+          tax_reserve: number
+          upcoming_final_amount: number
+          upcoming_operational_amount: number
+          upcoming_plan_name: string
+          upcoming_starts_on: string
+        }[]
+      }
+      financial_close_period: {
+        Args: { p_competence: string; p_reason: string }
+        Returns: Json
+      }
+      financial_create_plan_version: {
+        Args: {
+          p_amount: number
+          p_billing_period?: string
+          p_description?: string
+          p_direct_cost?: number
+          p_direct_cost_estimated?: boolean
+          p_effective_from: string
+          p_plan_id: string
+          p_setup_fee?: number
+          p_tax_rate?: number
+        }
+        Returns: Json
+      }
+      financial_generate_competence: {
+        Args: { p_competence: string }
+        Returns: Json
+      }
+      financial_gross_up: {
+        Args: { p_operational_amount: number; p_tax_rate: number }
+        Returns: number
+      }
+      financial_overview_v2: {
+        Args: { p_competence: string; p_mode: string }
+        Returns: Json
+      }
+      financial_record_settlement: {
+        Args: {
+          p_amount: number
+          p_entry_id: string
+          p_idempotency_key?: string
+          p_method?: string
+          p_notes?: string
+          p_settled_on: string
+        }
+        Returns: Json
+      }
+      financial_reopen_period: {
+        Args: { p_competence: string; p_reason: string }
+        Returns: Json
+      }
+      financial_reverse_settlement: {
+        Args: { p_reason: string; p_settlement_id: string }
+        Returns: Json
+      }
+      financial_update_settings: {
+        Args: {
+          p_allocation_method?: string
+          p_currency: string
+          p_current_pro_labore?: number
+          p_default_direct_cost?: number
+          p_default_due_day: number
+          p_desired_minimum_margin?: number
+          p_forecast_months: number
+          p_growth_retention_rate?: number
+          p_include_pro_labore_in_allocation?: boolean
+          p_minimum_reserve_months?: number
+          p_monthly_goal?: number
+          p_opening_balance: number
+          p_reserve_target: number
+          p_target_pro_labore?: number
+          p_tools_systems_cost?: number
+        }
+        Returns: Json
+      }
+      financial_upsert_plan: {
+        Args: {
+          p_code?: string
+          p_description?: string
+          p_is_active?: boolean
+          p_name: string
+          p_plan_id: string
+        }
+        Returns: Json
+      }
+      financial_upsert_recurring_rule: {
+        Args: {
+          p_amount?: number
+          p_brand?: string
+          p_category?: string
+          p_description?: string
+          p_direction?: string
+          p_due_day?: number
+          p_ends_on?: string
+          p_frequency?: string
+          p_is_active?: boolean
+          p_name: string
+          p_rule_id: string
+          p_starts_on?: string
+        }
+        Returns: Json
+      }
       get_admin_user_id: { Args: never; Returns: string }
       get_editorial_approval_preview: {
         Args: { p_file_id: string }
