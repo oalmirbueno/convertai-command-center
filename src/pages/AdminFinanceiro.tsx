@@ -21,6 +21,7 @@ import FixedCosts from "@/components/finance/FixedCosts";
 import PlansPricing from "@/components/finance/PlansPricing";
 import ManagementSummary from "@/components/finance/ManagementSummary";
 import AdsInvestment from "@/components/finance/AdsInvestment";
+import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
 import { todayBR as _todayBR, toBRDateKey as _toBRDateKey } from "@/lib/dateBR";
@@ -94,6 +95,16 @@ function LegacyFinanceiro() {
       const { data, error } = await supabase
         .from("project_payments")
         .select("*, project:projects!project_payments_project_id_fkey(name, project_type, billing_mode, brand), client:profiles!project_payments_client_id_fkey(full_name, company_name, client_type, brand), installments:payment_installments(*)");
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: isAdmin,
+  });
+  const { data: financeSettings } = useFinanceSettings();
+  const { data: allExpensesCash } = useQuery({
+    queryKey: ["expenses"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("expenses").select("*").order("due_date", { ascending: false });
       if (error) throw error;
       return data || [];
     },
@@ -216,6 +227,29 @@ function LegacyFinanceiro() {
   const expectedMonthlyRevenue = (clients || [])
     .filter((c: any) => c.plan_value && c.plan_status === "active" && c.client_type !== "one_off")
     .reduce((s: number, c: any) => s + Number(c.plan_value), 0);
+
+  // Saldo em caixa real · mesma fórmula do bloco "Caixa da Aceleriq" no Fluxo de Caixa:
+  // base de meses anteriores (conciliada) + tudo que entrou − tudo que saiu.
+  const isInvestorExpense = (e: any) => {
+    const c = e?.category || "";
+    return c === "investidor" || c.startsWith("inv_");
+  };
+  const allTimeReceivedCash =
+    (billing || [])
+      .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
+      .reduce((s: number, b: any) => s + receivedOf(b), 0) +
+    (projectPayments || []).reduce(
+      (s: number, pp: any) =>
+        s +
+        (pp.installments || [])
+          .filter((i: any) => i.status === "paid" || i.status === "partial")
+          .reduce((x: number, i: any) => x + receivedOf(i), 0),
+      0
+    );
+  const allTimePaidOutCash = (allExpensesCash || [])
+    .filter((e: any) => e.status === "paid" && !isInvestorExpense(e))
+    .reduce((s: number, e: any) => s + Number(e.amount || 0), 0);
+  const cashBalance = (financeSettings?.openingBalance ?? 0) + allTimeReceivedCash - allTimePaidOutCash;
 
   // Divisão automática · valores realmente recebidos no mês selecionado (planos + projetos)
   const monthReceivedItems = [
@@ -741,6 +775,7 @@ function LegacyFinanceiro() {
           : recSub;
 
         const cards = [
+          { label: "Saldo em Caixa", value: fmt(cashBalance), sub: "Base anterior + entradas − saídas · concilie no Fluxo de Caixa", icon: DollarSign, color: "text-primary" },
           ...(showMonthly ? [{ label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" }] : [
             { label: `Recebido ${periodLabel}`, value: fmt(receivedVal), sub: receivedBreakdown, icon: TrendingUp, color: "text-success" },
           ]),

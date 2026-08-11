@@ -432,6 +432,40 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
     return out.sort((a, b) => parseDate(a.due_date)!.getTime() - parseDate(b.due_date)!.getTime());
   }, [billingFiltered, paymentsFiltered]);
 
+  // Entradas já realizadas (mensalidades e parcelas pagas), mais recentes primeiro.
+  const receivedList = useMemo(() => {
+    const out: any[] = [];
+    (billingFiltered || [])
+      .filter((b: any) => b.type !== "ads_recharge" && (b.status === "paid" || b.status === "partial"))
+      .forEach((b: any) => {
+        out.push({
+          id: `b-${b.id}`,
+          description: b.description || (b.type === "renewal" ? "Renovação Mensal" : "Serviço"),
+          client: b.client?.company_name || b.client?.full_name || "-",
+          amount: receivedAmountOf(b),
+          total: Number(b.amount) || 0,
+          date: b.paid_date || b.due_date,
+          partial: b.status === "partial",
+        });
+      });
+    (paymentsFiltered || []).forEach((p: any) => {
+      (p.installments || [])
+        .filter((i: any) => i.status === "paid" || i.status === "partial")
+        .forEach((i: any) => {
+          out.push({
+            id: `i-${i.id}`,
+            description: `${p.project?.name || "Projeto"} · ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
+            client: p.client?.company_name || p.client?.full_name || "-",
+            amount: receivedAmountOf(i),
+            total: Number(i.amount) || 0,
+            date: i.paid_date || i.due_date,
+            partial: i.status === "partial",
+          });
+        });
+    });
+    return out.sort((a, b) => (parseDate(b.date)?.getTime() || 0) - (parseDate(a.date)?.getTime() || 0));
+  }, [billingFiltered, paymentsFiltered]);
+
   // ───────── Mutations ─────────
   const saveExpense = async (form: any, mode: "expense" | "investment") => {
     const defaultCat = mode === "investment" ? "inv_outros" : "outros";
@@ -752,17 +786,129 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
       </div>
 
       {/* MOVIMENTAÇÕES */}
-      <SectionHeader title="Movimentações" subtitle="Pagamentos, recebimentos, despesas e investimentos em listas separadas" />
-      <Tabs defaultValue="ap" className="space-y-4">
-        <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex-wrap h-auto">
-          <TabsTrigger value="ap" className="text-[12px] rounded-md">A pagar ({accountsPayable.length})</TabsTrigger>
-          <TabsTrigger value="ar" className="text-[12px] rounded-md">A receber ({accountsReceivable.length})</TabsTrigger>
-          <TabsTrigger value="exp" className="text-[12px] rounded-md">Despesas ({expenses.length})</TabsTrigger>
-          
-        </TabsList>
+      <SectionHeader title="Movimentações" subtitle="Entradas e saídas em blocos separados, cada um com pendentes e realizadas" />
 
-        <TabsContent value="ap">
-          <div className="rounded-2xl border border-border bg-card divide-y divide-border">
+      {/* ENTRADAS */}
+      <div className="rounded-2xl border border-success/30 bg-card overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-border bg-success/5 flex items-center gap-3 flex-wrap">
+          <span className="w-8 h-8 rounded-lg bg-success/15 text-success flex items-center justify-center shrink-0">
+            <ArrowUpRight className="w-4 h-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Entradas</p>
+            <p className="text-[11px] text-muted-foreground">Mensalidades, projetos e avulsos</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A receber</p>
+            <p className="text-sm font-mono font-semibold text-warning">{fmt(accountsReceivable.reduce((s: number, r: any) => s + r.amount, 0))}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Recebido (histórico)</p>
+            <p className="text-sm font-mono font-semibold text-success">{fmt(allTimeReceived)}</p>
+          </div>
+        </div>
+        <Tabs defaultValue="ar">
+          <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border">
+            <TabsTrigger value="ar" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              A receber ({accountsReceivable.length})
+            </TabsTrigger>
+            <TabsTrigger value="received" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-success data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              Recebidas ({receivedList.length})
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="ar" className="m-0">
+            <div className="divide-y divide-border">
+              {accountsReceivable.length === 0 && (
+                <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a receber no momento</div>
+              )}
+              {accountsReceivable.map((r: any) => (
+                <div key={r.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-success/15 text-success">
+                      <ArrowUpRight className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-foreground truncate">{r.description}</p>
+                      <p className="text-[11px] text-muted-foreground">{r.client} · Vence {parseDate(r.due_date)?.toLocaleDateString("pt-BR")}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 flex-shrink-0">
+                    {r.overdue ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">{Math.abs(r.daysUntil)}d atrasado</span>
+                    ) : r.daysUntil <= 7 ? (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">{r.daysUntil}d</span>
+                    ) : (
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{r.daysUntil}d</span>
+                    )}
+                    <span className="text-[13px] font-mono font-semibold text-success">{fmt(r.amount)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </TabsContent>
+
+          <TabsContent value="received" className="m-0">
+            <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+              {receivedList.length === 0 && (
+                <div className="p-10 text-center text-[12px] text-muted-foreground">Nenhuma entrada recebida ainda</div>
+              )}
+              {receivedList.map((r: any) => (
+                <div key={r.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-success/15 text-success">
+                      <TrendingUp className="w-4 h-4" />
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-[13px] font-medium text-foreground truncate">{r.description}</p>
+                      <p className="text-[11px] text-muted-foreground">
+                        {r.client} · Recebido em {parseDate(r.date)?.toLocaleDateString("pt-BR")}
+                        {r.partial && ` · parcial (${fmt(r.amount)} de ${fmt(r.total)})`}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-[13px] font-mono font-semibold text-success flex-shrink-0">{fmt(r.amount)}</span>
+                </div>
+              ))}
+            </div>
+          </TabsContent>
+        </Tabs>
+      </div>
+
+      {/* SAÍDAS */}
+      <div className="rounded-2xl border border-destructive/30 bg-card overflow-hidden">
+        <div className="px-4 sm:px-5 py-3.5 border-b border-border bg-destructive/5 flex items-center gap-3 flex-wrap">
+          <span className="w-8 h-8 rounded-lg bg-destructive/15 text-destructive flex items-center justify-center shrink-0">
+            <ArrowDownRight className="w-4 h-4" />
+          </span>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Saídas</p>
+            <p className="text-[11px] text-muted-foreground">Custos, despesas e investimentos</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">A pagar</p>
+            <p className="text-sm font-mono font-semibold text-warning">{fmt(accountsPayable.reduce((s: number, e: any) => s + Number(e.amount || 0), 0))}</p>
+          </div>
+          <div className="text-right">
+            <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Pago (histórico)</p>
+            <p className="text-sm font-mono font-semibold text-destructive">{fmt(allTimePaidOut)}</p>
+          </div>
+        </div>
+        <Tabs defaultValue="ap">
+          <TabsList className="bg-transparent rounded-none p-0 h-auto w-full justify-start px-4 sm:px-5 border-b border-border flex-wrap">
+            <TabsTrigger value="ap" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              A pagar ({accountsPayable.length})
+            </TabsTrigger>
+            <TabsTrigger value="exp" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-destructive data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              Todas as despesas ({expenses.length})
+            </TabsTrigger>
+            <TabsTrigger value="inv" className="text-[12px] rounded-none border-b-2 border-transparent data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:shadow-none px-3 py-2">
+              Investimentos ({investorEntries.length})
+            </TabsTrigger>
+          </TabsList>
+
+        <TabsContent value="ap" className="m-0">
+          <div className="divide-y divide-border">
             {accountsPayable.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a pagar 🎉</div>
             )}
@@ -801,39 +947,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </div>
         </TabsContent>
 
-        <TabsContent value="ar">
-          <div className="rounded-2xl border border-border bg-card divide-y divide-border">
-            {accountsReceivable.length === 0 && (
-              <div className="p-10 text-center text-[12px] text-muted-foreground">Nada a receber no momento</div>
-            )}
-            {accountsReceivable.map((r: any) => (
-              <div key={r.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                <div className="flex items-center gap-3 min-w-0">
-                  <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-success/15 text-success">
-                    <ArrowUpRight className="w-4 h-4" />
-                  </span>
-                  <div className="min-w-0">
-                    <p className="text-[13px] font-medium text-foreground truncate">{r.description}</p>
-                    <p className="text-[11px] text-muted-foreground">{r.client} · Vence {parseDate(r.due_date)?.toLocaleDateString("pt-BR")}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 flex-shrink-0">
-                  {r.overdue ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-destructive/15 text-destructive">{Math.abs(r.daysUntil)}d atrasado</span>
-                  ) : r.daysUntil <= 7 ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">{r.daysUntil}d</span>
-                  ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-muted text-muted-foreground">{r.daysUntil}d</span>
-                  )}
-                  <span className="text-[13px] font-mono font-semibold text-success">{fmt(r.amount)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </TabsContent>
-
-        <TabsContent value="exp">
-          <div className="rounded-2xl border border-border bg-card divide-y divide-border">
+        <TabsContent value="exp" className="m-0">
+          <div className="divide-y divide-border">
             {expenses.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
                 Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
@@ -873,8 +988,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
           </div>
         </TabsContent>
 
-        <TabsContent value="inv">
-          <div className="rounded-2xl border border-primary/25 bg-card divide-y divide-border">
+        <TabsContent value="inv" className="m-0">
+          <div className="divide-y divide-border">
             {investorEntries.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
                 Nenhum investimento registrado. Use "+ Lançamento" e escolha Investimento.
@@ -907,7 +1022,8 @@ export default function CashFlow({ billing = [], projectPayments = [] }: Props) 
             })}
           </div>
         </TabsContent>
-      </Tabs>
+        </Tabs>
+      </div>
 
       {/* LAUNCHER · escolha do tipo de lançamento */}
       <Dialog open={launcherOpen} onOpenChange={setLauncherOpen}>
