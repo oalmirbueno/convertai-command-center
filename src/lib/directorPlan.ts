@@ -44,6 +44,30 @@ export function nextProLaboreTier(operationalRevenue: number): ProLaboreTier | n
   return null;
 }
 
+/**
+ * Pró-labore proporcional ao que entrou, sem saltos:
+ * - abaixo de R$ 10 mil acompanha proporcionalmente (ex.: R$ 5 mil → R$ 1.500);
+ * - em R$ 10 mil vale exatamente R$ 3.000;
+ * - entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500);
+ * - acima do último degrau trava em R$ 25.000.
+ */
+export function interpolateProLabore(operationalRevenue: number): number {
+  if (!Number.isFinite(operationalRevenue) || operationalRevenue <= 0) return 0;
+  const first = PRO_LABORE_LADDER[0];
+  if (operationalRevenue < first.revenue) {
+    return Math.round((operationalRevenue / first.revenue) * first.proLabore);
+  }
+  let prev = first;
+  for (const tier of PRO_LABORE_LADDER.slice(1)) {
+    if (operationalRevenue < tier.revenue) {
+      const fraction = (operationalRevenue - prev.revenue) / (tier.revenue - prev.revenue);
+      return Math.round(prev.proLabore + fraction * (tier.proLabore - prev.proLabore));
+    }
+    prev = tier;
+  }
+  return prev.proLabore;
+}
+
 export interface DirectorPlanSeed {
   name: string;
   code: string;

@@ -1127,6 +1127,7 @@ function LegacyFinanceiro() {
               expectedMonthlyRevenue={expectedMonthlyRevenue}
               activeClientsCount={activeMensalistas}
               clients={clients || []}
+              isCurrentMonth={isCurrentMonthSelected}
             />
           )}
           <div className="flex items-center justify-between flex-wrap gap-2">

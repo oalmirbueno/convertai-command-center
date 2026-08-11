@@ -6,7 +6,7 @@ import { Wallet, PiggyBank, Target, Scale, TrendingUp, Landmark, Pencil } from "
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFinanceSettings, useFinancePlans, useFinanceMutations } from "@/hooks/useFinanceV2";
-import { DEFAULT_TAX_RATE, suggestProLabore, nextProLaboreTier } from "@/lib/directorPlan";
+import { DEFAULT_TAX_RATE, interpolateProLabore, nextProLaboreTier } from "@/lib/directorPlan";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 const pct = (v: number) => `${(v * 100).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}%`;
@@ -24,12 +24,14 @@ interface Props {
   expectedMonthlyRevenue: number;
   activeClientsCount: number;
   clients: any[];
+  /** true quando o mês exibido é o mês corrente (habilita o ritmo por dias). */
+  isCurrentMonth?: boolean;
 }
 
 const isProLaboreExpense = (e: any) =>
   /pr[oó][\s_-]?labore/i.test(`${e?.description || ""} ${e?.notes || ""}`);
 
-export default function ManagementSummary({ monthLabel, receivedItems, expectedMonthlyRevenue, activeClientsCount, clients }: Props) {
+export default function ManagementSummary({ monthLabel, receivedItems, expectedMonthlyRevenue, activeClientsCount, clients, isCurrentMonth = false }: Props) {
   const { data: settings } = useFinanceSettings();
   const { data: plans } = useFinancePlans();
   const { updateSettings } = useFinanceMutations();
@@ -82,15 +84,25 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
   const defaultDirectCost = settings?.defaultDirectCost ?? 275;
   const directCosts = activeClientsCount * defaultDirectCost;
 
-  const result = operationalReceived - fixedCostsValue - proLabore - directCosts;
+  // Pró-labore proporcional ao que entrou (regra oficial da escada, sem saltos).
+  const proLaboreProp = interpolateProLabore(operationalReceived);
+  const result = operationalReceived - fixedCostsValue - directCosts - proLaboreProp;
   const breakEvenOperational = fixedCostsValue + proLabore + directCosts;
   const breakEvenGross = breakEvenOperational / (1 - DEFAULT_TAX_RATE);
 
   const monthlyGoal = settings?.monthlyGoal ?? null;
   const goalProgress = monthlyGoal && monthlyGoal > 0 ? Math.min(operationalReceived / monthlyGoal, 1) : null;
 
-  const suggested = suggestProLabore(Math.max(operationalReceived, expectedMonthlyRevenue));
-  const nextTier = nextProLaboreTier(Math.max(operationalReceived, expectedMonthlyRevenue));
+  const nextTier = nextProLaboreTier(operationalReceived);
+
+  // Ritmo do mês corrente: projeção simples pelo dia atual.
+  const today = new Date();
+  const dayOfMonth = today.getDate();
+  const daysInMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0).getDate();
+  const projectedOperational = isCurrentMonth && dayOfMonth > 0
+    ? (operationalReceived / dayOfMonth) * daysInMonth
+    : null;
+  const projectedProLabore = projectedOperational !== null ? interpolateProLabore(projectedOperational) : null;
 
   const saveGoal = async () => {
     if (!settings) return;
@@ -120,15 +132,6 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
     }
   };
 
-  const lines = [
-    { label: "Recebido no mês (bruto)", value: grossReceived, icon: Wallet, color: "text-foreground", strong: true },
-    { label: "Reserva tributária (separada automaticamente)", value: -taxReserve, icon: Landmark, color: "text-info" },
-    { label: "Receita operacional", value: operationalReceived, icon: TrendingUp, color: "text-success", strong: true },
-    { label: fixedCostsSource === "real" ? "Custos fixos do mês" : "Custos fixos (referência: ferramentas)", value: -fixedCostsValue, icon: Scale, color: "text-warning" },
-    { label: "Pró-labore Almir", value: -proLabore, icon: PiggyBank, color: "text-warning" },
-    { label: `Custos diretos estimados (${activeClientsCount} clientes × ${fmt(defaultDirectCost)})`, value: -directCosts, icon: Scale, color: "text-warning" },
-  ];
-
   return (
     <div className="bg-card border border-border rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
@@ -142,71 +145,105 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
       <div className="grid md:grid-cols-2 gap-4">
         {/* Coluna 1: divisão do que entrou */}
         <div className="space-y-1.5">
-          {lines.map((l) => (
-            <div key={l.label} className="flex items-center gap-2 py-1">
-              <l.icon className={`w-3.5 h-3.5 shrink-0 ${l.color}`} />
-              <span className={`text-[12px] flex-1 ${l.strong ? "text-foreground font-medium" : "text-muted-foreground"}`}>{l.label}</span>
-              <span className={`text-[13px] font-mono ${l.value < 0 ? "text-muted-foreground" : l.color}`}>
-                {l.value < 0 ? `− ${fmt(Math.abs(l.value))}` : fmt(l.value)}
-              </span>
-            </div>
-          ))}
+          <div className="flex items-center gap-2 py-1">
+            <Wallet className="w-3.5 h-3.5 shrink-0 text-foreground" />
+            <span className="text-[12px] flex-1 text-foreground font-medium">Recebido no mês (bruto)</span>
+            <span className="text-[13px] font-mono text-foreground">{fmt(grossReceived)}</span>
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <Landmark className="w-3.5 h-3.5 shrink-0 text-info" />
+            <span className="text-[12px] flex-1 text-muted-foreground">Reserva tributária (separa na hora)</span>
+            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(taxReserve)}</span>
+          </div>
+          <div className="flex items-center gap-2 py-1 pb-2 border-b border-border">
+            <TrendingUp className="w-3.5 h-3.5 shrink-0 text-success" />
+            <span className="text-[12px] flex-1 text-foreground font-medium">Receita operacional</span>
+            <span className="text-[13px] font-mono text-success">{fmt(operationalReceived)}</span>
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <Scale className="w-3.5 h-3.5 shrink-0 text-warning" />
+            <span className="text-[12px] flex-1 text-muted-foreground">
+              {fixedCostsSource === "real" ? "Custos fixos do mês" : "Custos fixos (referência: ferramentas)"}
+            </span>
+            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(fixedCostsValue)}</span>
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <Scale className="w-3.5 h-3.5 shrink-0 text-warning" />
+            <span className="text-[12px] flex-1 text-muted-foreground">Custos diretos estimados ({activeClientsCount} clientes × {fmt(defaultDirectCost)})</span>
+            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(directCosts)}</span>
+          </div>
+          <div className="flex items-center gap-2 py-1">
+            <PiggyBank className="w-3.5 h-3.5 shrink-0 text-primary" />
+            <span className="text-[12px] flex-1 text-muted-foreground">
+              Pró-labore proporcional ao que entrou
+              <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-primary/10 text-primary align-middle">escada</span>
+            </span>
+            <span className="text-[13px] font-mono text-primary">− {fmt(proLaboreProp)}</span>
+          </div>
           <div className="flex items-center gap-2 pt-2 border-t border-border">
-            <span className="text-[12px] font-medium text-foreground flex-1">Resultado do mês</span>
+            <span className="text-[12px] font-medium text-foreground flex-1">Lucro / reserva do mês</span>
             <span className={`text-base font-mono font-semibold ${result >= 0 ? "text-success" : "text-destructive"}`}>{fmt(result)}</span>
           </div>
 
-          {/* Cascata de cobertura: cada real que entra vai cobrindo a estrutura na ordem */}
+          {/* Barra única: como o dinheiro que entrou se divide (alocação em ordem de prioridade) */}
           {(() => {
-            let available = Math.max(operationalReceived, 0);
-            const buckets = [
-              { label: "Custos diretos", target: directCosts },
-              { label: "Custos fixos", target: fixedCostsValue },
-              { label: "Pró-labore", target: proLabore },
-            ].map((b) => {
-              const covered = Math.min(available, Math.max(b.target, 0));
-              available -= covered;
-              return { ...b, covered, pct: b.target > 0 ? covered / b.target : 1 };
-            });
-            const profit = available;
-            return (
+            let rest = Math.max(operationalReceived, 0);
+            const alloc = (target: number) => {
+              const v = Math.min(rest, Math.max(target, 0));
+              rest -= v;
+              return v;
+            };
+            const fixosAlloc = alloc(fixedCostsValue);
+            const diretosAlloc = alloc(directCosts);
+            const plAlloc = alloc(proLaboreProp);
+            const lucroAlloc = rest;
+            const uncovered = fixedCostsValue + directCosts + proLaboreProp - (fixosAlloc + diretosAlloc + plAlloc);
+            const segs = [
+              { label: "Reserva tributária", value: taxReserve, cls: "bg-info" },
+              { label: "Custos fixos", value: fixosAlloc, cls: "bg-warning" },
+              { label: "Custos diretos", value: diretosAlloc, cls: "bg-warning/60" },
+              { label: "Pró-labore", value: plAlloc, cls: "bg-primary" },
+              { label: "Lucro/reserva", value: lucroAlloc, cls: "bg-success" },
+            ].filter((s) => s.value > 0.005);
+            const total = grossReceived > 0 ? grossReceived : 1;
+            return grossReceived > 0 ? (
               <div className="pt-3 space-y-2">
                 <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
-                  Cobertura automática · para onde vai o que entrou
+                  Como o dinheiro que entrou se divide
                 </p>
-                {buckets.map((b) => (
-                  <div key={b.label} className="space-y-0.5">
-                    <div className="flex items-center gap-2 text-[11px]">
-                      <span className="text-muted-foreground flex-1">{b.label}</span>
-                      <span className={`font-mono ${b.pct >= 1 ? "text-success" : "text-warning"}`}>
-                        {fmt(b.covered)} de {fmt(b.target)}
-                      </span>
-                    </div>
-                    <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${b.pct >= 1 ? "bg-success" : "bg-warning"}`}
-                        style={{ width: `${Math.round(Math.min(b.pct, 1) * 100)}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
-                <div className="flex items-center gap-2 text-[11px] pt-1">
-                  <span className="text-muted-foreground flex-1">Lucro / reserva do mês (sobra após a estrutura)</span>
-                  <span className={`font-mono font-medium ${profit > 0 ? "text-success" : "text-muted-foreground"}`}>{fmt(profit)}</span>
+                <div className="h-3 rounded-full overflow-hidden flex bg-secondary">
+                  {segs.map((s) => (
+                    <div key={s.label} className={s.cls} style={{ width: `${(s.value / total) * 100}%` }} title={`${s.label}: ${fmt(s.value)}`} />
+                  ))}
                 </div>
-                {grossReceived > 0 && (
-                  <p className="text-[10px] text-muted-foreground">
-                    De cada R$ 1,00 recebido este mês: {Math.round((taxReserve / grossReceived) * 100)}% reserva tributária
-                    {" · "}{Math.round((buckets.reduce((s, b) => s + b.covered, 0) / grossReceived) * 100)}% estrutura
-                    {" · "}{Math.max(Math.round((profit / grossReceived) * 100), 0)}% lucro/reserva.
+                <div className="flex flex-wrap gap-x-3 gap-y-1">
+                  {segs.map((s) => (
+                    <span key={s.label} className="text-[10px] text-muted-foreground flex items-center gap-1">
+                      <span className={`w-2 h-2 rounded-full shrink-0 ${s.cls}`} /> {s.label} {fmt(s.value)} ({Math.round((s.value / total) * 100)}%)
+                    </span>
+                  ))}
+                </div>
+                {uncovered > 0.005 && (
+                  <p className="text-[10px] text-destructive">
+                    Faltam {fmt(uncovered)} entrando para cobrir toda a estrutura do mês (custos + pró-labore proporcional).
                   </p>
                 )}
               </div>
+            ) : (
+              <p className="text-[10px] text-muted-foreground pt-2">
+                Nenhum valor recebido neste mês ainda — a divisão aparece automaticamente conforme o dinheiro entra.
+              </p>
             );
           })()}
 
+          {isCurrentMonth && projectedOperational !== null && grossReceived > 0 && (
+            <p className="text-[10px] text-muted-foreground pt-1">
+              Ritmo do mês: {fmt(operationalReceived)} operacionais até o dia {dayOfMonth} → projeção de {fmt(projectedOperational)} até o fim do mês, com pró-labore projetado de {fmt(projectedProLabore || 0)}.
+            </p>
+          )}
+
           <p className="text-[10px] text-muted-foreground pt-1">
-            Custos diretos usam a estimativa padrão de {fmt(defaultDirectCost)}/cliente (marcada como estimada). Pró-labore e custos fixos são descontados uma única vez.
+            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} — ajuste na aba Custos Fixos.
           </p>
         </div>
 
@@ -265,19 +302,17 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
               <PiggyBank className="w-3 h-3 text-success" /> Pró-labore pela escada do Plano Diretor
             </p>
             <div className="flex items-baseline gap-2 mt-1.5 flex-wrap">
-              <span className="text-lg font-mono font-semibold text-foreground">{fmt(proLabore)}</span>
-              <span className="text-[11px] text-muted-foreground">atual</span>
-              {suggested !== proLabore && (
-                <span className={`text-[11px] px-2 py-0.5 rounded-full ${suggested > proLabore ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-                  Sugerido: {fmt(suggested)}
-                </span>
-              )}
+              <span className="text-lg font-mono font-semibold text-foreground">{fmt(proLaboreProp)}</span>
+              <span className="text-[11px] text-muted-foreground">proporcional ao mês</span>
+              <span className="text-[11px] px-2 py-0.5 rounded-full bg-secondary text-muted-foreground">
+                Oficial: {fmt(proLabore)}
+              </span>
             </div>
             <p className="text-[11px] text-muted-foreground mt-1">
               {nextTier
                 ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)} operacionais.`
                 : "Topo da escada atingido."}
-              {" "}Sugestão nunca é aplicada sozinha — confirme na aba Custos Fixos.
+              {" "}Nada muda sozinho — a retirada oficial você confirma na aba Custos Fixos.
             </p>
           </div>
         </div>

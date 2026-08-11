@@ -6,7 +6,7 @@ import { Plus, Pencil, PiggyBank, Wrench, Scale, CheckCircle2, XCircle, Trash2 }
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useFinanceSettings, useFinanceRecurringRules, useFinanceMutations } from "@/hooks/useFinanceV2";
-import { suggestProLabore, nextProLaboreTier, PRO_LABORE_LADDER } from "@/lib/directorPlan";
+import { interpolateProLabore, nextProLaboreTier, PRO_LABORE_LADDER } from "@/lib/directorPlan";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v);
 
@@ -76,7 +76,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
   const proLabore = settings?.currentProLabore ?? 3000;
   const targetProLabore = settings?.targetProLabore ?? 10000;
   const toolsReference = Number(settings?.raw?.tools_systems_cost ?? 2500);
-  const suggested = suggestProLabore(monthlyOperationalRevenue);
+  const suggested = interpolateProLabore(monthlyOperationalRevenue);
   const nextTier = nextProLaboreTier(monthlyOperationalRevenue);
   const toolsRule = (rules || []).find((r) => (r.raw as any)?.stable_code === "tools-systems");
 
@@ -249,7 +249,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
           <span className="text-2xl font-mono font-semibold text-foreground">{fmt(proLabore)}</span>
           {suggested !== proLabore && (
             <span className={`text-[12px] px-2.5 py-1 rounded-full ${suggested > proLabore ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-              Sugerido pela escada: {fmt(suggested)}
+              Proporcional à receita: {fmt(suggested)}
             </span>
           )}
           {suggested === proLabore && (
@@ -261,7 +261,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
         <p className="text-[11px] text-muted-foreground">
           Base: {fmt(monthlyOperationalRevenue)} de receita operacional.
           {" "}{nextTier ? `Próximo degrau: ${fmt(nextTier.proLabore)} ao atingir ${fmt(nextTier.revenue)}.` : "Topo da escada atingido."}
-          {" "}O reajuste nunca é automático — sempre exige a sua confirmação aqui.
+          {" "}Abaixo de R$ 10 mil o valor acompanha proporcionalmente o que entra; entre degraus soma a diferença proporcional. O reajuste nunca é automático — sempre exige a sua confirmação aqui.
         </p>
         <div className="flex gap-1 overflow-x-auto scrollbar-hidden pb-1">
           {PRO_LABORE_LADDER.map((t) => (
@@ -433,7 +433,7 @@ export default function FixedCosts({ monthlyOperationalRevenue }: Props) {
           <div className="space-y-3">
             <div className="bg-secondary/50 rounded-lg p-3 space-y-1">
               <p className="text-[12px] text-muted-foreground">Atual: <span className="font-mono text-foreground">{fmt(proLabore)}</span></p>
-              <p className="text-[12px] text-muted-foreground">Sugerido pela escada ({fmt(monthlyOperationalRevenue)} operacionais): <span className="font-mono text-success">{fmt(suggested)}</span></p>
+              <p className="text-[12px] text-muted-foreground">Proporcional pela escada ({fmt(monthlyOperationalRevenue)} operacionais): <span className="font-mono text-success">{fmt(suggested)}</span></p>
             </div>
             <div>
               <label className="text-xs text-muted-foreground">Novo valor mensal (R$)</label>
