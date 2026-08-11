@@ -160,6 +160,34 @@ export function useClientDashboardData(clientId: string) {
     enabled: !!user && !!clientId,
   });
 
+  // Dados do próprio contrato (renovação e cobranças pendentes do cliente).
+  const { data: clientProfile } = useQuery({
+    queryKey: ["client-profile-lite", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("profiles")
+        .select("id, plan_name, plan_value, plan_status, plan_renewal_date, client_type")
+        .eq("id", clientId)
+        .maybeSingle();
+      if (error) return null;
+      return data || null;
+    },
+    enabled: !!user && !!clientId,
+  });
+
+  const { data: clientPendingBilling } = useQuery({
+    queryKey: ["client-own-pending-billing", clientId],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("billing")
+        .select("id, amount, due_date, status, type, description")
+        .eq("client_id", clientId)
+        .eq("status", "pending")
+        .order("due_date", { ascending: true });
+      if (error) return [];
+      return data || [];
+    },
+    enabled: !!user && !!clientId,
+  });
+
   // Última atualização publicada pela Aceleriq (relatórios/rituais publicados).
   const { data: latestReport } = useQuery({
     queryKey: ["client-latest-report", clientId],
@@ -217,6 +245,8 @@ export function useClientDashboardData(clientId: string) {
       recentUpdates: [],
       contentPublications: contentPublications || [],
       latestReport: latestReport || null,
+      clientProfile: clientProfile || null,
+      clientPendingBilling: clientPendingBilling || [],
     },
   };
 }

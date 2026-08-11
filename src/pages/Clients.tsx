@@ -26,10 +26,8 @@ import BriefingLinkModal from "@/components/admin/BriefingLinkModal";
 import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useBilling } from "@/hooks/useFinancialData";
-import { useFinancePlans } from "@/hooks/useFinanceV2";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
-import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
   if (!dateStr) return null;
@@ -600,7 +598,6 @@ export default function Clients() {
     },
     enabled: isAdmin,
   });
-  const { data: catalogPlansKpi } = useFinancePlans();
 
   // Contagem oficial: só recorrentes + híbridos ativos. Avulsos e empresas do
   // grupo não entram (aparecem em seções próprias na lista).
@@ -620,19 +617,20 @@ export default function Clients() {
       !isInternalClient(client) &&
       Number((client as any).plan_value) > 0
   );
-  const taxRateForClient = (client: ClientRecord) => {
-    const key = (client.plan_name || "").trim().toLowerCase();
-    const plan = (catalogPlansKpi || []).find((p) => p.name.trim().toLowerCase() === key);
-    const rate = plan?.currentVersion?.taxRate;
-    return rate === null || rate === undefined ? DEFAULT_TAX_RATE : rate;
-  };
   const grossBilling = payingClients.reduce((sum, client) => sum + Number((client as any).plan_value || 0), 0);
-  const operationalMrr = payingClients.reduce(
-    (sum, client) => sum + Number((client as any).plan_value || 0) * (1 - taxRateForClient(client)),
-    0
-  );
 
   const kpiToday = parseAppDate(todayBR());
+  const kpiInThisMonth = (value?: string | null) => {
+    const d = parseAppDate(value || "");
+    return !!d && !!kpiToday && d.getMonth() === kpiToday.getMonth() && d.getFullYear() === kpiToday.getFullYear();
+  };
+  const kpiReceivedOf = (row: any) => {
+    const total = Number(row?.amount) || 0;
+    const paid = Number(row?.paid_amount) || 0;
+    if (row?.status === "partial") return Math.min(paid, total);
+    if (row?.status === "paid") return paid > 0 && paid < total ? paid : total;
+    return 0;
+  };
   const kpiPausedIds = new Set(
     clientRows
       .filter((client) => client.plan_status === "standby" || client.plan_status === "inactive" || isInternalClient(client))
@@ -648,9 +646,30 @@ export default function Clients() {
   const kpiPendingInstallments = (kpiPayments || []).flatMap((pp: any) =>
     (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial")
   );
-  const receivableTotal =
-    kpiPendingBills.reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0) +
-    kpiPendingInstallments.reduce((sum: number, i: any) => sum + installmentRemaining(i), 0);
+
+  // Recebido REAL no mês corrente (mensalidades + parcelas de projetos)
+  const receivedMonthBills = (kpiBilling || [])
+    .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge" && kpiInThisMonth(b.paid_date || b.due_date))
+    .reduce((sum: number, b: any) => sum + kpiReceivedOf(b), 0);
+  const receivedMonthInstallments = (kpiPayments || []).reduce(
+    (sum: number, pp: any) =>
+      sum +
+      (pp.installments || [])
+        .filter((i: any) => (i.status === "paid" || i.status === "partial") && kpiInThisMonth(i.paid_date || i.due_date))
+        .reduce((s: number, i: any) => s + kpiReceivedOf(i), 0),
+    0
+  );
+  const receivedThisMonth = receivedMonthBills + receivedMonthInstallments;
+
+  // A receber DENTRO DO MÊS, especificando o que compõe o valor
+  const receivableBillsMonth = kpiPendingBills
+    .filter((b: any) => kpiInThisMonth(b.due_date))
+    .reduce((sum: number, b: any) => sum + Number(b.amount || 0), 0);
+  const receivableInstallmentsMonth = kpiPendingInstallments
+    .filter((i: any) => kpiInThisMonth(i.due_date))
+    .reduce((sum: number, i: any) => sum + installmentRemaining(i), 0);
+  const receivableTotal = receivableBillsMonth + receivableInstallmentsMonth;
+
   const overdueTotal =
     kpiPendingBills
       .filter((b: any) => {
@@ -674,25 +693,25 @@ export default function Clients() {
       loading: isLoading,
     },
     {
-      label: "Faturamento bruto",
+      label: "MRR (mensalidades)",
       value: formatCurrency(grossBilling),
-      helper: `mensalidades de ${payingClients.length} mensalista(s)`,
-      icon: Receipt,
-      tone: "text-foreground",
-      loading: isLoading,
-    },
-    {
-      label: "MRR operacional",
-      value: formatCurrency(operationalMrr),
-      helper: "após reserva tributária",
+      helper: `soma real de ${payingClients.length} mensalista(s)`,
       icon: DollarSign,
       tone: "text-primary",
       loading: isLoading,
     },
     {
-      label: "A receber",
+      label: "Recebido no mês",
+      value: formatCurrency(receivedThisMonth),
+      helper: `Mensalidades ${formatCurrency(receivedMonthBills)} · Projetos ${formatCurrency(receivedMonthInstallments)}`,
+      icon: Receipt,
+      tone: "text-success",
+      loading: isLoading,
+    },
+    {
+      label: "A receber no mês",
       value: formatCurrency(receivableTotal),
-      helper: "cobranças + parcelas em aberto",
+      helper: `Mensalidades ${formatCurrency(receivableBillsMonth)} · Projetos ${formatCurrency(receivableInstallmentsMonth)}`,
       icon: Wallet,
       tone: "text-warning",
       loading: isLoading,

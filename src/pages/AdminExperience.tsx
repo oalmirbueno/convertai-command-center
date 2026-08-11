@@ -361,6 +361,52 @@ export default function AdminExperience() {
     }
   };
 
+  // Mensagem pronta para o grupo do cliente, montada na hora com a
+  // movimentação real do painel. O admin só copia e cola.
+  const buildGroupMessage = (row: ClientHealth) => {
+    const client = row.client;
+    const name = client.company_name || client.full_name || "time";
+    const released7 = (releasedFiles || []).filter(
+      (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7
+    ).length;
+    const pending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
+    const activeProjs = (projects || []).filter(
+      (p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at
+    );
+    const hour = new Date().getHours();
+    const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+
+    const lines: string[] = [];
+    lines.push(`${greeting}, time ${name}! 👋`);
+    lines.push("");
+    lines.push("Resumo rápido de como estamos:");
+    if (released7 > 0) {
+      lines.push(`✅ ${released7} entrega(s) nova(s) liberadas no painel nesta semana`);
+    }
+    if (activeProjs.length > 0) {
+      lines.push(`🚀 Em movimento: ${activeProjs.map((p: any) => p.name).slice(0, 3).join(", ")}`);
+    }
+    if (pending.length > 0) {
+      lines.push("");
+      lines.push(`⏳ Dependendo de vocês: ${pending.length} material(is) aguardando aprovação (${pending.slice(0, 2).map((f: any) => f.file_name).join(", ")}${pending.length > 2 ? "…" : ""}).`);
+      lines.push("Consegue dar o ok hoje? Aprovou, a gente já agenda a publicação. 😉");
+    } else if (released7 === 0 && activeProjs.length > 0) {
+      lines.push("Produção seguindo no ritmo planejado, sem pendências do lado de vocês.");
+    }
+    lines.push("");
+    lines.push("Tudo detalhado no painel: aceleriq.online");
+    return lines.join("\n");
+  };
+
+  const copyGroupMessage = async (row: ClientHealth) => {
+    try {
+      await navigator.clipboard.writeText(buildGroupMessage(row));
+      toast.success("Mensagem do grupo copiada! É só colar no WhatsApp.");
+    } catch {
+      toast.error("Não consegui copiar automaticamente.");
+    }
+  };
+
   const levelMeta: Record<ClientHealth["level"], { label: string; cls: string; dot: string }> = {
     healthy: { label: "Saudável", cls: "text-success", dot: "bg-success" },
     attention: { label: "Atenção", cls: "text-warning", dot: "bg-warning" },
@@ -459,6 +505,14 @@ export default function AdminExperience() {
                           ))}
                         </div>
                       )}
+                      <div className="pt-2">
+                        <button
+                          onClick={() => copyGroupMessage(row)}
+                          className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                        >
+                          <Send className="w-3 h-3" /> Copiar mensagem do grupo (atualizada agora)
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>

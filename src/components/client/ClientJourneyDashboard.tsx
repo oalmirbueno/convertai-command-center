@@ -76,8 +76,19 @@ export default function ClientJourneyDashboard({
     totalFiles,
     contentPublications,
     latestReport,
+    clientProfile,
+    clientPendingBilling,
   } = data as any;
   const firstName = clientName.split(" ")[0] || "cliente";
+
+  // Avisos grandes: renovação chegando (7 dias) e pagamento em atraso.
+  const renewalDays = clientProfile?.plan_renewal_date ? daysUntil(clientProfile.plan_renewal_date) : null;
+  const renewalSoon = renewalDays !== null && renewalDays >= 0 && renewalDays <= 7 && clientProfile?.plan_status === "active";
+  const overdueBills = (clientPendingBilling || []).filter((b: any) => {
+    const due = new Date(`${b.due_date}T12:00:00`);
+    return due.getTime() < Date.now();
+  });
+  const overdueAmount = overdueBills.reduce((s: number, b: any) => s + Number(b.amount || 0), 0);
 
   // Frentes: recorrente (ciclo mensal) x projeto com começo e fim (marcos + %).
   const recurringFronts = activeProjects.filter((p: any) => isRecurringProject(p));
@@ -153,29 +164,94 @@ export default function ClientJourneyDashboard({
         </div>
       </FadeUp>
 
-      {/* 2 · Ação necessária (pendências que dependem do cliente) */}
-      {pendingFiles.length > 0 && (
+      {/* 2 · Avisos importantes: atraso e renovação chegando */}
+      {overdueBills.length > 0 && (
         <FadeUp>
           <button
             type="button"
-            onClick={() => navigate("/aprovacoes")}
-            className="flex w-full items-center gap-4 rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5 text-left transition-colors hover:border-amber-500/60"
+            onClick={() => navigate("/financeiro")}
+            className="flex w-full items-center gap-4 rounded-2xl border-2 border-red-500/50 bg-red-500/10 p-5 text-left transition-colors hover:border-red-500/70"
           >
-            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15">
-              <FileCheck className="h-5 w-5 text-amber-500" />
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/20">
+              <CalendarDays className="h-6 w-6 text-red-500" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                {pendingFiles.length === 1
-                  ? "1 entrega aguarda a sua aprovação"
-                  : `${pendingFiles.length} entregas aguardam a sua aprovação`}
+              <p className="text-base font-bold text-foreground">
+                Pagamento em atraso: {new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(overdueAmount)}
               </p>
               <p className="mt-0.5 text-xs text-muted-foreground">
-                Sua decisão libera a produção para o próximo passo.
+                Regularize para manter as entregas e publicações sem pausa. Toque para ver os detalhes.
               </p>
             </div>
-            <ArrowUpRight className="h-4 w-4 shrink-0 text-amber-500" />
+            <ArrowUpRight className="h-5 w-5 shrink-0 text-red-500" />
           </button>
+        </FadeUp>
+      )}
+
+      {renewalSoon && overdueBills.length === 0 && (
+        <FadeUp>
+          <button
+            type="button"
+            onClick={() => navigate("/financeiro")}
+            className="flex w-full items-center gap-4 rounded-2xl border-2 border-sky-500/40 bg-sky-500/10 p-5 text-left transition-colors hover:border-sky-500/60"
+          >
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/20">
+              <Repeat className="h-6 w-6 text-sky-500" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="text-base font-bold text-foreground">
+                {renewalDays === 0
+                  ? "Sua renovação vence hoje"
+                  : `Sua renovação vence em ${renewalDays} dia${renewalDays === 1 ? "" : "s"}`}
+                {clientProfile?.plan_value ? ` · ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(Number(clientProfile.plan_value))}` : ""}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Garanta a continuidade dos resultados sem interrupção. Toque para ver os detalhes.
+              </p>
+            </div>
+            <ArrowUpRight className="h-5 w-5 shrink-0 text-sky-500" />
+          </button>
+        </FadeUp>
+      )}
+
+      {/* 3 · Ação necessária: o que precisa aprovar e quando será postado */}
+      {pendingFiles.length > 0 && (
+        <FadeUp>
+          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5">
+            <button
+              type="button"
+              onClick={() => navigate("/aprovacoes")}
+              className="flex w-full items-center gap-4 text-left"
+            >
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/15">
+                <FileCheck className="h-5 w-5 text-amber-500" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-foreground">
+                  {pendingFiles.length === 1
+                    ? "1 entrega aguarda a sua aprovação"
+                    : `${pendingFiles.length} entregas aguardam a sua aprovação`}
+                </p>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Sua aprovação libera o agendamento da publicação. Aprovou, a Aceleriq programa na data planejada.
+                </p>
+              </div>
+              <span className="shrink-0 rounded-full bg-amber-500 px-3 py-1.5 text-[11px] font-semibold text-white">
+                Aprovar agora
+              </span>
+            </button>
+            <div className="mt-3 space-y-1.5 border-t border-amber-500/20 pt-3">
+              {pendingFiles.slice(0, 3).map((file: any) => (
+                <p key={file.id} className="truncate text-xs text-muted-foreground">
+                  <span className="font-medium text-foreground">{file.file_name}</span>
+                  {file.project?.name ? ` · ${file.project.name}` : ""}
+                </p>
+              ))}
+              {pendingFiles.length > 3 && (
+                <p className="text-[11px] text-muted-foreground">e mais {pendingFiles.length - 3} na área de Aprovações</p>
+              )}
+            </div>
+          </div>
         </FadeUp>
       )}
 
@@ -412,7 +488,73 @@ export default function ClientJourneyDashboard({
 
         <FadeUp>
           <div className="space-y-6">
-            {/* 7 · Próximas entregas (etapas com data) */}
+            {/* 7 · Quando será postado: agenda das publicações confirmadas */}
+            {(scheduled.length > 0 || published.length > 0) && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-foreground">Quando será postado</h2>
+                  <button
+                    type="button"
+                    onClick={() => navigate("/calendario")}
+                    className="text-[11px] font-medium text-primary hover:opacity-80"
+                  >
+                    Ver calendário
+                  </button>
+                </div>
+                <div className="rounded-xl border border-border bg-card p-4">
+                  {scheduled.length === 0 ? (
+                    <p className="py-4 text-center text-xs text-muted-foreground">
+                      Nenhuma publicação programada no momento.
+                    </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {scheduled
+                        .filter((p: any) => p.scheduled_at)
+                        .slice(0, 5)
+                        .map((publication: any) => (
+                          <div key={publication.id} className="flex items-center gap-3 border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-sky-500/10">
+                              <Send className="h-3.5 w-3.5 text-sky-500" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-xs font-medium text-foreground">
+                                {new Date(publication.scheduled_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}
+                                {" às "}
+                                {new Date(publication.scheduled_at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}
+                              </p>
+                              <p className="mt-0.5 text-[10px] text-muted-foreground">
+                                {platformLabel[publication.platform] || publication.platform || "Rede social"} · Programado
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                    </div>
+                  )}
+                  {published.slice(0, 2).some((p: any) => p.permalink) && (
+                    <div className="mt-3 border-t border-border/60 pt-3 space-y-1.5">
+                      {published
+                        .filter((p: any) => p.permalink)
+                        .slice(0, 2)
+                        .map((publication: any) => (
+                          <a
+                            key={publication.id}
+                            href={publication.permalink}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1.5 text-[11px] text-emerald-500 no-underline hover:opacity-80"
+                          >
+                            <CheckCircle2 className="h-3 w-3" />
+                            Publicado · ver no {platformLabel[publication.platform] || "perfil"}
+                            <ArrowUpRight className="h-3 w-3" />
+                          </a>
+                        ))}
+                    </div>
+                  )}
+                </div>
+              </section>
+            )}
+
+            {/* Próximas entregas (etapas com data) */}
             {upcomingMilestones.length > 0 && (
               <section className="space-y-3">
                 <h2 className="text-sm font-semibold text-foreground">Próximas entregas</h2>
@@ -431,31 +573,38 @@ export default function ClientJourneyDashboard({
               </section>
             )}
 
-            {/* 8 · Resultados explicados e próximos passos (última atualização publicada) */}
+            {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
             {latestReport && (
               <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-foreground">Última atualização da Aceleriq</h2>
+                <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
                 <button
                   type="button"
                   onClick={() => navigate(`/relatorios/${latestReport.id}`)}
-                  className="group w-full rounded-xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/30"
+                  className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
                 >
                   <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
                     <FileText className="h-3.5 w-3.5 text-primary" />
                     {latestReport.title}
                   </p>
+                  {latestReport.highlights && (
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
+                    </div>
+                  )}
                   {latestReport.summary && (
-                    <p className="mt-2 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">
-                      {latestReport.summary}
-                    </p>
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
+                      <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
+                    </div>
                   )}
                   {latestReport.next_steps && (
-                    <p className="mt-2 line-clamp-2 text-[11px] text-muted-foreground">
-                      <span className="font-medium text-foreground">Próximos passos: </span>
-                      {latestReport.next_steps}
-                    </p>
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
+                    </div>
                   )}
-                  <p className="mt-2 flex items-center gap-1 text-[10px] text-primary">
+                  <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
                     Ver atualização completa
                     <ArrowUpRight className="h-3 w-3" />
                   </p>
