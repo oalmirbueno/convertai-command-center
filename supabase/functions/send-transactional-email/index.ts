@@ -379,6 +379,29 @@ Deno.serve(async (req) => {
 
   console.log('Transactional email enqueued', { messageId, templateName })
 
+  // Nudge the dispatcher immediately with the service role so delivery never
+  // depends on the pg_cron job being alive. If the nudge fails, the message
+  // stays queued and the cron (when healthy) still picks it up: no loss.
+  try {
+    const nudge = await fetch(
+      `${Deno.env.get('SUPABASE_URL')}/functions/v1/process-email-queue`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ trigger: 'post-enqueue', queue: 'transactional_emails' }),
+      },
+    )
+    console.log('Dispatcher nudge status', { status: nudge.status, messageId })
+  } catch (nudgeError) {
+    console.error('Dispatcher nudge failed; queue retains the message', {
+      messageId,
+      error: nudgeError instanceof Error ? nudgeError.message : 'unknown',
+    })
+  }
+
   return new Response(
     JSON.stringify({ success: true, queued: true }),
     {

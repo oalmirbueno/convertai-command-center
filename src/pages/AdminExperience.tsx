@@ -140,11 +140,12 @@ export default function AdminExperience() {
     refetchInterval: LIVE,
   });
 
+  // Carteira recorrente completa: ativos E em onboarding entram nos rituais.
   const portfolioClients = useMemo(
     () =>
       (clients || []).filter(
         (c: any) =>
-          (c.plan_status || "active") === "active" &&
+          ["active", "onboarding"].includes(c.plan_status || "active") &&
           (c.client_type || "recurring") !== "one_off" &&
           !isInternalClient(c)
       ),
@@ -551,6 +552,49 @@ export default function AdminExperience() {
           <Sparkles className="w-4 h-4" /> Gerar mensagens de hoje
         </button>
       </div>
+
+      {/* Missões de hoje: a Central puxa você para a ação certa do dia */}
+      {(() => {
+        const todayRitual = ritualMeta(ritualForToday())!;
+        const stuckApprovals = healthRows.filter((r) => r.alerts.some((a) => a.kind === "aprovacao")).length;
+        const financialAlerts = healthRows.filter((r) => r.alerts.some((a) => a.kind === "financeiro")).length;
+        const greeting = new Date().getHours() < 12 ? "Bom dia" : new Date().getHours() < 18 ? "Boa tarde" : "Boa noite";
+        const weekday = new Date().toLocaleDateString("pt-BR", { weekday: "long" });
+        return (
+          <div className="relative overflow-hidden rounded-2xl border border-primary/25 bg-card p-5">
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.08] via-transparent to-success/[0.05]" />
+            <div className="relative z-10">
+              <p className="text-sm font-semibold text-foreground">
+                {greeting}, Almir! Hoje é {weekday}: dia de <span className="text-primary">{todayRitual.label}</span>.
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{todayRitual.why}. Gere, revise cliente por cliente e publique.</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <button
+                  onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+                >
+                  <Sparkles className="w-3.5 h-3.5" /> Gerar {todayRitual.label} para {portfolioClients.length} cliente(s)
+                </button>
+                {stuckApprovals > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-warning/10 text-warning">
+                    <Clock className="w-3.5 h-3.5" /> {stuckApprovals} cliente(s) com aprovação parada: cobre no grupo
+                  </span>
+                )}
+                {financialAlerts > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-destructive/10 text-destructive">
+                    <AlertTriangle className="w-3.5 h-3.5" /> {financialAlerts} cliente(s) com pagamento vencido
+                  </span>
+                )}
+                {opportunities.length > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-info/10 text-info">
+                    <Radar className="w-3.5 h-3.5" /> {opportunities.length} oportunidade(s) no Radar do mês
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Resumo vivo */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
@@ -963,14 +1007,43 @@ export default function AdminExperience() {
             </div>
           ) : (
             <div className="space-y-3">
-              {genPreviews.map((preview) => (
-                <div key={preview.clientId} className="rounded-lg border border-border bg-secondary/30 p-3">
+              <p className="text-[11px] text-muted-foreground">
+                Revise e edite a mensagem de cada cliente aqui mesmo. Só depois de confirmar os rascunhos são criados, e mesmo assim nada vai ao cliente antes de você publicar na fila.
+              </p>
+              {genPreviews.map((preview, index) => (
+                <div key={preview.clientId} className="rounded-lg border border-border bg-secondary/30 p-3 space-y-2">
                   <p className="text-[12px] font-medium text-foreground">{preview.clientName}</p>
-                  <p className="text-[11px] font-medium text-primary mt-1">{preview.draft.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed whitespace-pre-wrap">{preview.draft.summary}</p>
-                  <p className="text-[11px] text-muted-foreground mt-1.5">
-                    <span className="text-foreground font-medium">Próxima etapa: </span>{preview.draft.next_steps}
-                  </p>
+                  <p className="text-[11px] font-medium text-primary">{preview.draft.title}</p>
+                  <div>
+                    <label className="text-[9px] uppercase tracking-wider text-muted-foreground">Mensagem</label>
+                    <textarea
+                      value={preview.draft.summary}
+                      onChange={(e) =>
+                        setGenPreviews((prev) =>
+                          prev
+                            ? prev.map((p, i) => (i === index ? { ...p, draft: { ...p.draft, summary: e.target.value } } : p))
+                            : prev
+                        )
+                      }
+                      rows={4}
+                      className="w-full mt-0.5 bg-card border border-border rounded-lg px-3 py-2 text-[11px] text-foreground resize-y leading-relaxed"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[9px] uppercase tracking-wider text-muted-foreground">Próxima etapa</label>
+                    <textarea
+                      value={preview.draft.next_steps}
+                      onChange={(e) =>
+                        setGenPreviews((prev) =>
+                          prev
+                            ? prev.map((p, i) => (i === index ? { ...p, draft: { ...p.draft, next_steps: e.target.value } } : p))
+                            : prev
+                        )
+                      }
+                      rows={2}
+                      className="w-full mt-0.5 bg-card border border-border rounded-lg px-3 py-2 text-[11px] text-foreground resize-y leading-relaxed"
+                    />
+                  </div>
                 </div>
               ))}
               <div className="flex gap-2">

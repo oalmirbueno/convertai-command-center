@@ -448,13 +448,13 @@ export default function EditClientDrawer({
 
   return (
     <>
-      <div className="fixed inset-0 z-50 flex justify-end">
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-6">
+        <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
         <div
           role="dialog"
           aria-modal="true"
           aria-labelledby="client-drawer-title"
-          className="relative bg-card border-l border-border w-full max-w-[520px] h-full animate-in slide-in-from-right duration-200 flex flex-col"
+          className="relative bg-card border border-border w-full max-w-3xl h-full sm:h-auto sm:max-h-[92vh] sm:rounded-2xl shadow-2xl animate-in zoom-in-95 fade-in duration-200 flex flex-col overflow-hidden"
         >
           <div className="flex items-center justify-between px-5 py-4 border-b border-border">
             <div className="min-w-0">
