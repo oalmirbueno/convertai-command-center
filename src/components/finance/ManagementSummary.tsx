@@ -87,8 +87,13 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
 
   // Pró-labore proporcional ao que entrou (regra oficial da escada, sem saltos).
   const proLaboreProp = interpolateProLabore(operationalReceived);
-  const result = operationalReceived - fixedCostsValue - directCosts - proLaboreProp;
-  const breakEvenOperational = fixedCostsValue + proLabore + directCosts;
+  // O custo de clientes vira RESERVA para investimento: só é alocado do que
+  // sobra depois da estrutura — uma estimativa nunca joga a divisão pro negativo.
+  const afterStructure = operationalReceived - fixedCostsValue - proLaboreProp;
+  const clientReserveTarget = directCosts;
+  const clientReserve = Math.min(Math.max(afterStructure, 0), clientReserveTarget);
+  const result = afterStructure - clientReserve;
+  const breakEvenOperational = fixedCostsValue + proLabore;
   const breakEvenGross = breakEvenOperational / (1 - DEFAULT_TAX_RATE);
 
   const monthlyGoal = settings?.monthlyGoal ?? null;
@@ -175,11 +180,6 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             <span className="text-[13px] font-mono text-muted-foreground">− {fmt(fixedCostsValue)}</span>
           </div>
           <div className="flex items-center gap-2 py-1">
-            <Scale className="w-3.5 h-3.5 shrink-0 text-warning" />
-            <span className="text-[12px] flex-1 text-muted-foreground">Custos diretos estimados ({activeClientsCount} clientes × {fmt(defaultDirectCost)})</span>
-            <span className="text-[13px] font-mono text-muted-foreground">− {fmt(directCosts)}</span>
-          </div>
-          <div className="flex items-center gap-2 py-1">
             <PiggyBank className="w-3.5 h-3.5 shrink-0 text-primary" />
             <span className="text-[12px] flex-1 text-muted-foreground">
               Pró-labore proporcional ao que entrou
@@ -187,8 +187,16 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
             </span>
             <span className="text-[13px] font-mono text-primary">− {fmt(proLaboreProp)}</span>
           </div>
+          <div className="flex items-center gap-2 py-1">
+            <Scale className="w-3.5 h-3.5 shrink-0 text-info" />
+            <span className="text-[12px] flex-1 text-muted-foreground">
+              Reserva p/ custos de clientes e investimento
+              <span className="ml-1.5 text-[9px] px-1.5 py-0.5 rounded-full bg-info/10 text-info align-middle">alvo {fmt(clientReserveTarget)}</span>
+            </span>
+            <span className="text-[13px] font-mono text-info">− {fmt(clientReserve)}</span>
+          </div>
           <div className="flex items-center gap-2 pt-2 border-t border-border">
-            <span className="text-[12px] font-medium text-foreground flex-1">Lucro / reserva do mês</span>
+            <span className="text-[12px] font-medium text-foreground flex-1">Lucro do mês</span>
             <span className={`text-base font-mono font-semibold ${result >= 0 ? "text-success" : "text-destructive"}`}>{fmt(result)}</span>
           </div>
 
@@ -201,16 +209,16 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
               return v;
             };
             const fixosAlloc = alloc(fixedCostsValue);
-            const diretosAlloc = alloc(directCosts);
             const plAlloc = alloc(proLaboreProp);
+            const reservaAlloc = alloc(clientReserveTarget);
             const lucroAlloc = rest;
-            const uncovered = fixedCostsValue + directCosts + proLaboreProp - (fixosAlloc + diretosAlloc + plAlloc);
+            const uncovered = fixedCostsValue + proLaboreProp - (fixosAlloc + plAlloc);
             const segs = [
               { label: "Reserva tributária", value: taxReserve, cls: "bg-info" },
               { label: "Custos fixos", value: fixosAlloc, cls: "bg-warning" },
-              { label: "Custos diretos", value: diretosAlloc, cls: "bg-warning/60" },
               { label: "Pró-labore", value: plAlloc, cls: "bg-primary" },
-              { label: "Lucro/reserva", value: lucroAlloc, cls: "bg-success" },
+              { label: "Reserva clientes/invest.", value: reservaAlloc, cls: "bg-info/60" },
+              { label: "Lucro", value: lucroAlloc, cls: "bg-success" },
             ].filter((s) => s.value > 0.005);
             const total = grossReceived > 0 ? grossReceived : 1;
             return grossReceived > 0 ? (
@@ -232,7 +240,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
                 </div>
                 {uncovered > 0.005 && (
                   <p className="text-[10px] text-destructive">
-                    Faltam {fmt(uncovered)} entrando para cobrir toda a estrutura do mês (custos + pró-labore proporcional).
+                    Faltam {fmt(uncovered)} entrando para cobrir custos fixos + pró-labore proporcional do mês.
                   </p>
                 )}
               </div>
@@ -250,7 +258,7 @@ export default function ManagementSummary({ monthLabel, receivedItems, expectedM
           )}
 
           <p className="text-[10px] text-muted-foreground pt-1">
-            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} — ajuste na aba Custos Fixos.
+            Regra do pró-labore proporcional: abaixo de R$ 10 mil ele acompanha o que entra (ex.: R$ 5 mil → R$ 1.500); em R$ 10 mil vale R$ 3.000; entre degraus soma a diferença proporcional (ex.: R$ 12,5 mil → R$ 3.500). Retirada oficial configurada: {fmt(proLabore)} — ajuste na aba Custos Fixos. A reserva de clientes ({activeClientsCount} × {fmt(defaultDirectCost)}) é separada só do que sobra, como colchão para custos e investimento — estimativa não gera negativo.
           </p>
         </div>
 

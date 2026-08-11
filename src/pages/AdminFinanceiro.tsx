@@ -21,6 +21,7 @@ import FixedCosts from "@/components/finance/FixedCosts";
 import PlansPricing from "@/components/finance/PlansPricing";
 import ManagementSummary from "@/components/finance/ManagementSummary";
 import AdsInvestment from "@/components/finance/AdsInvestment";
+import CFOAssistant from "@/components/finance/CFOAssistant";
 import { useFinanceSettings } from "@/hooks/useFinanceV2";
 import { DEFAULT_TAX_RATE } from "@/lib/directorPlan";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, PieChart, Pie, Cell } from "recharts";
@@ -1085,6 +1086,7 @@ function LegacyFinanceiro() {
       <Tabs defaultValue={isAdmin ? "overview" : "ads"} className="space-y-4">
         <TabsList className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           {isAdmin && <TabsTrigger value="overview" className="text-[13px] rounded-md shrink-0">Visão Geral</TabsTrigger>}
+          {isAdmin && <TabsTrigger value="assistant" className="text-[13px] rounded-md shrink-0">Assistente</TabsTrigger>}
           {(isAdmin || profile?.role === "manager") && <TabsTrigger value="cashflow" className="text-[13px] rounded-md shrink-0">Fluxo de Caixa</TabsTrigger>}
           {isAdmin && <TabsTrigger value="renewals" className="text-[13px] rounded-md shrink-0">Mensalidades</TabsTrigger>}
           {isAdmin && <TabsTrigger value="fixedcosts" className="text-[13px] rounded-md shrink-0">Custos Fixos</TabsTrigger>}
@@ -1103,6 +1105,12 @@ function LegacyFinanceiro() {
         {(isAdmin || profile?.role === "manager") && (
           <TabsContent value="capital" className="space-y-6">
             <InvestorCapital billing={billing || []} projectPayments={projectPayments || []} />
+          </TabsContent>
+        )}
+
+        {isAdmin && (
+          <TabsContent value="assistant" className="space-y-6">
+            <CFOAssistant billing={billing || []} projectPayments={projectPayments || []} clients={clients || []} />
           </TabsContent>
         )}
 
