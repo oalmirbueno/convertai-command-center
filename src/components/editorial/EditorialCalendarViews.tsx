@@ -93,7 +93,7 @@ interface BacklogItem {
   publication: EditorialPublicationBundle | null;
 }
 
-type BoardStage = "draft" | "production" | "ready" | "delivery";
+type BoardStage = "draft" | "production" | "ready" | "scheduled" | "delivery";
 
 const platformLabels: Record<string, string> = {
   instagram: "Instagram",
@@ -164,9 +164,15 @@ const boardColumns: Array<{
     dot: "bg-amber-500",
   },
   {
+    id: "scheduled",
+    label: "Programado",
+    description: "Aprovado e com data confirmada para publicar",
+    dot: "bg-sky-500",
+  },
+  {
     id: "delivery",
-    label: "Produção concluída",
-    description: "Conteúdos prontos, agendados ou já entregues",
+    label: "Publicado / concluído",
+    description: "Já no ar ou encerrado",
     dot: "bg-emerald-500",
   },
 ];
@@ -279,10 +285,10 @@ function boardStage(post: EditorialPostBundle): BoardStage {
   const aggregate = aggregateEditorialStatus(
     post.publications.map(({ publication }) => publication),
   );
+  // Programado fica em coluna própria: agendado não se mistura com concluído.
+  if (aggregate === "scheduled") return "scheduled";
   if (
-    ["scheduled", "published", "partially_published", "failed"].includes(
-      aggregate,
-    ) ||
+    ["published", "partially_published", "failed"].includes(aggregate) ||
     post.post.production_status === "cancelled"
   ) {
     return "delivery";
@@ -1169,7 +1175,7 @@ function BoardPostCard({
   onClick: () => void;
 }) {
   const draggable =
-    canEdit && stage !== "delivery" && isEditorialPostPlanMutable(post);
+    canEdit && stage !== "delivery" && stage !== "scheduled" && isEditorialPostPlanMutable(post);
   const Icon = contentTypeIcon(post.post.content_type);
   const approval = getEditorialApprovalStage(post);
   const {
@@ -1431,7 +1437,7 @@ function BoardColumn({
   const { active } = useDndContext();
   const activeKind = active?.data.current?.kind;
   const acceptsActive = activeKind === "task" || activeKind === "post";
-  const isWritable = column.id !== "delivery" && canEdit;
+  const isWritable = column.id !== "delivery" && column.id !== "scheduled" && canEdit;
   const { isOver, setNodeRef } = useDroppable({
     id: `stage:${column.id}`,
     disabled: !isWritable,
@@ -1439,7 +1445,7 @@ function BoardColumn({
       kind: "stage",
       stage: column.id,
       productionStatus:
-        column.id === "delivery" ? null : column.id,
+        column.id === "delivery" || column.id === "scheduled" ? null : column.id,
     },
   });
 
@@ -1544,6 +1550,7 @@ function BoardView({
       draft: [],
       production: [],
       ready: [],
+      scheduled: [],
       delivery: [],
     };
     for (const post of posts) initial[boardStage(post)].push(post);
@@ -1554,6 +1561,7 @@ function BoardView({
       draft: [],
       production: [],
       ready: [],
+      scheduled: [],
       delivery: [],
     };
     for (const task of tasks) {
@@ -1565,7 +1573,7 @@ function BoardView({
 
   return (
     <div className="pb-2">
-      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
         {boardColumns.map((column) => (
           <BoardColumn
             key={column.id}
