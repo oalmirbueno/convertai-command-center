@@ -371,6 +371,20 @@ export default function EditorialCalendar() {
   );
   const clientRows = clients as unknown as CalendarClientRow[];
   const projectRows = projects as unknown as CalendarProjectRow[];
+
+  // A Agenda de conteúdo é só de quem tem frente de social media: cliente com o
+  // serviço marcado no cadastro ou com projeto de social ativo. Evita misturar
+  // clientes de site/tráfego/avulsos no calendário editorial.
+  const socialClientIds = useMemo(() => {
+    const ids = new Set<string>();
+    (clientRows || []).forEach((row: any) => {
+      if (row?.services_config?.social) ids.add(row.id);
+    });
+    (projectRows || []).forEach((row: any) => {
+      if (row?.project_type === "social_media" && row?.client_id) ids.add(row.client_id);
+    });
+    return ids;
+  }, [clientRows, projectRows]);
   const restrictStaffScope = ["manager", "design", "traffic"].includes(
     profile?.role || "",
   );
@@ -397,19 +411,21 @@ export default function EditorialCalendar() {
   }, [editorialScopeQuery.data, restrictStaffScope]);
   const editorialClientRows = useMemo(
     () =>
-      scopedClientIds === null
+      (scopedClientIds === null
         ? clientRows
-        : clientRows.filter((client) => scopedClientIds.has(client.id)),
-    [clientRows, scopedClientIds],
+        : clientRows.filter((client) => scopedClientIds.has(client.id))
+      ).filter((client) => !canUseTeamData || socialClientIds.has(client.id)),
+    [clientRows, scopedClientIds, canUseTeamData, socialClientIds],
   );
   const editorialProjectRows = useMemo(
     () =>
-      scopedClientIds === null
+      (scopedClientIds === null
         ? projectRows
         : projectRows.filter((project) =>
             scopedClientIds.has(project.client_id),
-          ),
-    [projectRows, scopedClientIds],
+          )
+      ).filter((project) => !canUseTeamData || socialClientIds.has(project.client_id)),
+    [projectRows, scopedClientIds, canUseTeamData, socialClientIds],
   );
   const teamRows = useMemo(
     () =>
@@ -417,8 +433,11 @@ export default function EditorialCalendar() {
     [canUseTeamData, teamMembers],
   );
   const posts = useMemo(
-    () => calendarQuery.data?.posts || [],
-    [calendarQuery.data?.posts],
+    () =>
+      (calendarQuery.data?.posts || []).filter(
+        (bundle) => !canUseTeamData || socialClientIds.has(bundle.post.client_id),
+      ),
+    [calendarQuery.data?.posts, canUseTeamData, socialClientIds],
   );
   const detailQuery = useEditorialPostDetail(
     contentId,
@@ -590,6 +609,9 @@ export default function EditorialCalendar() {
         }
         const project = projectById.get(task.project_id);
         if (!project) return false;
+        if (canUseTeamData && !socialClientIds.has(project.client_id)) {
+          return false;
+        }
         if (forcedClientId && project.client_id !== forcedClientId) {
           return false;
         }
@@ -1241,6 +1263,59 @@ export default function EditorialCalendar() {
     ],
   );
 
+  // Arrastar para "Publicado / concluído" = validação manual da equipe:
+  // confirma as publicações agendadas como publicadas pelo fluxo oficial.
+  const markPostPublished = useCallback(
+    async (bundle: EditorialPostBundle) => {
+      if (!permissions.canPublish) {
+        toast.error("Somente admin ou manager podem concluir publicações.");
+        return;
+      }
+      const moveKey = `post:${bundle.post.id}`;
+      if (!beginEditorialMove(moveKey)) return;
+      try {
+        const completeBundle = await loadEditorialPostForMutation(
+          bundle.post.id,
+          bundle.post.client_id,
+        );
+        const scheduled = completeBundle.publications.filter(
+          ({ publication }) => publication.status === "scheduled",
+        );
+        if (scheduled.length === 0) {
+          throw new Error(
+            "Para concluir, primeiro agende a publicação (o conteúdo aprovado vai para a coluna Programado e daí você conclui).",
+          );
+        }
+        for (const { publication } of scheduled) {
+          await transitionPublication.mutateAsync({
+            publicationId: publication.id,
+            action: "publish",
+            expectedVersion: publication.version,
+            publishedAt: new Date().toISOString(),
+            deferRefresh: true,
+          });
+        }
+        await queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+        toast.success("Concluído! Publicação confirmada pela equipe (validação manual).");
+      } catch (error: unknown) {
+        toast.error(
+          error instanceof Error
+            ? error.message
+            : "Não foi possível concluir a publicação.",
+        );
+      } finally {
+        finishEditorialMove(moveKey);
+      }
+    },
+    [
+      permissions.canPublish,
+      beginEditorialMove,
+      finishEditorialMove,
+      transitionPublication,
+      queryClient,
+    ],
+  );
+
   const handleDragStart = (event: DragStartEvent) => {
     const data = event.active.data.current;
     if (!data) return;
@@ -1269,15 +1344,17 @@ export default function EditorialCalendar() {
       return;
     }
 
-    if (
-      activeData.kind === "post" &&
-      overData.kind === "stage" &&
-      overData.productionStatus
-    ) {
-      void movePostToStage(
-        activeData.post as EditorialPostBundle,
-        overData.productionStatus as EditableEditorialStage,
-      );
+    if (activeData.kind === "post" && overData.kind === "stage") {
+      if (overData.stage === "delivery") {
+        void markPostPublished(activeData.post as EditorialPostBundle);
+        return;
+      }
+      if (overData.productionStatus) {
+        void movePostToStage(
+          activeData.post as EditorialPostBundle,
+          overData.productionStatus as EditableEditorialStage,
+        );
+      }
       return;
     }
 

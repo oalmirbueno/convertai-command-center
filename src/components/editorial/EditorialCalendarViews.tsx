@@ -1174,8 +1174,11 @@ function BoardPostCard({
   moving: boolean;
   onClick: () => void;
 }) {
+  // Programado pode ser arrastado para "Publicado / concluído" (validação manual).
   const draggable =
-    canEdit && stage !== "delivery" && stage !== "scheduled" && isEditorialPostPlanMutable(post);
+    canEdit &&
+    stage !== "delivery" &&
+    (stage === "scheduled" || isEditorialPostPlanMutable(post));
   const Icon = contentTypeIcon(post.post.content_type);
   const approval = getEditorialApprovalStage(post);
   const {
@@ -1437,7 +1440,7 @@ function BoardColumn({
   const { active } = useDndContext();
   const activeKind = active?.data.current?.kind;
   const acceptsActive = activeKind === "task" || activeKind === "post";
-  const isWritable = column.id !== "delivery" && column.id !== "scheduled" && canEdit;
+  const isWritable = column.id !== "scheduled" && canEdit;
   const { isOver, setNodeRef } = useDroppable({
     id: `stage:${column.id}`,
     disabled: !isWritable,
