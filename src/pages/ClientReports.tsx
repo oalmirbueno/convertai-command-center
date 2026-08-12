@@ -89,6 +89,18 @@ export default function ClientReports() {
   );
 }
 
+// Tres tipos convivem aqui fora dos rituais: anuncios (numeros de midia),
+// entrega (prints e comprovacoes) e resumo geral.
+const reportKind = (r: any): { label: string; cls: string } => {
+  const m = (r.metrics || {}) as Record<string, unknown>;
+  const hasAdsNumbers = ["ad_spend", "cpc", "cpm", "roas", "impressions", "reach", "clicks", "results"]
+    .some((key) => Number(m[key]) > 0);
+  if (hasAdsNumbers) return { label: "Anúncios", cls: "bg-primary/10 text-primary border-primary/25" };
+  const images = Array.isArray(r.images) ? r.images : [];
+  if (r.file_url || images.length > 0) return { label: "Entrega", cls: "bg-emerald-500/10 text-emerald-500 border-emerald-500/25" };
+  return { label: "Resumo", cls: "bg-secondary text-muted-foreground border-border" };
+};
+
 function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate: any }) {
   const groups: Record<string, any[]> = {};
   for (const r of reports) {
@@ -148,7 +160,14 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
                         <TrendingUp className="w-4 h-4 text-primary" />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <p className="text-sm font-semibold text-foreground truncate">{r.title}</p>
+                          {(() => { const kind = reportKind(r); return (
+                            <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide ${kind.cls}`}>
+                              {kind.label}
+                            </span>
+                          ); })()}
+                        </div>
                         <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
                           {(r as any).project?.name}
                           {r.period_start && r.period_end && (

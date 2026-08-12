@@ -27,6 +27,7 @@ import { formatBRDate, parseAppDate, todayBR } from "@/lib/dateBR";
 import { isInternalClient } from "@/lib/clientFlags";
 import { useBilling } from "@/hooks/useFinancialData";
 import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 
 function getRenewalStatus(dateStr: string | null | undefined) {
@@ -500,6 +501,20 @@ export default function Clients() {
   const [searchParams, setSearchParams] = useSearchParams();
   const isAdmin = profile?.role === "admin";
   const { data: clients, isLoading, isError, refetch } = useClients();
+
+  const toggleOneOffDone = async (client: any, done: boolean) => {
+    const nextConfig = { ...(client.services_config || {}), one_off_done: done };
+    const { error } = await supabase
+      .from("profiles")
+      .update({ services_config: nextConfig })
+      .eq("id", client.id);
+    if (error) {
+      toast.error("Não foi possível atualizar o cliente.");
+      return;
+    }
+    toast.success(done ? "Avulso marcado como concluído." : "Avulso retomado.");
+    refetch();
+  };
   const clientRows = useMemo(() => (clients || []) as ClientRecord[], [clients]);
   const financialQuery = useClientFinancialSummaries();
   const financialPayload = financialQuery.data;
@@ -510,6 +525,7 @@ export default function Clients() {
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [showDoneOneOffs, setShowDoneOneOffs] = useState(false);
   const [serviceFilter, setServiceFilter] = useState("all");
   const [search, setSearch] = useState("");
 
@@ -561,7 +577,12 @@ export default function Clients() {
   // Separação para a lista: clientes de verdade (recorrentes + híbridos),
   // avulsos em seção própria e empresas do grupo fora da contagem.
   const principais = filtered.filter((c) => !isInternalClient(c) && (c.client_type || "recurring") !== "one_off");
-  const avulsosList = filtered.filter((c) => !isInternalClient(c) && (c.client_type || "recurring") === "one_off");
+  const avulsosAll = filtered.filter((c) => !isInternalClient(c) && (c.client_type || "recurring") === "one_off");
+  // Avulso entregue sai da lista viva para nao poluir; fica num grupo
+  // recolhido com opcao de retomar. Flag no proprio cadastro, sem migration.
+  const isOneOffDone = (c: any) => Boolean(c?.services_config?.one_off_done);
+  const avulsosList = avulsosAll.filter((c) => !isOneOffDone(c));
+  const avulsosDone = avulsosAll.filter((c) => isOneOffDone(c));
   const internasList = filtered.filter((c) => isInternalClient(c));
 
   const financialRows = useMemo(
@@ -934,14 +955,43 @@ export default function Clients() {
         <div className="space-y-4">
           {(() => {
             const renderClientRow = (c: any) => {
-            const financial = financialByClient.get(String(c.id));
+            const financialRecord = financialByClient.get(String(c.id));
             const internal = isInternalClient(c);
+            // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
+            // operacional do plano do perfil para a linha nunca ficar sem soma.
+            const profileValue = Number((c as any).plan_value) || 0;
+            const financial = financialRecord
+              ? financialRecord
+              : profileValue > 0 && !internal
+                ? ({
+                    clientId: String(c.id),
+                    planName: c.plan_name || null,
+                    pricingMode: null,
+                    operationalAmount: profileValue * (1 - 0.06),
+                    finalAmount: profileValue,
+                    planAmount: profileValue,
+                    finalPlanAmount: profileValue,
+                    billingPeriod: null,
+                    termStatus: null,
+                    reviewRequired: false,
+                    directCost: null,
+                    directCostEstimated: false,
+                    marginPercent: null,
+                    dueLabel: null,
+                    billingStatus: c.plan_status || null,
+                    receivableAmount: null,
+                    overdueAmount: null,
+                    raw: {},
+                  } as ClientFinancialView)
+                : undefined;
             const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
             const statusMeta = internal
               ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
-              : financial
-                ? financialStatusMeta(financial.billingStatus)
-                : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
+              : financialRecord
+                ? financialStatusMeta(financialRecord.billingStatus)
+                : financial
+                  ? { label: "Valor do cadastro", className: "border-info/30 bg-info/10 text-info" }
+                  : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
             const modeLabel = internal
               ? "Sem cobrança"
               : financial?.pricingMode === "linked"
@@ -1130,6 +1180,53 @@ export default function Clients() {
                     <div className="space-y-2 text-[13px]">
                       {avulsosList.map((c) => renderClientRow(c))}
                     </div>
+                    <div className="flex flex-wrap gap-1.5 px-1 pt-1">
+                      {avulsosList.map((c) => (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => toggleOneOffDone(c, true)}
+                          className="rounded-md border border-border bg-transparent px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-success/40 hover:text-success"
+                        >
+                          Concluir {c.company_name || c.full_name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {avulsosDone.length > 0 && (
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowDoneOneOffs((v) => !v)}
+                      className="flex w-full items-center gap-2 rounded-lg border border-border bg-secondary/30 px-3 py-2 text-left"
+                    >
+                      <span className="text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
+                        Avulsos concluídos ({avulsosDone.length})
+                      </span>
+                      <span className="ml-auto text-[10px] text-muted-foreground">
+                        {showDoneOneOffs ? "Recolher" : "Mostrar"}
+                      </span>
+                    </button>
+                    {showDoneOneOffs && (
+                      <div className="space-y-2 text-[13px] opacity-80">
+                        {avulsosDone.map((c) => (
+                          <div key={c.id} className="space-y-1">
+                            {renderClientRow(c)}
+                            <div className="px-1">
+                              <button
+                                type="button"
+                                onClick={() => toggleOneOffDone(c, false)}
+                                className="rounded-md border border-border bg-transparent px-2 py-1 text-[10px] text-primary transition-colors hover:border-primary/40"
+                              >
+                                Retomar cliente
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 )}
 

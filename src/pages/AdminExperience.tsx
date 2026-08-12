@@ -1372,14 +1372,91 @@ export default function AdminExperience() {
           </div>
         </TabsContent>
 
-        {/* ── Histórico ── */}
+        {/* ── Histórico: linha do tempo com o contexto inteiro do painel ── */}
         <TabsContent value="historico">
+          {(() => {
+            const nameOf = (clientId: string) => {
+              const client = portfolioClients.find((c: any) => c.id === clientId);
+              return client ? (client.company_name || client.full_name) : "Cliente";
+            };
+            type TimelineEvent = { at: string; icon: "report" | "publication" | "approval" | "file"; text: string; clientId: string };
+            const timeline: TimelineEvent[] = [
+              ...publishedReports.map((r: any) => ({
+                at: r.created_at,
+                icon: "report" as const,
+                text: `Atualização publicada: ${r.title}`,
+                clientId: r.client_id,
+              })),
+              ...allPublications
+                .filter((p: any) => p.status === "published" && p.published_at)
+                .map((p: any) => ({
+                  at: p.published_at,
+                  icon: "publication" as const,
+                  text: `Publicação no ar (${p.platform === "instagram" ? "Instagram" : p.platform})`,
+                  clientId: p.client_id,
+                })),
+              ...allPublications
+                .filter((p: any) => p.status === "scheduled" && p.scheduled_at)
+                .map((p: any) => ({
+                  at: p.scheduled_at,
+                  icon: "publication" as const,
+                  text: `Publicação programada (${p.platform === "instagram" ? "Instagram" : p.platform})`,
+                  clientId: p.client_id,
+                })),
+              ...pendingApprovalFiles.map((f: any) => ({
+                at: f.created_at,
+                icon: "approval" as const,
+                text: `Enviado para aprovação: ${f.file_name}`,
+                clientId: f.client_id,
+              })),
+              ...releasedFiles.map((f: any) => ({
+                at: f.created_at,
+                icon: "file" as const,
+                text: `Material liberado: ${f.file_name}`,
+                clientId: f.client_id,
+              })),
+            ]
+              .filter((event) => event.at)
+              .sort((a, b) => (a.at < b.at ? 1 : -1))
+              .slice(0, 120);
+            const iconMap = { report: CheckCircle2, publication: ArrowUpRight, approval: HeartPulse, file: CheckCircle2 } as const;
+            return (
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-5 py-3 border-b border-border flex items-center gap-2">
               <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Tudo que já foi enviado aos clientes</span>
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
+                Linha do tempo completa: atualizações, publicações, aprovações e materiais ({timeline.length})
+              </span>
             </div>
             <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
+              {timeline.length === 0 && (
+                <p className="p-8 text-center text-sm text-muted-foreground">Nenhum movimento registrado ainda.</p>
+              )}
+              {timeline.map((event, index) => {
+                const EventIcon = iconMap[event.icon];
+                return (
+                  <div key={`${event.at}-${index}`} className="flex items-center gap-3 px-5 py-2.5">
+                    <EventIcon className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[12px] text-foreground">{event.text}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {nameOf(event.clientId)} · {new Date(event.at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+            );
+          })()}
+
+          <div className="mt-4 bg-card border border-border rounded-xl overflow-hidden">
+            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
+              <CheckCircle2 className="w-3.5 h-3.5 text-success" />
+              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Atualizações enviadas aos clientes</span>
+            </div>
+            <div className="divide-y divide-border max-h-[400px] overflow-y-auto">
               {publishedReports.length === 0 && (
                 <p className="p-8 text-center text-sm text-muted-foreground">Nada publicado ainda.</p>
               )}
