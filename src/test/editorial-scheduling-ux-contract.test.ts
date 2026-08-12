@@ -86,7 +86,7 @@ describe("editorial scheduling UX contract", () => {
     expect(views).toContain("hasPublicationOverride");
     expect(views).toContain("publication?.fileChildren");
     expect(views).toContain("Mover ${item.post.post.title}");
-    expect(views).toContain("grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4");
+    expect(views).toContain("grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5");
     expect(views).not.toContain('label: "Agenda e publicados"');
     expect(detail).toContain("PublicationProgress");
     expect(detail).toContain("Agendado no painel");
