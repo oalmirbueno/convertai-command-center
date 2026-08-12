@@ -88,6 +88,7 @@ export default function AdminExperience() {
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
+  const [activeTab, setActiveTab] = useState("carteira");
   const [expandedDraft, setExpandedDraft] = useState<string | null>(null);
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
 
@@ -576,15 +577,29 @@ export default function AdminExperience() {
         <div>
           <p className="heading-page">Central de Experiência</p>
           <p className="text-xs text-muted-foreground mt-1">
-            Somente equipe · retenção, oportunidades e rituais em tempo real. Nada aqui aparece ao cliente.
+            Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente.
           </p>
         </div>
         <button
           onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-          className="inline-flex items-center gap-2 px-4 py-2 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
           <Sparkles className="w-4 h-4" /> Gerar mensagens de hoje
         </button>
+      </div>
+
+      {/* Como funciona: o fluxo em três passos, sempre visível */}
+      <div className="grid grid-cols-3 gap-2">
+        {[
+          { step: "1", label: "Gerar", detail: "Mensagem pronta com os dados do cliente" },
+          { step: "2", label: "Revisar", detail: "Você lê e edita na fila" },
+          { step: "3", label: "Publicar", detail: "Cliente vê no painel e é avisado" },
+        ].map((s) => (
+          <div key={s.step} className="bg-secondary/30 border border-border rounded-xl px-3 py-2.5 text-center">
+            <p className="text-[11px] font-semibold text-primary">{s.step}. {s.label}</p>
+            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">{s.detail}</p>
+          </div>
+        ))}
       </div>
 
       {/* Missões de hoje: a Central puxa você para a ação certa do dia */}
@@ -602,27 +617,44 @@ export default function AdminExperience() {
                 {greeting}, Almir! Hoje é {weekday}: dia de <span className="text-primary">{todayRitual.label}</span>.
               </p>
               <p className="text-[11px] text-muted-foreground mt-0.5">{todayRitual.why}. Gere, revise cliente por cliente e publique.</p>
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 grid grid-cols-1 sm:flex sm:flex-wrap gap-2">
                 <button
                   onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
+                  className="inline-flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-lg text-[12px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
                 >
-                  <Sparkles className="w-3.5 h-3.5" /> Gerar {todayRitual.label} para {portfolioClients.length} cliente(s)
+                  <Sparkles className="w-3.5 h-3.5 shrink-0" /> Gerar {todayRitual.label} para {portfolioClients.length} cliente(s)
                 </button>
                 {stuckApprovals > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-warning/10 text-warning">
-                    <Clock className="w-3.5 h-3.5" /> {stuckApprovals} cliente(s) com aprovação parada: cobre no grupo
-                  </span>
+                  <button
+                    onClick={() => setActiveTab("carteira")}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] bg-warning/10 text-warning hover:bg-warning/20 transition-colors cursor-pointer border-none text-left"
+                  >
+                    <Clock className="w-3.5 h-3.5 shrink-0" /> {stuckApprovals} aprovação(ões) paradas: toque para ver quem cobrar
+                  </button>
                 )}
                 {financialAlerts > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-destructive/10 text-destructive">
-                    <AlertTriangle className="w-3.5 h-3.5" /> {financialAlerts} cliente(s) com pagamento vencido
-                  </span>
+                  <button
+                    onClick={() => setActiveTab("carteira")}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none text-left"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 shrink-0" /> {financialAlerts} pagamento(s) vencidos: toque para ver
+                  </button>
                 )}
                 {opportunities.length > 0 && (
-                  <span className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-[12px] bg-info/10 text-info">
-                    <Radar className="w-3.5 h-3.5" /> {opportunities.length} oportunidade(s) no Radar do mês
-                  </span>
+                  <button
+                    onClick={() => setActiveTab("radar")}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] bg-info/10 text-info hover:bg-info/20 transition-colors cursor-pointer border-none text-left"
+                  >
+                    <Radar className="w-3.5 h-3.5 shrink-0" /> {opportunities.length} oportunidade(s) para vender mais: toque para abrir
+                  </button>
+                )}
+                {draftReports.length > 0 && (
+                  <button
+                    onClick={() => setActiveTab("fila")}
+                    className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-lg text-[12px] bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border text-left"
+                  >
+                    <FileText className="w-3.5 h-3.5 shrink-0" /> {draftReports.length} rascunho(s) esperando sua revisão
+                  </button>
                 )}
               </div>
             </div>
@@ -631,7 +663,7 @@ export default function AdminExperience() {
       })()}
 
       {/* Resumo vivo */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {[
           { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse },
           { label: "Em atenção", value: attention, color: "text-warning", icon: Clock },
@@ -649,7 +681,7 @@ export default function AdminExperience() {
         ))}
       </div>
 
-      <Tabs defaultValue="carteira" className="space-y-4">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
         <TabsList className="bg-secondary/50 border border-border rounded-lg p-1 flex overflow-x-auto md:flex-wrap h-auto scrollbar-hidden w-full justify-start">
           <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
           <TabsTrigger value="perfis" className="text-[13px] rounded-md shrink-0">Perfis</TabsTrigger>
@@ -662,10 +694,14 @@ export default function AdminExperience() {
         {/* ── Carteira recorrente ── */}
         <TabsContent value="carteira">
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-              <HeartPulse className="w-3.5 h-3.5 text-primary" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Saúde da carteira recorrente</span>
-              <span className="text-[10px] text-muted-foreground ml-auto">Nota interna e explicável · toque para abrir os fatores e ações</span>
+            <div className="px-4 sm:px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <HeartPulse className="w-3.5 h-3.5 text-primary shrink-0" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Saúde da carteira recorrente</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Cada cliente recebe uma nota de 0 a 100 calculada dos dados reais (financeiro, aprovações, entregas, Pulso). Toque em um cliente para ver o porquê da nota e as ações prontas: mensagem do grupo, ritual e cadastro.
+              </p>
             </div>
             <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
               {healthRows.length === 0 && (
@@ -719,24 +755,24 @@ export default function AdminExperience() {
                             ))}
                           </div>
                         )}
-                        <div className="flex flex-wrap gap-2 pt-2">
+                        <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 pt-2">
                           <button
                             onClick={() => copyText(buildGroupMessage(row.client), "Mensagem do grupo copiada! É só colar no WhatsApp.")}
-                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                            className="inline-flex items-center justify-center gap-1.5 text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
                           >
-                            <Send className="w-3 h-3" /> Copiar mensagem do grupo
+                            <Send className="w-3 h-3 shrink-0" /> Copiar mensagem do grupo
                           </button>
                           <button
-                            onClick={() => openClientProfile(row.client.id)}
-                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                            onClick={() => { setProfileClientId(row.client.id); setActiveTab("perfis"); }}
+                            className="inline-flex items-center justify-center gap-1.5 text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
                           >
-                            <UserCircle className="w-3 h-3" /> Abrir cadastro
+                            <UserCircle className="w-3 h-3 shrink-0" /> Ver perfil completo
                           </button>
                           <button
                             onClick={() => { setGenClientId(row.client.id); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
-                            className="inline-flex items-center gap-1.5 text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                            className="inline-flex items-center justify-center gap-1.5 text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
                           >
-                            <Sparkles className="w-3 h-3" /> Gerar ritual só deste cliente
+                            <Sparkles className="w-3 h-3 shrink-0" /> Gerar ritual deste cliente
                           </button>
                         </div>
                       </div>
@@ -768,11 +804,14 @@ export default function AdminExperience() {
             };
             return (
               <div className="space-y-4">
-                <div className="flex items-center gap-3 flex-wrap">
+                <p className="text-[11px] text-muted-foreground">
+                  Escolha o cliente e veja tudo dele em um lugar: o que enviar em cada momento da semana, a mensagem do grupo pronta e o contexto que explica a nota.
+                </p>
+                <div className="flex items-center gap-2 flex-wrap">
                   <select
                     value={client.id}
                     onChange={(e) => setProfileClientId(e.target.value)}
-                    className="bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground"
+                    className="w-full sm:w-auto bg-secondary border border-border rounded-lg px-3 py-2.5 text-sm text-foreground"
                   >
                     {healthRows.map((r) => (
                       <option key={r.client.id} value={r.client.id}>{r.client.company_name || r.client.full_name}</option>
@@ -786,7 +825,7 @@ export default function AdminExperience() {
                   )}
                   <button
                     onClick={() => openClientProfile(client.id)}
-                    className="ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
+                    className="sm:ml-auto text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground border border-border cursor-pointer"
                   >
                     Abrir cadastro
                   </button>
@@ -882,8 +921,8 @@ export default function AdminExperience() {
                 const age = daysSince(lastActivity);
                 const idle = activeCount === 0 && doneCount > 0 && age !== null && age >= 21;
                 return (
-                  <div key={client.id} className="flex items-center gap-3 px-5 py-3 flex-wrap">
-                    <div className="min-w-0 flex-1">
+                  <div key={client.id} className="flex items-center gap-2 sm:gap-3 px-4 sm:px-5 py-3 flex-wrap">
+                    <div className="min-w-0 flex-1 basis-full sm:basis-auto">
                       <p className="text-[13px] text-foreground truncate">{client.company_name || client.full_name}</p>
                       <p className="text-[10px] text-muted-foreground">
                         {activeCount > 0
@@ -926,6 +965,11 @@ export default function AdminExperience() {
         {/* ── Radar do mês ── */}
         <TabsContent value="radar">
           <div className="space-y-2">
+            {opportunities.length > 0 && (
+              <p className="text-[11px] text-muted-foreground px-1 pb-1">
+                O painel encontrou estas chances de reter e vender mais. Cada uma vira um Radar Aceleriq para o cliente com um toque, sempre passando pela sua revisão antes.
+              </p>
+            )}
             {opportunities.length === 0 && (
               <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
                 Nenhuma oportunidade detectada agora. O radar observa Pulsos altos (depoimento e indicação), planos abaixo da tabela e avulsos prontos para reativação.
@@ -939,18 +983,18 @@ export default function AdminExperience() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13px] font-medium text-foreground">{opp.title}</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">{opp.detail}</p>
-                  <div className="flex flex-wrap gap-2 mt-2">
+                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 mt-2">
                     <button
                       onClick={() => { setGenClientId(opp.clientId); setGenRitual("radar_aceleriq"); setGenPreviews(null); setGeneratorOpen(true); }}
-                      className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                      className="text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
                     >
                       Gerar Radar para o cliente
                     </button>
                     <button
-                      onClick={() => openClientProfile(opp.clientId)}
-                      className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                      onClick={() => { setProfileClientId(opp.clientId); setActiveTab("perfis"); }}
+                      className="text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
                     >
-                      Abrir cadastro
+                      Ver perfil do cliente
                     </button>
                   </div>
                 </div>
@@ -962,10 +1006,14 @@ export default function AdminExperience() {
         {/* ── Fila de revisão ── */}
         <TabsContent value="fila">
           <div className="bg-card border border-border rounded-xl overflow-hidden">
-            <div className="px-5 py-3 border-b border-border flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5 text-warning" />
-              <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Fila de revisão</span>
-              <span className="text-[10px] text-muted-foreground ml-auto">Toque em um rascunho para ler, editar e publicar</span>
+            <div className="px-4 sm:px-5 py-3 border-b border-border">
+              <div className="flex items-center gap-2">
+                <FileText className="w-3.5 h-3.5 text-warning shrink-0" />
+                <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Fila de revisão</span>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                Nada daqui chegou ao cliente ainda. Toque em um rascunho para ler o texto completo, ajustar do seu jeito e publicar quando aprovar.
+              </p>
             </div>
             <div className="divide-y divide-border max-h-[560px] overflow-y-auto">
               {draftReports.length === 0 && (
@@ -1022,33 +1070,33 @@ export default function AdminExperience() {
                             className="w-full mt-1 bg-card border border-border rounded-lg px-3 py-2 text-[12px] text-foreground resize-y leading-relaxed"
                           />
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            onClick={() => saveDraftEdits(r)}
-                            className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
-                          >
-                            Salvar edição
-                          </button>
+                        <div className="grid grid-cols-2 sm:flex sm:flex-wrap gap-2">
                           {isAdmin && (
                             <button
                               onClick={() => publishDraft(r)}
-                              className="inline-flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-success/10 text-success hover:bg-success/20 transition-colors cursor-pointer border-none"
                             >
-                              <Send className="w-3 h-3" /> Publicar para o cliente
+                              <Send className="w-3 h-3 shrink-0" /> Publicar
                             </button>
                           )}
                           <button
+                            onClick={() => saveDraftEdits(r)}
+                            className="text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                          >
+                            Salvar edição
+                          </button>
+                          <button
                             onClick={() => navigate(`/relatorios/${r.id}`)}
-                            className="text-[11px] px-3 py-1.5 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                            className="text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
                           >
                             Abrir completo
                           </button>
                           {isAdmin && (
                             <button
                               onClick={() => deleteDraft(r)}
-                              className="inline-flex items-center gap-1 text-[11px] px-3 py-1.5 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none ml-auto"
+                              className="inline-flex items-center justify-center gap-1 text-[11px] px-3 py-2 rounded-lg bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors cursor-pointer border-none sm:ml-auto"
                             >
-                              <Trash2 className="w-3 h-3" /> Descartar
+                              <Trash2 className="w-3 h-3 shrink-0" /> Descartar
                             </button>
                           )}
                         </div>
