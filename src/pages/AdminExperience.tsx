@@ -407,6 +407,54 @@ export default function AdminExperience() {
     const fridayReview = "Na sexta-feira voltamos com a Prova de Movimento mostrando o que avançou e o que aprendemos.";
     const mondayReview = "Na segunda-feira abrimos o próximo ciclo com a nova Rota da Semana.";
 
+    // Foco da semana derivado do que realmente está acontecendo, com variação
+    const seed = client.id + ritual;
+    const focus = pending > 0
+      ? pickVariant([
+          `Destravar as aprovações pendentes e colocar as publicações no ar na data certa.`,
+          `Fechar o ciclo de aprovações e garantir o calendário rodando sem atraso.`,
+          `Aprovações em dia e conteúdo no ar: essa é a virada da semana.`,
+        ], seed)
+      : nextMilestones
+        ? pickVariant([
+            `Avançar nas etapas com data marcada: ${nextMilestones}.`,
+            `Semana de execução: colocar ${nextMilestones} de pé.`,
+            `Foco total em entregar as próximas etapas: ${nextMilestones}.`,
+          ], seed)
+        : scheduledPubs.length > 0
+          ? pickVariant([
+              `Manter a cadência de publicações e acompanhar os sinais de cada frente.`,
+              `Conteúdo rodando no calendário e olho nos sinais que importam.`,
+              `Consistência: publicar no ritmo planejado e medir o que volta.`,
+            ], seed)
+          : pickVariant([
+              `Produzir as próximas entregas e manter a operação em movimento.`,
+              `Semana de construção: preparar as entregas que sustentam o próximo ciclo.`,
+              `Avançar a produção para chegar na próxima semana com material pronto.`,
+            ], seed);
+
+    // Observação/aprendizado derivado do movimento real da semana
+    const observation = publishedWeek.length > 0
+      ? `Com ${publishedWeek.length} publicação(ões) no ar nesta semana, os próximos dias mostram a resposta do público. Vamos acompanhar os sinais de cada frente e trazer a leitura pronta: o que mudou, o que isso indica e a decisão que tomamos a partir disso.`
+      : released7d > 0
+        ? `Com as entregas desta semana liberadas, o próximo movimento é colocá-las para trabalhar. Acompanhamos os sinais de cada frente e trazemos a leitura interpretada na próxima atualização.`
+        : `Semana de construção interna. Na próxima atualização mostramos o material pronto e o sinal que ele deve mover.`;
+
+    // Recomendação do Radar derivada da oportunidade detectada (ou do gap de frente)
+    const oppForClient = opportunities.find((o) => o.clientId === client.id);
+    const radarRecommendation = oppForClient
+      ? oppForClient.kind === "depoimento"
+        ? `Registrar esse bom momento: gravar um depoimento curto (ou autorizar um case) e indicar uma empresa parceira que se beneficiaria do mesmo trabalho. Custo zero para você e valor enorme para a parceria.`
+        : oppForClient.kind === "reajuste"
+          ? `Atualizar o plano para a tabela vigente, garantindo a continuidade do padrão de entrega com escopo protegido por escrito. Sem surpresa: nada muda antes de você aprovar.`
+          : `Retomar a operação com um novo ciclo: um acompanhamento mensal enxuto ou um diagnóstico express para mapear o próximo passo de maior impacto.`
+      : activeProjects.some((p: any) => p.project_type === "social_media") && !activeProjects.some((p: any) => p.project_type === "traffic")
+        ? `Testar um impulso de tráfego pago sobre os conteúdos que melhor performaram: o perfil já produz material validado, e a mídia multiplica o alcance qualificado com investimento controlado.`
+        : `Consolidar a frente que mais gera sinal hoje e preparar o próximo ativo do funil (página, automação ou campanha) para a janela seguinte.`;
+    const radarWhyNow = pending === 0 && released7d > 0
+      ? `A operação está rodando em dia (entregas liberadas e nada pendente do seu lado), o que abre espaço para esse movimento sem tirar o foco do essencial.`
+      : `Cruzamos a movimentação do seu painel (entregas, aprovações e sinais das frentes) e este é o momento com melhor relação esforço x retorno.`;
+
     const base = {
       client_id: client.id,
       project_id: activeProject?.id || null,
@@ -432,7 +480,7 @@ export default function AdminExperience() {
             : `A semana está em fase de produção: os materiais estão sendo construídos e passam pela nossa revisão interna antes de aparecerem no painel.`,
           ``,
           `O QUE ESTÁ EM PRODUÇÃO AGORA`,
-          activeProjects.length > 0 ? frontsText : `[REVISAR: descrever a produção da semana]`,
+          activeProjects.length > 0 ? frontsText : `Preparação das próximas entregas do seu ciclo, com revisão interna de qualidade antes de qualquer material chegar até você.`,
           nextMilestones ? `Próximas etapas no radar: ${nextMilestones}.` : ``,
           ``,
           pending > 0
@@ -463,10 +511,10 @@ export default function AdminExperience() {
           `POR QUE FIZEMOS`,
           activeProjects.length > 0
             ? `Cada frente tem um papel no seu crescimento:\n${frontsText}`
-            : `[REVISAR: conectar as entregas ao objetivo do cliente]`,
+            : `Cada entrega desta fase constrói a base que sustenta o próximo ciclo de resultados.`,
           ``,
           `O QUE VAMOS OBSERVAR`,
-          `Nos próximos dias acompanhamos os sinais acima e trazemos a leitura já interpretada: o que mudou, o que isso indica e qual decisão tomamos a partir disso. [REVISAR: adicionar o aprendizado específico desta semana]`,
+          observation,
           ``,
           pending > 0 ? `PENDÊNCIA: ${pending} material(is) aguardando sua aprovação (${pendingNames}).` : `PENDÊNCIA: nenhuma. Tudo em dia do seu lado.`,
           ``,
@@ -474,7 +522,9 @@ export default function AdminExperience() {
         ].filter(Boolean).join("\n"),
         next_steps: pending > 0
           ? `Aprovar ${pendingNames} para liberarmos o agendamento. Depois disso, o próximo passo é nosso: abrir o ciclo de segunda com a nova Rota.`
-          : "[REVISAR: próximo passo da próxima semana e quem é o responsável]",
+          : nextMilestones
+            ? `O próximo passo é nosso: avançar em ${nextMilestones}. Você acompanha tudo pelo painel e a nova Rota chega segunda.`
+            : `O próximo passo é nosso: preparar o ciclo da próxima semana. A nova Rota chega segunda-feira com o plano completo.`,
         highlights: `${released7d} entrega(s) na semana · processo aberto do que, por quê e qual sinal`,
       };
     }
@@ -487,13 +537,13 @@ export default function AdminExperience() {
           `${name}, o Radar é o nosso ritual de antecipação: uma vez por mês trazemos uma oportunidade que enxergamos antes de você precisar pedir.`,
           ``,
           `OPORTUNIDADE DETECTADA`,
-          opp ? opp.detail : `[REVISAR: descrever a oportunidade identificada para este cliente]`,
+          opp ? opp.detail : radarRecommendation,
           ``,
           `POR QUE AGORA`,
-          `Cruzamos a movimentação do seu painel (entregas, aprovações e sinais das frentes) e este é o momento com melhor relação esforço x retorno. [REVISAR: contexto específico]`,
+          radarWhyNow,
           ``,
           `NOSSA RECOMENDAÇÃO`,
-          `[REVISAR: a ação prática que a Aceleriq fará se aprovado, com o impacto esperado no indicador principal]`,
+          radarRecommendation,
           ``,
           `COMO RESPONDER (basta dizer no grupo):`,
           `1. Pode seguir  ·  2. Deixar para o próximo ciclo  ·  3. Quero entender melhor`,
@@ -503,32 +553,48 @@ export default function AdminExperience() {
       };
     }
     if (ritual === "marco_90") {
-      const totalReleased = (releasedFiles || []).filter((f: any) => f.client_id === client.id).length;
+      const clientFiles = (releasedFiles || []).filter((f: any) => f.client_id === client.id);
+      const d90 = new Date(now.getTime() - 90 * 86400000);
+      const released90 = clientFiles.filter((f: any) => new Date(f.created_at) >= d90).length;
+      const before90 = clientFiles.length - released90;
+      const totalReleased = clientFiles.length;
       const doneProjects = clientProjects.filter((p: any) => p.status === "done").length;
       const totalPublished = clientPubs.filter((p: any) => p.status === "published").length;
+      const clientHealthRow = healthRows.find((h) => h.client.id === client.id);
+      const blockers = clientHealthRow?.alerts || [];
       return {
         ...base,
-        period_start: new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10),
+        period_start: d90.toISOString().slice(0, 10),
         title: `Marco 90 · ${name}`,
         summary: [
           `${name}, a cada 90 dias paramos para olhar o caminho inteiro: de onde saímos, o que foi construído e para onde vamos. É fácil esquecer como as coisas estavam antes; este registro existe para isso.`,
           ``,
           `ONDE ESTÁVAMOS`,
-          `[REVISAR: como estava a operação/presença do cliente há 90 dias]`,
+          before90 > 0
+            ? `Há 90 dias o painel registrava ${before90} entrega(s) construídas. De lá para cá, somamos mais ${released90}: o acervo de ativos da sua operação não parou de crescer.`
+            : `Há 90 dias esta operação estava começando do zero no painel. Tudo o que existe abaixo foi construído neste período.`,
           ``,
           `O QUE FOI CONSTRUÍDO (registrado no painel)`,
-          `• ${totalReleased} entrega(s) liberadas no total${totalPublished > 0 ? `\n• ${totalPublished} publicação(ões) no ar` : ""}${doneProjects > 0 ? `\n• ${doneProjects} projeto(s) concluídos` : ""}${activeProjects.length > 0 ? `\n• ${activeProjects.length} frente(s) ativas em operação` : ""}`,
+          `• ${totalReleased} entrega(s) liberadas no total${released90 > 0 ? ` (${released90} neste trimestre)` : ""}${totalPublished > 0 ? `\n• ${totalPublished} publicação(ões) no ar` : ""}${doneProjects > 0 ? `\n• ${doneProjects} projeto(s) concluídos` : ""}${activeProjects.length > 0 ? `\n• ${activeProjects.length} frente(s) ativas em operação` : ""}`,
           ``,
           `O QUE MELHOROU`,
-          `[REVISAR: os sinais que evoluíram no período, com o antes e o agora]`,
+          activeProjects.length > 0
+            ? `As frentes ativas seguem movendo os sinais certos:\n${frontsText}`
+            : `A base construída no período está pronta para sustentar o próximo ciclo de operação.`,
           ``,
           `O QUE AINDA TRAVA`,
-          `[REVISAR: com transparência, o que segurou resultado e o que faremos a respeito]`,
+          blockers.length > 0
+            ? `Com transparência: ${blockers.map((b) => b.label.toLowerCase()).join("; ")}. Já estão no nosso plano de ação e acompanhamos de perto.`
+            : `Nenhuma trava crítica registrada no período. O desafio agora é subir o nível, não corrigir rota.`,
           ``,
           `O PRÓXIMO NÍVEL`,
-          `[REVISAR: o foco dos próximos 90 dias e o que ele destrava]`,
+          nextMilestones
+            ? `O trimestre que começa tem etapas com data marcada: ${nextMilestones}. É isso que destrava o próximo estágio da operação.`
+            : `${focus} Esse é o movimento que abre o próximo estágio da operação.`,
         ].join("\n"),
-        next_steps: "[REVISAR: a primeira ação do próximo trimestre e a data da próxima revisão]",
+        next_steps: nextMilestones
+          ? `Primeira ação do trimestre: ${nextMilestones}. Próxima revisão completa em 90 dias, com os ritmos semanais continuando normalmente.`
+          : `Seguimos com os ritmos semanais (Rota, Check e Prova) e a próxima revisão completa acontece em 90 dias.`,
         highlights: "Marco trimestral: antes, agora, evidências e o próximo nível",
       };
     }
@@ -539,12 +605,12 @@ export default function AdminExperience() {
         `Bom dia, ${name}! Abrindo a semana com o plano claro, do nosso jeito: você nunca fica sem saber o que está acontecendo.`,
         ``,
         `FOCO DESTA SEMANA`,
-        `[REVISAR: o objetivo da semana em uma frase, ligado ao resultado do cliente]`,
+        focus,
         ``,
         `O QUE VAMOS FAZER E POR QUÊ`,
         activeProjects.length > 0
           ? frontsText
-          : `[REVISAR: as entregas planejadas da semana e o papel de cada uma]`,
+          : `Produção das próximas entregas do seu ciclo, cada uma com papel definido no seu resultado e revisão interna antes de chegar até você.`,
         nextMilestones ? `Etapas com data no radar: ${nextMilestones}.` : ``,
         nextPubText ? `Próxima publicação confirmada: ${nextPubText}.` : ``,
         released7d > 0 ? `Da semana passada, ${released7d} entrega(s) já estão liberadas no painel${releasedNames ? ` (${releasedNames})` : ""}.` : ``,
@@ -557,7 +623,7 @@ export default function AdminExperience() {
       ].filter(Boolean).join("\n"),
       next_steps: pending > 0
         ? `Aprovar os materiais pendentes (${pendingNames}) até quarta. O painel mostra tudo na área de Aprovações.`
-        : "[REVISAR: única ação necessária do cliente nesta semana, com prazo]",
+        : `Nenhuma ação necessária de vocês nesta semana. O movimento é nosso: ${focus.charAt(0).toLowerCase()}${focus.slice(1)}`,
       highlights: "Rota da semana: foco, o que vamos fazer, por quê e a única ação de vocês",
     };
   };
@@ -1047,6 +1113,30 @@ export default function AdminExperience() {
                       ))}
                       <p className="text-[10px] text-muted-foreground">Montada na hora com entregas, frentes e pendências reais. O texto varia a cada semana para nunca soar repetido.</p>
                     </div>
+
+                    {(() => {
+                      const lastRitual = (reports || []).find(
+                        (r: any) => r.client_id === client.id && r.status === "published" && (r.metrics as any)?.ritual_type
+                      );
+                      return lastRitual ? (
+                        <div className="bg-card border border-primary/25 rounded-xl p-5 space-y-1.5">
+                          <span className="text-[11px] uppercase tracking-wider text-primary font-medium">Onde estamos com este cliente</span>
+                          <p className="text-[12px] font-medium text-foreground">{lastRitual.title}</p>
+                          <p className="text-[11px] text-muted-foreground whitespace-pre-line line-clamp-6 leading-relaxed">{lastRitual.summary}</p>
+                          <button
+                            onClick={() => navigate(`/relatorios/${lastRitual.id}`)}
+                            className="text-[10px] text-primary flex items-center gap-1 bg-transparent border-none cursor-pointer p-0 hover:opacity-80"
+                          >
+                            Ver a última atualização completa <ArrowUpRight className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="bg-card border border-border rounded-xl p-5">
+                          <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Onde estamos com este cliente</span>
+                          <p className="text-[11px] text-muted-foreground mt-1">Nenhuma atualização publicada ainda. Gere a Rota da Semana ao lado para abrir o primeiro ciclo.</p>
+                        </div>
+                      );
+                    })()}
 
                     <div className="bg-card border border-border rounded-xl p-5 space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Contexto agora</span>

@@ -58,13 +58,14 @@ const adminMoreNav: NavItem[] = [
 
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
+  { title: "Onde Estamos", url: "/onde-estamos", icon: HeartPulse },
   { title: "Projetos", url: "/projetos", icon: FolderOpen },
   { title: "Agenda", url: "/calendario", icon: CalendarDays },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-  { title: "Cofre", url: "/cofre", icon: KeyRound },
 ];
 
 const clientMoreNav: NavItem[] = [
+  { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
   { title: "Documentos", url: "/documentos", icon: FileText },

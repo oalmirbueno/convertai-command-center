@@ -635,7 +635,7 @@ export default function ClientJourneyDashboard({
                 <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
                 <button
                   type="button"
-                  onClick={() => navigate(`/relatorios/${latestReport.id}`)}
+                  onClick={() => navigate("/onde-estamos")}
                   className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
                 >
                   <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
@@ -651,17 +651,17 @@ export default function ClientJourneyDashboard({
                   {latestReport.summary && (
                     <div className="mt-3">
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
-                      <p className="mt-1 line-clamp-3 text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
+                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
                     </div>
                   )}
                   {latestReport.next_steps && (
                     <div className="mt-3">
                       <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
+                      <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
                     </div>
                   )}
                   <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
-                    Ver atualização completa
+                    Abrir Onde Estamos (todas as atualizações)
                     <ArrowUpRight className="h-3 w-3" />
                   </p>
                 </button>

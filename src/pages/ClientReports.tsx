@@ -46,7 +46,9 @@ export default function ClientReports() {
         .eq("status", "published")
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return data || [];
+      // Rituais de acompanhamento (Rota, Prova, Radar, Marco) moram em
+      // "Onde Estamos"; aqui ficam só os relatórios de mídia e resultados.
+      return (data || []).filter((r: any) => !(r.metrics as any)?.ritual_type);
     },
     enabled: !!user,
   });
