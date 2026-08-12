@@ -119,7 +119,7 @@ describe("editorial platforms and visual metadata", () => {
     );
     expect(PUBLICATION_STATUS_LABELS.scheduled).toBe("Agendado");
     expect(PRODUCTION_STATUS_LABELS.production).toBe("Em produção");
-    expect(EDITORIAL_PRODUCTION_STATUS_CONFIG.ready.color).toBe("#10B981");
+    expect(EDITORIAL_PRODUCTION_STATUS_CONFIG.ready.color).toBe("#F59E0B");
     for (const config of Object.values(EDITORIAL_STATUS_CONFIG)) {
       expect(config.label).not.toBe("");
       expect(config.color).toMatch(/^#[0-9A-F]{6}$/i);
