@@ -39,6 +39,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import {
+  useEditorialEditorOptions,
   useEditorialMutations,
   useEditorialPostEvents,
   type EditorialPostBundle,
@@ -232,7 +233,84 @@ export default function EditorialDetailSheet({
   onCreateRevision,
   onArchived,
 }: EditorialDetailSheetProps) {
-  const { transitionPublication, archivePost } = useEditorialMutations();
+  const { transitionPublication, archivePost, savePost } = useEditorialMutations();
+  // Agendamento inline: conta + data no proprio popup, sem abrir o editor.
+  const [inlineAccountId, setInlineAccountId] = useState("");
+  const [inlineWhen, setInlineWhen] = useState("");
+  const [inlineSaving, setInlineSaving] = useState(false);
+  const editorOptions = useEditorialEditorOptions(
+    post?.post.client_id || null,
+    post?.post.project_id || null,
+    open && post !== null && post.publications.length === 0,
+  );
+  const inlineAccounts = (editorOptions.data?.accounts || []).filter(
+    (account: any) => (account.status || "active") === "active",
+  );
+
+  const scheduleInline = async () => {
+    if (!post || !inlineAccountId) {
+      toast.error("Escolha a conta que vai receber a publicação.");
+      return;
+    }
+    let scheduledAtIso: string | null = null;
+    if (inlineWhen) {
+      scheduledAtIso = zonedDateTimeLocalToIso(inlineWhen, EDITORIAL_DEFAULT_TIME_ZONE);
+      if (!scheduledAtIso) {
+        toast.error("Data ou horário inválido. Ajuste e tente de novo.");
+        return;
+      }
+    }
+    setInlineSaving(true);
+    try {
+      await savePost.mutateAsync({
+        payload: {
+          id: post.post.id,
+          idempotency_key: crypto.randomUUID(),
+          mutation_id: crypto.randomUUID(),
+          client_id: post.post.client_id,
+          project_id: post.post.project_id,
+          primary_file_id: post.post.primary_file_id,
+          title: post.post.title,
+          content_type: post.post.content_type,
+          objective: post.post.objective,
+          default_caption: post.post.default_caption,
+          production_status: post.post.production_status,
+          task_id: (post as any).internal?.task_id || null,
+          responsible_id: (post as any).internal?.responsible_id || null,
+          internal_notes: (post as any).internal?.internal_notes || null,
+          revision_of_post_id: null,
+          publications: [
+            {
+              id: null,
+              idempotency_key: crypto.randomUUID(),
+              external_account_id: inlineAccountId,
+              file_id: null,
+              caption: post.post.default_caption,
+              first_comment: null,
+              alt_text: null,
+              asset_file_ids: [],
+              scheduled_at: scheduledAtIso,
+              scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+            },
+          ],
+        },
+        expectedVersion: post.post.version,
+      });
+      toast.success(
+        scheduledAtIso
+          ? "Conta e horário definidos. Se o material já estiver aprovado, a publicação sai no horário; se não, sai até 1 hora depois da aprovação."
+          : "Conta definida. Agora é só escolher o horário quando quiser.",
+      );
+      setInlineAccountId("");
+      setInlineWhen("");
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível programar a publicação.",
+      );
+    } finally {
+      setInlineSaving(false);
+    }
+  };
   const confirmDialog = useConfirm();
   const isStaff = canEdit || canPublish;
   const {
@@ -854,24 +932,62 @@ export default function EditorialDetailSheet({
               })}
 
               {post.publications.length === 0 && (
-                <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] p-5 text-center">
+                <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] p-4 sm:p-5">
                   <p className="text-[13px] font-medium text-foreground">
-                    Falta definir onde e quando publicar
+                    Programar publicação
                   </p>
-                  <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground">
-                    Escolha a conta (o perfil que vai receber a publicação) e a data e horário.
-                    Só depois disso aparecem aqui os botões de Agendar e Confirmar publicação.
+                  <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                    Escolha a conta e o horário aqui mesmo. Se o material já estiver aprovado,
+                    sai no horário marcado; se ainda não estiver, sai até 1 hora depois da aprovação.
                   </p>
                   {canEdit && !isImpersonating && (
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="mt-3"
-                      onClick={() => onEdit(post)}
-                    >
-                      <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
-                      Definir conta, data e horário
-                    </Button>
+                    <div className="mt-3 space-y-2.5">
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Conta</Label>
+                        <select
+                          value={inlineAccountId}
+                          onChange={(event) => setInlineAccountId(event.target.value)}
+                          className="mt-1 w-full rounded-lg border border-border bg-background px-3 py-2 text-[13px] text-foreground focus:border-primary/50 focus:outline-none"
+                        >
+                          <option value="">
+                            {editorOptions.isLoading
+                              ? "Carregando contas..."
+                              : inlineAccounts.length === 0
+                                ? "Nenhuma conta cadastrada para este cliente"
+                                : "Escolha o perfil que recebe a publicação"}
+                          </option>
+                          {inlineAccounts.map((account: any) => (
+                            <option key={account.id} value={account.id}>
+                              {account.display_name}
+                              {account.handle ? ` (${account.handle})` : ""}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px] text-muted-foreground">Data e horário</Label>
+                        <Input
+                          type="datetime-local"
+                          value={inlineWhen}
+                          onChange={(event) => setInlineWhen(event.target.value)}
+                          className="mt-1"
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="w-full sm:w-auto"
+                        disabled={inlineSaving || !inlineAccountId}
+                        onClick={() => void scheduleInline()}
+                      >
+                        {inlineSaving ? (
+                          <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                        ) : (
+                          <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                        )}
+                        Programar
+                      </Button>
+                    </div>
                   )}
                 </div>
               )}
