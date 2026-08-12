@@ -709,7 +709,7 @@ export default function AdminExperience() {
       if (edits) { payload.summary = edits.summary; payload.next_steps = edits.next_steps; }
       const { error } = await supabase.from("reports").update(payload).eq("id", report.id);
       if (error) throw error;
-      await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/relatorios");
+      await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/onde-estamos");
       toast.success("Publicado no portal do cliente e notificado.");
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });
