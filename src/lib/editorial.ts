@@ -81,9 +81,12 @@ export const EDITORIAL_PRODUCTION_STATUS_CONFIG: Record<
   EditorialProductionStatus,
   { label: string; color: string }
 > = {
+  // Cores alinhadas com as colunas do board: rascunho cinza, produção violeta,
+  // pronto/revisão âmbar. Agendado (azul) e publicado (verde) vêm do status de
+  // publicação. Assim a agenda e o kanban contam a mesma história de cores.
   draft: { label: "Rascunho", color: "#64748B" },
   production: { label: "Em produção", color: "#8B5CF6" },
-  ready: { label: "Pronto", color: "#10B981" },
+  ready: { label: "Pronto", color: "#F59E0B" },
   cancelled: { label: "Cancelado", color: "#6B7280" },
   archived: { label: "Arquivado", color: "#475569" },
 };
