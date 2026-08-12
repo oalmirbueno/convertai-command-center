@@ -4,6 +4,7 @@ import { Loader2, ArrowRight, Eye, EyeOff, Check, BarChart3, Zap, Target } from 
 import { useNavigate } from "react-router-dom";
 import { safeInternalPath } from "@/lib/internalNavigation";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import consultantHero from "@/assets/consultant-hero-flipped.jpg";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -397,7 +398,7 @@ export default function Login() {
                     });
                     if (resetError) setError("Não foi possível enviar o link agora. Tente novamente em instantes.");
                     else setError("");
-                    if (!resetError) alert("Se este e-mail estiver cadastrado, você receberá um link para definir a senha. Confira a caixa de entrada e o spam.");
+                    if (!resetError) toast.success("Se este e-mail estiver cadastrado, você receberá um link para definir a senha. Confira a caixa de entrada e o spam.", { duration: 8000 });
                   }}
                   className="w-full text-center text-xs text-muted-foreground hover:text-primary transition-colors cursor-pointer bg-transparent border-none pt-1"
                 >

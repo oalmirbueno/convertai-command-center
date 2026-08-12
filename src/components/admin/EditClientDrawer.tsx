@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Pause, Play } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
@@ -62,6 +63,7 @@ export default function EditClientDrawer({
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const navigate = useNavigate();
+  const confirmDialog = useConfirm();
   const queryClient = useQueryClient();
   const [saving, setSaving] = useState(false);
   const [fullName, setFullName] = useState("");
@@ -300,9 +302,16 @@ export default function EditClientDrawer({
     brand !== (client.brand || "") ||
     clientPassword.length > 0;
 
-  const openClientOperation = (path: string) => {
-    if (hasUnsavedChanges && !window.confirm("Você alterou o cadastro e ainda não salvou. Sair sem salvar essas mudanças?")) {
-      return;
+  const openClientOperation = async (path: string) => {
+    if (hasUnsavedChanges) {
+      const proceed = await confirmDialog({
+        title: "Sair sem salvar?",
+        description: "Você alterou o cadastro e ainda não salvou. As mudanças serão descartadas.",
+        confirmLabel: "Sair sem salvar",
+        cancelLabel: "Continuar editando",
+        destructive: true,
+      });
+      if (!proceed) return;
     }
     onClose();
     navigate(path);
@@ -664,7 +673,12 @@ export default function EditClientDrawer({
                 ) : (
                   <button
                     onClick={async () => {
-                      if (!confirm("Colocar este cliente em Standby? A cobrança recorrente será pausada até você reativar.")) return;
+                      const proceed = await confirmDialog({
+                        title: "Colocar em Standby?",
+                        description: "A cobrança recorrente fica pausada até você reativar o cliente.",
+                        confirmLabel: "Colocar em Standby",
+                      });
+                      if (!proceed) return;
                       setSaving(true);
                       try {
                         const { error } = await supabase.from("profiles").update({ plan_status: "standby" }).eq("id", client.id);

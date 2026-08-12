@@ -16,6 +16,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -232,6 +233,7 @@ export default function EditorialDetailSheet({
   onArchived,
 }: EditorialDetailSheetProps) {
   const { transitionPublication, archivePost } = useEditorialMutations();
+  const confirmDialog = useConfirm();
   const isStaff = canEdit || canPublish;
   const {
     data: events,
@@ -375,13 +377,12 @@ export default function EditorialDetailSheet({
   };
 
   const handleArchive = async () => {
-    if (
-      !window.confirm(
-        "Arquivar este conteúdo? Ele sairá do calendário ativo, mas o histórico será preservado.",
-      )
-    ) {
-      return;
-    }
+    const proceed = await confirmDialog({
+      title: "Arquivar este conteúdo?",
+      description: "Ele sai do calendário ativo, mas o histórico fica preservado.",
+      confirmLabel: "Arquivar",
+    });
+    if (!proceed) return;
 
     try {
       await archivePost.mutateAsync({

@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -180,6 +181,9 @@ export default function EditorialEditor({
 }: EditorialEditorProps) {
   const { savePost } = useEditorialMutations();
   const { navigator } = useContext(UNSAFE_NavigationContext);
+  const confirmDialog = useConfirm();
+  const confirmDialogRef = useRef(confirmDialog);
+  confirmDialogRef.current = confirmDialog;
   const [clientId, setClientId] = useState("");
   const [projectId, setProjectId] = useState("");
   const [title, setTitle] = useState("");
@@ -224,30 +228,47 @@ export default function EditorialEditor({
     const originalPush = navigator.push;
     const originalReplace = navigator.replace;
     const originalGo = navigator.go;
-    const confirmNavigation = () => {
+    // Dialogo do painel no lugar do confirm nativo: bloqueia a navegacao,
+    // pergunta e, se o usuario confirmar, refaz a navegacao original.
+    const confirmNavigation = (retry?: () => void) => {
       if (savingNavigationRef.current) {
         toast.info("Aguarde o salvamento terminar antes de sair.");
         return false;
       }
-      if (
-        !dirtyNavigationRef.current ||
-        window.confirm("Descartar as alterações não salvas?")
-      ) {
-        dirtyNavigationRef.current = false;
+      if (!dirtyNavigationRef.current) {
         setHasChanges(false);
         setPendingMutationId(null);
         return true;
       }
+      void confirmDialogRef.current({
+        title: "Descartar alterações?",
+        description: "Você tem mudanças não salvas neste conteúdo. Elas serão perdidas.",
+        confirmLabel: "Descartar e sair",
+        cancelLabel: "Continuar editando",
+        destructive: true,
+      }).then((proceed) => {
+        if (!proceed) return;
+        dirtyNavigationRef.current = false;
+        setHasChanges(false);
+        setPendingMutationId(null);
+        retry?.();
+      });
       return false;
     };
     const guardedPush: typeof navigator.push = (...args) => {
-      if (confirmNavigation()) originalPush.apply(navigator, args);
+      if (confirmNavigation(() => originalPush.apply(navigator, args))) {
+        originalPush.apply(navigator, args);
+      }
     };
     const guardedReplace: typeof navigator.replace = (...args) => {
-      if (confirmNavigation()) originalReplace.apply(navigator, args);
+      if (confirmNavigation(() => originalReplace.apply(navigator, args))) {
+        originalReplace.apply(navigator, args);
+      }
     };
     const guardedGo: typeof navigator.go = (...args) => {
-      if (confirmNavigation()) originalGo.apply(navigator, args);
+      if (confirmNavigation(() => originalGo.apply(navigator, args))) {
+        originalGo.apply(navigator, args);
+      }
     };
 
     navigator.push = guardedPush;
@@ -664,11 +685,16 @@ export default function EditorialEditor({
 
   const requestOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && savePost.isPending) return;
-    if (
-      !nextOpen &&
-      hasChanges &&
-      !window.confirm("Descartar as alterações não salvas?")
-    ) {
+    if (!nextOpen && hasChanges) {
+      void confirmDialog({
+        title: "Descartar alterações?",
+        description: "Você tem mudanças não salvas neste conteúdo. Elas serão perdidas.",
+        confirmLabel: "Descartar e sair",
+        cancelLabel: "Continuar editando",
+        destructive: true,
+      }).then((proceed) => {
+        if (proceed) onOpenChange(false);
+      });
       return;
     }
     onOpenChange(nextOpen);

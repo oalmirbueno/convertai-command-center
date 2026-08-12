@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useConfirm } from "@/components/shared/confirmDialog";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -200,6 +201,7 @@ const fmtSize = (n: number | null) => {
 };
 
 export default function Workspace() {
+  const confirmDialog = useConfirm();
   const { user, profile } = useAuth();
   const qc = useQueryClient();
   const { toast } = useToast();
@@ -1151,7 +1153,12 @@ export default function Workspace() {
       }
       return;
     }
-    if (!window.confirm("Confirme somente depois de verificar o arquivo com uma ferramenta de segurança confiável.")) return;
+    const scanProceed = await confirmDialog({
+      title: "Liberar este arquivo?",
+      description: "Confirme somente depois de verificar o arquivo com uma ferramenta de segurança confiável.",
+      confirmLabel: "Liberar arquivo",
+    });
+    if (!scanProceed) return;
     const { error } = await supabase.rpc("mark_workspace_inbox_scan_clean", {
       p_node_id: n.id,
       p_reference: "Confirmação manual no Workspace",
@@ -1397,7 +1404,13 @@ export default function Workspace() {
 
   async function revokeInbox(n: Node) {
     if (n.kind !== "folder" || n.__virtual) return;
-    if (!window.confirm(`Revogar o link de upload de “${n.name}”? O link atual deixará de funcionar imediatamente.`)) return;
+    const revokeProceed = await confirmDialog({
+      title: "Revogar link de upload?",
+      description: `O link atual de “${n.name}” deixa de funcionar imediatamente.`,
+      confirmLabel: "Revogar link",
+      destructive: true,
+    });
+    if (!revokeProceed) return;
     try {
       const { error } = await supabase.rpc("manage_workspace_inbox_token", {
         p_folder_id: n.id,

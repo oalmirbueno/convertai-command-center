@@ -7,6 +7,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
+import { ConfirmDialogProvider } from "@/components/shared/confirmDialog";
 import AppLayout from "@/components/AppLayout";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
 
@@ -177,9 +178,11 @@ const App = () => (
         <DownloadProgressOverlay />
         <AuthProvider>
           <ImpersonationProvider profile={null} clientId={null}>
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
+            <ConfirmDialogProvider>
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </ConfirmDialogProvider>
           </ImpersonationProvider>
         </AuthProvider>
       </TooltipProvider>
