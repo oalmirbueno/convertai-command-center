@@ -483,17 +483,21 @@ export default function EditorialDetailSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={onOpenChange}>
-        <SheetContent className="w-full overflow-y-auto sm:max-w-2xl">
-          <SheetHeader>
+        <SheetContent
+          side="bottom"
+          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-t-2xl border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl data-[state=open]:animate-in data-[state=closed]:animate-out"
+        >
+          <SheetHeader className="shrink-0 border-b border-border bg-card px-5 py-4 text-left sm:px-7 sm:py-5">
             <div className="flex items-start justify-between gap-4 pr-8">
               <div className="min-w-0">
-                <SheetTitle className="truncate">{post.post.title}</SheetTitle>
-                <SheetDescription className="mt-1">
+                <SheetTitle className="truncate text-base sm:text-lg">{post.post.title}</SheetTitle>
+                <SheetDescription className="mt-1 text-xs">
                   {clientName} · {projectName}
                 </SheetDescription>
               </div>
               <Badge
                 variant="outline"
+                className="shrink-0"
                 style={{
                   borderColor: `${aggregateConfig.color}55`,
                   backgroundColor: `${aggregateConfig.color}18`,
@@ -505,7 +509,7 @@ export default function EditorialDetailSheet({
             </div>
           </SheetHeader>
 
-          <div className="space-y-6 py-6">
+          <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-5 sm:px-7 sm:py-6">
             <section className="grid gap-3 rounded-xl border border-border bg-card p-4 sm:grid-cols-2">
               <div>
                 <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
