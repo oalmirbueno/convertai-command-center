@@ -685,8 +685,8 @@ export default function ReportDetail() {
         nextSteps={report.next_steps}
       />
 
-      {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR ═══════════════ */}
-      {report.project_id && (
+      {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR (equipe) ═══════════════ */}
+      {!isClientView && report.project_id && (
         <ReportComparison
           projectId={report.project_id}
           currentReportId={report.id}

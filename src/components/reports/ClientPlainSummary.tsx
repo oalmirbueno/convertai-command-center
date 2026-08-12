@@ -144,8 +144,32 @@ export default function ClientPlainSummary({
       investmentReading.push(
         `Para cada R$ 1,00 investido, retornaram ${money(data.returnPerReal)} em vendas.`
       );
+    } else if (data.contacts > 0) {
+      investmentReading.push(
+        `O retorno desta fase são as ${int(data.contacts)} pessoa(s) que chegaram até vocês: cliente conhece primeiro, compra depois. É esse fluxo constante de interessados que vira venda nos ciclos seguintes.`
+      );
+    } else if (data.reach > 0) {
+      investmentReading.push(
+        `O retorno desta fase é a presença: ${int(data.reach)} pessoa(s) da região certa agora conhecem a marca. Ninguém compra de quem nunca viu; esta etapa constrói exatamente isso.`
+      );
     }
   }
+
+  // Fase da jornada: primeiro ciclo é estruturação; com histórico, é evolução.
+  // A mensagem sempre ancora expectativa: resultado composto vem com constância,
+  // e cada fase tem um objetivo claro - isso segura o cliente nos meses 1 e 2.
+  const hasHistory = Boolean(
+    previousMetrics && Object.values(previousMetrics).some((value) => Number(value) > 0),
+  );
+  const journeyPhase = hasHistory
+    ? {
+        title: "Fase de evolução",
+        text: "Vocês já têm base de comparação: agora cada período mostra a curva subindo sobre o anterior. É nessa fase que a constância começa a pagar, porque o público que já viu a marca antes responde mais barato e mais rápido.",
+      }
+    : {
+        title: "Fase de estruturação",
+        text: "Este é o primeiro retrato completo do trabalho. Os números desta fase são a régua de partida: nos próximos relatórios você compara e enxerga a evolução real. Marca forte se constrói em ciclos, e o primeiro ciclo é onde se planta.",
+      };
 
   // Interpretação construtiva: o que o movimento indica e o que fazer com isso.
   const interpretation = (() => {
@@ -248,6 +272,14 @@ export default function ClientPlainSummary({
             </div>
           </div>
         )}
+
+        {/* Em que fase estamos */}
+        <div className="rounded-xl border border-border bg-secondary/25 p-4 sm:p-5">
+          <p className="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            <TrendingUp className="h-3.5 w-3.5" /> {journeyPhase.title}
+          </p>
+          <p className="mt-2.5 text-[13px] leading-relaxed text-foreground">{journeyPhase.text}</p>
+        </div>
 
         {/* O que isso significa */}
         <div className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4 sm:p-5">
