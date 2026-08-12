@@ -117,13 +117,39 @@ export default function AdminExperience() {
     queryKey: ["exp-released-files"],
     queryFn: async () => {
       const { data, error } = await supabase.from("files")
-        .select("id, client_id, created_at")
+        .select("id, client_id, file_name, created_at")
         .in("visibility", ["client_shared", "approval"])
         .eq("status", "ready")
         .is("archived_at", null)
         .is("parent_file_id", null)
         .order("created_at", { ascending: false });
       if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: LIVE,
+  });
+
+  const { data: allMilestones = [] } = useQuery({
+    queryKey: ["exp-milestones"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("milestones")
+        .select("id, project_id, title, status, target_date")
+        .is("deleted_at", null)
+        .order("target_date", { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    refetchInterval: LIVE,
+  });
+
+  const { data: allPublications = [] } = useQuery({
+    queryKey: ["exp-publications"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("editorial_publications")
+        .select("id, client_id, status, platform, scheduled_at, published_at")
+        .in("status", ["scheduled", "published"])
+        .order("scheduled_at", { ascending: true });
+      if (error) return [];
       return data || [];
     },
     refetchInterval: LIVE,
@@ -323,18 +349,63 @@ export default function AdminExperience() {
     return out;
   }, [healthRows, oneOffClients, projects]);
 
-  // ───────── Rascunhos: montagem com dados reais ─────────
+  // ───────── Rascunhos: montagem com dados reais e processo explicado ─────────
+  // Estrutura oficial de cada mensagem: o que fizemos, por que fizemos,
+  // qual sinal vamos observar e quando revisamos.
+  const FRONT_SIGNALS: Record<string, string> = {
+    social_media: "alcance qualificado, salvamentos e contatos chegando pelo perfil",
+    traffic: "custo por contato e volume de orçamentos gerados pelas campanhas",
+    site: "visitas e pedidos de orçamento chegando pelo site",
+    landing_page: "conversões da página (cadastros e chamadas)",
+    automation: "tempo economizado e atendimentos respondidos automaticamente",
+    event: "confirmações e participação no evento",
+    other: "o indicador principal combinado para esta frente",
+  };
+  const FRONT_LABELS: Record<string, string> = {
+    social_media: "Social Media", traffic: "Tráfego Pago", automation: "Automação",
+    site: "Site", landing_page: "Landing Page", event: "Evento", other: "Projeto",
+  };
+
   const buildDraft = (client: any, ritual: string) => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
     const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
-    const activeProject = clientProjects.find((p: any) => p.status !== "done") || clientProjects[0] || null;
-    const released7d = (releasedFiles || []).filter(
+    const activeProjects = clientProjects.filter((p: any) => p.status !== "done");
+    const activeProject = activeProjects[0] || clientProjects[0] || null;
+    const releasedWeek = (releasedFiles || []).filter(
       (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekAgo
-    ).length;
-    const pending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id).length;
+    );
+    const released7d = releasedWeek.length;
+    const releasedNames = releasedWeek.slice(0, 3).map((f: any) => f.file_name).join(", ");
+    const pendingFiles = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
+    const pending = pendingFiles.length;
+    const pendingNames = pendingFiles.slice(0, 2).map((f: any) => f.file_name).join(", ");
     const name = client.company_name || client.full_name;
     const dateLabel = now.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+
+    // Frentes descritas com o sinal que cada uma deve mover
+    const frontsText = activeProjects
+      .map((p: any) => `• ${FRONT_LABELS[p.project_type] || "Projeto"} (${p.name}): sinal observado: ${FRONT_SIGNALS[p.project_type] || FRONT_SIGNALS.other}`)
+      .join("\n");
+
+    // Próximas etapas com data (marcos dos projetos do cliente)
+    const projectIds = new Set(clientProjects.map((p: any) => p.id));
+    const nextMilestones = (allMilestones || [])
+      .filter((m: any) => projectIds.has(m.project_id) && m.status !== "completed" && m.target_date)
+      .slice(0, 2)
+      .map((m: any) => `${m.title} (previsão ${new Date(`${m.target_date}T12:00:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })})`)
+      .join("; ");
+
+    // Publicações confirmadas
+    const clientPubs = (allPublications || []).filter((p: any) => p.client_id === client.id);
+    const scheduledPubs = clientPubs.filter((p: any) => p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) >= now);
+    const publishedWeek = clientPubs.filter((p: any) => p.status === "published" && p.published_at && new Date(p.published_at) >= weekAgo);
+    const nextPubText = scheduledPubs[0]
+      ? new Date(scheduledPubs[0].scheduled_at).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" })
+      : null;
+
+    const fridayReview = "Na sexta-feira voltamos com a Prova de Movimento mostrando o que avançou e o que aprendemos.";
+    const mondayReview = "Na segunda-feira abrimos o próximo ciclo com a nova Rota da Semana.";
 
     const base = {
       client_id: client.id,
@@ -352,18 +423,59 @@ export default function AdminExperience() {
       return {
         ...base,
         title: `Check do Meio da Semana · ${dateLabel}`,
-        summary: `Passando no meio da semana para manter você por dentro, ${name}: ${released7d} entrega(s) liberada(s) nos últimos dias${pending > 0 ? ` e ${pending} material(is) esperando a sua aprovação para seguirmos` : " e a produção segue no ritmo planejado"}. [REVISAR: acrescentar o andamento específico da semana]`,
-        next_steps: pending > 0 ? "Aprovar os materiais pendentes ainda hoje para não travar o cronograma." : "Nenhuma ação necessária agora. Seguimos com o planejado.",
-        highlights: "Check de meio de semana",
+        summary: [
+          `Passando no meio da semana para manter você por dentro de tudo, ${name}.`,
+          ``,
+          `O QUE JÁ ANDOU DESDE SEGUNDA`,
+          released7d > 0
+            ? `Liberamos ${released7d} entrega(s) no painel${releasedNames ? `: ${releasedNames}` : ""}. Cada uma já passou pela nossa revisão interna de qualidade antes de chegar até você.`
+            : `A semana está em fase de produção: os materiais estão sendo construídos e passam pela nossa revisão interna antes de aparecerem no painel.`,
+          ``,
+          `O QUE ESTÁ EM PRODUÇÃO AGORA`,
+          activeProjects.length > 0 ? frontsText : `[REVISAR: descrever a produção da semana]`,
+          nextMilestones ? `Próximas etapas no radar: ${nextMilestones}.` : ``,
+          ``,
+          pending > 0
+            ? `O QUE DEPENDE DE VOCÊS\n${pending} material(is) aguardando aprovação (${pendingNames}). Sua aprovação libera o agendamento na data planejada. Sem ela, o cronograma da semana trava.`
+            : `Nenhuma pendência do lado de vocês. Seguimos no planejado.`,
+          ``,
+          `QUANDO REVISAMOS: ${fridayReview}`,
+        ].filter(Boolean).join("\n"),
+        next_steps: pending > 0
+          ? `Aprovar os materiais pendentes ainda hoje (${pendingNames}). Leva 2 minutos na área de Aprovações.`
+          : "Nenhuma ação necessária agora. A próxima parada é a Prova de Movimento na sexta.",
+        highlights: "Check de meio de semana: andamento, produção e o que depende de vocês",
       };
     }
     if (ritual === "prova_movimento") {
       return {
         ...base,
         title: `Prova de Movimento · ${dateLabel}`,
-        summary: `O que avançou nesta semana para ${name}: ${released7d} entrega(s) liberada(s) no painel${pending > 0 ? ` e ${pending} material(is) aguardando sua aprovação` : ""}. [REVISAR: adicionar o aprendizado da semana e o resultado observado]`,
-        next_steps: pending > 0 ? "Aprovar os materiais pendentes para liberar a próxima etapa." : "[REVISAR: próximo passo e responsável]",
-        highlights: `${released7d} entregas na semana`,
+        summary: [
+          `Fechamento da semana de ${name}, com o processo aberto para você ver.`,
+          ``,
+          `O QUE FIZEMOS`,
+          released7d > 0
+            ? `${released7d} entrega(s) concluídas e liberadas no painel${releasedNames ? `: ${releasedNames}` : ""}.`
+            : `Semana de construção interna: produção e preparação das próximas entregas (bastidores que aparecem no painel assim que liberados).`,
+          publishedWeek.length > 0 ? `${publishedWeek.length} publicação(ões) foram ao ar nesta semana, conforme o calendário aprovado por vocês.` : ``,
+          ``,
+          `POR QUE FIZEMOS`,
+          activeProjects.length > 0
+            ? `Cada frente tem um papel no seu crescimento:\n${frontsText}`
+            : `[REVISAR: conectar as entregas ao objetivo do cliente]`,
+          ``,
+          `O QUE VAMOS OBSERVAR`,
+          `Nos próximos dias acompanhamos os sinais acima e trazemos a leitura já interpretada: o que mudou, o que isso indica e qual decisão tomamos a partir disso. [REVISAR: adicionar o aprendizado específico desta semana]`,
+          ``,
+          pending > 0 ? `PENDÊNCIA: ${pending} material(is) aguardando sua aprovação (${pendingNames}).` : `PENDÊNCIA: nenhuma. Tudo em dia do seu lado.`,
+          ``,
+          `QUANDO REVISAMOS: ${mondayReview}`,
+        ].filter(Boolean).join("\n"),
+        next_steps: pending > 0
+          ? `Aprovar ${pendingNames} para liberarmos o agendamento. Depois disso, o próximo passo é nosso: abrir o ciclo de segunda com a nova Rota.`
+          : "[REVISAR: próximo passo da próxima semana e quem é o responsável]",
+        highlights: `${released7d} entrega(s) na semana · processo aberto do que, por quê e qual sinal`,
       };
     }
     if (ritual === "radar_aceleriq") {
@@ -371,29 +483,82 @@ export default function AdminExperience() {
       return {
         ...base,
         title: `Radar Aceleriq · ${now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`,
-        summary: opp
-          ? `Oportunidade identificada para ${name}: ${opp.detail} [REVISAR: detalhar a recomendação e o impacto esperado]`
-          : `Oportunidade proativa para ${name}: [REVISAR: descrever a oportunidade, a recomendação e o impacto esperado]. Base do mês: ${released7d} entrega(s) na última semana e ${clientProjects.length} projeto(s) na operação.`,
-        next_steps: "[REVISAR: recomendação prática e o que a Aceleriq fará se aprovado]",
-        highlights: "1 oportunidade recomendada",
+        summary: [
+          `${name}, o Radar é o nosso ritual de antecipação: uma vez por mês trazemos uma oportunidade que enxergamos antes de você precisar pedir.`,
+          ``,
+          `OPORTUNIDADE DETECTADA`,
+          opp ? opp.detail : `[REVISAR: descrever a oportunidade identificada para este cliente]`,
+          ``,
+          `POR QUE AGORA`,
+          `Cruzamos a movimentação do seu painel (entregas, aprovações e sinais das frentes) e este é o momento com melhor relação esforço x retorno. [REVISAR: contexto específico]`,
+          ``,
+          `NOSSA RECOMENDAÇÃO`,
+          `[REVISAR: a ação prática que a Aceleriq fará se aprovado, com o impacto esperado no indicador principal]`,
+          ``,
+          `COMO RESPONDER (basta dizer no grupo):`,
+          `1. Pode seguir  ·  2. Deixar para o próximo ciclo  ·  3. Quero entender melhor`,
+        ].filter(Boolean).join("\n"),
+        next_steps: "Escolher uma das três opções acima. Se aprovado, entra na próxima janela de produção e você acompanha tudo pelo painel.",
+        highlights: "1 oportunidade proativa do mês, com recomendação e impacto esperado",
       };
     }
     if (ritual === "marco_90") {
+      const totalReleased = (releasedFiles || []).filter((f: any) => f.client_id === client.id).length;
+      const doneProjects = clientProjects.filter((p: any) => p.status === "done").length;
+      const totalPublished = clientPubs.filter((p: any) => p.status === "published").length;
       return {
         ...base,
         period_start: new Date(now.getTime() - 90 * 86400000).toISOString().slice(0, 10),
         title: `Marco 90 · ${name}`,
-        summary: `Resumo do trimestre de ${name}: [REVISAR: antes e agora, evidências do período, travas encontradas]. Evolução registrada no painel: entregas liberadas, aprovações e etapas concluídas.`,
-        next_steps: "[REVISAR: o próximo nível para os próximos 90 dias]",
-        highlights: "Marco trimestral",
+        summary: [
+          `${name}, a cada 90 dias paramos para olhar o caminho inteiro: de onde saímos, o que foi construído e para onde vamos. É fácil esquecer como as coisas estavam antes; este registro existe para isso.`,
+          ``,
+          `ONDE ESTÁVAMOS`,
+          `[REVISAR: como estava a operação/presença do cliente há 90 dias]`,
+          ``,
+          `O QUE FOI CONSTRUÍDO (registrado no painel)`,
+          `• ${totalReleased} entrega(s) liberadas no total${totalPublished > 0 ? `\n• ${totalPublished} publicação(ões) no ar` : ""}${doneProjects > 0 ? `\n• ${doneProjects} projeto(s) concluídos` : ""}${activeProjects.length > 0 ? `\n• ${activeProjects.length} frente(s) ativas em operação` : ""}`,
+          ``,
+          `O QUE MELHOROU`,
+          `[REVISAR: os sinais que evoluíram no período, com o antes e o agora]`,
+          ``,
+          `O QUE AINDA TRAVA`,
+          `[REVISAR: com transparência, o que segurou resultado e o que faremos a respeito]`,
+          ``,
+          `O PRÓXIMO NÍVEL`,
+          `[REVISAR: o foco dos próximos 90 dias e o que ele destrava]`,
+        ].join("\n"),
+        next_steps: "[REVISAR: a primeira ação do próximo trimestre e a data da próxima revisão]",
+        highlights: "Marco trimestral: antes, agora, evidências e o próximo nível",
       };
     }
     return {
       ...base,
       title: `Rota da Semana · ${dateLabel}`,
-      summary: `Foco da semana para ${name}: [REVISAR: definir o foco em uma frase]. Em produção: ${clientProjects.filter((p: any) => p.status !== "done").length} frente(s). Na última semana foram liberadas ${released7d} entrega(s).${pending > 0 ? ` Ação necessária: ${pending} aprovação(ões) pendente(s).` : ""}`,
-      next_steps: pending > 0 ? "Aprovar os materiais pendentes." : "[REVISAR: única ação necessária do cliente nesta semana]",
-      highlights: "Rota semanal",
+      summary: [
+        `Bom dia, ${name}! Abrindo a semana com o plano claro, do nosso jeito: você nunca fica sem saber o que está acontecendo.`,
+        ``,
+        `FOCO DESTA SEMANA`,
+        `[REVISAR: o objetivo da semana em uma frase, ligado ao resultado do cliente]`,
+        ``,
+        `O QUE VAMOS FAZER E POR QUÊ`,
+        activeProjects.length > 0
+          ? frontsText
+          : `[REVISAR: as entregas planejadas da semana e o papel de cada uma]`,
+        nextMilestones ? `Etapas com data no radar: ${nextMilestones}.` : ``,
+        nextPubText ? `Próxima publicação confirmada: ${nextPubText}.` : ``,
+        released7d > 0 ? `Da semana passada, ${released7d} entrega(s) já estão liberadas no painel${releasedNames ? ` (${releasedNames})` : ""}.` : ``,
+        ``,
+        pending > 0
+          ? `A ÚNICA AÇÃO DE VOCÊS\nAprovar ${pendingNames} até quarta-feira. É o que libera o agendamento das publicações na data certa.`
+          : `A ÚNICA AÇÃO DE VOCÊS\nNenhuma por enquanto. Se algo surgir, avisamos aqui e no painel.`,
+        ``,
+        `QUANDO REVISAMOS: ${fridayReview}`,
+      ].filter(Boolean).join("\n"),
+      next_steps: pending > 0
+        ? `Aprovar os materiais pendentes (${pendingNames}) até quarta. O painel mostra tudo na área de Aprovações.`
+        : "[REVISAR: única ação necessária do cliente nesta semana, com prazo]",
+      highlights: "Rota da semana: foco, o que vamos fazer, por quê e a única ação de vocês",
     };
   };
 
