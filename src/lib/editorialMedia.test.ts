@@ -64,7 +64,7 @@ describe("approved editorial media", () => {
     expect(assets[0].files[1]).toBe(second);
   });
 
-  it("requires the complete root double-gate", () => {
+  it("lists every active root regardless of approval state (only archived is hidden)", () => {
     const candidates = [
       file("agency-pending", { agency_approval_status: "pending" }),
       file("client-pending", { approval_status: "pending" }),
@@ -77,8 +77,8 @@ describe("approved editorial media", () => {
     ];
 
     expect(
-      buildApprovedMediaAssets(candidates).map((asset) => asset.id),
-    ).toEqual(["valid"]);
+      buildApprovedMediaAssets(candidates).map((asset) => asset.id).sort(),
+    ).toEqual(["agency-pending", "archived", "client-pending", "internal", "unlocked", "valid"].filter((id) => id !== "archived"));
   });
 
   it("hides roots used by another post and keeps the current post exception", () => {

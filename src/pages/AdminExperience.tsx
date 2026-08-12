@@ -642,15 +642,23 @@ export default function AdminExperience() {
       ? portfolioClients
       : portfolioClients.filter((c: any) => c.id === genClientId);
     if (targets.length === 0) { toast.error("Selecione um cliente"); return; }
-    const previews: DraftPreview[] = targets
+    // O banco exige projeto no registro: cliente sem projeto não entra no lote.
+    const withProject = targets.filter((c: any) =>
+      (projects || []).some((p: any) => p.client_id === c.id && !p.deleted_at)
+    );
+    const skippedNoProject = targets.length - withProject.length;
+    const previews: DraftPreview[] = withProject
       .filter((c: any) => !hasRecentDraft(c.id, genRitual))
       .map((c: any) => ({
         clientId: c.id,
         clientName: c.company_name || c.full_name,
         draft: buildDraft(c, genRitual),
       }));
+    if (skippedNoProject > 0) {
+      toast.info(`${skippedNoProject} cliente(s) sem projeto cadastrado ficaram fora. Crie um projeto para eles entrarem nos rituais.`);
+    }
     if (previews.length === 0) {
-      toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
+      if (skippedNoProject === 0) toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
       return;
     }
     setGenPreviews(previews);

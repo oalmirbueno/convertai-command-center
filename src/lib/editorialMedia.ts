@@ -1,4 +1,3 @@
-import { isEditorialFileEditable, isFilePublishable } from "@/lib/editorial";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 
 export type EditorialMediaContentType = "static" | "carousel" | "video";
@@ -157,10 +156,9 @@ export function buildApprovedMediaAssets(
   return files
     .filter((file) => !file.parent_file_id)
     .filter(activeFile)
-    // Anexável = já aprovado (reuso) OU rascunho interno editável, espelhando a
-    // regra do servidor (file_is_editable no save). O gate de aprovação completa
-    // continua obrigatório na hora de agendar/publicar - nada muda na segurança.
-    .filter((root) => isFilePublishable(root) || isEditorialFileEditable(root))
+    // Todos os arquivos ativos aparecem para montar o post, aprovados ou não:
+    // a lógica de espera é do agendamento (só publica depois da aprovação),
+    // não da seleção. O gate completo segue obrigatório em agendar/publicar.
     .filter(
       (root) =>
         !usedRootFileIds.has(root.id) || root.id === options.currentRootFileId,

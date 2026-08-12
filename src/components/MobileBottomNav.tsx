@@ -6,6 +6,7 @@ import {
   FolderOpen,
   CheckSquare,
   CalendarDays,
+  FileArchive,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -58,6 +59,21 @@ export default function MobileBottomNav({ unreadCount, onOpenNotifications }: Pr
           <CalendarDays className="w-5 h-5" />
           <span>Agenda</span>
         </NavLink>
+
+        {isStaff && (
+          <NavLink
+            to="/arquivos"
+            className={({ isActive }) =>
+              cn(
+                tabBase,
+                isActive ? "text-primary" : "text-muted-foreground",
+              )
+            }
+          >
+            <FileArchive className="h-5 w-5" />
+            <span>Arquivos</span>
+          </NavLink>
+        )}
 
         {isStaff ? (
           <NavLink
