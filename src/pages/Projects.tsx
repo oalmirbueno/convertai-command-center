@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { useProjects } from "@/hooks/useSupabaseData";
+import { useProjects, useTasks } from "@/hooks/useSupabaseData";
+import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { useAuth } from "@/contexts/AuthContext";
 import { Plus, MoreHorizontal, Clock, Sparkles } from "lucide-react";
 import CreateProjectModal from "@/components/admin/CreateProjectModal";
@@ -31,6 +32,7 @@ const statusLabels: Record<string, string> = {
 export default function Projects() {
   const { profile } = useAuth();
   const { data: projects, isLoading } = useProjects();
+  const { data: tasks } = useTasks();
   const isAdmin = profile?.role === "admin";
   const isClient = profile?.role === "client";
 
@@ -117,12 +119,23 @@ export default function Projects() {
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">{p.client?.company_name || p.client?.full_name}</p>
                 </div>
-                <div className="w-28 hidden md:block">
-                  <div className="h-[3px] rounded-full bg-secondary overflow-hidden">
-                    <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.progress}%` }} />
-                  </div>
-                  <p className="text-xs font-mono text-muted-foreground mt-1 text-right">{p.progress}%</p>
-                </div>
+                {(() => {
+                  // Recorrente nao tem "80% pronto": mostra o ritmo do ciclo.
+                  const view = buildProgressView(p, (tasks || []) as any[]);
+                  return (
+                    <div className="hidden w-36 md:block">
+                      <div className="h-[3px] overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all"
+                          style={{ width: `${cycleFillPercent(view)}%` }}
+                        />
+                      </div>
+                      <p className="mt-1 truncate text-right text-[11px] text-muted-foreground">
+                        {view.mode === "percent" ? `${view.percent}%` : view.label}
+                      </p>
+                    </div>
+                  );
+                })()}
                 <div className="hidden sm:flex items-center gap-1.5 text-xs text-muted-foreground">
                   <Clock className="w-3 h-3" />
                   {formatDate(p.deadline)}

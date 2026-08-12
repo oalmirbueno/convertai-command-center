@@ -404,3 +404,45 @@ export const editorialPermissions = getEditorialPermissions;
 export const isFilePublishable = isEditorialFilePublishable;
 export const isFileEditable = isEditorialFileEditable;
 export const aggregateEditorialStatus = aggregateEditorialPostStatus;
+
+/**
+ * Estágio visual único do conteúdo, para agenda e quadro contarem a mesma
+ * história de cor.
+ *
+ * O quadro colore pela coluna (derivada de production_status) e a agenda coloria
+ * só por status de publicação: por isso rascunho, produção e pronto apareciam
+ * com a mesma cor no calendário. Aqui os dois campos entram na mesma decisão,
+ * com a publicação tendo precedência quando já saiu do planejamento.
+ */
+export type EditorialVisualStage =
+  | "draft"
+  | "production"
+  | "ready"
+  | "scheduled"
+  | "published"
+  | "failed"
+  | "cancelled";
+
+export const EDITORIAL_VISUAL_STAGE_LABELS: Record<EditorialVisualStage, string> = {
+  draft: "Rascunho",
+  production: "Em produção",
+  ready: "Pronto",
+  scheduled: "Programado",
+  published: "Publicado",
+  failed: "Falhou",
+  cancelled: "Cancelado",
+};
+
+export function editorialVisualStage(
+  productionStatus: string | null | undefined,
+  publicationStatus?: string | null,
+): EditorialVisualStage {
+  if (publicationStatus === "published") return "published";
+  if (publicationStatus === "failed") return "failed";
+  if (publicationStatus === "cancelled") return "cancelled";
+  if (publicationStatus === "scheduled") return "scheduled";
+  if (productionStatus === "cancelled") return "cancelled";
+  if (productionStatus === "production") return "production";
+  if (productionStatus === "ready") return "ready";
+  return "draft";
+}

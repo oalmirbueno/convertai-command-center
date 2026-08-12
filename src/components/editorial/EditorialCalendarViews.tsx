@@ -48,6 +48,8 @@ import type { EditorialInboxTask } from "@/components/editorial/EditorialTaskInb
 import { dateKeyInTimeZone } from "@/lib/editorialDate";
 import {
   aggregateEditorialStatus,
+  editorialVisualStage,
+  EDITORIAL_VISUAL_STAGE_LABELS,
   getEditorialApprovalStage,
 } from "@/lib/editorial";
 import {
@@ -119,6 +121,20 @@ const statusLabels: Record<string, string> = {
   published: "Publicado",
   failed: "Falhou",
   cancelled: "Cancelado",
+};
+
+// Cor por estagio visual: a agenda passa a contar a mesma historia do quadro.
+// Antes tudo que nao estivesse agendado/publicado saia cinza, entao rascunho,
+// producao e pronto ficavam identicos no calendario. Classes literais para o
+// Tailwind nao purgar.
+const stageClasses: Record<string, string> = {
+  draft: "border-slate-400/30 bg-slate-400/10 text-foreground",
+  production: "border-violet-500/30 bg-violet-500/10 text-violet-500",
+  ready: "border-amber-500/30 bg-amber-500/10 text-amber-500",
+  scheduled: "border-sky-500/30 bg-sky-500/10 text-sky-500",
+  published: "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
+  failed: "border-destructive/30 bg-destructive/10 text-destructive",
+  cancelled: "border-border bg-muted text-muted-foreground",
 };
 
 const statusClasses: Record<string, string> = {
@@ -460,7 +476,11 @@ function PublicationPill({
     : "Sem horário";
   const platform =
     platformLabels[publication.platform] || publication.platform;
-  const status = statusLabels[publication.status] || publication.status;
+  const stage = editorialVisualStage(
+    item.post.post.production_status,
+    publication.status,
+  );
+  const status = EDITORIAL_VISUAL_STAGE_LABELS[stage] || publication.status;
   const context = postContentContext(item.post, item.publication);
   const draggable = isEditorialPublicationDraggable(
     item.post,
@@ -495,7 +515,7 @@ function PublicationPill({
       }
       className={cn(
         "group relative min-h-11 w-full rounded-lg border text-left transition-colors hover:border-primary/40",
-        statusClasses[publication.status] || statusClasses.planned,
+        stageClasses[stage] || stageClasses.draft,
         isDragging && "opacity-30",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
@@ -1801,19 +1821,24 @@ function ListView({
                         publication.platform}
                     </p>
                   </div>
-                  <Badge
-                    variant="outline"
-                    className={cn(
-                      "w-fit",
-                      statusClasses[publication.status] ||
-                        statusClasses.planned,
-                    )}
-                  >
-                    {publication.status === "published" && (
-                      <CheckCircle2 className="mr-1 h-3 w-3" />
-                    )}
-                    {statusLabels[publication.status] || publication.status}
-                  </Badge>
+                  {(() => {
+                    // Mesmo estagio visual do calendario e do quadro.
+                    const listStage = editorialVisualStage(
+                      item.post.post.production_status,
+                      publication.status,
+                    );
+                    return (
+                      <Badge
+                        variant="outline"
+                        className={cn("w-fit", stageClasses[listStage] || stageClasses.draft)}
+                      >
+                        {listStage === "published" && (
+                          <CheckCircle2 className="mr-1 h-3 w-3" />
+                        )}
+                        {EDITORIAL_VISUAL_STAGE_LABELS[listStage] || publication.status}
+                      </Badge>
+                    );
+                  })()}
                 </button>
                 <div className="flex shrink-0 items-center gap-1">
                   {draggable && !moving && (

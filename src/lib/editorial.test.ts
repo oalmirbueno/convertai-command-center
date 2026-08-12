@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import {
   EDITORIAL_PLATFORM_CONFIG,
   EDITORIAL_PLATFORMS,
+  EDITORIAL_VISUAL_STAGE_LABELS,
+  editorialVisualStage,
   EDITORIAL_PRODUCTION_STATUS_CONFIG,
   EDITORIAL_PUBLICATION_STATUSES,
   EDITORIAL_STATUS_CONFIG,
@@ -440,5 +442,34 @@ describe("editorial post filters", () => {
     expect(
       filterEditorialPosts(posts, { platform: "all", status: "all" }),
     ).toEqual(posts);
+  });
+});
+
+describe("estágio visual único da agenda e do quadro", () => {
+  it("distingue rascunho, produção e pronto quando a publicação ainda é planejada", () => {
+    // Bug recorrente: o calendário coloria só por status de publicação, então
+    // mover para "produção" não mudava nada na agenda.
+    expect(editorialVisualStage("draft", "planned")).toBe("draft");
+    expect(editorialVisualStage("production", "planned")).toBe("production");
+    expect(editorialVisualStage("ready", "planned")).toBe("ready");
+  });
+
+  it("deixa a publicação vencer quando ela já saiu do planejamento", () => {
+    expect(editorialVisualStage("production", "scheduled")).toBe("scheduled");
+    expect(editorialVisualStage("ready", "published")).toBe("published");
+    expect(editorialVisualStage("draft", "failed")).toBe("failed");
+    expect(editorialVisualStage("ready", "cancelled")).toBe("cancelled");
+  });
+
+  it("cai em rascunho sem informação e respeita cancelamento de produção", () => {
+    expect(editorialVisualStage(null, null)).toBe("draft");
+    expect(editorialVisualStage("cancelled", "planned")).toBe("cancelled");
+  });
+
+  it("tem rótulo para todos os estágios", () => {
+    const stages = ["draft", "production", "ready", "scheduled", "published", "failed", "cancelled"] as const;
+    for (const stage of stages) {
+      expect(EDITORIAL_VISUAL_STAGE_LABELS[stage]).toBeTruthy();
+    }
   });
 });
