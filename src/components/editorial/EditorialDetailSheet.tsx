@@ -853,8 +853,25 @@ export default function EditorialDetailSheet({
               })}
 
               {post.publications.length === 0 && (
-                <div className="rounded-xl border border-dashed border-border p-5 text-center text-xs text-muted-foreground">
-                  Este conteúdo ainda não tem plataformas planejadas.
+                <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] p-5 text-center">
+                  <p className="text-[13px] font-medium text-foreground">
+                    Falta definir onde e quando publicar
+                  </p>
+                  <p className="mx-auto mt-1.5 max-w-md text-xs leading-relaxed text-muted-foreground">
+                    Escolha a conta (o perfil que vai receber a publicação) e a data e horário.
+                    Só depois disso aparecem aqui os botões de Agendar e Confirmar publicação.
+                  </p>
+                  {canEdit && !isImpersonating && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="mt-3"
+                      onClick={() => onEdit(post)}
+                    >
+                      <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                      Definir conta, data e horário
+                    </Button>
+                  )}
                 </div>
               )}
             </section>
