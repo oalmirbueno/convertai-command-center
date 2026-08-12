@@ -72,6 +72,19 @@ const TYPE_TABS = [
   { value: "hybrid", label: "Híbridos" },
 ];
 
+// Filtro por serviço contratado (services_config do cadastro). Rótulos curtos
+// para o filtro caber em uma linha sem virar bagunça.
+const SERVICE_FILTERS: { value: string; label: string }[] = [
+  { value: "all", label: "Todos os serviços" },
+  { value: "social", label: "Social Media" },
+  { value: "trafego", label: "Tráfego" },
+  { value: "site", label: "Site" },
+  { value: "automacao", label: "Automação" },
+  { value: "design", label: "Design" },
+  { value: "videos_ia", label: "Vídeos" },
+  { value: "seo", label: "SEO" },
+];
+
 const typeBadge: Record<string, { label: string; cls: string }> = {
   recurring: { label: "Recorrente", cls: "bg-primary/10 text-primary border-primary/30" },
   one_off: { label: "Avulso", cls: "bg-warning/10 text-warning border-warning/30" },
@@ -497,6 +510,7 @@ export default function Clients() {
   const [briefingOpen, setBriefingOpen] = useState(false);
   const [tab, setTab] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [serviceFilter, setServiceFilter] = useState("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -527,6 +541,7 @@ export default function Clients() {
     const status = c.plan_status || "active";
     if (tab !== "all" && status !== tab) return false;
     if (typeFilter !== "all" && (c.client_type || "recurring") !== typeFilter) return false;
+    if (serviceFilter !== "all" && !(c as any).services_config?.[serviceFilter]) return false;
 
     if (searching) {
       const searchable = normalizeSearch([
@@ -788,8 +803,31 @@ export default function Clients() {
         </section>
       )}
 
-      {/* Status + Type Filters */}
-      <div className="mt-3 flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
+      {/* Filtros: status, tipo e serviço contratado */}
+      <div className="mt-4 space-y-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">Filtrar por</p>
+          <select
+            value={serviceFilter}
+            onChange={(event) => setServiceFilter(event.target.value)}
+            aria-label="Filtrar clientes por serviço contratado"
+            className="rounded-lg border border-border bg-secondary/50 px-3 py-1.5 text-[12px] text-foreground focus:outline-none focus:border-primary/50"
+          >
+            {SERVICE_FILTERS.map((service) => (
+              <option key={service.value} value={service.value}>{service.label}</option>
+            ))}
+          </select>
+          {(serviceFilter !== "all" || typeFilter !== "all" || tab !== "all") && (
+            <button
+              type="button"
+              onClick={() => { setServiceFilter("all"); setTypeFilter("all"); setTab("all"); }}
+              className="text-[11px] text-primary hover:opacity-80 cursor-pointer bg-transparent border-none"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      <div className="flex flex-nowrap items-center gap-2 overflow-x-auto scrollbar-hidden pb-1 md:flex-wrap md:overflow-visible md:pb-0">
         <div className="flex shrink-0 gap-1 bg-secondary/50 border border-border rounded-lg p-1 w-fit" role="group" aria-label="Filtrar clientes por status">
           {STATUS_TABS.map((t) => (
             <button
@@ -825,6 +863,7 @@ export default function Clients() {
             </button>
           ))}
         </div>
+      </div>
       </div>
 
       <div className="mt-3" data-tour="clients-search">

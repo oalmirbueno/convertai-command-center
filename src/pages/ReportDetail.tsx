@@ -1,4 +1,6 @@
 import { useParams, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import ClientPlainSummary from "@/components/reports/ClientPlainSummary";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -96,6 +98,9 @@ function daysBetween(a: string, b: string) {
 export default function ReportDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { profile } = useAuth();
+  // O cliente lê a versão em linguagem simples; a técnica fica para a equipe.
+  const isClientView = profile?.role === "client";
 
   const { data: report, isLoading } = useQuery({
     queryKey: ["report-detail", id],
@@ -671,6 +676,15 @@ export default function ReportDetail() {
       )}
       </div>
 
+      {/* ═══════════════ LEITURA EM LINGUAGEM CLARA (cliente primeiro) ═══════════════ */}
+      <ClientPlainSummary
+        metrics={(report.metrics || {}) as Record<string, any>}
+        previousMetrics={(previousReport?.metrics || null) as Record<string, any> | null}
+        periodDays={periodDays}
+        summary={report.summary}
+        nextSteps={report.next_steps}
+      />
+
       {/* ═══════════════ COMPARAÇÃO COM RELATÓRIO ANTERIOR ═══════════════ */}
       {report.project_id && (
         <ReportComparison
@@ -683,10 +697,10 @@ export default function ReportDetail() {
       )}
 
       {/* ═══════════════ AUDITORIA DE MÉTRICAS ═══════════════ */}
-      <MetricsAudit metrics={report.metrics as any} />
+      {!isClientView && <MetricsAudit metrics={report.metrics as any} />}
 
       {/* ═══════════════ KPI CARDS ═══════════════ */}
-      {kpis.length > 0 && (
+      {!isClientView && kpis.length > 0 && (
         <section className="space-y-3">
           <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
             <Gauge className="w-3.5 h-3.5 text-primary" />
