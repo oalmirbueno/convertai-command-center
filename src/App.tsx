@@ -97,6 +97,21 @@ function ProtectedRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Rota exclusiva da equipe. O cliente que digitar a URL na mao volta para o
+ * painel dele, sem ver nenhuma tela interna da agencia. O RLS ja protege os
+ * dados; esta trava evita expor a casca administrativa.
+ */
+function StaffRoute({ children }: { children: ReactNode }) {
+  const { profile, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  const isStaff =
+    profile?.role === "admin" ||
+    ["design", "traffic", "manager"].includes(profile?.role || "");
+  if (!isStaff) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { user, profile, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -120,32 +135,32 @@ function AppRoutes() {
 
       <Route path="/dashboard" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminDashboard /> : <ClientDashboard />}</AppLayout></ProtectedRoute>} />
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
-      <Route path="/briefings" element={<ProtectedRoute><AppLayout><AdminBriefings /></AppLayout></ProtectedRoute>} />
-      <Route path="/kanban" element={<ProtectedRoute><AppLayout><Kanban /></AppLayout></ProtectedRoute>} />
+      <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
-      <Route path="/clientes" element={<ProtectedRoute><AppLayout><Clients /></AppLayout></ProtectedRoute>} />
-      <Route path="/equipe" element={<ProtectedRoute><AppLayout><Team /></AppLayout></ProtectedRoute>} />
-      <Route path="/arquivos" element={<ProtectedRoute><AppLayout><AdminFiles /></AppLayout></ProtectedRoute>} />
-      <Route path="/config" element={<ProtectedRoute><AppLayout><SettingsPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/clientes" element={<ProtectedRoute><StaffRoute><AppLayout><Clients /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/equipe" element={<ProtectedRoute><StaffRoute><AppLayout><Team /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/arquivos" element={<ProtectedRoute><StaffRoute><AppLayout><AdminFiles /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/config" element={<ProtectedRoute><StaffRoute><AppLayout><SettingsPage /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/pedidos" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminRequests /> : <ClientRequests />}</AppLayout></ProtectedRoute>} />
       <Route path="/documentos" element={<ProtectedRoute><AppLayout><ClientDocuments /></AppLayout></ProtectedRoute>} />
       <Route path="/perfil" element={<ProtectedRoute><AppLayout><ProfilePage /></AppLayout></ProtectedRoute>} />
       <Route path="/aprovacoes" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminApprovals /> : <ClientApprovals />}</AppLayout></ProtectedRoute>} />
       <Route path="/relatorios" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminReports /> : <ClientReports />}</AppLayout></ProtectedRoute>} />
-      <Route path="/relatorios/novo" element={<ProtectedRoute><AppLayout><AdminReportCreate /></AppLayout></ProtectedRoute>} />
+      <Route path="/relatorios/novo" element={<ProtectedRoute><StaffRoute><AppLayout><AdminReportCreate /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/relatorios/:id" element={<ProtectedRoute><AppLayout><ReportDetail /></AppLayout></ProtectedRoute>} />
       <Route path="/timeline" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
-      <Route path="/ver-como-cliente" element={<ProtectedRoute><AppLayout><AdminViewAsClient /></AppLayout></ProtectedRoute>} />
+      <Route path="/ver-como-cliente" element={<ProtectedRoute><StaffRoute><AppLayout><AdminViewAsClient /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
-      <Route path="/financeiro/projecao" element={<ProtectedRoute><AppLayout><AdminProjection /></AppLayout></ProtectedRoute>} />
-      <Route path="/api-docs" element={<ProtectedRoute><AppLayout><ApiDocs /></AppLayout></ProtectedRoute>} />
-      <Route path="/admin/quiz" element={<ProtectedRoute><AppLayout><AdminQuizSubmissions /></AppLayout></ProtectedRoute>} />
-      <Route path="/admin/backfill" element={<ProtectedRoute><AppLayout><AdminBackfillPage /></AppLayout></ProtectedRoute>} />
+      <Route path="/financeiro/projecao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminProjection /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/api-docs" element={<ProtectedRoute><StaffRoute><AppLayout><ApiDocs /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/admin/quiz" element={<ProtectedRoute><StaffRoute><AppLayout><AdminQuizSubmissions /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/admin/backfill" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBackfillPage /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/cofre" element={<ProtectedRoute><AppLayout><ClientVaultPage /></AppLayout></ProtectedRoute>} />
       <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
-      <Route path="/contratos" element={<ProtectedRoute><AppLayout><AdminContracts /></AppLayout></ProtectedRoute>} />
+      <Route path="/contratos" element={<ProtectedRoute><StaffRoute><AppLayout><AdminContracts /></AppLayout></StaffRoute></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
