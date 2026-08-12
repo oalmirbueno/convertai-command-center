@@ -972,7 +972,7 @@ export default function Clients() {
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium text-foreground truncate">{c.company_name || c.full_name}</p>
+                      <p className="truncate text-[15px] font-semibold leading-tight text-foreground">{c.company_name || c.full_name}</p>
                       {(searching || tab === "all") && (
                         <span className="inline-flex items-center rounded-md border border-border bg-secondary/60 px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wider text-muted-foreground">
                           {statusLabel[c.plan_status || "active"] || "Sem status"}
@@ -992,7 +992,7 @@ export default function Clients() {
                         </span>
                       )}
                     </div>
-                    <p className="truncate text-[11px] text-muted-foreground">
+                    <p className="mt-1 truncate text-[11.5px] leading-relaxed text-muted-foreground">
                       {c.company_name && c.full_name ? `${c.full_name} · ` : ""}
                       {[c.email, c.phone].filter(Boolean).join(" · ")}
                     </p>
@@ -1112,7 +1112,7 @@ export default function Clients() {
 
             return (
               <>
-                <div className="space-y-1 stagger-children">
+                <div className="space-y-2 stagger-children">
                   {principais.map((c) => renderClientRow(c))}
                   {principais.length === 0 && (
                     <p className="py-3 text-center text-xs text-muted-foreground">Nenhum cliente recorrente ou híbrido nos filtros aplicados.</p>
@@ -1127,7 +1127,7 @@ export default function Clients() {
                         Total geral: {principais.length + avulsosList.length} clientes ({principais.length} recorrentes/híbridos + {avulsosList.length} avulsos)
                       </span>
                     </div>
-                    <div className="space-y-1 text-[13px]">
+                    <div className="space-y-2 text-[13px]">
                       {avulsosList.map((c) => renderClientRow(c))}
                     </div>
                   </div>
