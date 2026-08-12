@@ -1,4 +1,4 @@
-import { isFilePublishable } from "@/lib/editorial";
+import { isEditorialFileEditable, isFilePublishable } from "@/lib/editorial";
 import { mediaKindFromFile } from "@/lib/fileUrls";
 
 export type EditorialMediaContentType = "static" | "carousel" | "video";
@@ -157,7 +157,10 @@ export function buildApprovedMediaAssets(
   return files
     .filter((file) => !file.parent_file_id)
     .filter(activeFile)
-    .filter((root) => isFilePublishable(root))
+    // Anexável = já aprovado (reuso) OU rascunho interno editável, espelhando a
+    // regra do servidor (file_is_editable no save). O gate de aprovação completa
+    // continua obrigatório na hora de agendar/publicar - nada muda na segurança.
+    .filter((root) => isFilePublishable(root) || isEditorialFileEditable(root))
     .filter(
       (root) =>
         !usedRootFileIds.has(root.id) || root.id === options.currentRootFileId,
