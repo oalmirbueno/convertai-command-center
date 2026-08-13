@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -40,6 +40,7 @@ const SIGNAL_TONE: Record<string, string> = {
 export default function ClientJourneyUpdates() {
   const navigate = useNavigate();
   const { clientId, isImpersonating } = useClientIdentity();
+  const [expandedMonth, setExpandedMonth] = useState<string | null>(null);
   const { profile } = useAuth();
   // Staff sem "Ver como Cliente" nao tem jornada propria: sem esta trava, o
   // admin via os dados do proprio cadastro achando que eram de um cliente.
@@ -369,26 +370,66 @@ export default function ClientJourneyUpdates() {
               </p>
             </div>
             <div className="space-y-2.5 px-5 py-5 sm:px-7">
-              {rows.map((row) => (
-                <div key={row.key} className="flex items-center gap-3">
-                  <span className="w-14 shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
-                    {monthLabel(row.key)}
-                  </span>
-                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-secondary/50">
-                    <div
-                      className="flex h-full overflow-hidden rounded-full"
-                      style={{ width: `${Math.max(6, (row.total / peak) * 100)}%` }}
-                    >
-                      {row.entregas > 0 && <span className="h-full bg-primary" style={{ flex: row.entregas }} />}
-                      {row.publicacoes > 0 && <span className="h-full bg-sky-500" style={{ flex: row.publicacoes }} />}
-                      {row.relatorios > 0 && <span className="h-full bg-amber-500" style={{ flex: row.relatorios }} />}
+              {rows.map((row) => {
+                const isOpen = expandedMonth === row.key;
+                return (
+                <div key={row.key}>
+                  <button
+                    type="button"
+                    onClick={() => setExpandedMonth(isOpen ? null : row.key)}
+                    className={`flex w-full items-center gap-3 rounded-lg px-1 py-1 text-left transition-colors ${isOpen ? "bg-secondary/40" : "hover:bg-secondary/25"}`}
+                  >
+                    <span className="w-14 shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                      {monthLabel(row.key)}
+                    </span>
+                    <div className="h-3 flex-1 overflow-hidden rounded-full bg-secondary/50">
+                      <div
+                        className="flex h-full overflow-hidden rounded-full"
+                        style={{ width: `${Math.max(6, (row.total / peak) * 100)}%` }}
+                      >
+                        {row.entregas > 0 && <span className="h-full bg-primary" style={{ flex: row.entregas }} />}
+                        {row.publicacoes > 0 && <span className="h-full bg-sky-500" style={{ flex: row.publicacoes }} />}
+                        {row.relatorios > 0 && <span className="h-full bg-amber-500" style={{ flex: row.relatorios }} />}
+                      </div>
                     </div>
-                  </div>
-                  <span className="w-20 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
-                    {row.total} · total {row.running}
-                  </span>
+                    <span className="w-20 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                      {row.total} · total {row.running}
+                    </span>
+                  </button>
+                  {isOpen && (
+                    <div className="ml-16 mt-1.5 space-y-1 border-l border-border pl-3 pb-1">
+                      {row.entregas > 0 && (
+                        <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{row.entregas}</span> material(is) trabalhado(s) neste mês</p>
+                      )}
+                      {(snapshot?.publications || [])
+                        .filter((pub: any) => pub.status === "published" && pub.published_at && pub.published_at.startsWith(row.key))
+                        .map((pub: any, index: number) => (
+                          <p key={index} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span className="h-1.5 w-1.5 rounded-full bg-sky-500" />
+                            Publicação no ar em {new Date(pub.published_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "short" })}
+                            {pub.permalink && (
+                              <a href={pub.permalink} target="_blank" rel="noreferrer" className="text-primary hover:opacity-80">ver</a>
+                            )}
+                          </p>
+                        ))}
+                      {(snapshot?.reports || [])
+                        .filter((report: any) => report.created_at?.startsWith(row.key))
+                        .map((report: any) => (
+                          <button
+                            key={report.id}
+                            type="button"
+                            onClick={() => navigate(`/relatorios/${report.id}`)}
+                            className="flex items-center gap-1.5 text-left text-[11px] text-muted-foreground hover:text-foreground"
+                          >
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                            <span className="truncate">{report.title}</span>
+                          </button>
+                        ))}
+                    </div>
+                  )}
                 </div>
-              ))}
+                );
+              })}
               <div className="flex flex-wrap gap-3 pt-2 text-[10px] text-muted-foreground">
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Entregas</span>
                 <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Publicações</span>
