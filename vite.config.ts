@@ -62,6 +62,11 @@ function requireProductionUrl(name: string, value: string | undefined): string {
 export default defineConfig(({ command, mode }) => {
   const define: Record<string, string> = {};
 
+  // Carimbo único por build: o app compara este id com /version.json publicado
+  // e se atualiza sozinho quando sai versão nova (fim da tela branca em PWA).
+  const buildId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  define["__APP_BUILD_ID__"] = JSON.stringify(command === "build" ? buildId : "dev");
+
   if (command === "build") {
     const fileEnv = loadEnv(mode, process.cwd(), "");
     const defaults = loadPublicEnvDefaults();
@@ -90,7 +95,20 @@ export default defineConfig(({ command, mode }) => {
         overlay: false,
       },
     },
-    plugins: [react()],
+    plugins: [
+      react(),
+      {
+        name: "aceleriq-emit-version",
+        apply: "build" as const,
+        generateBundle() {
+          this.emitFile({
+            type: "asset",
+            fileName: "version.json",
+            source: JSON.stringify({ buildId }),
+          });
+        },
+      },
+    ],
     resolve: {
       alias: {
         "@": path.resolve(__dirname, "./src"),
