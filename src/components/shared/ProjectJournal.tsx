@@ -23,6 +23,7 @@ interface JournalEntry {
   icon: "file" | "approved" | "publication" | "report" | "note";
   title: string;
   body?: string | null;
+  previewUrl?: string | null;
 }
 
 const ICONS = {
@@ -67,7 +68,7 @@ export default function ProjectJournal({
           : Promise.resolve({ data: [] as any[] }),
         supabase
           .from("files")
-          .select("file_name, approval_status, approval_requested_at, client_decided_at, created_at")
+          .select("file_name, file_url, mime_type, approval_status, approval_requested_at, client_decided_at, created_at")
           .eq("client_id", clientId)
           .is("archived_at", null)
           .is("parent_file_id", null)
@@ -113,12 +114,18 @@ export default function ProjectJournal({
       });
     }
     for (const file of data.files) {
+      // A arte aparece junto do registro: transparencia visual, nao so texto.
+      const isImage =
+        (file.mime_type || "").startsWith("image/") ||
+        /\.(png|jpe?g|webp|gif)$/i.test(file.file_name || "");
+      const previewUrl = isImage && file.file_url ? file.file_url : null;
       if (file.approval_requested_at) {
         list.push({
           at: file.approval_requested_at,
           kind: "auto",
           icon: "file",
           title: `Material enviado para sua aprovação: ${file.file_name}`,
+          previewUrl,
         });
       }
       if (file.client_decided_at && file.approval_status === "approved") {
@@ -127,6 +134,7 @@ export default function ProjectJournal({
           kind: "auto",
           icon: "approved",
           title: `Material aprovado: ${file.file_name}`,
+          previewUrl,
         });
       }
     }
@@ -253,6 +261,14 @@ export default function ProjectJournal({
                     <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
                       {entry.body}
                     </p>
+                  )}
+                  {entry.previewUrl && (
+                    <img
+                      src={entry.previewUrl}
+                      alt=""
+                      loading="lazy"
+                      className="mt-2 h-16 w-16 rounded-lg border border-border object-cover"
+                    />
                   )}
                 </div>
               </div>

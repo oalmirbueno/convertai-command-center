@@ -88,7 +88,7 @@ function LegacyFinanceiro() {
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const queryClient = useQueryClient();
-  const { data: billing } = useBilling();
+  const { data: billing, isLoading: billingLoading } = useBilling();
   const { data: wallets } = useAdsWallet();
   const { data: recharges } = useRechargeRequests();
   const { data: clients } = useClients();
@@ -815,8 +815,12 @@ function LegacyFinanceiro() {
                 <s.icon className={`w-4 h-4 ${s.color}`} />
                 <span className="text-[11px] text-muted-foreground uppercase tracking-wider">{s.label}</span>
               </div>
-              <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
-              {s.sub && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
+              {billingLoading ? (
+                <div className="h-7 w-28 animate-pulse rounded bg-secondary" aria-label={`Carregando ${s.label}`} />
+              ) : (
+                <p className="text-lg font-semibold font-mono text-foreground">{s.value}</p>
+              )}
+              {s.sub && !billingLoading && <p className="text-[11px] text-muted-foreground mt-0.5">{s.sub}</p>}
             </div>
           ))}
           {/* Projeção card · clickable */}
