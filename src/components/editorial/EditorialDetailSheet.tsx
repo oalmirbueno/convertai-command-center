@@ -354,7 +354,8 @@ export default function EditorialDetailSheet({
       await savePost.mutateAsync({
         payload: {
           id: post.post.id,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key:
+            (post as any).internal?.idempotency_key || crypto.randomUUID(),
           mutation_id: crypto.randomUUID(),
           client_id: post.post.client_id,
           project_id: post.post.project_id,
@@ -505,7 +506,8 @@ export default function EditorialDetailSheet({
       await savePost.mutateAsync({
         payload: {
           id: post.post.id,
-          idempotency_key: crypto.randomUUID(),
+          idempotency_key:
+            (post as any).internal?.idempotency_key || crypto.randomUUID(),
           mutation_id: crypto.randomUUID(),
           client_id: post.post.client_id,
           project_id: post.post.project_id,

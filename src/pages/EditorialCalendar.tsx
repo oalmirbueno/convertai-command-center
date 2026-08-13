@@ -611,6 +611,12 @@ export default function EditorialCalendar() {
         if (task.status === "done") {
           return false;
         }
+        // Prazo vencido há mais de 7 dias é passado, não agenda: parava tudo
+        // entulhado de tarefa antiga. Sem prazo continua aparecendo na lista.
+        if (task.due_date) {
+          const due = new Date(`${task.due_date}T23:59:59`);
+          if (Date.now() - due.getTime() > 7 * 86400000) return false;
+        }
         const project = projectById.get(task.project_id);
         if (!project) return false;
         if (canUseTeamData && !socialClientIds.has(project.client_id)) {
@@ -722,12 +728,19 @@ export default function EditorialCalendar() {
   const taskDataReady =
     !canUseTeamData ||
     (tasksQuery.data !== undefined && linkedTaskIdsQuery.data !== undefined);
+  // Tarefa que já virou conteúdo some de TODAS as visões, não só do quadro.
+  // Era o "card duplicado que fica na data velha": o prazo roxo da tarefa
+  // continuava no calendário ao lado do card de conteúdo.
+  const deadlineTasksUnlinked = useMemo(
+    () => editorialDeadlineTasks.filter((task) => !linkedPostIdByTaskId[task.id]),
+    [editorialDeadlineTasks, linkedPostIdByTaskId],
+  );
   const tasksForCurrentView =
     !canUseTeamData || !taskDataReady
       ? []
       : view === "board"
         ? productionTasks
-        : editorialDeadlineTasks;
+        : deadlineTasksUnlinked;
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -911,6 +924,13 @@ export default function EditorialCalendar() {
     targetDateKey?: string,
     targetStage?: EditableEditorialStage,
   ) => {
+    // Tarefa que JÁ virou conteúdo nunca cria um segundo: abre o existente.
+    // Era uma das portas da duplicação.
+    const linkedPostId = linkedPostIdByTaskId[task.id];
+    if (linkedPostId) {
+      openDetailById(linkedPostId);
+      return;
+    }
     const project = projectById.get(task.project_id);
     if (!project) {
       toast.error("O projeto desta tarefa não está disponível.");
@@ -1172,6 +1192,19 @@ export default function EditorialCalendar() {
       ) {
         return;
       }
+      // O arrasto preserva o horário original; para HOJE, se essa hora já
+      // passou, o banco recusava com "horário no passado" e parecia que o
+      // mover não funcionava. Dia passado: aviso claro. Hoje com hora vencida:
+      // empurra para daqui a 15 minutos.
+      let effectiveScheduledAt = scheduledAt;
+      const todayKey = dateKeyInTimeZone(new Date().toISOString());
+      if (targetDateKey < todayKey) {
+        toast.error("Não dá para agendar publicação em dia que já passou.");
+        return;
+      }
+      if (new Date(scheduledAt).getTime() < Date.now() + 5 * 60_000) {
+        effectiveScheduledAt = new Date(Date.now() + 15 * 60_000).toISOString();
+      }
       const moveKey = `publication:${visiblePublication.id}`;
       if (!beginEditorialMove(moveKey)) return;
       queryClient.setQueriesData(
@@ -1180,7 +1213,7 @@ export default function EditorialCalendar() {
           updateCachedEditorialPublicationDate(
             value,
             visiblePublication.id,
-            scheduledAt,
+            effectiveScheduledAt,
           ),
       );
       try {
@@ -1219,7 +1252,7 @@ export default function EditorialCalendar() {
           const payload = buildEditorialPostMutationPayload(completePost, {
             mutationId: crypto.randomUUID(),
             publicationId: publication.id,
-            scheduledAt,
+            scheduledAt: effectiveScheduledAt,
             scheduledTimezone: EDITORIAL_DEFAULT_TIME_ZONE,
           });
           await savePost.mutateAsync({
@@ -1232,7 +1265,7 @@ export default function EditorialCalendar() {
             publicationId: publication.id,
             action: "schedule",
             expectedVersion: publication.version,
-            scheduledAt,
+            scheduledAt: effectiveScheduledAt,
             timezone: EDITORIAL_DEFAULT_TIME_ZONE,
             deferRefresh: true,
           });

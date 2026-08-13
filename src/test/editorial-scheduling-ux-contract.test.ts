@@ -35,7 +35,10 @@ describe("editorial scheduling UX contract", () => {
     expect(toolbar).toContain("Todos os formatos");
     expect(page).toContain("isPublishableTask(task)");
     expect(page).toMatch(
-      /view === "board"\s*\? productionTasks\s*:\s*editorialDeadlineTasks/,
+      // Atualizado de proposito: tarefa que ja virou conteudo some de TODAS
+      // as visoes (deadlineTasksUnlinked), nao so do quadro. Era o card
+      // duplicado que ficava na data velha depois do arrasto.
+      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksUnlinked/,
     );
   });
 

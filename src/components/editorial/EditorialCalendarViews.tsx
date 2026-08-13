@@ -221,7 +221,13 @@ function flattenScheduled(posts: EditorialPostBundle[]) {
   return posts
     .flatMap((post) =>
       post.publications
-        .filter((publication) => publication.publication.scheduled_at)
+        // Cancelada não é agenda: ela mantém a data antiga no banco e ficava
+        // desenhando um card fantasma ao lado do plano vivo.
+        .filter(
+          (publication) =>
+            publication.publication.scheduled_at &&
+            publication.publication.status !== "cancelled",
+        )
         .map((publication) => ({ post, publication })),
     )
     .sort((left, right) =>

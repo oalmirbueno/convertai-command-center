@@ -14,6 +14,7 @@ const v3 = read("supabase/migrations/20260813210000_autopublish_v3_hardening.sql
 const publishAll = read(
   "supabase/migrations/20260813220000_autopublish_publish_all_scheduled.sql",
 );
+const v4 = read("supabase/migrations/20260813230000_autopublish_v4_signed_urls.sql");
 
 describe("publicação nunca duplica", () => {
   it("o passo de publicação registra que foi despachado", () => {
@@ -95,6 +96,32 @@ describe("agendou e aprovou, publica", () => {
     expect(publishAll).toContain("pg_get_functiondef");
     // Patch idempotente: rodar duas vezes nao quebra.
     expect(publishAll).toContain("Patch ja aplicado");
+  });
+});
+
+describe("midia com link assinado (v4)", () => {
+  it("a Meta recebe link ASSINADO, nunca o link publico de bucket privado", () => {
+    // O erro real de producao: "Falha ao baixar midia... /object/public/files".
+    // O bucket e privado; o motor agora assina antes de criar o container.
+    expect(v4).toContain("/storage/v1/object/sign/files");
+    expect(v4).toContain("'expiresIn', 21600");
+    expect(v4).toContain("autopublish_service_key");
+    expect(v4).toContain("email_queue_service_role_key");
+  });
+
+  it("assinatura em lote, na ordem congelada, com fallback por nome e por URL externa", () => {
+    expect(v4).toContain("autopublish_storage_paths");
+    expect(v4).toContain("ORDER BY asset.position");
+    expect(v4).toContain("parent_file_id = _root_file_id");
+    // Arquivo sem storage_path (link externo) continua publicavel.
+    expect(v4).toContain("Sem storage_path (link externo http)");
+  });
+
+  it("mantem as garantias da v3: verify, retry por passo e falha oficial", () => {
+    expect(v4).toContain("publish_dispatched THEN 'verify'");
+    expect(v4).toContain("_step_limit constant smallint := 4");
+    expect(v4).toContain("autopublish_mark_failed");
+    expect(v4).toContain("delivery_mode IN ('manual', 'automatic')");
   });
 });
 

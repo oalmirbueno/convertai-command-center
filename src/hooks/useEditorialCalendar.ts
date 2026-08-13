@@ -359,6 +359,10 @@ interface EditorialPage<T> {
 async function readAllPages<T>(
   fetchPage: (from: number, to: number) => PromiseLike<EditorialPage<T>>,
 ) {
+  // Deduplicado por id: a paginação ordena por colunas que mudam durante a
+  // leitura (updated_at, scheduled_at), então a mesma linha podia voltar em
+  // duas páginas e virar card repetido na tela.
+  const byId = new Map<string, T>();
   const rows: T[] = [];
   let from = 0;
 
@@ -369,7 +373,14 @@ async function readAllPages<T>(
     );
     if (error) throw error;
     const page = data || [];
-    rows.push(...page);
+    for (const row of page) {
+      const id = (row as { id?: string } | null)?.id;
+      if (id) {
+        if (byId.has(id)) continue;
+        byId.set(id, row);
+      }
+      rows.push(row);
+    }
     if (page.length < EDITORIAL_PAGE_SIZE) return rows;
     from += EDITORIAL_PAGE_SIZE;
   }
