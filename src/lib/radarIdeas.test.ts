@@ -94,6 +94,46 @@ describe("Radar: a ideia nasce do contexto real", () => {
   });
 });
 
+describe("Radar: contexto real em toda ideia", () => {
+  it("cada ideia carrega o momento do cliente com os dados dele", () => {
+    const ideas = buildRadarIdeas(
+      {
+        ...base,
+        serviceLabels: ["Social Media"],
+        recentMaterials: ["carrossel-outubro-01.png", "story_promo.png"],
+        contactsTrendPct: 23,
+      },
+      3,
+    );
+    for (const idea of ideas) {
+      expect(idea.moment).toContain("Padaria do Bairro");
+      expect(idea.moment).toContain("5 meses de trabalho juntos");
+      expect(idea.moment).toContain("Social Media");
+      expect(idea.moment).toContain("contatos crescendo 23%");
+      expect(idea.moment).toContain("carrossel outubro 01");
+    }
+  });
+
+  it("o texto do cliente abre com o momento antes do motivo", () => {
+    const [idea] = buildRadarIdeas({ ...base, serviceLabels: ["Social Media"] }, 1);
+    const forClient = radarIdeaForClient(idea);
+    expect(forClient.whyNow.startsWith(idea.moment)).toBe(true);
+    expect(forClient.whyNow).toContain(idea.whyNow);
+  });
+
+  it("crescimento medido entra no caso de resultado", () => {
+    const ideas = buildRadarIdeas({ ...base, contactsTrendPct: 40 }, 10);
+    const prova = ideas.find((idea) => idea.id.includes("prova-numero-real"));
+    expect(prova?.whyNow).toContain("40%");
+  });
+
+  it("sem medição, o momento não inventa número de crescimento", () => {
+    const ideas = buildRadarIdeas({ ...base, contactsTrendPct: null }, 1);
+    expect(ideas[0].moment).not.toContain("crescendo");
+    expect(ideas[0].moment).not.toContain("%");
+  });
+});
+
 describe("Radar: a venda nunca vaza para o cliente", () => {
   it("o texto do cliente não carrega oferta nem valor", () => {
     const ideas = buildRadarIdeas(base, 10);

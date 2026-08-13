@@ -7,6 +7,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
+import { buildGrowthSeries } from "@/lib/reportGrowth";
 import {
   buildRadarIdeas,
   radarIdeaForClient,
@@ -41,6 +42,21 @@ const RITUALS = [
 ] as const;
 
 const ritualMeta = (value?: string | null) => RITUALS.find((r) => r.value === value) || null;
+
+// O que cada frente observa e como se chama, em português de cliente.
+const FRONT_SIGNALS: Record<string, string> = {
+  social_media: "alcance qualificado, salvamentos e contatos chegando pelo perfil",
+  traffic: "custo por contato e volume de orçamentos gerados pelas campanhas",
+  site: "visitas e pedidos de orçamento chegando pelo site",
+  landing_page: "conversões da página (cadastros e chamadas)",
+  automation: "tempo economizado e atendimentos respondidos automaticamente",
+  event: "confirmações e participação no evento",
+  other: "o indicador principal combinado para esta frente",
+};
+const FRONT_LABELS: Record<string, string> = {
+  social_media: "Social Media", traffic: "Tráfego Pago", automation: "Automação",
+  site: "Site", landing_page: "Landing Page", event: "Evento", other: "Projeto",
+};
 
 /** Ritual sugerido pelo dia da semana: segunda abre, quarta checa, sexta fecha. */
 const ritualForToday = (): string => {
@@ -314,16 +330,18 @@ export default function AdminExperience() {
 
   // ───────── Radar do mês: oportunidades com foco em retenção e expansão ─────────
   /**
-   * O Radar do mês: ideias de diferenciação por cliente, montadas do contexto
-   * real dele. A leitura é a do marketing de diferenciação (Fator X): a ideia
-   * nasce do que o cliente JÁ tem, e a agência chega com ela pronta antes de
-   * ele pedir. A leitura comercial de cada ideia fica só para a equipe.
+   * O Radar do mês: ideias de diferenciação por cliente RECORRENTE, montadas
+   * do contexto real dele (frentes, materiais recentes, publicações, Pulso,
+   * crescimento medido nos relatórios). A leitura é a do marketing de
+   * diferenciação (Fator X): a ideia nasce do que o cliente JÁ tem, e a
+   * agência chega com ela pronta antes de ele pedir. Avulso fica de fora: o
+   * ritual é da carteira; a reativação de avulso vive na aba Avulsos.
    */
   const opportunities = useMemo<RadarIdea[]>(() => {
     const now = new Date();
     const d30 = new Date(now.getTime() - 30 * 86400000);
 
-    const buildContext = (client: any, isOneOff: boolean): RadarClientContext => {
+    const buildContext = (client: any): RadarClientContext => {
       const clientProjects = (projects || []).filter(
         (p: any) => p.client_id === client.id && !p.deleted_at,
       );
@@ -343,8 +361,11 @@ export default function AdminExperience() {
         (p: any) => p.published_at && new Date(p.published_at) >= d30,
       ).length;
 
-      const releasedLast30 = (releasedFiles || []).filter(
-        (f: any) => f.client_id === client.id && new Date(f.created_at) >= d30,
+      const recentReleased = (releasedFiles || []).filter(
+        (f: any) => f.client_id === client.id,
+      );
+      const releasedLast30 = recentReleased.filter(
+        (f: any) => new Date(f.created_at) >= d30,
       ).length;
 
       const firstProject = clientProjects
@@ -354,64 +375,55 @@ export default function AdminExperience() {
       const startedDays = daysSince(firstProject);
       const monthsTogether = startedDays !== null ? Math.max(1, Math.round(startedDays / 30)) : 1;
 
-      const doneProjects = clientProjects.filter((p: any) => p.status === "done");
-      const lastDone = doneProjects
-        .map((p: any) => p.updated_at || p.created_at)
-        .sort()
-        .reverse()[0];
-      const idleDays =
-        isOneOff && doneProjects.length > 0 && clientProjects.every((p: any) => p.status === "done")
-          ? daysSince(lastDone)
-          : null;
-
       const health = healthRows.find((row) => row.client.id === client.id);
+
+      // Crescimento real de contatos entre a primeira e a última medição.
+      const clientReports = (reports || []).filter(
+        (r: any) => r.client_id === client.id && r.status === "published",
+      );
+      const growth = buildGrowthSeries(clientReports as any[]);
+      let contactsTrendPct: number | null = null;
+      if (growth.length >= 2) {
+        const first = growth[0].contacts;
+        const last = growth[growth.length - 1].contacts;
+        if (first > 0 && last !== first) {
+          contactsTrendPct = Math.round(((last - first) / first) * 100);
+        }
+      }
 
       return {
         clientId: client.id,
         clientName: client.company_name || client.full_name,
         services,
+        serviceLabels: services.map((s) => FRONT_LABELS[s] || s).filter(Boolean),
         pulseScore: health?.pulse?.score ?? null,
         pulseAgeDays: health?.pulse ? daysSince(health.pulse.date) : null,
         releasedLast30,
         publishedLast30,
         publishedTotal: clientPubs.length,
-        hasPublishedReport: (reports || []).some(
-          (r: any) => r.client_id === client.id && r.status === "published",
-        ),
+        hasPublishedReport: clientReports.length > 0,
         monthsTogether,
-        isOneOff,
-        idleDays,
+        isOneOff: false,
+        idleDays: null,
         month: now.getMonth(),
+        recentMaterials: recentReleased.slice(0, 3).map((f: any) => f.file_name),
+        contactsTrendPct,
+        pendingApprovals: (pendingApprovalFiles || []).filter(
+          (f: any) => f.client_id === client.id,
+        ).length,
       };
     };
 
     const out: RadarIdea[] = [];
     healthRows.forEach((row) => {
-      out.push(...buildRadarIdeas(buildContext(row.client, false), 3));
-    });
-    oneOffClients.forEach((client: any) => {
-      out.push(...buildRadarIdeas(buildContext(client, true), 2));
+      out.push(...buildRadarIdeas(buildContext(row.client), 3));
     });
     return out.sort((a, b) => b.score - a.score);
-  }, [healthRows, oneOffClients, projects, releasedFiles, allPublications, reports]);
+  }, [healthRows, projects, releasedFiles, allPublications, reports, pendingApprovalFiles]);
 
   // ───────── Rascunhos: montagem com dados reais e processo explicado ─────────
   // Estrutura oficial de cada mensagem: o que fizemos, por que fizemos,
   // qual sinal vamos observar e quando revisamos.
-  const FRONT_SIGNALS: Record<string, string> = {
-    social_media: "alcance qualificado, salvamentos e contatos chegando pelo perfil",
-    traffic: "custo por contato e volume de orçamentos gerados pelas campanhas",
-    site: "visitas e pedidos de orçamento chegando pelo site",
-    landing_page: "conversões da página (cadastros e chamadas)",
-    automation: "tempo economizado e atendimentos respondidos automaticamente",
-    event: "confirmações e participação no evento",
-    other: "o indicador principal combinado para esta frente",
-  };
-  const FRONT_LABELS: Record<string, string> = {
-    social_media: "Social Media", traffic: "Tráfego Pago", automation: "Automação",
-    site: "Site", landing_page: "Landing Page", event: "Evento", other: "Projeto",
-  };
-
   const buildDraft = (client: any, ritual: string) => {
     const now = new Date();
     const weekAgo = new Date(now.getTime() - 7 * 86400000);
@@ -1288,11 +1300,11 @@ export default function AdminExperience() {
             {opportunities.length > 0 && (
               <div className="rounded-xl border border-border bg-card p-4">
                 <p className="text-[12px] leading-relaxed text-muted-foreground">
-                  O Radar é o ritual de antecipação: uma vez por mês a Aceleriq chega com uma ideia
-                  de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia
-                  nasce do que ele já tem (frentes contratadas, material produzido, Pulso e tempo de
-                  casa), na leitura do marketing de diferenciação: o que torna a marca desejada já
-                  existe dentro do negócio.
+                  O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a
+                  Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer
+                  e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais
+                  recentes, publicações, Pulso, crescimento medido), na leitura do marketing de
+                  diferenciação: o que torna a marca desejada já existe dentro do negócio.
                 </p>
                 <p className="mt-2 text-[11px] leading-relaxed text-warning">
                   A faixa de valor e o serviço avulso aparecem só para a equipe. Isso nunca entra na
@@ -1322,6 +1334,12 @@ export default function AdminExperience() {
                       <p className="text-[13px] font-medium text-foreground">{idea.title}</p>
                     </div>
                     <p className="text-[12px] text-foreground/80 mt-1.5">{idea.pitch}</p>
+
+                    {/* O retrato real do cliente: é ele que faz a ideia deixar
+                        de parecer genérica. */}
+                    <p className="mt-2 rounded-lg bg-secondary/40 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                      {idea.moment}
+                    </p>
 
                     <p className="text-[11px] text-muted-foreground mt-2">
                       <span className="text-foreground/70">Por que agora: </span>

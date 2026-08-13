@@ -86,6 +86,59 @@ export interface RadarClientContext {
   idleDays?: number | null;
   /** Mês de referência, 0 a 11. Usado para a leitura de sazonalidade. */
   month: number;
+  /** Nomes reais dos últimos materiais liberados (até 3). */
+  recentMaterials?: string[];
+  /** Frentes ativas com nome em português: "Social Media", "Tráfego Pago"... */
+  serviceLabels?: string[];
+  /** Crescimento de contatos entre a primeira e a última medição, em %. */
+  contactsTrendPct?: number | null;
+  /** Materiais aguardando aprovação do cliente agora. */
+  pendingApprovals?: number;
+}
+
+/** Nome de arquivo legível: sem extensão e sem hífen de máquina. */
+function cleanMaterialName(name: string): string {
+  return name.replace(/\.[a-z0-9]{2,5}$/i, "").replace(/[_-]+/g, " ").trim();
+}
+
+/**
+ * O momento do cliente, escrito com os dados reais dele. É o que dá contexto
+ * a qualquer ideia: sem isso a recomendação parece tirada de uma cartola.
+ */
+export function radarMomentLine(ctx: RadarClientContext): string {
+  const parts: string[] = [];
+
+  parts.push(
+    `${ctx.monthsTogether} ${ctx.monthsTogether === 1 ? "mês" : "meses"} de trabalho juntos`,
+  );
+  if (ctx.serviceLabels && ctx.serviceLabels.length > 0) {
+    parts.push(`frente de ${ctx.serviceLabels.join(" e ")} ativa`);
+  }
+  if (ctx.publishedLast30 > 0) {
+    parts.push(`${ctx.publishedLast30} publicações no ar nos últimos 30 dias`);
+  } else if (ctx.releasedLast30 > 0) {
+    parts.push(`${ctx.releasedLast30} materiais entregues nos últimos 30 dias`);
+  }
+  if (ctx.contactsTrendPct !== null && ctx.contactsTrendPct !== undefined) {
+    if (ctx.contactsTrendPct > 0) {
+      parts.push(`contatos crescendo ${ctx.contactsTrendPct}% entre as medições`);
+    } else if (ctx.contactsTrendPct < 0) {
+      parts.push(`contatos caindo ${Math.abs(ctx.contactsTrendPct)}% entre as medições`);
+    }
+  }
+  if (ctx.pulseScore && ctx.pulseScore >= 4) {
+    parts.push(`experiência avaliada em ${ctx.pulseScore}/5`);
+  }
+  if (ctx.recentMaterials && ctx.recentMaterials.length > 0) {
+    parts.push(
+      `entre as últimas entregas: ${ctx.recentMaterials
+        .slice(0, 2)
+        .map(cleanMaterialName)
+        .join(", ")}`,
+    );
+  }
+
+  return `O momento de ${ctx.clientName}: ${parts.join(" · ")}.`;
 }
 
 export interface RadarIdea {
@@ -95,6 +148,8 @@ export interface RadarIdea {
   title: string;
   /** Uma frase que explica a ideia. */
   pitch: string;
+  /** O momento do cliente, montado com os dados reais dele. */
+  moment: string;
   /** Por que este é o momento, com os números reais do cliente. */
   whyNow: string;
   /** O que a Aceleriq faz, em passos concretos. */
@@ -189,7 +244,9 @@ const PLAYS: RadarPlay[] = [
     pitch:
       "O que já foi construído aqui dentro vira argumento de venda lá fora. Resultado que ninguém vê não convence ninguém.",
     whyNow: (ctx) =>
-      `Vocês têm ${ctx.monthsTogether} ${ctx.monthsTogether === 1 ? "mês" : "meses"} de trabalho registrado no painel, com relatório publicado. Isso já é um caso real, e caso real vende mais que promessa.`,
+      ctx.contactsTrendPct && ctx.contactsTrendPct > 0
+        ? `Vocês têm ${ctx.monthsTogether} ${ctx.monthsTogether === 1 ? "mês" : "meses"} de trabalho registrado e os contatos cresceram ${ctx.contactsTrendPct}% entre a primeira e a última medição. Esse número existe, está no painel, e caso real vende mais que promessa.`
+        : `Vocês têm ${ctx.monthsTogether} ${ctx.monthsTogether === 1 ? "mês" : "meses"} de trabalho registrado no painel, com relatório publicado. Isso já é um caso real, e caso real vende mais que promessa.`,
     moves: [
       "Montagem do caso com o antes e o agora, usando só número que existe no painel",
       "Peça de prova para o perfil e uma versão para a página ou proposta comercial",
@@ -265,8 +322,13 @@ const PLAYS: RadarPlay[] = [
     title: (ctx) => `${ctx.clientName}: colocar dinheiro no que já provou que funciona`,
     pitch:
       "Em vez de criar campanha do zero, levar verba para o conteúdo que o público já aprovou sozinho.",
-    whyNow: (ctx) =>
-      `Foram ${ctx.publishedLast30} publicações no ar nos últimos 30 dias e já dá para saber qual delas o público segurou. Impulsionar o que venceu no orgânico é o caminho de menor risco para ampliar alcance.`,
+    whyNow: (ctx) => {
+      const materials =
+        ctx.recentMaterials && ctx.recentMaterials.length > 0
+          ? ` Candidatas naturais: ${ctx.recentMaterials.slice(0, 2).map(cleanMaterialName).join(" e ")}.`
+          : "";
+      return `Foram ${ctx.publishedLast30} publicações no ar nos últimos 30 dias e já dá para saber qual delas o público segurou. Impulsionar o que venceu no orgânico é o caminho de menor risco para ampliar alcance.${materials}`;
+    },
     moves: [
       "Leitura do que teve melhor desempenho no período",
       "Impulsionamento com verba controlada e público definido",
@@ -351,6 +413,7 @@ const PLAYS: RadarPlay[] = [
  */
 export function buildRadarIdeas(ctx: RadarClientContext, limit = 3): RadarIdea[] {
   const ideas: RadarIdea[] = [];
+  const moment = radarMomentLine(ctx);
   for (const play of PLAYS) {
     const score = play.when(ctx);
     if (score === null) continue;
@@ -359,6 +422,7 @@ export function buildRadarIdeas(ctx: RadarClientContext, limit = 3): RadarIdea[]
       lens: play.lens,
       title: play.title(ctx),
       pitch: play.pitch,
+      moment,
       whyNow: play.whyNow(ctx),
       moves: play.moves,
       signal: play.signal,
@@ -382,7 +446,10 @@ export function radarIdeaForClient(idea: RadarIdea): {
 } {
   return {
     opportunity: idea.pitch,
-    whyNow: idea.whyNow,
+    // O contexto real primeiro, o motivo depois: o cliente lê o retrato do
+    // próprio negócio antes da recomendação, e a ideia deixa de parecer
+    // genérica.
+    whyNow: `${idea.moment}\n\n${idea.whyNow}`,
     recommendation: idea.moves.map((move, index) => `${index + 1}. ${move}`).join("\n"),
     signal: idea.signal,
   };
