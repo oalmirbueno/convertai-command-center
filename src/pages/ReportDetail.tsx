@@ -1,6 +1,7 @@
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import ClientPlainSummary from "@/components/reports/ClientPlainSummary";
+import RichText from "@/components/shared/RichText";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { supabase } from "@/integrations/supabase/client";
@@ -181,7 +182,11 @@ export default function ReportDetail() {
     let chartColumns: string[] = [];
 
     if (rawChartData.length > 0) {
-      chartColumns = Object.keys(rawChartData[0]).filter(k => k !== "label");
+      chartColumns = Object.keys(rawChartData[0]).filter((k) => {
+        if (k === "label") return false;
+        // Serie sem valor no periodo nao entra: zero espalhado passa imagem ruim.
+        return rawChartData.some((row) => Number(row[k]) > 0);
+      });
     } else if (volumeMetrics.length >= 2 && report.period_start && report.period_end) {
       const start = new Date(report.period_start);
       const end = new Date(report.period_end);
@@ -503,14 +508,13 @@ export default function ReportDetail() {
       <Tooltip
         cursor={{ stroke: "hsl(145 100% 50% / 0.4)", strokeWidth: 1, strokeDasharray: "4 4" }}
         contentStyle={{
-          background: "hsl(0 0% 7% / 0.95)",
-          backdropFilter: "blur(12px)",
-          border: "1px solid hsl(145 100% 50% / 0.35)",
+          background: "hsl(var(--card))",
+          border: "1px solid hsl(var(--border))",
           borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))",
-          boxShadow: "0 0 24px hsl(145 100% 50% / 0.18), 0 12px 40px rgba(0,0,0,0.6)",
-          fontFamily: "JetBrains Mono, monospace",
+          boxShadow: "0 8px 30px hsl(var(--foreground) / 0.12)",
         }}
-        labelStyle={{ color: "hsl(145 100% 50%)", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}
+        itemStyle={{ color: "hsl(var(--foreground))" }}
+        labelStyle={{ color: "hsl(var(--primary))", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase", marginBottom: 4 }}
         formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name]}
       />
     );
@@ -1483,15 +1487,8 @@ export default function ReportDetail() {
               <p className="text-[10px] text-muted-foreground">Visão geral dos resultados e desempenho do período analisado</p>
             </div>
           </div>
-          <div className="px-6 py-5 space-y-3">
-            {parseLines(report.summary).map((line, i) => (
-              <div key={i} className="flex items-start gap-3">
-                <div className="w-6 h-6 rounded-lg bg-primary/10 flex items-center justify-center shrink-0 mt-0.5">
-                  <span className="text-[10px] font-bold text-primary">{i + 1}</span>
-                </div>
-                <p className="text-[13px] text-foreground/85 leading-relaxed">{line}</p>
-              </div>
-            ))}
+          <div className="px-6 py-5">
+            <RichText text={report.summary} />
           </div>
         </section>
       )}
@@ -1509,13 +1506,8 @@ export default function ReportDetail() {
                 <p className="text-[10px] text-muted-foreground">Pontos que merecem atenção especial</p>
               </div>
             </div>
-            <div className="px-6 py-5 space-y-2.5">
-              {parseLines(report.highlights).map((line, i) => (
-                <div key={i} className="flex items-start gap-2.5">
-                  <Zap className="w-3.5 h-3.5 text-warning shrink-0 mt-1" />
-                  <p className="text-[13px] text-foreground/85 leading-relaxed">{line}</p>
-                </div>
-              ))}
+            <div className="px-6 py-5">
+              <RichText text={report.highlights} />
             </div>
           </section>
         )}
@@ -1531,15 +1523,8 @@ export default function ReportDetail() {
                 <p className="text-[10px] text-muted-foreground">Ações planejadas para o próximo período</p>
               </div>
             </div>
-            <div className="px-6 py-5 space-y-2.5">
-              {parseLines(report.next_steps).map((line, i) => (
-                <div key={i} className="flex items-start gap-3">
-                  <span className="text-[11px] font-mono font-bold text-primary bg-primary/10 rounded-lg w-6 h-6 flex items-center justify-center shrink-0 mt-0.5">
-                    {i + 1}
-                  </span>
-                  <p className="text-[13px] text-foreground/85 leading-relaxed">{line}</p>
-                </div>
-              ))}
+            <div className="px-6 py-5">
+              <RichText text={report.next_steps} />
             </div>
           </section>
         )}
