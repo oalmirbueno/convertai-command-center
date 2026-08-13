@@ -289,6 +289,21 @@ export default function Workspace() {
     enabled: isStaff,
   });
 
+  // O banco devolve no maximo 1000 linhas por chamada. Sem paginar, um acervo
+  // grande "perde" nos em silencio - pastas e arquivos sumiam do indice.
+  const fetchAllRows = async (buildQuery: (from: number, to: number) => any) => {
+    const pageSize = 1000;
+    const rows: any[] = [];
+    for (let page = 0; page < 30; page += 1) {
+      const from = page * pageSize;
+      const { data, error } = await buildQuery(from, from + pageSize - 1);
+      if (error) throw error;
+      rows.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+    return rows;
+  };
+
   const {
     data: nodes,
     isLoading,
@@ -304,9 +319,8 @@ export default function Workspace() {
       if (scope === "client") q = q.eq("client_id", clientId!);
       q = parent ? q.eq("parent_id", parent.id) : q.is("parent_id", null);
       q = q.order("kind", { ascending: true }).order("sort_index", { ascending: true }).order("name", { ascending: true });
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as Node[];
+      const rows = await fetchAllRows((from, to) => q.range(from, to));
+      return rows as Node[];
     },
     enabled: isStaff && (scope === "global" || !!clientId),
     staleTime: 30_000,
@@ -325,9 +339,9 @@ export default function Workspace() {
         .select("id, parent_id, name, kind, storage_path, sent_for_approval_file_id")
         .eq("scope", scope);
       if (scope === "client") q = q.eq("client_id", clientId!);
-      const { data, error } = await q;
-      if (error) throw error;
-      return (data || []) as Array<{
+      q = q.order("id", { ascending: true });
+      const rows = await fetchAllRows((from, to) => q.range(from, to));
+      return rows as Array<{
         id: string;
         parent_id: string | null;
         name: string;

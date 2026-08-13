@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
+import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Compass, FileCheck, CalendarDays, Inbox, ArrowUpRight,
@@ -37,7 +39,16 @@ const SIGNAL_TONE: Record<string, string> = {
 
 export default function ClientJourneyUpdates() {
   const navigate = useNavigate();
-  const { clientId } = useClientIdentity();
+  const { clientId, isImpersonating } = useClientIdentity();
+  const { profile } = useAuth();
+  // Staff sem "Ver como Cliente" nao tem jornada propria: sem esta trava, o
+  // admin via os dados do proprio cadastro achando que eram de um cliente.
+  const isStaff =
+    profile?.role === "admin" ||
+    ["design", "traffic", "manager"].includes(profile?.role || "");
+  if (isStaff && !isImpersonating) {
+    return <Navigate to="/central" replace />;
+  }
 
   // Um único retrato do momento, atualizado sozinho a cada 30 segundos.
   const { data: snapshot, isLoading, isError } = useQuery({

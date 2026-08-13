@@ -369,6 +369,30 @@ export default function ClientJourneyDashboard({
         </div>
       </FadeUp>
 
+      {/* Atalhos principais: sempre a um toque, nunca escondidos no rodape */}
+      <FadeUp>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+          {[
+            { label: "Projetos", icon: Briefcase, to: "/projetos" },
+            { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
+            { label: "Calendário", icon: CalendarDays, to: "/calendario" },
+            { label: "Relatórios", icon: FileText, to: "/relatorios" },
+            { label: "Cofre", icon: FolderOpen, to: "/cofre" },
+            { label: "Pedidos", icon: Inbox, to: "/pedidos" },
+          ].map((shortcut) => (
+            <button
+              key={shortcut.to}
+              type="button"
+              onClick={() => navigate(shortcut.to)}
+              className="flex min-h-[64px] touch-manipulation flex-col items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-2 py-3 text-[11px] text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground active:scale-[0.97]"
+            >
+              <shortcut.icon className="h-[18px] w-[18px]" />
+              {shortcut.label}
+            </button>
+          ))}
+        </div>
+      </FadeUp>
+
       {/* 4 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
       {hasContentFront && (
         <FadeUp>
@@ -787,26 +811,6 @@ export default function ClientJourneyDashboard({
             {doneProjects.length > 0 && (
               <span><span className="font-semibold text-foreground">{doneProjects.length}</span> projetos concluídos</span>
             )}
-          </div>
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {[
-              { label: "Projetos", icon: Briefcase, to: "/projetos" },
-              { label: "Aprovações", icon: FileCheck, to: "/aprovacoes" },
-              { label: "Calendário", icon: CalendarDays, to: "/calendario" },
-              { label: "Relatórios", icon: FileText, to: "/relatorios" },
-              { label: "Cofre", icon: FolderOpen, to: "/cofre" },
-              { label: "Pedidos", icon: Inbox, to: "/pedidos" },
-            ].map((shortcut) => (
-              <button
-                key={shortcut.to}
-                type="button"
-                onClick={() => navigate(shortcut.to)}
-                className="flex flex-col items-center gap-1.5 rounded-xl border border-border bg-secondary/30 px-2 py-3 text-[10px] text-muted-foreground transition-colors hover:border-primary/30 hover:text-foreground"
-              >
-                <shortcut.icon className="h-4 w-4" />
-                {shortcut.label}
-              </button>
-            ))}
           </div>
         </div>
       </FadeUp>
