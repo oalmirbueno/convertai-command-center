@@ -159,6 +159,13 @@ export default function ClientJourneyDashboard({
   const scheduled = publications.filter((p: any) => p.status === "scheduled");
   const published = publications.filter((p: any) => p.status === "published");
   const publishedThisMonth = published.filter((p: any) => isSameMonth(p.published_at || p.scheduled_at, now));
+  // Relatorio velho nao e "agora": depois de 21 dias o card passa a mostrar o
+  // retrato vivo (dados reais do proprio painel) em vez de texto antigo.
+  const reportIsFresh = Boolean(
+    latestReport &&
+      Date.now() - new Date(latestReport.created_at || latestReport.period_end || 0).getTime() <
+        21 * 24 * 60 * 60 * 1000,
+  );
   const nextPublication = scheduled
     .filter((p: any) => p.scheduled_at && new Date(p.scheduled_at) >= now)
     .sort((a: any, b: any) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime())[0] || null;
@@ -539,6 +546,88 @@ export default function ClientJourneyDashboard({
                 Novos projetos aparecerão aqui quando forem iniciados.
               </div>
             )}
+            {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
+            <section className="space-y-3">
+                <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
+                {!(latestReport && reportIsFresh) && (
+                  <button
+                    type="button"
+                    onClick={() => navigate("/onde-estamos")}
+                    className="group w-full rounded-xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] to-transparent p-4 text-left transition-colors hover:border-primary/40"
+                  >
+                    <p className="text-[13px] font-medium leading-relaxed text-foreground">
+                      {deliveredFiles.length > 0
+                        ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
+                        : "Estamos organizando o seu ciclo de trabalho."}
+                      {nextPublication?.scheduled_at &&
+                        ` Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.`}
+                    </p>
+                    <p className="mt-2 flex items-center gap-1 text-[11px] text-primary">
+                      Ver o retrato completo em tempo real
+                      <ArrowUpRight className="h-3 w-3" />
+                    </p>
+                  </button>
+                )}
+            {latestReport && reportIsFresh && (
+              <div>
+                <button
+                  type="button"
+                  onClick={() => navigate("/onde-estamos")}
+                  className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
+                >
+                  <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+                    <FileText className="h-3.5 w-3.5 text-primary" />
+                    {latestReport.title}
+                  </p>
+                  {latestReport.highlights && (
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
+                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
+                    </div>
+                  )}
+                  {latestReport.summary && (
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
+                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
+                    </div>
+                  )}
+                  {latestReport.next_steps && (
+                    <div className="mt-3">
+                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
+                      <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
+                    </div>
+                  )}
+                  <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
+                    Abrir Onde Estamos (todas as atualizações)
+                    <ArrowUpRight className="h-3 w-3" />
+                  </p>
+                </button>
+              </div>
+            )}
+              </section>
+
+            {/* 9 · Entregas recentes (histórico de valor) */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
+              <div className="rounded-xl border border-border bg-card p-4">
+                {deliveredFiles.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Nenhuma entrega liberada ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {deliveredFiles.slice(0, 6).map((file: any) => (
+                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {file.project?.name || "Entrega"} · v{file.version || 1}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
           </div>
         </FadeUp>
 
@@ -629,67 +718,6 @@ export default function ClientJourneyDashboard({
               </section>
             )}
 
-            {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
-            {latestReport && (
-              <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
-                <button
-                  type="button"
-                  onClick={() => navigate("/onde-estamos")}
-                  className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
-                >
-                  <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                    <FileText className="h-3.5 w-3.5 text-primary" />
-                    {latestReport.title}
-                  </p>
-                  {latestReport.highlights && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
-                    </div>
-                  )}
-                  {latestReport.summary && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
-                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
-                    </div>
-                  )}
-                  {latestReport.next_steps && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                      <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
-                    </div>
-                  )}
-                  <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
-                    Abrir Onde Estamos (todas as atualizações)
-                    <ArrowUpRight className="h-3 w-3" />
-                  </p>
-                </button>
-              </section>
-            )}
-
-            {/* 9 · Entregas recentes (histórico de valor) */}
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
-              <div className="rounded-xl border border-border bg-card p-4">
-                {deliveredFiles.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">
-                    Nenhuma entrega liberada ainda.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {deliveredFiles.slice(0, 6).map((file: any) => (
-                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {file.project?.name || "Entrega"} · v{file.version || 1}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
         </FadeUp>
       </div>

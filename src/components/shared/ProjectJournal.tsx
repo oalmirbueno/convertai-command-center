@@ -44,6 +44,7 @@ export default function ProjectJournal({
   const queryClient = useQueryClient();
   const [draft, setDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [showAll, setShowAll] = useState(false);
 
   const { data, isLoading } = useQuery({
     queryKey: ["project-journal", clientId],
@@ -217,13 +218,14 @@ export default function ProjectJournal({
           atualizações escritas pelo time.
         </div>
       ) : (
-        <div className="relative space-y-0">
-          {entries.map((entry, index) => {
+        <>
+        <div className="relative max-h-[380px] space-y-0 overflow-y-auto rounded-xl border border-border/60 bg-secondary/[0.15] p-3 pr-2">
+          {(showAll ? entries : entries.slice(0, 12)).map((entry, index, visible) => {
             const EntryIcon = ICONS[entry.icon];
             const isNote = entry.kind === "note";
             return (
               <div key={`${entry.at}-${index}`} className="relative flex gap-3 pb-4">
-                {index < entries.length - 1 && (
+                {index < visible.length - 1 && (
                   <span className="absolute left-[13px] top-7 h-full w-px bg-border" aria-hidden="true" />
                 )}
                 <span
@@ -237,7 +239,7 @@ export default function ProjectJournal({
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <p className="text-[13px] font-medium leading-snug text-foreground">{entry.title}</p>
+                    <p className={isNote ? "text-[13px] font-medium leading-snug text-foreground" : "text-[12px] leading-snug text-foreground/80"}>{entry.title}</p>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(entry.at).toLocaleDateString("pt-BR", {
                         day: "2-digit",
@@ -257,6 +259,16 @@ export default function ProjectJournal({
             );
           })}
         </div>
+        {entries.length > 12 && (
+          <button
+            type="button"
+            onClick={() => setShowAll((value) => !value)}
+            className="w-full rounded-lg border border-border bg-transparent py-1.5 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+          >
+            {showAll ? "Mostrar menos" : `Ver histórico completo (${entries.length})`}
+          </button>
+        )}
+        </>
       )}
     </section>
   );
