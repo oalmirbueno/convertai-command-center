@@ -134,6 +134,15 @@ export default function ProjectJournal({
         (file.mime_type || "").startsWith("image/") ||
         /\.(png|jpe?g|webp|gif)$/i.test(file.file_name || "");
       const previewUrl = isImage && file.file_url ? file.file_url : null;
+      if (!file.approval_requested_at && !file.client_decided_at) {
+        list.push({
+          at: file.created_at,
+          kind: "auto",
+          icon: "file",
+          title: `Novo material no projeto: ${file.file_name}`,
+          previewUrl,
+        });
+      }
       if (file.approval_requested_at) {
         list.push({
           at: file.approval_requested_at,

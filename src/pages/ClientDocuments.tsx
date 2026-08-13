@@ -103,7 +103,9 @@ export default function ClientDocuments() {
 
   const filteredFiles = (files || []).filter((f: any) => {
     if (childIds.has(f.id)) return false; // hide children
-    if (!["client_shared", "approval"].includes(f.visibility)) return false;
+    // A regra de quem ve o que e do banco (RLS): cliente real so recebe o
+    // liberado; equipe recebe tudo. A tela mostra o que chegar - antes o
+    // filtro escondia material interno ate do admin e parecia "nada enviado".
     if (f.status !== "ready" || f.archived_at) return false;
     if ((f.folder || "estrategicos") !== activeFolder) return false;
     if (filterProject !== "all" && f.project_id !== filterProject) return false;

@@ -91,12 +91,18 @@ export function buildProgressView(
 
   const next = pending[0] || null;
 
+  const pendingCount = projectTasks.filter(
+    (task) => !DONE_STATUSES.has((task.status || "").toLowerCase()),
+  ).length;
+
   const label =
     total > 0
       ? `${done} de ${total} entregas do mês`
       : done > 0
         ? `${done} entrega(s) concluída(s) no mês`
-        : "Ciclo em andamento";
+        : pendingCount > 0
+          ? `${pendingCount} entrega(s) em produção`
+          : "Ciclo em andamento";
 
   return {
     mode: "cycle",

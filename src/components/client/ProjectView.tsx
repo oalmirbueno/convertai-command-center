@@ -52,8 +52,7 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
   const { data: files } = useFiles(undefined, project.client_id);
 
   const visibleFiles = (files || []).filter((file: any) =>
-    ["client_shared", "approval"].includes(file.visibility)
-    && (file.project_id === project.id || !file.project_id)
+    (file.project_id === project.id || !file.project_id)
     && file.status === "ready"
     && !file.archived_at
     && !file.parent_file_id

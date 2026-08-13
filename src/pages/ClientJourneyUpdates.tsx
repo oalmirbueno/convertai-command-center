@@ -258,7 +258,7 @@ export default function ClientJourneyUpdates() {
                     </span>
                   </p>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
-                    {view.mode === "percent" ? `${view.percent}%` : view.label}
+                    {view.mode === "percent" ? (view.percent > 0 ? `${view.percent}%` : "Em andamento") : view.label}
                   </span>
                 </div>
                 <div className="mt-2 h-[3px] overflow-hidden rounded-full bg-secondary">
@@ -272,6 +272,24 @@ export default function ClientJourneyUpdates() {
                     <Clock className="h-3 w-3" /> A seguir: {view.nextTitle}
                   </p>
                 )}
+                {(() => {
+                  // Contexto real: o que esta em producao nesta frente agora
+                  const doing = (snapshot?.tasks || [])
+                    .filter((task: any) => task.project_id === project.id &&
+                      !["done", "completed", "concluido", "concluída"].includes((task.status || "").toLowerCase()))
+                    .slice(0, 3);
+                  if (doing.length === 0) return null;
+                  return (
+                    <ul className="mt-2 space-y-1">
+                      {doing.map((task: any, index: number) => (
+                        <li key={index} className="flex items-start gap-1.5 text-[11px] text-muted-foreground">
+                          <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-primary/60" />
+                          <span className="truncate">{task.title}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  );
+                })()}
               </div>
             );
           })}
