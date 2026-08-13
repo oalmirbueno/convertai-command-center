@@ -396,14 +396,17 @@
   filter: invert(1) hue-rotate(180deg) saturate(1.15);
 }
 
-/* Navegacao no claro: letras mais firmes e fundo levemente tonalizado,
-   sem o branco chapado. */
-.light nav a,
-.light nav button {
-  --tw-text-opacity: 1;
+/* A barra de navegacao e escura nos dois temas. No claro, as letras cinza
+   sumiam: links inativos ficam quase brancos e o ativo branco puro. */
+.light header nav a {
+  color: hsl(0 0% 92%);
 }
-.light .app-topbar {
-  background: hsl(160 25% 12% / 0.97);
+.light header nav a:hover {
+  color: hsl(0 0% 100%);
+}
+.light header nav a[aria-current="page"],
+.light header nav a.active {
+  color: hsl(0 0% 100%);
 }
 
 /* Fundo do app no claro: leve gradiente para nao ficar tudo branco. */

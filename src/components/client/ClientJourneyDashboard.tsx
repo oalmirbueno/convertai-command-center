@@ -23,6 +23,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import CircularProgress from "./CircularProgress";
 import { FadeUp, StaggerContainer } from "./motion";
+import ProjectJournal from "@/components/shared/ProjectJournal";
 import {
   daysUntil,
   formatDateShort,
@@ -455,6 +456,54 @@ export default function ClientJourneyDashboard({
         </FadeUp>
       )}
 
+      {/* Linha de etapas: em que ponto do processo o trabalho esta agora */}
+      <FadeUp>
+        {(() => {
+          const stages = ["Estruturação", "Produção", "Aprovação", "Programado", "No ar"];
+          const currentStage =
+            published.length > 0 ? 4 :
+            scheduled.length > 0 ? 3 :
+            pendingFiles.length > 0 ? 2 :
+            activeProjects.length > 0 ? 1 : 0;
+          return (
+            <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-6">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Etapa do processo
+              </p>
+              <ol className="mt-3 flex items-center gap-0" aria-label="Etapas do trabalho">
+                {stages.map((stage, index) => {
+                  const done = index < currentStage;
+                  const current = index === currentStage;
+                  return (
+                    <li key={stage} className="flex min-w-0 flex-1 items-center">
+                      <div className="flex min-w-0 flex-col items-center gap-1.5 text-center flex-1">
+                        <span
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold transition-colors ${
+                            current
+                              ? "border-primary bg-primary text-primary-foreground shadow-[0_0_12px_hsl(var(--primary)/0.45)]"
+                              : done
+                                ? "border-primary/40 bg-primary/15 text-primary"
+                                : "border-border bg-secondary/40 text-muted-foreground"
+                          }`}
+                        >
+                          {done ? "✓" : index + 1}
+                        </span>
+                        <span className={`truncate text-[9px] leading-tight sm:text-[10px] ${current ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                          {stage}
+                        </span>
+                      </div>
+                      {index < stages.length - 1 && (
+                        <span className={`mx-0.5 mb-4 h-px flex-1 ${done ? "bg-primary/50" : "bg-border"}`} aria-hidden="true" />
+                      )}
+                    </li>
+                  );
+                })}
+              </ol>
+            </div>
+          );
+        })()}
+      </FadeUp>
+
       {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
       <section className="space-y-3">
           <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
@@ -653,6 +702,12 @@ export default function ClientJourneyDashboard({
                   );
                 })}
               </section>
+            )}
+
+            {clientId && (
+              <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+                <ProjectJournal clientId={clientId} canWrite={false} />
+              </div>
             )}
 
             {activeProjects.length === 0 && doneProjects.length === 0 && (

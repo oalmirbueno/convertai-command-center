@@ -828,20 +828,6 @@ export default function AdminExperience() {
         </button>
       </div>
 
-      {/* Como funciona: o fluxo em três passos, sempre visível */}
-      <div className="grid grid-cols-3 gap-2">
-        {[
-          { step: "1", label: "Gerar", detail: "Mensagem pronta com os dados do cliente" },
-          { step: "2", label: "Revisar", detail: "Você lê e edita na fila" },
-          { step: "3", label: "Publicar", detail: "Cliente vê no painel e é avisado" },
-        ].map((s) => (
-          <div key={s.step} className="bg-secondary/30 border border-border rounded-xl px-3 py-2.5 text-center">
-            <p className="text-[11px] font-semibold text-primary">{s.step}. {s.label}</p>
-            <p className="text-[9px] text-muted-foreground mt-0.5 leading-snug">{s.detail}</p>
-          </div>
-        ))}
-      </div>
-
       {/* Missões de hoje: a Central puxa você para a ação certa do dia */}
       {(() => {
         const todayRitual = ritualMeta(ritualForToday())!;
