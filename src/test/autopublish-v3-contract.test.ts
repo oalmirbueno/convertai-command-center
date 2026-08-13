@@ -15,6 +15,10 @@ const publishAll = read(
   "supabase/migrations/20260813220000_autopublish_publish_all_scheduled.sql",
 );
 const v4 = read("supabase/migrations/20260813230000_autopublish_v4_signed_urls.sql");
+const v5 = read("supabase/migrations/20260814000000_autopublish_v5_fast_routes.sql");
+const captionFix = read(
+  "supabase/migrations/20260814010000_autopublish_fix_caption_encoding.sql",
+);
 
 describe("publicação nunca duplica", () => {
   it("o passo de publicação registra que foi despachado", () => {
@@ -122,6 +126,22 @@ describe("midia com link assinado (v4)", () => {
     expect(v4).toContain("_step_limit constant smallint := 4");
     expect(v4).toContain("autopublish_mark_failed");
     expect(v4).toContain("delivery_mode IN ('manual', 'automatic')");
+  });
+});
+
+describe("rota rapida (v5) e legenda intacta", () => {
+  it("cartoes do carrossel saem em paralelo e o passo emenda na mesma rodada", () => {
+    expect(v5).toContain("child_request_ids");
+    expect(v5).toContain("FOR _pass IN 1..3 LOOP");
+    // Cartao que falha e refeito individualmente, nao derruba o lote.
+    expect(v5).toContain("Cartao ' || _idx || ' refeito");
+  });
+
+  it("legenda codifica um %XX por BYTE: acento e emoji chegam intactos", () => {
+    // O bug real: 'e com acento' virava %C3A9 (bytes colados) e o Instagram
+    // publicava a legenda cheia de caracteres quebrados.
+    expect(captionFix).toContain("'(..)', '%\\1', 'g'");
+    expect(captionFix).toContain("'%C3%A9'");
   });
 });
 
