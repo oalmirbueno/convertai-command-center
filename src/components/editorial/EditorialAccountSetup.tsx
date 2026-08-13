@@ -670,8 +670,8 @@ export default function EditorialAccountSetup({
               </Button>
             </div>
             <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-              A conexão apenas identifica e vincula a conta. A publicação
-              automática ainda não está habilitada.
+              A conexão identifica e vincula a conta. Com ela ativa, o material
+              aprovado e agendado é publicado pelo painel na data marcada.
             </p>
           </div>
         )}

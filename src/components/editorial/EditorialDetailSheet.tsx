@@ -63,6 +63,10 @@ import {
   zonedDateTimeLocalToIso,
 } from "@/lib/editorialDate";
 import { cn } from "@/lib/utils";
+import {
+  AUTOPUBLISH_STAGE_LABELS,
+  useAutopublishStatus,
+} from "@/hooks/useAutopublishStatus";
 
 type PublicationAction =
   | "schedule"
@@ -137,6 +141,48 @@ function publicationFileReady(
     post.post.production_status === "ready" &&
     isFilePublishable(post.primaryFile) &&
     isFilePublishable(effectiveFile)
+  );
+}
+
+/**
+ * Em que pé está a publicação automática, para a equipe.
+ *
+ * Antes, quando o motor falhava, o erro ficava só no banco e a agenda seguia
+ * mostrando "Programado" como se estivesse tudo certo. Agora a falha aparece
+ * aqui, com o passo em que parou e o motivo.
+ */
+function PublicationDeliveryStatus({ publicationId }: { publicationId: string }) {
+  const { data } = useAutopublishStatus(publicationId);
+  if (!data) return null;
+
+  const failed = data.stage === "failed";
+  const done = data.stage === "done";
+  if (done && !data.last_error) return null;
+
+  return (
+    <div
+      className={cn(
+        "flex gap-2 rounded-lg border p-3",
+        failed
+          ? "border-destructive/20 bg-destructive/5"
+          : "border-sky-500/20 bg-sky-500/5",
+      )}
+    >
+      {failed ? (
+        <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+      ) : (
+        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-500" />
+      )}
+      <div className="min-w-0">
+        <p className={cn("text-xs font-medium", failed ? "text-destructive" : "text-sky-500")}>
+          {AUTOPUBLISH_STAGE_LABELS[data.stage]}
+          {data.attempts > 1 && ` · ${data.attempts} tentativas`}
+        </p>
+        {data.last_error && (
+          <p className="mt-0.5 break-words text-xs text-muted-foreground">{data.last_error}</p>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -826,6 +872,8 @@ export default function EditorialDetailSheet({
                         </p>
                       </div>
                     )}
+
+                    {isStaff && <PublicationDeliveryStatus publicationId={publication.id} />}
 
                     {isStaff && bundle.internal?.failure_reason && (
                       <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">

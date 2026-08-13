@@ -111,6 +111,20 @@ export function editorialScheduleMissingFields(
   return missing;
 }
 
+/** A Meta publica no máximo 10 itens por publicação automática. */
+export const AUTOMATIC_DELIVERY_MAX_ASSETS = 10;
+
+/**
+ * A publicação pode sair sozinha? Precisa da lista de arquivos congelada e
+ * dentro do limite da Meta. Fora disso, o agendamento continua valendo, só que
+ * a publicação é feita pela equipe.
+ */
+export function canDeliverAutomatically(assetFileIds: readonly string[]) {
+  return (
+    assetFileIds.length > 0 && assetFileIds.length <= AUTOMATIC_DELIVERY_MAX_ASSETS
+  );
+}
+
 export function buildEditorialSchedulePayload(
   input: EditorialSchedulePayloadInput,
 ) {
@@ -156,6 +170,7 @@ export function buildEditorialSchedulePayload(
     revision_of_post_id: input.existingPost?.revisionOfPostId || null,
     publications: targets.map((target) => {
       const targetAsset = target.asset || input.asset;
+      const assetFileIds = targetAsset.files.map((file) => file.id);
       return {
         id: target.id || null,
         idempotency_key: target.idempotencyKey,
@@ -166,7 +181,12 @@ export function buildEditorialSchedulePayload(
           target.caption === undefined ? caption : target.caption,
         first_comment: target.firstComment ?? null,
         alt_text: target.altText ?? null,
-        asset_file_ids: targetAsset.files.map((file) => file.id),
+        asset_file_ids: assetFileIds,
+        // Sem isto o agendamento nascia "manual" e o motor de publicação
+        // simplesmente nunca olhava para ele: nada saía sozinho. O limite de 10
+        // é da própria Meta; acima disso o envio segue manual para o
+        // agendamento continuar funcionando em vez de ser recusado.
+        delivery_mode: canDeliverAutomatically(assetFileIds) ? "automatic" : "manual",
         scheduled_at: input.scheduledAtIso,
         scheduled_timezone: input.timezone,
       };

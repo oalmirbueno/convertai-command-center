@@ -68,8 +68,11 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain("Somente administradores e responsáveis");
     expect(accountSetup).toContain("{canManage && showForm &&");
     expect(accountSetup).toContain("!canManage && linkedAccountCount > 0");
+    // O texto mudou quando a publicação automática passou a funcionar de
+    // verdade. A regra continua: a tela não promete mais do que entrega, e o
+    // que libera a publicação é o material aprovado e agendado, não a conexão.
     expect(accountSetup).toMatch(
-      /publicação\s+automática ainda não está habilitada/,
+      /material\s+aprovado e agendado é publicado pelo painel/,
     );
   });
 
@@ -84,8 +87,10 @@ describe("editorial account setup contract", () => {
     expect(accountSetup).toContain('return "Conectada"');
     expect(accountSetup).toContain('return "Expirada"');
     expect(accountSetup).toContain('return "Manual"');
+    // Conectar a conta continua NÃO sendo o que liga a publicação: quem manda
+    // é o material aprovado e agendado.
     expect(accountSetup).toMatch(
-      /A publicação\s+automática ainda não está habilitada\./,
+      /A conexão identifica e vincula a conta\./,
     );
     expect(accountSetup).not.toContain("transitionEditorialPublication");
   });

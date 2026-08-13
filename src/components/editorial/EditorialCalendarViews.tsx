@@ -132,6 +132,9 @@ const stageClasses: Record<string, string> = {
   production: "border-violet-500/30 bg-violet-500/10 text-violet-500",
   ready: "border-amber-500/30 bg-amber-500/10 text-amber-500",
   scheduled: "border-sky-500/30 bg-sky-500/10 text-sky-500",
+  // Passou da hora e nao saiu: precisa saltar aos olhos, nao se confundir com
+  // um agendamento normal.
+  overdue: "border-warning/40 bg-warning/15 text-warning",
   published: "border-emerald-500/30 bg-emerald-500/10 text-emerald-500",
   failed: "border-destructive/30 bg-destructive/10 text-destructive",
   cancelled: "border-border bg-muted text-muted-foreground",
@@ -479,6 +482,7 @@ function PublicationPill({
   const stage = editorialVisualStage(
     item.post.post.production_status,
     publication.status,
+    publication.scheduled_at,
   );
   const status = EDITORIAL_VISUAL_STAGE_LABELS[stage] || publication.status;
   const context = postContentContext(item.post, item.publication);
@@ -1826,6 +1830,7 @@ function ListView({
                     const listStage = editorialVisualStage(
                       item.post.post.production_status,
                       publication.status,
+                      publication.scheduled_at,
                     );
                     return (
                       <Badge

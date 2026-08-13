@@ -419,6 +419,7 @@ export type EditorialVisualStage =
   | "production"
   | "ready"
   | "scheduled"
+  | "overdue"
   | "published"
   | "failed"
   | "cancelled";
@@ -428,19 +429,48 @@ export const EDITORIAL_VISUAL_STAGE_LABELS: Record<EditorialVisualStage, string>
   production: "Em produção",
   ready: "Pronto",
   scheduled: "Programado",
+  overdue: "Passou da hora",
   published: "Publicado",
   failed: "Falhou",
   cancelled: "Cancelado",
 };
 
+/**
+ * Passou da hora e não saiu.
+ *
+ * Antes um post marcado para o dia 3 e que nunca foi publicado continuava com o
+ * mesmo selo azul de "Programado" de um post marcado para amanhã. Era por isso
+ * que a agenda parecia "teimar": ninguém tinha como ver que aquilo tinha
+ * vencido. A folga existe porque a publicação automática roda de minuto em
+ * minuto e um post pode estar sendo processado bem na virada.
+ */
+const OVERDUE_TOLERANCE_MINUTES = 15;
+
+export function isPublicationOverdue(
+  publicationStatus: string | null | undefined,
+  scheduledAt: string | null | undefined,
+  now: Date = new Date(),
+): boolean {
+  if (publicationStatus !== "scheduled" || !scheduledAt) return false;
+  const scheduled = new Date(scheduledAt);
+  if (Number.isNaN(scheduled.getTime())) return false;
+  return now.getTime() - scheduled.getTime() > OVERDUE_TOLERANCE_MINUTES * 60_000;
+}
+
 export function editorialVisualStage(
   productionStatus: string | null | undefined,
   publicationStatus?: string | null,
+  scheduledAt?: string | null,
+  now: Date = new Date(),
 ): EditorialVisualStage {
   if (publicationStatus === "published") return "published";
   if (publicationStatus === "failed") return "failed";
   if (publicationStatus === "cancelled") return "cancelled";
-  if (publicationStatus === "scheduled") return "scheduled";
+  if (publicationStatus === "scheduled") {
+    return isPublicationOverdue(publicationStatus, scheduledAt, now)
+      ? "overdue"
+      : "scheduled";
+  }
   if (productionStatus === "cancelled") return "cancelled";
   if (productionStatus === "production") return "production";
   if (productionStatus === "ready") return "ready";

@@ -466,6 +466,33 @@ describe("estágio visual único da agenda e do quadro", () => {
     expect(editorialVisualStage("cancelled", "planned")).toBe("cancelled");
   });
 
+  it("mostra que passou da hora quando o agendamento venceu e nada saiu", () => {
+    // A queixa real: post marcado para o dia 3 continuava com o mesmo selo azul
+    // de "Programado" no dia 13, e a agenda parecia teimar.
+    const agora = new Date("2026-08-13T12:00:00Z");
+    const ontem = "2026-08-12T12:00:00Z";
+    const daquiAPouco = "2026-08-13T12:30:00Z";
+
+    expect(editorialVisualStage("ready", "scheduled", ontem, agora)).toBe("overdue");
+    expect(editorialVisualStage("ready", "scheduled", daquiAPouco, agora)).toBe("scheduled");
+  });
+
+  it("dá folga de alguns minutos para o motor rodar antes de acusar atraso", () => {
+    const agora = new Date("2026-08-13T12:00:00Z");
+    const cincoMinAtras = "2026-08-13T11:55:00Z";
+    const meiaHoraAtras = "2026-08-13T11:30:00Z";
+
+    expect(editorialVisualStage("ready", "scheduled", cincoMinAtras, agora)).toBe("scheduled");
+    expect(editorialVisualStage("ready", "scheduled", meiaHoraAtras, agora)).toBe("overdue");
+  });
+
+  it("publicado e falho nunca viram atraso", () => {
+    const agora = new Date("2026-08-13T12:00:00Z");
+    const ontem = "2026-08-12T12:00:00Z";
+    expect(editorialVisualStage("ready", "published", ontem, agora)).toBe("published");
+    expect(editorialVisualStage("ready", "failed", ontem, agora)).toBe("failed");
+  });
+
   it("tem rótulo para todos os estágios", () => {
     const stages = ["draft", "production", "ready", "scheduled", "published", "failed", "cancelled"] as const;
     for (const stage of stages) {
