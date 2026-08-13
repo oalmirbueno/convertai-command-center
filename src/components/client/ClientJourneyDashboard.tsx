@@ -455,6 +455,150 @@ export default function ClientJourneyDashboard({
         </FadeUp>
       )}
 
+      {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
+      <section className="space-y-3">
+          <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
+          {!(latestReport && reportIsFresh) && (
+            <button
+              type="button"
+              onClick={() => navigate("/onde-estamos")}
+              className="group w-full rounded-xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] to-transparent p-4 text-left transition-colors hover:border-primary/40"
+            >
+              <p className="text-[13px] font-medium leading-relaxed text-foreground">
+                {deliveredFiles.length > 0
+                  ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
+                  : "Estamos organizando o seu ciclo de trabalho."}
+                {nextPublication?.scheduled_at &&
+                  ` Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.`}
+              </p>
+              <p className="mt-2 flex items-center gap-1 text-[11px] text-primary">
+                Ver o retrato completo em tempo real
+                <ArrowUpRight className="h-3 w-3" />
+              </p>
+            </button>
+          )}
+      {latestReport && reportIsFresh && (
+        <div>
+          <button
+            type="button"
+            onClick={() => navigate("/onde-estamos")}
+            className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
+          >
+            <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
+              <FileText className="h-3.5 w-3.5 text-primary" />
+              {latestReport.title}
+            </p>
+            {latestReport.highlights && (
+              <div className="mt-3">
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
+                <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
+              </div>
+            )}
+            {latestReport.summary && (
+              <div className="mt-3">
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
+                <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
+              </div>
+            )}
+            {latestReport.next_steps && (
+              <div className="mt-3">
+                <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
+                <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
+              </div>
+            )}
+            <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
+              Abrir Onde Estamos (todas as atualizações)
+              <ArrowUpRight className="h-3 w-3" />
+            </p>
+          </button>
+        </div>
+      )}
+        </section>
+
+
+      {/* Projetos com prazo e Entregas recentes lado a lado, cada um com o proprio scroll */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
+        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-2xl">
+            {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
+            {(closedProjects.length > 0 || doneProjects.length > 0) && (
+              <section className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-semibold text-foreground">Projetos com prazo</h2>
+                  <span className="text-xs text-muted-foreground">
+                    {closedProjects.length} ativo(s)
+                    {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
+                  </span>
+                </div>
+                {[...closedProjects, ...doneProjects].map((project: any) => {
+                  const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
+                  const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
+                  const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
+                  return (
+                    <button
+                      key={project.id}
+                      type="button"
+                      onClick={() => onSelectProject(project)}
+                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
+                    >
+                      <div className="flex items-start gap-4">
+                        <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-3">
+                            <div>
+                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                                {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
+                              </p>
+                              <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
+                            </div>
+                            <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
+                          </div>
+                          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
+                              {completed}/{projectMilestones.length} etapas
+                            </span>
+                            {project.deadline && (
+                              <span>
+                                {deadlineDistance !== null && deadlineDistance < 0
+                                  ? "Prazo em atualização"
+                                  : `Previsão ${formatDateShort(project.deadline)}`}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </button>
+                  );
+                })}
+              </section>
+            )}
+        </div>
+        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-2xl">
+            {/* 9 · Entregas recentes (histórico de valor) */}
+            <section className="space-y-3">
+              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
+              <div className="rounded-xl border border-border bg-card p-4">
+                {deliveredFiles.length === 0 ? (
+                  <p className="py-6 text-center text-xs text-muted-foreground">
+                    Nenhuma entrega liberada ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-3">
+                    {deliveredFiles.slice(0, 6).map((file: any) => (
+                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
+                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
+                        <p className="mt-0.5 text-[10px] text-muted-foreground">
+                          {file.project?.name || "Entrega"} · v{file.version || 1}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+        </div>
+      </div>
+
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <FadeUp className="lg:col-span-2">
           <div className="space-y-6">
@@ -511,147 +655,11 @@ export default function ClientJourneyDashboard({
               </section>
             )}
 
-            {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
-            {(closedProjects.length > 0 || doneProjects.length > 0) && (
-              <section className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-sm font-semibold text-foreground">Projetos com prazo</h2>
-                  <span className="text-xs text-muted-foreground">
-                    {closedProjects.length} ativo(s)
-                    {doneProjects.length > 0 ? ` · ${doneProjects.length} concluído(s)` : ""}
-                  </span>
-                </div>
-                {[...closedProjects, ...doneProjects].map((project: any) => {
-                  const projectMilestones = milestones.filter((milestone: any) => milestone.project_id === project.id);
-                  const completed = projectMilestones.filter((milestone: any) => milestone.status === "completed").length;
-                  const deadlineDistance = project.deadline ? daysUntil(project.deadline) : null;
-                  return (
-                    <button
-                      key={project.id}
-                      type="button"
-                      onClick={() => onSelectProject(project)}
-                      className="group w-full rounded-xl border border-border bg-card p-5 text-left transition-colors hover:border-primary/30"
-                    >
-                      <div className="flex items-start gap-4">
-                        <CircularProgress progress={project.progress || 0} size={56} strokeWidth={4} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between gap-3">
-                            <div>
-                              <p className="text-[10px] uppercase tracking-widest text-muted-foreground">
-                                {typeLabels[project.project_type] || "Projeto"} · {projectStatusLabel[project.status] || project.status}
-                              </p>
-                              <p className="mt-1 truncate text-sm font-semibold text-foreground">{project.name}</p>
-                            </div>
-                            <ArrowUpRight className="h-4 w-4 text-muted-foreground transition-colors group-hover:text-primary" />
-                          </div>
-                          <div className="mt-3 flex flex-wrap gap-3 text-[11px] text-muted-foreground">
-                            <span className="flex items-center gap-1">
-                              <CheckCircle2 className="h-3 w-3 text-emerald-500" />
-                              {completed}/{projectMilestones.length} etapas
-                            </span>
-                            {project.deadline && (
-                              <span>
-                                {deadlineDistance !== null && deadlineDistance < 0
-                                  ? "Prazo em atualização"
-                                  : `Previsão ${formatDateShort(project.deadline)}`}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </button>
-                  );
-                })}
-              </section>
-            )}
-
             {activeProjects.length === 0 && doneProjects.length === 0 && (
               <div className="rounded-xl border border-border bg-card p-8 text-center text-sm text-muted-foreground">
                 Novos projetos aparecerão aqui quando forem iniciados.
               </div>
             )}
-            {/* 8 · O que estamos fazendo, onde estamos e o próximo passo */}
-            <section className="space-y-3">
-                <h2 className="text-sm font-semibold text-foreground">Onde estamos agora</h2>
-                {!(latestReport && reportIsFresh) && (
-                  <button
-                    type="button"
-                    onClick={() => navigate("/onde-estamos")}
-                    className="group w-full rounded-xl border border-primary/25 bg-gradient-to-br from-primary/[0.07] to-transparent p-4 text-left transition-colors hover:border-primary/40"
-                  >
-                    <p className="text-[13px] font-medium leading-relaxed text-foreground">
-                      {deliveredFiles.length > 0
-                        ? `Trabalho em movimento: ${deliveredFiles.length} entrega(s) já liberada(s).`
-                        : "Estamos organizando o seu ciclo de trabalho."}
-                      {nextPublication?.scheduled_at &&
-                        ` Próxima publicação em ${new Date(nextPublication.scheduled_at).toLocaleDateString("pt-BR", { day: "2-digit", month: "long" })}.`}
-                    </p>
-                    <p className="mt-2 flex items-center gap-1 text-[11px] text-primary">
-                      Ver o retrato completo em tempo real
-                      <ArrowUpRight className="h-3 w-3" />
-                    </p>
-                  </button>
-                )}
-            {latestReport && reportIsFresh && (
-              <div>
-                <button
-                  type="button"
-                  onClick={() => navigate("/onde-estamos")}
-                  className="group w-full rounded-xl border border-primary/25 bg-primary/[0.04] p-4 text-left transition-colors hover:border-primary/40"
-                >
-                  <p className="flex items-center gap-2 text-xs font-semibold text-foreground">
-                    <FileText className="h-3.5 w-3.5 text-primary" />
-                    {latestReport.title}
-                  </p>
-                  {latestReport.highlights && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">O que estamos fazendo</p>
-                      <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-foreground">{latestReport.highlights}</p>
-                    </div>
-                  )}
-                  {latestReport.summary && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Resultado explicado</p>
-                      <p className="mt-1 line-clamp-4 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.summary}</p>
-                    </div>
-                  )}
-                  {latestReport.next_steps && (
-                    <div className="mt-3">
-                      <p className="text-[9px] font-semibold uppercase tracking-widest text-primary">Próxima etapa</p>
-                      <p className="mt-1 line-clamp-2 whitespace-pre-line text-[11px] leading-relaxed text-muted-foreground">{latestReport.next_steps}</p>
-                    </div>
-                  )}
-                  <p className="mt-3 flex items-center gap-1 text-[10px] text-primary">
-                    Abrir Onde Estamos (todas as atualizações)
-                    <ArrowUpRight className="h-3 w-3" />
-                  </p>
-                </button>
-              </div>
-            )}
-              </section>
-
-            {/* 9 · Entregas recentes (histórico de valor) */}
-            <section className="space-y-3">
-              <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
-              <div className="rounded-xl border border-border bg-card p-4">
-                {deliveredFiles.length === 0 ? (
-                  <p className="py-6 text-center text-xs text-muted-foreground">
-                    Nenhuma entrega liberada ainda.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {deliveredFiles.slice(0, 6).map((file: any) => (
-                      <div key={file.id} className="border-b border-border/60 pb-3 last:border-0 last:pb-0">
-                        <p className="truncate text-xs font-medium text-foreground">{file.file_name}</p>
-                        <p className="mt-0.5 text-[10px] text-muted-foreground">
-                          {file.project?.name || "Entrega"} · v{file.version || 1}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
           </div>
         </FadeUp>
 

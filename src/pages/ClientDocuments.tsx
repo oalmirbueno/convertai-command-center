@@ -202,9 +202,13 @@ export default function ClientDocuments() {
       {isLoading ? (
         <div className="space-y-2">{[1,2,3].map(i => <Skeleton key={i} className="h-16 rounded-xl" />)}</div>
       ) : filteredFiles.length === 0 ? (
-        <div className="text-center py-12 text-sm text-muted-foreground flex flex-col items-center gap-2">
-          <FolderOpen className="w-8 h-8 text-muted-foreground/40" />
-          Nenhum arquivo nesta pasta
+        <div className="flex flex-col items-center gap-2 py-12 text-center">
+          <FolderOpen className="h-8 w-8 text-muted-foreground/40" />
+          <p className="text-sm font-medium text-foreground">Nenhum material liberado ainda</p>
+          <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
+            Assim que a equipe liberar um material ou enviar algo para sua aprovação, ele aparece aqui
+            na hora, junto com o histórico completo no Onde Estamos.
+          </p>
         </div>
       ) : (
         <div className="space-y-2 stagger-children">
