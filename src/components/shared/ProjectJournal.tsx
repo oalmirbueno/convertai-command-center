@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
+import { useResolvedFileUrl } from "@/lib/fileUrls";
 import { toast } from "sonner";
 import {
   BookOpen, CheckCircle2, FileCheck2, Megaphone, PenLine, Send, Loader2,
@@ -24,6 +25,24 @@ interface JournalEntry {
   title: string;
   body?: string | null;
   previewUrl?: string | null;
+  file?: any;
+}
+
+/** Miniatura clicavel com URL assinada: o storage e privado, entao a URL
+ *  precisa ser resolvida na hora - o file_url cru nao abria nada. */
+function JournalThumb({ file }: { file: any }) {
+  const { url } = useResolvedFileUrl(file);
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" title="Abrir material">
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        className="mt-2 h-16 w-16 rounded-lg border border-border object-cover transition-transform hover:scale-105"
+      />
+    </a>
+  );
 }
 
 const ICONS = {
@@ -68,7 +87,7 @@ export default function ProjectJournal({
           : Promise.resolve({ data: [] as any[] }),
         supabase
           .from("files")
-          .select("file_name, file_url, mime_type, approval_status, approval_requested_at, client_decided_at, created_at")
+          .select("id, file_name, file_url, mime_type, storage_bucket, storage_path, approval_status, approval_requested_at, client_decided_at, created_at")
           .eq("client_id", clientId)
           .is("archived_at", null)
           .is("parent_file_id", null)
@@ -133,7 +152,7 @@ export default function ProjectJournal({
       const isImage =
         (file.mime_type || "").startsWith("image/") ||
         /\.(png|jpe?g|webp|gif)$/i.test(file.file_name || "");
-      const previewUrl = isImage && file.file_url ? file.file_url : null;
+      const previewUrl = isImage ? "resolver" : null;
       if (!file.approval_requested_at && !file.client_decided_at) {
         list.push({
           at: file.created_at,
@@ -141,6 +160,7 @@ export default function ProjectJournal({
           icon: "file",
           title: `Novo material no projeto: ${file.file_name}`,
           previewUrl,
+          file,
         });
       }
       if (file.approval_requested_at) {
@@ -150,6 +170,7 @@ export default function ProjectJournal({
           icon: "file",
           title: `Material enviado para sua aprovação: ${file.file_name}`,
           previewUrl,
+          file,
         });
       }
       if (file.client_decided_at && file.approval_status === "approved") {
@@ -159,6 +180,7 @@ export default function ProjectJournal({
           icon: "approved",
           title: `Material aprovado: ${file.file_name}`,
           previewUrl,
+          file,
         });
       }
     }
@@ -286,14 +308,7 @@ export default function ProjectJournal({
                       {entry.body}
                     </p>
                   )}
-                  {entry.previewUrl && (
-                    <img
-                      src={entry.previewUrl}
-                      alt=""
-                      loading="lazy"
-                      className="mt-2 h-16 w-16 rounded-lg border border-border object-cover"
-                    />
-                  )}
+                  {entry.previewUrl && entry.file && <JournalThumb file={entry.file} />}
                 </div>
               </div>
             );
