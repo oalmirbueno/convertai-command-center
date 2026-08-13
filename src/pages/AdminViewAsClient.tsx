@@ -5,6 +5,7 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
 import ClientDashboard from "@/pages/ClientDashboard";
 import ClientApprovals from "@/pages/ClientApprovals";
+import ClientJourneyUpdates from "@/pages/ClientJourneyUpdates";
 import ClientDocuments from "@/pages/ClientDocuments";
 import ClientReports from "@/pages/ClientReports";
 import ClientFinanceiro from "@/pages/ClientFinanceiro";
@@ -23,6 +24,7 @@ import { PROFILE_SAFE_SELECT } from "@/lib/profileFields";
 
 const clientTabs = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "onde-estamos", label: "Onde Estamos", icon: BarChart3 },
   { id: "aprovacoes", label: "Aprovações", icon: CheckSquare },
   { id: "calendario", label: "Agenda", icon: CalendarDays },
   { id: "documentos", label: "Documentos", icon: FileText },
@@ -211,6 +213,8 @@ export default function AdminViewAsClient() {
 
   const renderTabContent = () => {
     switch (activeTab) {
+      case "onde-estamos":
+        return <ClientJourneyUpdates />;
       case "aprovacoes":
         return <ClientApprovals />;
       case "calendario":

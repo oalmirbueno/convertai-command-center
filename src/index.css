@@ -393,7 +393,10 @@
    A logo oficial e feita para fundo escuro (texto branco). No tema claro,
    inverte a luminosidade preservando o verde da marca. */
 .light .brand-logo {
-  filter: invert(1) hue-rotate(180deg) saturate(1.15);
+  /* A utility de drop-shadow do Tailwind tambem define "filter" e vencia esta
+     regra - por isso a logo continuava clara no tema claro. */
+  filter: invert(1) hue-rotate(180deg) saturate(1.15)
+    drop-shadow(0 0 28px hsl(var(--primary) / 0.35)) !important;
 }
 
 /* A barra de navegacao e escura nos dois temas. No claro, as letras cinza
