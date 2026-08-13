@@ -55,6 +55,7 @@ const WorkspaceInboxPublic = lazy(() => import("@/pages/WorkspaceInboxPublic"));
 const OAuthConsent = lazy(() => import("@/pages/OAuthConsent"));
 const MetaOAuthCallback = lazy(() => import("@/pages/MetaOAuthCallback"));
 const MCPConnect = lazy(() => import("@/pages/MCPConnect"));
+const Novidades = lazy(() => import("@/pages/Novidades"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -174,6 +175,7 @@ function AppRoutes() {
       <Route path="/workspace" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <Workspace /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/central" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminExperience /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/onde-estamos" element={<ProtectedRoute><AppLayout><ClientJourneyUpdates /></AppLayout></ProtectedRoute>} />
+      <Route path="/novidades" element={<ProtectedRoute><AppLayout><Novidades /></AppLayout></ProtectedRoute>} />
       <Route path="/contratos" element={<ProtectedRoute><StaffRoute><AppLayout><AdminContracts /></AppLayout></StaffRoute></ProtectedRoute>} />
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />

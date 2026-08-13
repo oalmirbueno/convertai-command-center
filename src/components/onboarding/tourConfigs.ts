@@ -212,14 +212,42 @@ export const clientTourSteps: TourStep[] = [
     route: "/dashboard",
   },
 
+  // ── Onde Estamos ──
+  {
+    target: "[data-tour='nav-onde-estamos']",
+    title: "Onde Estamos · a tela mais importante",
+    description:
+      "Aqui você vê, em tempo real, o que está sendo feito pelo seu negócio agora: as entregas do mês, o que está em produção, o que espera você e o histórico completo do trabalho.",
+    placement: "bottom",
+    route: "/onde-estamos",
+  },
+  {
+    target: "[data-tour='welcome']",
+    title: "📈 A sua evolução mês a mês",
+    description:
+      "Ainda em Onde Estamos, role a página: tem a linha do tempo da sua evolução, o gráfico de crescimento montado com os números reais dos relatórios e o resumo Antes e Agora, que mostra tudo o que foi construído desde o começo.",
+    placement: "center",
+    route: "/onde-estamos",
+  },
+
   // ── Projetos (visão expandida) ──
   {
     target: "[data-tour='nav-projetos']",
     title: "Detalhes do Projeto",
     description:
-      "Veja informações completas: progresso, entregas, tarefas em andamento, timeline e atualizações da equipe que cuida da sua empresa.",
+      "Veja informações completas de cada frente: progresso, entregas, o que está em produção e o desenho de como funciona aquele serviço, do planejamento até a entrega.",
     placement: "bottom",
     route: "/projetos",
+  },
+
+  // ── Agenda ──
+  {
+    target: "[data-tour='nav-calendario']",
+    title: "Agenda de Publicações",
+    description:
+      "O calendário do que vai ao ar: o que já foi publicado, o que está agendado e o que ainda espera a sua aprovação.",
+    placement: "bottom",
+    route: "/calendario",
   },
 
   // ── Relatórios ──
@@ -227,19 +255,9 @@ export const clientTourSteps: TourStep[] = [
     target: "[data-tour='nav-relatorios']",
     title: "Relatórios de Resultados",
     description:
-      "Acesse os relatórios de performance da sua empresa com métricas detalhadas, gráficos de evolução e análises dos resultados alcançados.",
+      "Os números do trabalho período a período, com a explicação do que cada um significa para o seu negócio e a comparação com o período anterior.",
     placement: "bottom",
     route: "/relatorios",
-  },
-
-  // ── Timeline ──
-  {
-    target: "[data-tour='nav-timeline']",
-    title: "Cronograma",
-    description:
-      "Visualize o cronograma dos projetos da sua empresa. Veja marcos importantes, datas de entrega e o que vem pela frente.",
-    placement: "bottom",
-    route: "/timeline",
   },
 
   // ── Menu Mais ──
@@ -266,9 +284,23 @@ export const clientTourSteps: TourStep[] = [
   },
   {
     target: "[data-tour='welcome']",
+    title: "📁 Documentos organizados por tipo",
+    description:
+      "Todos os seus materiais em um lugar só, separados por pasta: materiais gráficos (com filtro de carrossel, post, story e vídeo), identidade visual, documentos, relatórios e contratos. Cada botão mostra quantos itens tem.",
+    placement: "center",
+  },
+  {
+    target: "[data-tour='welcome']",
     title: "💰 Financeiro",
     description:
       "Acompanhe faturas, boletos e o histórico financeiro da sua empresa. Veja o que está pendente e o que já foi pago.",
+    placement: "center",
+  },
+  {
+    target: "[data-tour='welcome']",
+    title: "✨ Novidades",
+    description:
+      "O painel evolui toda semana. Em Novidades você lê o que mudou para você e o que estamos construindo agora, sempre em português claro.",
     placement: "center",
   },
 
@@ -286,7 +318,7 @@ export const clientTourSteps: TourStep[] = [
     target: "[data-tour='finish']",
     title: "Tudo pronto! ✅",
     description:
-      "Agora você sabe como acompanhar os projetos da sua empresa. Clique no botão (?) no canto inferior direito a qualquer momento para rever este tour.",
+      "Use o painel no dia a dia, não só para aprovar: é aqui que você vê o trabalho acontecendo e os resultados chegando. Clique no botão (?) no canto inferior direito a qualquer momento para rever este tour.",
     placement: "center",
   },
 ];
@@ -393,6 +425,57 @@ export interface PageTourConfig {
 }
 
 export const pageTours: PageTourConfig[] = [
+  /* ── Onde Estamos ── */
+  {
+    route: "/onde-estamos",
+    label: "Onde Estamos",
+    client: [
+      {
+        target: "[data-tour='welcome']",
+        title: "O retrato do momento",
+        description:
+          "No topo ficam os quatro sinais do mês: entregas concluídas, o que está em produção agora, publicações no ar e o que espera você. Cada um é clicável e leva direto para a tela do assunto.",
+        placement: "center",
+      },
+      {
+        target: "[data-tour='welcome']",
+        title: "A sua evolução e o crescimento",
+        description:
+          "Descendo a página vem a linha do tempo mês a mês (clique no mês para ver o que aconteceu nele) e o gráfico de contatos e alcance, montado com os números reais dos seus relatórios.",
+        placement: "center",
+      },
+      {
+        target: "[data-tour='welcome']",
+        title: "Antes e Agora",
+        description:
+          "No fim da página, o resumo automático de tudo o que foi construído desde o primeiro dia. É a sua história com a Aceleriq, escrita pelo próprio sistema.",
+        placement: "center",
+      },
+    ],
+  },
+
+  /* ── Documentos ── */
+  {
+    route: "/documentos",
+    label: "Documentos",
+    client: [
+      {
+        target: "[data-tour='welcome']",
+        title: "Filtre pelo que você procura",
+        description:
+          "A primeira linha de botões são as pastas: materiais gráficos, identidade visual, base, documentos, relatórios e contratos. O número em cada botão é a quantidade de itens.",
+        placement: "center",
+      },
+      {
+        target: "[data-tour='welcome']",
+        title: "E dentro da pasta, por tipo",
+        description:
+          "Ao escolher uma pasta aparece a segunda linha: carrossel, post, story, vídeo. Assim você chega no material certo em dois cliques.",
+        placement: "center",
+      },
+    ],
+  },
+
   /* ── Dashboard ── */
   {
     route: "/dashboard",

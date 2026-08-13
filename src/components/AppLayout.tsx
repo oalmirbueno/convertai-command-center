@@ -52,6 +52,7 @@ const adminMoreNav: NavItem[] = [
   
   
   { title: "Cofre", url: "/cofre", icon: KeyRound },
+  { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Config", url: "/config", icon: Settings },
   { title: "API", url: "/api-docs", icon: Zap },
 ];
@@ -65,6 +66,7 @@ const clientMainNav: NavItem[] = [
 ];
 
 const clientMoreNav: NavItem[] = [
+  { title: "Novidades", url: "/novidades", icon: Sparkles },
   { title: "Cofre", url: "/cofre", icon: KeyRound },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
   { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },

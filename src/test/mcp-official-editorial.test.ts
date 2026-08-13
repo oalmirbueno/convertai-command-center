@@ -146,10 +146,13 @@ describe("official MCP editorial helpers", () => {
 
 describe("official MCP editorial contract", () => {
   it("registers both editorial tools and documents their non-publishing boundary", () => {
-    expect(index).toContain('version: "1.1.0"');
+    // Versao fixada de proposito: subir exige decisao consciente. 1.3.0 passou
+    // a documentar a organizacao de pastas e tipos de arquivo para os agentes.
+    expect(index).toContain('version: "1.3.0"');
     expect(index).toContain("listEditorialCalendarTool");
     expect(index).toContain("createEditorialItemTool");
     expect(index).toContain("sem aprovar, agendar ou publicar");
+    expect(index).toContain("ORGANIZACAO DE ARQUIVOS");
   });
 
   it("keeps every editorial read scoped by client, project and JWT RLS", () => {

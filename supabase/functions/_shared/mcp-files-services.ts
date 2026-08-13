@@ -40,7 +40,9 @@ export function isAllowedMime(m: string): boolean {
 }
 export function isMedia(m: string): boolean { return MEDIA_MIMES.has(m); }
 
-const FOLDERS = ['estrategicos','materiais','operacionais','contratos','relatorios','entregas'] as const;
+// Mesmas pastas da tela (src/lib/fileTaxonomy.ts). 'criativos' faltava aqui e
+// fazia envio por agente falhar; 'identidade' e 'base' sao as novas.
+const FOLDERS = ['estrategicos','materiais','criativos','identidade','base','operacionais','contratos','relatorios','entregas'] as const;
 const LEGACY_VISIBILITY = ['internal','client_shared','approval'] as const;
 const SENSITIVITY = ['normal','confidential','restricted'] as const;
 
