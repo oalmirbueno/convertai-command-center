@@ -378,7 +378,7 @@ export default function AdminRequests() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p className="heading-page">Pedidos de Clientes</p>
+          <h1 className="heading-page">Pedidos de Clientes</h1>
           {!roleCanMutate ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
               Acompanhamento em modo leitura. Admin ou manager gerencia os

@@ -179,22 +179,22 @@ export default function ClientJourneyDashboard({
   if (loadingProjects) {
     return (
       <div className="space-y-6 animate-fade-in">
-        <Skeleton className="h-36 w-full rounded-2xl" />
+        <Skeleton className="h-36 w-full rounded-xl" />
         <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
           {[1, 2, 3, 4].map((item) => (
             <Skeleton key={item} className="h-28 rounded-xl" />
           ))}
         </div>
-        <Skeleton className="h-64 w-full rounded-2xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
       </div>
     );
   }
 
   return (
-    <StaggerContainer className="space-y-8">
+    <StaggerContainer className="space-y-6">
       {/* 1 · Boas-vindas e contexto */}
       <FadeUp>
-        <div className="relative overflow-hidden rounded-2xl border border-border bg-card p-6 sm:p-8">
+        <div className="relative overflow-hidden rounded-xl border border-border bg-card p-6 sm:p-8">
           <div className="absolute inset-0 bg-gradient-to-br from-primary/[0.06] via-transparent to-primary/[0.02]" />
           <div className="relative z-10 flex items-start justify-between gap-4">
             <div>
@@ -234,7 +234,7 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className="flex w-full items-center gap-4 rounded-2xl border-2 border-red-500/50 bg-red-500/10 p-5 text-left transition-colors hover:border-red-500/70"
+            className="flex w-full items-center gap-4 rounded-xl border-2 border-red-500/50 bg-red-500/10 p-5 text-left transition-colors hover:border-red-500/70"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-red-500/20">
               <CalendarDays className="h-6 w-6 text-red-500" />
@@ -257,7 +257,7 @@ export default function ClientJourneyDashboard({
           <button
             type="button"
             onClick={() => navigate("/financeiro")}
-            className="flex w-full items-center gap-4 rounded-2xl border-2 border-sky-500/40 bg-sky-500/10 p-5 text-left transition-colors hover:border-sky-500/60"
+            className="flex w-full items-center gap-4 rounded-xl border-2 border-sky-500/40 bg-sky-500/10 p-5 text-left transition-colors hover:border-sky-500/60"
           >
             <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-sky-500/20">
               <Repeat className="h-6 w-6 text-sky-500" />
@@ -281,7 +281,7 @@ export default function ClientJourneyDashboard({
       {/* 3 · Ação necessária: o que precisa aprovar e quando será postado */}
       {pendingFiles.length > 0 && (
         <FadeUp>
-          <div className="rounded-2xl border border-amber-500/40 bg-amber-500/5 p-5">
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/5 p-5">
             <button
               type="button"
               onClick={() => navigate("/aprovacoes")}
@@ -321,7 +321,7 @@ export default function ClientJourneyDashboard({
 
       {/* 3 · Métricas gerais */}
       <FadeUp>
-        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <div className="grid auto-rows-fr grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
           {[
             {
               label: "Frentes ativas",
@@ -356,7 +356,7 @@ export default function ClientJourneyDashboard({
               bg: "bg-amber-500/10",
             },
           ].map((metric) => (
-            <div key={metric.label} className="rounded-xl border border-border bg-card p-4 sm:p-5">
+            <div key={metric.label} className="h-full flex flex-col rounded-xl border border-border bg-card p-4 sm:p-5">
               <div className="mb-2 flex items-center justify-between">
                 <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${metric.bg}`}>
                   <metric.icon className={`h-4 w-4 ${metric.color}`} />
@@ -397,7 +397,7 @@ export default function ClientJourneyDashboard({
       {/* 4 · Conteúdos deste ciclo (só para quem tem frente de conteúdo) */}
       {hasContentFront && (
         <FadeUp>
-          <section className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <div className="flex items-center justify-between gap-3">
               <h2 className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <CalendarCheck className="h-4 w-4 text-primary" />
@@ -412,7 +412,7 @@ export default function ClientJourneyDashboard({
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </button>
             </div>
-            <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="mt-4 grid auto-rows-fr grid-cols-2 gap-3 sm:grid-cols-4">
               {[
                 {
                   label: "Aguardando aprovação",
@@ -476,7 +476,7 @@ export default function ClientJourneyDashboard({
             "No ar e medindo resultado para otimizar.",
           ];
           return (
-            <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-6">
+            <div className="rounded-xl border border-border bg-card px-4 py-4 sm:px-6">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Etapa do processo
               </p>
@@ -579,8 +579,8 @@ export default function ClientJourneyDashboard({
 
 
       {/* Projetos com prazo e Entregas recentes lado a lado, cada um com o proprio scroll */}
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 items-start">
-        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-2xl">
+      <div className="grid auto-rows-fr grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="h-full max-h-[420px] overflow-y-auto pr-1 rounded-xl">
             {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
             {(closedProjects.length > 0 || doneProjects.length > 0) && (
               <section className="space-y-3">
@@ -635,7 +635,7 @@ export default function ClientJourneyDashboard({
               </section>
             )}
         </div>
-        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-2xl">
+        <div className="h-full max-h-[420px] overflow-y-auto pr-1 rounded-xl">
             {/* 9 · Entregas recentes (histórico de valor) */}
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>
@@ -718,7 +718,7 @@ export default function ClientJourneyDashboard({
             )}
 
             {clientId && (
-              <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+              <div className="rounded-xl border border-border bg-card p-4 sm:p-5">
                 <ProjectJournal clientId={clientId} canWrite={false} />
               </div>
             )}
@@ -825,7 +825,7 @@ export default function ClientJourneyDashboard({
       {/* Pulso Aceleriq: avaliação rápida da experiência */}
       {showPulse && (
         <FadeUp>
-          <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+          <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
             <p className="text-sm font-semibold text-foreground">Como está sendo a experiência com a Aceleriq?</p>
             <p className="mt-1 text-xs text-muted-foreground">
               Leva 5 segundos e vai direto para o nosso time. Sua opinião guia o próximo ciclo.
@@ -873,7 +873,7 @@ export default function ClientJourneyDashboard({
 
       {/* 10 · Evolução acumulada + atalhos */}
       <FadeUp>
-        <div className="rounded-2xl border border-border bg-card p-5 sm:p-6">
+        <div className="rounded-xl border border-border bg-card p-5 sm:p-6">
           <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
             <span className="flex items-center gap-1.5">
               <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />

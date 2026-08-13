@@ -249,6 +249,8 @@ export default function Workspace() {
   const [renaming, setRaming] = useState<Node | null>(null);
   const [renameValue, setRenameValue] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<Node | null>(null);
+  const [confirmCleanup, setConfirmCleanup] = useState(false);
+  const [cleaningFolders, setCleaningFolders] = useState(false);
   const [deletingNode, setDeletingNode] = useState(false);
   const [moveCreate, setMoveCreate] = useState<{ node: Node; parentId: string | null; parentLabel: string } | null>(null);
   const [moveCreateName, setMoveCreateName] = useState("");
@@ -361,6 +363,41 @@ export default function Workspace() {
     [workspaceIndex],
   );
 
+  /**
+   * Quantos itens existem dentro de cada pasta (contando a árvore inteira).
+   * É isso que faz a pasta fantasma aparecer: antes uma pasta vazia era
+   * visualmente idêntica a uma pasta cheia, e ninguém sabia qual limpar.
+   */
+  const folderItemCounts = useMemo(() => {
+    const childrenByParent = new Map<string, string[]>();
+    const kindById = new Map<string, "folder" | "file">();
+    for (const node of workspaceIndex || []) {
+      kindById.set(node.id, node.kind);
+      if (!node.parent_id) continue;
+      const siblings = childrenByParent.get(node.parent_id) || [];
+      siblings.push(node.id);
+      childrenByParent.set(node.parent_id, siblings);
+    }
+
+    const totals = new Map<string, number>();
+    const countOf = (id: string, guard: Set<string>): number => {
+      if (totals.has(id)) return totals.get(id)!;
+      if (guard.has(id)) return 0; // ciclo impossível no banco, mas seguro
+      guard.add(id);
+      let total = 0;
+      for (const childId of childrenByParent.get(id) || []) {
+        total += kindById.get(childId) === "folder" ? countOf(childId, guard) : 1;
+      }
+      totals.set(id, total);
+      return total;
+    };
+
+    for (const node of workspaceIndex || []) {
+      if (node.kind === "folder") countOf(node.id, new Set());
+    }
+    return totals;
+  }, [workspaceIndex]);
+
   const folderPaths = useMemo(() => {
     const map = new Map<string, string>();
     const byId = new Map((allFolders || []).map(f => [f.id, f]));
@@ -389,13 +426,24 @@ export default function Workspace() {
       if (!clientId) return [] as any[];
       // Fetch all files (parents + carousel children) so we can group carousels
       // and show every slide inside the preview.
-      const { data, error } = await (supabase as any)
-        .from("staff_files_secure")
-        .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, visibility, created_at, uploaded_by, parent_file_id, size_bytes")
-        .eq("client_id", clientId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      // Paginado em blocos de 1000: era a única consulta sem paginação aqui, e
+      // acima desse limite o acervo do cliente aparecia pela metade. O erro
+      // continua subindo na hora, para a falha ser visível e nunca silenciosa.
+      const pageSize = 1000;
+      const rows: any[] = [];
+      for (let page = 0; page < 30; page += 1) {
+        const from = page * pageSize;
+        const { data, error } = await (supabase as any)
+          .from("staff_files_secure")
+          .select("id, file_name, file_url, file_type, mime_type, extension, storage_bucket, storage_path, folder, approval_status, agency_approval_status, visibility, created_at, uploaded_by, parent_file_id, size_bytes")
+          .eq("client_id", clientId)
+          .order("created_at", { ascending: false })
+          .range(from, from + pageSize - 1);
+        if (error) throw error;
+        rows.push(...(data || []));
+        if (!data || data.length < pageSize) break;
+      }
+      return rows;
     },
     enabled: isStaff && scope === "client" && !!clientId,
     staleTime: 10_000,
@@ -527,9 +575,32 @@ export default function Workspace() {
       seen.add(identity);
       base.push(node);
     }
+
+    // Pastas duplicadas com o mesmo nome no mesmo nível (herança da versão que
+    // recriava pasta a cada clique): mostra só a que tem conteúdo. Nada é
+    // apagado - a vazia continua no banco, apenas sai da frente.
+    const bestFolderByName = new Map<string, Node>();
+    for (const node of base) {
+      if (node.kind !== "folder" || node.__virtual) continue;
+      const key = (node.name || "").trim().toLowerCase();
+      const current = bestFolderByName.get(key);
+      if (!current) {
+        bestFolderByName.set(key, node);
+        continue;
+      }
+      const currentCount = folderItemCounts.get(current.id) || 0;
+      const candidateCount = folderItemCounts.get(node.id) || 0;
+      if (candidateCount > currentCount) bestFolderByName.set(key, node);
+    }
+    const deduped = base.filter((node) => {
+      if (node.kind !== "folder" || node.__virtual) return true;
+      const key = (node.name || "").trim().toLowerCase();
+      return bestFolderByName.get(key)?.id === node.id;
+    });
+
     const s = search.trim().toLowerCase();
-    let res = s ? base.filter(n => n.name.toLowerCase().includes(s)) : base;
-    if (tagFilter !== "all") res = res.filter(n => n.kind === "folder" || tagOf(n, base) === tagFilter);
+    let res = s ? deduped.filter(n => n.name.toLowerCase().includes(s)) : deduped;
+    if (tagFilter !== "all") res = res.filter(n => n.kind === "folder" || tagOf(n, deduped) === tagFilter);
     // Sort: folders always pinned first
     const key = (n: Node) => (n.name || "").toLowerCase();
     const t = (n: Node) => new Date(n.created_at || 0).getTime();
@@ -541,7 +612,44 @@ export default function Workspace() {
       return t(b) - t(a); // recent
     });
     return res;
-  }, [nodes, virtualNodes, search, parent, tagFilter, sortBy]);
+  }, [nodes, virtualNodes, search, parent, tagFilter, sortBy, folderItemCounts]);
+
+  /** Pastas deste nível sem NENHUM arquivo dentro, em nenhuma subpasta. */
+  const emptyFoldersHere = useMemo(
+    () =>
+      (nodes || []).filter(
+        (node) => node.kind === "folder" && (folderItemCounts.get(node.id) || 0) === 0,
+      ),
+    [nodes, folderItemCounts],
+  );
+
+  /**
+   * Limpeza de pasta fantasma. Só remove pasta com zero itens na árvore toda,
+   * então é impossível perder conteúdo aqui.
+   */
+  async function cleanupEmptyFolders() {
+    if (cleaningFolders || emptyFoldersHere.length === 0) return;
+    setCleaningFolders(true);
+    try {
+      const ids = emptyFoldersHere.map((node) => node.id);
+      const { error } = await supabase.from("workspace_nodes").delete().in("id", ids);
+      if (error) throw error;
+      toast({
+        title: "Pastas vazias removidas",
+        description: `${ids.length} pasta(s) sem conteúdo saíram da lista.`,
+      });
+      setConfirmCleanup(false);
+      invalidate();
+    } catch (e: any) {
+      toast({
+        title: "Não foi possível limpar",
+        description: e?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setCleaningFolders(false);
+    }
+  }
 
   // Category counts for smart chips (by SmartTag)
   const tagCounts = useMemo(() => {
@@ -741,8 +849,11 @@ export default function Workspace() {
               .ilike("name", n.name);
             foundQ = parentIdForTpl ? foundQ.eq("parent_id", parentIdForTpl) : foundQ.is("parent_id", null);
             if (scope === "client") foundQ = foundQ.eq("client_id", clientId!);
-            const { data: found } = await foundQ.maybeSingle();
-            id = (found as any)?.id || null;
+            // limit(1): duplicata antiga não pode virar gatilho para criar mais.
+            const { data: found } = await foundQ
+              .order("created_at", { ascending: true })
+              .limit(1);
+            id = (found as any)?.[0]?.id || null;
           }
           if (!id) {
             const { data, error } = await supabase.from("workspace_nodes").insert({
@@ -811,27 +922,46 @@ export default function Workspace() {
     }
     try {
       const parentId = parent && !isVirt(parent.id) ? parent.id : null;
-      let q: any = (supabase as any).from("workspace_nodes").select("*")
-        .eq("scope", scope).eq("kind", "folder").ilike("name", targetName);
-      q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
-      if (scope === "client") q = q.eq("client_id", clientId!);
-      const { data: existing } = await q.maybeSingle();
-      let folder: any = existing;
-      if (!folder) {
-        const { data: created, error } = await supabase.from("workspace_nodes").insert({
-          name: targetName, kind: "folder", scope,
-          client_id: scope === "client" ? clientId : null,
-          parent_id: parentId, created_by: user?.id ?? null,
-        }).select("*").single();
-        if (error) throw error;
-        folder = created;
-      }
+      // Antes a pasta era criada só por clicar aqui, mesmo que ninguém enviasse
+      // nada: era essa a fábrica de pasta fantasma. Agora a seção abre vazia e
+      // a pasta de verdade só nasce quando o primeiro arquivo é enviado.
+      const existing = await findSectionFolder(targetName, parentId);
       setTagFilter("all");
-      nav.push(folder as Node);
-      invalidate();
+      nav.push(
+        existing ||
+          ({
+            id: `${VIRT_PREFIX}section:${parentId || "root"}:${targetName}`,
+            name: targetName,
+            kind: "folder",
+            scope,
+            client_id: scope === "client" ? clientId : null,
+            parent_id: parentId,
+          } as unknown as Node),
+      );
     } catch (e: any) {
       toast({ title: "Erro ao abrir seção", description: e?.message || "Tente novamente.", variant: "destructive" });
     }
+  }
+
+  /**
+   * Procura a pasta da seção. Usa limit(1) em vez de maybeSingle porque, se já
+   * existirem duas pastas com o mesmo nome (herança da versão antiga), o
+   * maybeSingle devolvia erro com dado nulo e o código concluía "não existe" -
+   * criando mais uma duplicata a cada clique.
+   */
+  async function findSectionFolder(name: string, parentId: string | null) {
+    let q: any = (supabase as any)
+      .from("workspace_nodes")
+      .select("*")
+      .eq("scope", scope)
+      .eq("kind", "folder")
+      .ilike("name", name)
+      .order("created_at", { ascending: true })
+      .limit(1);
+    q = parentId ? q.eq("parent_id", parentId) : q.is("parent_id", null);
+    if (scope === "client") q = q.eq("client_id", clientId!);
+    const { data } = await q;
+    return (data && data[0]) || null;
   }
 
 
@@ -925,6 +1055,29 @@ export default function Workspace() {
   async function resolveRealParentId(rawParent: string | null | undefined): Promise<string | null> {
     if (!rawParent) return null;
     if (!isVirt(rawParent)) return rawParent;
+
+    // Seção aberta mas ainda sem pasta real: é AGORA, no primeiro envio, que a
+    // pasta nasce - e nasce no lugar certo, dentro da pasta onde a pessoa está.
+    if (rawParent.startsWith(VIRT_PREFIX + "section:")) {
+      const rest = rawParent.substring((VIRT_PREFIX + "section:").length);
+      const separator = rest.indexOf(":");
+      if (separator < 0) return null;
+      const rawParentId = rest.substring(0, separator);
+      const sectionName = rest.substring(separator + 1).trim();
+      if (!sectionName) return null;
+      const sectionParentId = rawParentId === "root" ? null : rawParentId;
+      const existing = await findSectionFolder(sectionName, sectionParentId);
+      if (existing?.id) return existing.id as string;
+      const { data: created, error } = await supabase.from("workspace_nodes").insert({
+        name: sectionName, kind: "folder", scope,
+        client_id: scope === "client" ? clientId : null,
+        parent_id: sectionParentId, created_by: user?.id ?? null,
+      }).select("id").single();
+      if (error || !created) throw error || new Error("Falha ao criar a pasta da seção");
+      invalidate();
+      return (created as any).id as string;
+    }
+
     if (!rawParent.startsWith(VIRT_PREFIX + "folder:")) return null;
     if (scope !== "client" || !clientId) return null;
     const folderName = rawParent.substring((VIRT_PREFIX + "folder:").length).trim();
@@ -932,7 +1085,9 @@ export default function Workspace() {
     const cacheKey = `${clientId}::${folderName.toLowerCase()}`;
     const cached = materializedFoldersRef.current.get(cacheKey);
     if (cached) return cached;
-    const { data: existing } = await supabase
+    // limit(1) e não maybeSingle: com duas pastas de mesmo nome, o maybeSingle
+    // falhava e o código criava uma terceira.
+    const { data: existingRows } = await supabase
       .from("workspace_nodes")
       .select("id")
       .eq("scope", "client")
@@ -940,7 +1095,9 @@ export default function Workspace() {
       .eq("kind", "folder")
       .is("parent_id", null)
       .ilike("name", folderName)
-      .maybeSingle();
+      .order("created_at", { ascending: true })
+      .limit(1);
+    const existing = (existingRows as any)?.[0];
     if ((existing as any)?.id) {
       const id = (existing as any).id as string;
       materializedFoldersRef.current.set(cacheKey, id);
@@ -1573,10 +1730,10 @@ export default function Workspace() {
     : currentClient ? (currentClient.company_name || currentClient.full_name) : "Selecionar cliente";
 
   return (
-    <div className="flex h-full min-h-0 flex-col animate-fade-in md:block md:h-auto md:max-w-[1400px] md:mx-auto md:px-6 md:pt-20 md:pb-8">
+    <div className="flex h-full min-h-0 flex-col animate-fade-in md:block md:h-auto md:space-y-6">
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
-          <h1 className="text-lg md:text-2xl font-bold tracking-tight">Workspace</h1>
+          <h1 className="heading-page">Workspace</h1>
           <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe. Arraste para mover, solte arquivos para enviar</p>
         </div>
         {/* Context switcher: collapsed picker with search + filters */}
@@ -1713,6 +1870,25 @@ export default function Workspace() {
                 {organizing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
                 <span className="hidden sm:inline">Auto-organizar</span>
               </Button>
+              {emptyFoldersHere.length > 0 && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setConfirmCleanup(true)}
+                  disabled={cleaningFolders}
+                  title="Remove as pastas deste nível que não têm nenhum arquivo dentro"
+                  className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3"
+                >
+                  {cleaningFolders ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-3.5 h-3.5" />
+                  )}
+                  <span className="hidden sm:inline">
+                    Limpar vazias ({emptyFoldersHere.length})
+                  </span>
+                </Button>
+              )}
               <Button size="sm" onClick={() => fileInputRef.current?.click()} className="gap-1.5 h-9 sm:h-8 px-2 sm:px-3 ml-auto sm:ml-0 shrink-0">
                 <Upload className="w-3.5 h-3.5" />
                 Upload
@@ -1933,7 +2109,17 @@ export default function Workspace() {
                       </div>
                       <div className="px-2.5 py-1.5 border-t border-border/60 bg-card/95 backdrop-blur">
                         <p className="text-[11px] font-medium text-foreground truncate">{n.name}</p>
-                        {!isFolder && (
+                        {isFolder ? (
+                          <p className="text-[10px] text-muted-foreground truncate">
+                            {n.__virtual
+                              ? "Seção"
+                              : (folderItemCounts.get(n.id) || 0) === 0
+                                ? "Vazia"
+                                : `${folderItemCounts.get(n.id)} ${
+                                    folderItemCounts.get(n.id) === 1 ? "item" : "itens"
+                                  }`}
+                          </p>
+                        ) : (
                           <p className="text-[10px] text-muted-foreground truncate">
                             {KIND_META[k].label} · {fmtSize(n.size_bytes)}
                           </p>
@@ -1974,6 +2160,15 @@ export default function Workspace() {
                       <Icon className={cn("w-4 h-4 shrink-0", isFolder ? "text-primary" : "text-muted-foreground")} />
                       <span className="flex-1 text-[13px] truncate">{n.name}</span>
                       {!isFolder && <span className="text-[11px] text-muted-foreground">{fmtSize(n.size_bytes)}</span>}
+                      {isFolder && !n.__virtual && (
+                        <span className="text-[11px] text-muted-foreground">
+                          {(folderItemCounts.get(n.id) || 0) === 0
+                            ? "Vazia"
+                            : `${folderItemCounts.get(n.id)} ${
+                                folderItemCounts.get(n.id) === 1 ? "item" : "itens"
+                              }`}
+                        </span>
+                      )}
                       {isInboxQuarantined(n) && <span className="text-[10px] text-amber-500">Quarentena</span>}
                       {isWorkspaceFileLinked(n) && <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-success/15 text-success">Em Arquivos</span>}
                       <div className="relative z-10">
@@ -2235,6 +2430,35 @@ export default function Workspace() {
             <Button variant="destructive" onClick={() => confirmDelete && performDelete(confirmDelete)} disabled={deletingNode}>
               {deletingNode && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
               {deletingNode ? "Excluindo..." : "Excluir"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={confirmCleanup} onOpenChange={(o) => !o && !cleaningFolders && setConfirmCleanup(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Limpar pastas vazias?</DialogTitle>
+            <DialogDescription>
+              {emptyFoldersHere.length} pasta(s) deste nível não têm nenhum arquivo dentro, em
+              nenhuma subpasta. Elas serão removidas da lista. Nenhum conteúdo é apagado: pasta com
+              qualquer arquivo dentro não entra nesta limpeza.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-40 overflow-y-auto rounded-lg border border-border bg-secondary/30 p-3">
+            {emptyFoldersHere.map((node) => (
+              <p key={node.id} className="text-[12px] text-muted-foreground">
+                {node.name}
+              </p>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmCleanup(false)} disabled={cleaningFolders}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={cleanupEmptyFolders} disabled={cleaningFolders}>
+              {cleaningFolders && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+              {cleaningFolders ? "Limpando..." : "Limpar"}
             </Button>
           </DialogFooter>
         </DialogContent>

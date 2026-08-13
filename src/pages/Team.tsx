@@ -193,7 +193,7 @@ export default function Team() {
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="heading-page">Equipe</p>
+        <h1 className="heading-page">Equipe</h1>
         <button onClick={() => { closeModal(); setCreateOpen(true); }}
           className="inline-flex items-center gap-2 px-3 sm:px-4 py-2 rounded-full text-[12px] sm:text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer">
           <UserPlus className="w-3.5 h-3.5" /> <span className="hidden sm:inline">Novo</span> Membro
@@ -254,7 +254,7 @@ export default function Team() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeModal} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+          <div className="relative bg-card border border-border rounded-xl w-full max-w-[420px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200 max-h-[95vh] overflow-y-auto" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
             <div className="flex items-center justify-between px-5 sm:px-6 py-4 border-b border-border">
               <h2 className="text-sm font-semibold text-foreground">{editMember ? "Editar Membro" : "Novo Membro"}</h2>
               <button onClick={closeModal} className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none p-1"><X className="w-4 h-4" /></button>
@@ -357,7 +357,7 @@ export default function Team() {
       {removeMember && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => !removing && setRemoveMember(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-[400px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
+          <div className="relative bg-card border border-border rounded-xl w-full max-w-[400px] mx-4 animate-in fade-in zoom-in-[0.96] duration-200" style={{ boxShadow: "0 24px 64px rgba(0,0,0,0.5)" }}>
             <div className="px-5 sm:px-6 pt-6 pb-4 text-center space-y-3">
               <div className="mx-auto w-12 h-12 rounded-full bg-destructive/15 flex items-center justify-center">
                 <AlertTriangle className="w-6 h-6 text-destructive" />

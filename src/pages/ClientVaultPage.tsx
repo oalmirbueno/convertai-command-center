@@ -119,7 +119,7 @@ export default function ClientVaultPage() {
             <KeyRound className="w-5 h-5 text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-semibold text-foreground tracking-tight">
+            <h1 className="heading-page">
               Cofre de Acessos
             </h1>
             <p className="text-[13px] text-muted-foreground mt-1 max-w-xl">
@@ -136,7 +136,7 @@ export default function ClientVaultPage() {
       </div>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+      <div className="grid auto-rows-fr grid-cols-2 md:grid-cols-4 gap-3">
         <MetricCard label="Total" value={counts?.total ?? 0} icon={KeyRound} accent="text-foreground" />
         <MetricCard label="Senhas" value={counts?.password ?? 0} icon={KeyRound} accent="text-primary" />
         <MetricCard label="Links Úteis" value={counts?.link ?? 0} icon={Link2} accent="text-sky-400" />
@@ -147,7 +147,7 @@ export default function ClientVaultPage() {
         {/* Client selector · hub mode only (admin/team not impersonating) */}
         {isHubMode && (
           <aside className="space-y-3">
-            <div className="bg-card border border-border rounded-2xl p-3">
+            <div className="bg-card border border-border rounded-xl p-3">
               <div className="flex items-center gap-2 mb-3">
                 <Users className="w-3.5 h-3.5 text-muted-foreground" />
                 <h2 className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">
@@ -259,7 +259,7 @@ export default function ClientVaultPage() {
           {effectiveClientId ? (
             <ClientVault clientId={effectiveClientId} canManage={isAdminOrTeam && !impersonatedId} />
           ) : (
-            <div className="text-center py-16 bg-card border border-border rounded-2xl">
+            <div className="text-center py-16 bg-card border border-border rounded-xl">
               <Users className="w-10 h-10 mx-auto mb-3 text-muted-foreground opacity-40" />
               <p className="text-[13px] text-muted-foreground">
                 Selecione um cliente ao lado para visualizar o cofre.
@@ -293,7 +293,7 @@ function MetricCard({
   accent: string;
 }) {
   return (
-    <div className="bg-card border border-border rounded-2xl p-4">
+    <div className="h-full flex flex-col bg-card border border-border rounded-xl p-4">
       <div className="flex items-center justify-between mb-2">
         <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium">
           {label}

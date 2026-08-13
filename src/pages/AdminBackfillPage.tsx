@@ -61,14 +61,15 @@ export default function AdminBackfillPage() {
   };
 
   return (
-    <div className="container max-w-3xl py-10 space-y-6">
+    <div className="space-y-6">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Backfill de Leads pro Ops</h1>
+        <h1 className="heading-page">Backfill de Leads pro Ops</h1>
         <p className="text-muted-foreground mt-2">
           Envia todos os quiz submissions antigos pro Aceleriq Ops.
         </p>
       </div>
 
+      <div className="max-w-3xl space-y-6">
       <Card className="border-primary/20">
         <CardHeader>
           <CardTitle>Executar sincronização</CardTitle>
@@ -175,6 +176,7 @@ export default function AdminBackfillPage() {
           </Card>
         </div>
       )}
+      </div>
     </div>
   );
 }

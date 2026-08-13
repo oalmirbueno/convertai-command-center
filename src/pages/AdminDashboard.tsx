@@ -309,8 +309,8 @@ export default function AdminDashboard() {
   ];
 
   return (
-    <div className="space-y-8 animate-fade-in">
-      <p className="heading-page">Dashboard</p>
+    <div className="space-y-6 animate-fade-in">
+      <h1 className="heading-page">Dashboard</h1>
 
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 stagger-children" data-tour="dash-stats">
@@ -410,19 +410,19 @@ export default function AdminDashboard() {
             <Wallet className="w-3.5 h-3.5 text-info" />
             Ads Wallet
           </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr stagger-children">
             {(wallets || []).map((w: any) => (
               <div
                 key={w.id}
-                className="bg-card border border-border rounded-xl p-5 hover:border-muted-foreground/30 transition-colors cursor-pointer"
+                className="bg-card border border-border rounded-xl p-5 h-full flex flex-col hover:border-muted-foreground/30 transition-colors cursor-pointer"
                 onClick={() => navigate("/financeiro")}
               >
                 <div className="flex items-center justify-between mb-2">
                   <p className="text-[13px] text-muted-foreground truncate">{w.client?.company_name || w.client?.full_name}</p>
                   <span className="text-[10px] uppercase tracking-wider text-muted-foreground bg-secondary px-2 py-0.5 rounded-full">{w.platform}</span>
                 </div>
-                <p className="font-mono font-light text-[22px] leading-none text-foreground">{fmt(Number(w.balance))}</p>
-                <div className={`h-0.5 w-8 rounded-full mt-3 opacity-60 ${Number(w.balance) < 100 ? "bg-warning" : "bg-info"}`} />
+                <p className="font-mono font-light text-[22px] leading-none text-foreground mb-3">{fmt(Number(w.balance))}</p>
+                <div className={`h-0.5 w-8 rounded-full mt-auto opacity-60 ${Number(w.balance) < 100 ? "bg-warning" : "bg-info"}`} />
               </div>
             ))}
           </div>

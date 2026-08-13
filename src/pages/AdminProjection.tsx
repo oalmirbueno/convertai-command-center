@@ -229,7 +229,7 @@ export default function AdminProjection() {
             <ArrowLeft className="w-5 h-5" />
           </button>
           <div>
-            <h1 className="text-xl font-semibold text-foreground">Projeção: {MONTHS_FULL[nextMonth]} {nextYear}</h1>
+            <h1 className="heading-page">Projeção: {MONTHS_FULL[nextMonth]} {nextYear}</h1>
             <p className="text-[12px] text-muted-foreground">Receita projetada e recomendações para crescimento</p>
           </div>
         </div>
@@ -291,9 +291,9 @@ export default function AdminProjection() {
       </div>
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 auto-rows-fr">
         {/* Comparison bar chart */}
-        <div className="bg-card border border-border rounded-xl p-5">
+        <div className="bg-card border border-border rounded-xl p-5 h-full flex flex-col">
           <h3 className="text-[13px] font-medium text-foreground mb-4">Comparativo de Receita</h3>
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={comparisonData}>
@@ -312,7 +312,7 @@ export default function AdminProjection() {
 
         {/* Pie chart */}
         {pieData.length > 0 && (
-          <div className="bg-card border border-border rounded-xl p-5">
+          <div className="bg-card border border-border rounded-xl p-5 h-full flex flex-col">
             <h3 className="text-[13px] font-medium text-foreground mb-4">Composição da Projeção</h3>
             <div className="flex items-center gap-6">
               <ResponsiveContainer width="50%" height={200}>

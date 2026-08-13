@@ -1,18 +1,17 @@
-export const FILE_FOLDERS = [
-  { id: "estrategicos", label: "Estratégicos" },
-  { id: "contratos", label: "Contratos" },
-  { id: "materiais", label: "Materiais Gráficos" },
-  { id: "entregas", label: "Entregas" },
-  { id: "criativos", label: "Criativos" },
-  { id: "relatorios", label: "Relatórios" },
-  { id: "operacionais", label: "Operacionais" },
-] as const;
+/**
+ * Compatibilidade: estas constantes eram a lista de pastas da tela da equipe,
+ * e existiam OUTRAS duas listas diferentes no sistema (a do cliente, com só 4
+ * pastas, e a da integração, com 6). Agora todas nascem da mesma fonte:
+ * src/lib/fileTaxonomy.ts. Mantidas com o formato antigo para não quebrar quem
+ * já importava daqui.
+ */
+import { FILE_FOLDER_DEFINITIONS, FILE_KINDS } from "./fileTaxonomy";
 
-export const FILE_TYPES = [
-  "documento",
-  "contrato",
-  "criativo",
-  "relatório",
-  "estratégico",
-  "outro",
-] as const;
+export const FILE_FOLDERS = FILE_FOLDER_DEFINITIONS.map((folder) => ({
+  id: folder.id,
+  label: folder.label,
+}));
+
+export const FILE_TYPES = Object.values(FILE_KINDS).map((kind) => kind.id);
+
+export { FILE_FOLDER_DEFINITIONS, FILE_KINDS };

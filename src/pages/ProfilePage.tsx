@@ -88,9 +88,10 @@ export default function ProfilePage() {
   const initials = profile?.full_name?.split(" ").map(n => n[0]).join("").slice(0, 2) || "?";
 
   return (
-    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-lg w-full">
+    <div className="space-y-6 animate-fade-in">
       <p className="heading-page">Meu Perfil</p>
 
+      <div className="max-w-3xl space-y-6">
       <div className="bg-card border border-border rounded-xl p-4 sm:p-6 space-y-6">
         <div className="flex items-center gap-4">
           <div className="relative group">
@@ -164,6 +165,7 @@ export default function ProfilePage() {
           {savingPassword ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Lock className="w-3.5 h-3.5" />}
           {savingPassword ? "Salvando..." : "Alterar Senha"}
         </button>
+      </div>
       </div>
     </div>
   );

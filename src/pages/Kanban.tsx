@@ -870,7 +870,7 @@ export default function Kanban() {
       >
         {/* Header fixo */}
         <div className="shrink-0 px-4 pt-1 pb-2 bg-background/95 backdrop-blur-sm border-b border-border/50">
-          <p className="heading-page text-[16px] mb-2" data-tour="kanban-create-btn">Kanban</p>
+          <h1 className="heading-page mb-2" data-tour="kanban-create-btn">Kanban</h1>
           {FiltersBar}
           {/* Tabs indicadoras */}
           <div className="mt-1 flex items-center gap-1 overflow-hidden">
@@ -1091,7 +1091,7 @@ export default function Kanban() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <p className="heading-page text-[16px] md:text-[14px]" data-tour="kanban-create-btn">Kanban</p>
+      <h1 className="heading-page" data-tour="kanban-create-btn">Kanban</h1>
 
       {/* Filters */}
       {FiltersBar}

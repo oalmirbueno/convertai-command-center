@@ -14,15 +14,15 @@ import { FileImage, FileText, Film, Archive, Download, FolderOpen, ExternalLink 
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
+import {
+  fileLocationLabel,
+  matchesFolderFilter,
+  summarizeFiles,
+  type FileKindId,
+  type FolderId,
+} from "@/lib/fileTaxonomy";
 
 // CarouselSlider is imported from shared components (auto-fetches sibling slides).
-
-const CLIENT_FOLDERS = [
-  { id: "estrategicos", label: "Estratégicos" },
-  { id: "contratos", label: "Contratos" },
-  { id: "materiais", label: "Materiais Gráficos" },
-  { id: "relatorios", label: "Relatórios" },
-];
 
 const fileIcon = (name: string) => {
   const ext = name?.split(".").pop()?.toLowerCase() || "";
@@ -82,7 +82,8 @@ export default function ClientDocuments() {
   const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
 
-  const [activeFolder, setActiveFolder] = useState("estrategicos");
+  const [activeFolder, setActiveFolder] = useState<FolderId | "todos">("todos");
+  const [activeKind, setActiveKind] = useState<FileKindId | null>(null);
   const [filterProject, setFilterProject] = useState("all");
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
@@ -101,16 +102,29 @@ export default function ClientDocuments() {
     }
   });
 
-  const filteredFiles = (files || []).filter((f: any) => {
-    if (childIds.has(f.id)) return false; // hide children
-    // A regra de quem ve o que e do banco (RLS): cliente real so recebe o
-    // liberado; equipe recebe tudo. A tela mostra o que chegar - antes o
-    // filtro escondia material interno ate do admin e parecia "nada enviado".
+  // Base visível: tudo o que o banco liberou para esta pessoa (RLS decide), sem
+  // o filtro de pasta - é sobre ela que as contagens dos botões são calculadas,
+  // para o número no botão bater com o que aparece ao clicar.
+  const visibleFiles = (files || []).filter((f: any) => {
+    if (childIds.has(f.id)) return false; // filho de carrossel aparece junto do pai
     if (f.status !== "ready" || f.archived_at) return false;
-    if ((f.folder || "estrategicos") !== activeFolder) return false;
     if (filterProject !== "all" && f.project_id !== filterProject) return false;
     return true;
   });
+
+  // Só entram na barra as pastas que realmente têm algo: nada de aba vazia.
+  const folderSummaries = summarizeFiles(visibleFiles).filter((entry) => entry.total > 0);
+  const activeSummary = folderSummaries.find((entry) => entry.folder.id === activeFolder) || null;
+  const kindChips = activeSummary && activeSummary.byKind.length > 1 ? activeSummary.byKind : [];
+
+  const filteredFiles = visibleFiles.filter((f: any) =>
+    matchesFolderFilter(f, activeFolder, activeKind),
+  );
+
+  const selectFolder = (folder: FolderId | "todos") => {
+    setActiveFolder(folder);
+    setActiveKind(null);
+  };
 
   const handleApprove = async () => {
     if (!confirmApprove) return;
@@ -183,21 +197,73 @@ export default function ClientDocuments() {
         </div>
       )}
 
-      {/* Folder tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
-        {CLIENT_FOLDERS.map((f) => (
+      {/* Pastas: o que é cada coisa, com quantos itens tem em cada uma. */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
           <button
-            key={f.id}
-            onClick={() => setActiveFolder(f.id)}
-            className={`px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
-              activeFolder === f.id
-                ? "text-foreground border-b-2 border-primary bg-secondary/50"
+            type="button"
+            onClick={() => selectFolder("todos")}
+            className={`shrink-0 rounded-lg px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors ${
+              activeFolder === "todos"
+                ? "bg-primary/15 text-primary"
                 : "text-muted-foreground hover:text-foreground"
             }`}
           >
-            {f.label}
+            Tudo ({visibleFiles.length})
           </button>
-        ))}
+          {folderSummaries.map((entry) => (
+            <button
+              key={entry.folder.id}
+              type="button"
+              title={entry.folder.hint}
+              onClick={() => selectFolder(entry.folder.id)}
+              className={`shrink-0 rounded-lg px-3.5 py-2 text-xs font-medium whitespace-nowrap transition-colors ${
+                activeFolder === entry.folder.id
+                  ? "bg-primary/15 text-primary"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {entry.folder.label} ({entry.total})
+            </button>
+          ))}
+        </div>
+
+        {/* Dentro da pasta: carrossel, post, story, vídeo... */}
+        {kindChips.length > 0 && (
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+            <button
+              type="button"
+              onClick={() => setActiveKind(null)}
+              className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
+                activeKind === null
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Todos os tipos
+            </button>
+            {kindChips.map((entry) => (
+              <button
+                key={entry.kind.id}
+                type="button"
+                onClick={() => setActiveKind(entry.kind.id)}
+                className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
+                  activeKind === entry.kind.id
+                    ? "border-primary/40 bg-primary/10 text-primary"
+                    : "border-border text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {entry.kind.label} ({entry.total})
+              </button>
+            ))}
+          </div>
+        )}
+
+        {activeSummary && (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {activeSummary.folder.hint}
+          </p>
+        )}
       </div>
 
       {/* File list */}
@@ -228,7 +294,8 @@ export default function ClientDocuments() {
                       {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {f.project?.name || "-"} • {formatDate(f.created_at)}
+                      {fileLocationLabel(f)} • {f.project?.name || "Sem projeto"} •{" "}
+                      {formatDate(f.created_at)}
                     </p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>

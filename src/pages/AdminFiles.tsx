@@ -32,6 +32,15 @@ import {
   recoverOrCleanupFailedFileRecord,
 } from "@/lib/fileRecordActions";
 import { FILE_FOLDERS, FILE_TYPES } from "@/lib/fileMetadata";
+import {
+  folderDefinition,
+  kindLabel,
+  matchesFolderFilter,
+  resolveKind,
+  summarizeFiles,
+  type FileKindId,
+  type FolderId,
+} from "@/lib/fileTaxonomy";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import {
   releaseFileToClient,
@@ -256,6 +265,8 @@ export default function AdminFiles() {
     ? requestedFolderId
     : "estrategicos";
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [activeKind, setActiveKind] = useState<FileKindId | null>(null);
+  const [search, setSearch] = useState("");
   const [uploadOpen, setUploadOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
@@ -274,7 +285,9 @@ export default function AdminFiles() {
   const [uploadName, setUploadName] = useState("");
   const [uploadFolder, setUploadFolder] = useState(initialFolder);
   const [uploadProject, setUploadProject] = useState("");
-  const [uploadType, setUploadType] = useState("criativo");
+  const [uploadType, setUploadType] = useState<string>(
+    folderDefinition(initialFolder).defaultKind,
+  );
   const [uploadPostSaveAction, setUploadPostSaveAction] = useState<UploadPostSaveAction>("draft");
   const [uploadCaption, setUploadCaption] = useState("");
   const [uploadCarousel, setUploadCarousel] = useState("");
@@ -425,6 +438,7 @@ export default function AdminFiles() {
   };
 
   const handleFolderChange = (folderId: string) => {
+    setActiveKind(null);
     const next = new URLSearchParams(searchParams);
     next.set("folder", folderId);
     setSearchParams(next, { replace: true });
@@ -505,11 +519,25 @@ export default function AdminFiles() {
     }
   });
 
-  const filteredFiles = (allFiles || []).filter((f: any) => {
-    if (f.parent_file_id) return false; // hide carousel children
+  // Tudo do cliente selecionado, antes de escolher a pasta: é sobre esta base
+  // que as contagens das abas são feitas, para o número bater com a tela.
+  const scopedFiles = (allFiles || []).filter((f: any) => {
+    if (f.parent_file_id) return false; // filho de carrossel aparece junto do pai
     if (selectedClient !== "all" && f.client_id !== selectedClient) return false;
-    if ((f.folder || "estrategicos") !== activeFolder) return false;
     return true;
+  });
+
+  const folderSummaries = summarizeFiles(scopedFiles);
+  const activeSummary = folderSummaries.find((entry) => entry.folder.id === activeFolder) || null;
+  const kindChips = activeSummary && activeSummary.byKind.length > 1 ? activeSummary.byKind : [];
+  const searchTerm = search.trim().toLowerCase();
+
+  const filteredFiles = scopedFiles.filter((f: any) => {
+    if (!matchesFolderFilter(f, activeFolder as FolderId, activeKind)) return false;
+    if (!searchTerm) return true;
+    return [f.file_name, f.description, f.caption, f.project?.name, f.client?.company_name]
+      .filter(Boolean)
+      .some((value: string) => String(value).toLowerCase().includes(searchTerm));
   });
 
   const handleFilesSelect = (newFiles: File[]) => {
@@ -885,7 +913,7 @@ export default function AdminFiles() {
             client_id: selectedClient,
             file_name: fileName,
             file_url: `files://${path}`,
-            file_type: isCarousel ? "creative" : uploadType,
+            file_type: isCarousel ? "carrossel" : uploadType,
             mime_type: file.type || null,
             extension: ext || null,
             storage_bucket: "files",
@@ -1096,21 +1124,75 @@ export default function AdminFiles() {
         </div>
       )}
 
-      {/* Folder tabs */}
-      <div className="flex items-center gap-1 overflow-x-auto pb-1">
-        {FOLDERS.map((f) => (
-          <button
-            key={f.id}
-            onClick={() => handleFolderChange(f.id)}
-            className={`px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
-              activeFolder === f.id
-                ? "text-foreground border-b-2 border-primary bg-secondary/50"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
+      {/* Pastas, com quantos itens tem em cada uma */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {folderSummaries.map((entry) => (
+            <button
+              key={entry.folder.id}
+              onClick={() => handleFolderChange(entry.folder.id)}
+              title={entry.folder.hint}
+              className={`shrink-0 px-4 py-2 text-xs uppercase tracking-wide rounded-lg whitespace-nowrap transition-colors ${
+                activeFolder === entry.folder.id
+                  ? "text-foreground border-b-2 border-primary bg-secondary/50"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              {entry.folder.label}
+              {entry.total > 0 && (
+                <span className="ml-1.5 text-[10px] text-muted-foreground">{entry.total}</span>
+              )}
+            </button>
+          ))}
+        </div>
+
+        {activeFolder !== "contratos" && (
+          <div className="flex flex-wrap items-center gap-2">
+            {kindChips.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setActiveKind(null)}
+                  className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
+                    activeKind === null
+                      ? "border-primary/40 bg-primary/10 text-primary"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  Todos os tipos
+                </button>
+                {kindChips.map((entry) => (
+                  <button
+                    key={entry.kind.id}
+                    type="button"
+                    onClick={() => setActiveKind(entry.kind.id)}
+                    className={`shrink-0 rounded-full border px-3 py-1 text-[11px] transition-colors ${
+                      activeKind === entry.kind.id
+                        ? "border-primary/40 bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:text-foreground"
+                    }`}
+                  >
+                    {entry.kind.label} ({entry.total})
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="ml-auto w-full sm:w-56">
+              <Input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar pelo nome..."
+                className="h-9 rounded-lg bg-card text-xs"
+              />
+            </div>
+          </div>
+        )}
+
+        {activeSummary && (
+          <p className="text-[11px] leading-relaxed text-muted-foreground">
+            {activeSummary.folder.hint}
+          </p>
+        )}
       </div>
 
       {activeFolder === "contratos" ? (
@@ -1187,25 +1269,25 @@ export default function AdminFiles() {
               Nenhum arquivo nesta pasta
             </div>
           ) : viewMode === "grid" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
+            <div className="grid auto-rows-fr grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 stagger-children">
               {filteredFiles.map((f: any) => {
                 const reviewBadge = agencyBadge[f.agency_approval_status] || agencyBadge.not_requested;
                 const carouselChildren = childrenMap.get(f.id) || [];
                 const isCarousel = isCarouselAssetGroup(f, carouselChildren);
                 const isEditable = isEditableFile(f);
                 return (
-                  <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
+                  <div key={f.id} className="flex h-full flex-col bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
                     onClick={() => setPreviewFile(f)}>
                     <FileThumb file={f} className="w-full aspect-square rounded-none border-0" />
-                    <div className="p-3 space-y-2">
+                    <div className="flex flex-1 flex-col gap-2 p-3">
                       <div className="flex items-start gap-2">
-                        <p className="flex-1 text-[13px] font-medium text-foreground line-clamp-2 min-h-[36px]">
+                        <p className="flex-1 text-[13px] font-medium text-foreground line-clamp-2">
                           {f.file_name}
                           {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
                         </p>
                         {isCarousel && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{carouselChildren.length + 1}</span>}
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{f.project?.name || "-"} • {formatDate(f.created_at)}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{kindLabel(resolveKind(f))} • {f.project?.name || "Sem projeto"} • {formatDate(f.created_at)}</p>
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
                         <div className="flex items-center gap-2">
@@ -1247,7 +1329,8 @@ export default function AdminFiles() {
                           )}
                         </div>
                         <p className="text-[11px] text-muted-foreground">
-                          {f.project?.name || "-"} • {formatDate(f.created_at)}
+                          {kindLabel(resolveKind(f))} • {f.project?.name || "Sem projeto"} •{" "}
+                          {formatDate(f.created_at)}
                         </p>
                       </div>
                       <div className="hidden md:flex items-center gap-2">
@@ -1626,7 +1709,18 @@ export default function AdminFiles() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="label-sm">Pasta</Label>
-                  <Select value={uploadFolder} onValueChange={setUploadFolder}>
+                  <Select
+                    value={uploadFolder}
+                    onValueChange={(folder) => {
+                      setUploadFolder(folder);
+                      // Trocou de pasta: o tipo acompanha, para nunca gravar
+                      // "contrato" dentro de Materiais gráficos.
+                      const definition = folderDefinition(folder);
+                      if (!definition.kinds.includes(uploadType as FileKindId)) {
+                        setUploadType(definition.defaultKind);
+                      }
+                    }}
+                  >
                     <SelectTrigger className="mt-1 bg-secondary border-border rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
                       {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
@@ -1635,14 +1729,21 @@ export default function AdminFiles() {
                 </div>
                 <div>
                   <Label className="label-sm">Tipo</Label>
+                  {/* Só os tipos que fazem sentido na pasta escolhida: dentro de
+                      Materiais gráficos vem carrossel, post, story e vídeo. */}
                   <Select value={uploadType} onValueChange={setUploadType}>
                     <SelectTrigger className="mt-1 bg-secondary border-border rounded-xl"><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {FILE_TYPES.map(t => <SelectItem key={t} value={t}>{t}</SelectItem>)}
+                      {folderDefinition(uploadFolder).kinds.map((kind) => (
+                        <SelectItem key={kind} value={kind}>{kindLabel(kind)}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
               </div>
+              <p className="text-[11px] leading-relaxed text-muted-foreground">
+                {folderDefinition(uploadFolder).hint}
+              </p>
               <div>
                 <Label className="label-sm">Projeto vinculado (opcional)</Label>
                 <Select value={uploadProject} onValueChange={setUploadProject}>

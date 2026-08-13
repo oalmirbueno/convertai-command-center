@@ -57,7 +57,7 @@ export default function ClientReports() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-56 w-full rounded-2xl" />)}
+        {[1, 2].map(i => <Skeleton key={i} className="h-56 w-full rounded-xl" />)}
       </div>
     );
   }
@@ -75,7 +75,7 @@ export default function ClientReports() {
       </div>
 
       {(!reports || reports.length === 0) ? (
-        <div className="text-center py-20 bg-card border border-border rounded-2xl">
+        <div className="text-center py-20 bg-card border border-border rounded-xl">
           <div className="w-16 h-16 rounded-2xl bg-secondary mx-auto mb-4 flex items-center justify-center">
             <FileText className="w-7 h-7 text-muted-foreground/30" />
           </div>
@@ -149,7 +149,7 @@ function ClientReportsGrouped({ reports, navigate }: { reports: any[]; navigate:
             return (
               <div
                 key={r.id}
-                className="bg-card border border-border rounded-2xl overflow-hidden hover:border-primary/30 transition-all group cursor-pointer"
+                className="bg-card border border-border rounded-xl overflow-hidden hover:border-primary/30 transition-all group cursor-pointer"
                 onClick={() => navigate(`/relatorios/${r.id}`)}
               >
                 {/* Header */}

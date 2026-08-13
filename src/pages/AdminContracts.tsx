@@ -130,11 +130,11 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
   }
 
   return (
-    <div className="max-w-6xl mx-auto pb-20">
+    <div>
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-2xl md:text-3xl font-semibold flex items-center gap-3">
-            <FileSignature className="w-7 h-7 text-primary" />
+          <h1 className="heading-page flex items-center gap-2">
+            <FileSignature className="w-5 h-5 text-primary" />
             Contratos
           </h1>
           <p className="text-sm text-muted-foreground mt-1">

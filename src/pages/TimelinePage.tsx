@@ -431,7 +431,7 @@ export default function TimelinePage() {
     return (
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}
       </div>
     );
   }
@@ -440,7 +440,7 @@ export default function TimelinePage() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-semibold text-foreground">Timeline dos Projetos</h1>
+        <h1 className="heading-page">Timeline dos Projetos</h1>
         <Select value={filterProject} onValueChange={setFilterProject}>
           <SelectTrigger className="w-[220px]">
             <SelectValue placeholder="Todos os projetos" />
@@ -475,7 +475,7 @@ export default function TimelinePage() {
         const canGoNext = pageIdx + INITIAL_MILESTONES < milestones.length;
 
         return (
-          <div key={project.id} className="bg-card border border-border rounded-2xl p-6 space-y-5">
+          <div key={project.id} className="bg-card border border-border rounded-xl p-6 space-y-5">
             {/* Project header */}
             <div className="flex items-start justify-between">
               <div>
@@ -931,7 +931,7 @@ export default function TimelinePage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setSelectedMilestone(null)} />
-            <div className="relative bg-card border border-border rounded-2xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200 mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="relative bg-card border border-border rounded-xl w-full max-w-sm p-6 animate-in fade-in zoom-in-95 duration-200 mx-4 max-h-[85vh] overflow-y-auto">
               <div className={`w-12 h-12 rounded-full flex items-center justify-center mb-4 ${
                 selectedMilestone.status === "completed" ? "bg-success text-white" :
                 selectedMilestone.status === "in_progress" ? "bg-primary/20 text-primary" : "bg-secondary text-muted-foreground"
@@ -1034,7 +1034,7 @@ export default function TimelinePage() {
         return (
           <div className="fixed inset-0 z-50 flex items-center justify-center">
             <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setAddMilestoneProject(null)} />
-            <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4 max-h-[85vh] overflow-y-auto">
+            <div className="relative bg-card border border-border rounded-xl w-full max-w-md p-6 mx-4 max-h-[85vh] overflow-y-auto">
               <p className="text-base font-semibold text-foreground mb-1">Novo Milestone</p>
               <p className="text-[11px] text-muted-foreground mb-4">
                 {existingMilestones.length} milestones existentes
@@ -1123,7 +1123,7 @@ export default function TimelinePage() {
       {editingMilestone && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingMilestone(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4">
+          <div className="relative bg-card border border-border rounded-xl w-full max-w-md p-6 mx-4">
             <p className="text-base font-semibold text-foreground mb-4">Editar Milestone</p>
             <div className="space-y-4">
               <div>
@@ -1160,7 +1160,7 @@ export default function TimelinePage() {
       {editingTask && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setEditingTask(null)} />
-          <div className="relative bg-card border border-border rounded-2xl w-full max-w-md p-6 mx-4">
+          <div className="relative bg-card border border-border rounded-xl w-full max-w-md p-6 mx-4">
             <p className="text-base font-semibold text-foreground mb-4">Editar Tarefa</p>
             <div className="space-y-4">
               <div>

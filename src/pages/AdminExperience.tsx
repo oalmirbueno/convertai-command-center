@@ -812,10 +812,10 @@ export default function AdminExperience() {
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
 
   return (
-    <div className="space-y-5 animate-fade-in">
+    <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <p className="heading-page">Central de Experiência</p>
+          <h1 className="heading-page">Central de Experiência</h1>
           <p className="text-xs text-muted-foreground mt-1">
             Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente.
           </p>
@@ -1074,9 +1074,9 @@ export default function AdminExperience() {
                   </button>
                 </div>
 
-                <div className="grid lg:grid-cols-2 gap-4 items-start">
+                <div className="grid lg:grid-cols-2 gap-4 auto-rows-fr">
                   {/* Plano de mensagens do período */}
-                  <div className="bg-card border border-border rounded-xl overflow-hidden">
+                  <div className="bg-card border border-border rounded-xl overflow-hidden h-full flex flex-col">
                     <div className="px-5 py-3 border-b border-border">
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">O que enviar e quando · com o contexto deste cliente</span>
                     </div>
@@ -1100,7 +1100,7 @@ export default function AdminExperience() {
                         );
                       })}
                     </div>
-                    <p className="text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
+                    <p className="mt-auto text-[10px] text-muted-foreground px-5 py-2.5 border-t border-border">
                       Cada geração usa a movimentação real deste cliente e varia o texto semana a semana. Você revisa e edita antes de qualquer coisa chegar nele.
                     </p>
                   </div>

@@ -238,7 +238,7 @@ export default function ClientApprovals() {
 
   return (
     <div className="space-y-6 animate-fade-in">
-      <p className="heading-page">Aprovações</p>
+      <h1 className="heading-page">Aprovações</h1>
       {isReadOnly && (
         <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
           Modo somente leitura: você pode conferir a experiência do cliente, mas não aprovar nem pedir ajustes por ele.
@@ -252,13 +252,13 @@ export default function ClientApprovals() {
       ) : approvalFiles.length === 0 ? (
         <div className="text-center py-12 text-sm text-muted-foreground">Nenhuma aprovação pendente</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
+        <div className="grid auto-rows-fr grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 stagger-children">
           {approvalFiles.map((f: any) => {
             const badge = approvalBadge[f.approval_status] || approvalBadge.pending;
             const images = getCarouselImages(f);
             const isCarousel = images.length > 1;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
+              <div key={f.id} className="h-full flex flex-col bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors"
                 onClick={() => setPreviewFile(f)}>
                 <CarouselPreview images={images} small />
                 <div className="p-4 space-y-2">

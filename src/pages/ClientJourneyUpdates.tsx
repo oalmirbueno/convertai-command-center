@@ -158,8 +158,8 @@ export default function ClientJourneyUpdates() {
   if (isLoading) {
     return (
       <div className="space-y-4">
-        <Skeleton className="h-56 w-full rounded-2xl" />
-        <Skeleton className="h-32 w-full rounded-2xl" />
+        <Skeleton className="h-56 w-full rounded-xl" />
+        <Skeleton className="h-32 w-full rounded-xl" />
       </div>
     );
   }
@@ -167,9 +167,9 @@ export default function ClientJourneyUpdates() {
   return (
     <div className="animate-fade-in space-y-6">
       <div>
-        <p className="heading-page flex items-center gap-2">
+        <h1 className="heading-page flex items-center gap-2">
           <Compass className="h-5 w-5 text-primary" /> Onde Estamos
-        </p>
+        </h1>
         <p className="mt-1 text-xs text-muted-foreground">
           O retrato do seu trabalho agora: o que já foi entregue, o que está em produção e qual é o próximo passo.
           Esta página se atualiza sozinha.
@@ -187,7 +187,7 @@ export default function ClientJourneyUpdates() {
 
       {/* ── Retrato automático do momento ── */}
       {narrative && (
-        <section className="overflow-hidden rounded-2xl border border-primary/25 bg-card">
+        <section className="overflow-hidden rounded-xl border border-primary/25 bg-card">
           <div className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7 sm:py-5">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary">
               <Sparkles className="h-3 w-3" /> {narrative.phase}
@@ -376,7 +376,7 @@ export default function ClientJourneyUpdates() {
             : null;
         if (materials === 0 && postsLive === 0 && reportsCount === 0) return null;
         return (
-          <section className="overflow-hidden rounded-2xl border border-primary/25 bg-card">
+          <section className="overflow-hidden rounded-xl border border-primary/25 bg-card">
             <div className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
                 A sua história com a Aceleriq
@@ -431,7 +431,7 @@ export default function ClientJourneyUpdates() {
         const money = (value: number) =>
           new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
         return (
-          <section className="overflow-hidden rounded-2xl border border-border bg-card">
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="border-b border-border px-5 py-4 sm:px-7">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Crescimento do seu negócio
@@ -499,7 +499,7 @@ export default function ClientJourneyUpdates() {
         });
         const peak = Math.max(...rows.map((row) => row.total), 1);
         return (
-          <section className="overflow-hidden rounded-2xl border border-border bg-card">
+          <section className="overflow-hidden rounded-xl border border-border bg-card">
             <div className="border-b border-border px-5 py-4 sm:px-7">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
                 Sua evolução desde o início
@@ -598,7 +598,7 @@ export default function ClientJourneyUpdates() {
             return (
               <article
                 key={update.id}
-                className={`rounded-2xl border bg-card p-5 sm:p-6 ${isLatest ? "border-primary/40 shadow-sm" : "border-border"}`}
+                className={`rounded-xl border bg-card p-5 sm:p-6 ${isLatest ? "border-primary/40 shadow-sm" : "border-border"}`}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${badge.cls}`}>

@@ -1403,7 +1403,7 @@ export default function EditorialCalendar() {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setDragSummary(null)}
     >
-      <div className="space-y-4 pb-8">
+      <div className="space-y-6">
         <header className="relative overflow-hidden rounded-2xl border border-border bg-card/75 px-4 py-4 sm:px-5">
           <div className="absolute inset-y-0 left-0 w-1 bg-primary" />
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">

@@ -413,13 +413,13 @@ export default function ReportDetail() {
 
   if (isLoading) {
     return (
-      <div className="space-y-6 max-w-6xl mx-auto">
+      <div className="space-y-6">
         <Skeleton className="h-10 w-64" />
-        <Skeleton className="h-48 rounded-2xl" />
+        <Skeleton className="h-48 rounded-xl" />
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-40 rounded-2xl" />)}
+          {[1, 2, 3, 4].map(i => <Skeleton key={i} className="h-40 rounded-xl" />)}
         </div>
-        <Skeleton className="h-80 rounded-2xl" />
+        <Skeleton className="h-80 rounded-xl" />
       </div>
     );
   }
@@ -598,13 +598,13 @@ export default function ReportDetail() {
 
   /* ── Render ─────────────────────────────────────── */
   return (
-    <div className="space-y-6 sm:space-y-8 animate-fade-in max-w-6xl mx-auto w-full print-report">
+    <div className="space-y-6 animate-fade-in print-report">
       <button onClick={() => (window.history.length > 1 ? navigate(-1) : navigate("/relatorios"))} className="no-print inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer bg-transparent border-none">
         <ArrowLeft className="w-4 h-4" /> Voltar
       </button>
 
       {/* ═══════════════ HERO HEADER ═══════════════ */}
-      <div className="relative bg-card border border-border rounded-2xl overflow-hidden">
+      <div className="relative bg-card border border-border rounded-xl overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/8 via-transparent to-accent/5" />
         <div className="absolute top-0 right-0 w-80 h-80 rounded-full bg-primary/5 blur-[80px]" />
         <div className="absolute bottom-0 left-0 w-60 h-60 rounded-full bg-accent/5 blur-[60px]" />
@@ -714,7 +714,7 @@ export default function ReportDetail() {
             {kpis.map((kpi, i) => {
               const StatusIcon = statusIcon(kpi.status);
               return (
-                <div key={i} className="bg-card border border-border rounded-2xl p-5 relative overflow-hidden group hover:border-primary/20 transition-all">
+                <div key={i} className="bg-card border border-border rounded-xl p-5 relative overflow-hidden group hover:border-primary/20 transition-all">
                   <div className="absolute top-0 right-0 w-20 h-20 rounded-full opacity-[0.04]" style={{ background: kpi.color, transform: "translate(30%, -30%)" }} />
                   <div className="flex items-center justify-between mb-3">
                     <div className="w-10 h-10 rounded-xl flex items-center justify-center" style={{ background: `${kpi.color}15`, border: `1px solid ${kpi.color}25` }}>
@@ -748,7 +748,7 @@ export default function ReportDetail() {
               const pctOfBenchmark = metric.benchmark ? Math.min((metric.value / metric.benchmark) * 100, 100) : null;
 
               return (
-                <div key={metric.key} className="group bg-card border border-border rounded-2xl p-5 hover:border-primary/20 transition-all relative overflow-hidden">
+                <div key={metric.key} className="group bg-card border border-border rounded-xl p-5 hover:border-primary/20 transition-all relative overflow-hidden">
                   <div className="absolute top-0 right-0 w-28 h-28 rounded-full opacity-[0.03]" style={{ background: metric.color, transform: "translate(30%, -30%)" }} />
 
                   <div className="flex items-start justify-between mb-4">
@@ -800,7 +800,7 @@ export default function ReportDetail() {
       {customMetrics.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
           {customMetrics.map((cm, i) => (
-            <div key={i} className="bg-card border border-border rounded-2xl p-5 hover:border-primary/20 transition-all">
+            <div key={i} className="bg-card border border-border rounded-xl p-5 hover:border-primary/20 transition-all">
               <Hash className="w-4 h-4 text-muted-foreground mb-2" />
               <p className="text-2xl font-bold font-mono text-foreground tracking-tight">{cm.value}</p>
               <p className="text-[11px] uppercase tracking-wider text-muted-foreground mt-1.5 font-medium">{cm.label}</p>
@@ -818,7 +818,7 @@ export default function ReportDetail() {
           </h2>
 
           {/* Main chart · Aceleriq futurist surface */}
-          <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
+          <div className="relative bg-card border border-border rounded-xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
             {/* Tech grid backdrop */}
             <div className="absolute inset-0 opacity-[0.35] pointer-events-none"
               style={{
@@ -891,7 +891,7 @@ export default function ReportDetail() {
                   const series = chartData.map((r, i) => ({ i, v: Number(r[cs.col]) || 0 }));
                   const safeId = cs.col.replace(/[^a-zA-Z0-9]/g, "_");
                   return (
-                    <div key={cs.col} className="group relative rounded-2xl border border-border bg-card p-4 hover:border-primary/30 transition-all overflow-hidden">
+                    <div key={cs.col} className="group relative rounded-xl border border-border bg-card p-4 hover:border-primary/30 transition-all overflow-hidden">
                       <div className="absolute top-0 right-0 w-24 h-24 rounded-full opacity-[0.06] pointer-events-none" style={{ background: cs.color, transform: "translate(35%,-35%)" }} />
                       <div className="relative flex items-center justify-between gap-2 mb-3">
                         <div className="flex items-center gap-2 min-w-0">
@@ -965,7 +965,7 @@ export default function ReportDetail() {
               if (r < bottleneckRate) { bottleneckRate = r; bottleneckIdx = i; }
             });
             return (
-              <div className="relative bg-[hsl(0_0%_7%)] border border-border rounded-2xl p-5 sm:p-7 page-break-inside-avoid overflow-hidden">
+              <div className="relative bg-[hsl(0_0%_7%)] border border-border rounded-xl p-5 sm:p-7 page-break-inside-avoid overflow-hidden">
                 {/* Tech grid backdrop */}
                 <div className="absolute inset-0 pointer-events-none opacity-[0.35]"
                   style={{
@@ -1160,7 +1160,7 @@ export default function ReportDetail() {
           {pieData.length >= 2 && (() => {
             const totalPie = pieData.reduce((s, d) => s + d.value, 0);
             return (
-              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+              <div className="bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid">
                 <div className="flex items-center justify-between flex-wrap gap-2 mb-1">
                   <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
                     <PieChartIcon className="w-4 h-4 text-primary" />
@@ -1270,7 +1270,7 @@ export default function ReportDetail() {
           {/* Radar + Eficiência refinada */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {radarData.length >= 3 && (
-              <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid overflow-hidden">
+              <div className="relative bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid overflow-hidden">
                 <div className="absolute inset-0 pointer-events-none opacity-50"
                   style={{ background: "radial-gradient(circle at 50% 60%, hsl(145 100% 50% / 0.10), transparent 70%)" }} />
                 <h3 className="relative text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
@@ -1335,7 +1335,7 @@ export default function ReportDetail() {
             )}
 
             {efficiencyData.length > 0 && (
-              <div className="bg-card border border-border rounded-2xl p-5 sm:p-6 page-break-inside-avoid">
+              <div className="bg-card border border-border rounded-xl p-5 sm:p-6 page-break-inside-avoid">
                 <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
                   <Gauge className="w-4 h-4 text-primary" />
                   Índice de Eficiência
@@ -1381,7 +1381,7 @@ export default function ReportDetail() {
 
       {/* ═══════════════ DATA TABLE ═══════════════ */}
       {chartData.length > 0 && chartColumns.length > 0 && (
-        <section className="bg-card border border-border rounded-2xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-border flex items-center justify-between">
             <h2 className="text-xs uppercase tracking-widest text-muted-foreground font-semibold flex items-center gap-2">
               <FileText className="w-3.5 h-3.5 text-primary" />
@@ -1446,7 +1446,7 @@ export default function ReportDetail() {
 
       {/* ═══════════════ INSIGHTS ═══════════════ */}
       {insights.length > 0 && (
-        <section className="bg-gradient-to-br from-card to-secondary/30 border border-border rounded-2xl p-6">
+        <section className="bg-gradient-to-br from-card to-secondary/30 border border-border rounded-xl p-6">
           <div className="flex items-center gap-3 mb-5">
             <div className="w-10 h-10 rounded-xl bg-primary/10 border border-primary/20 flex items-center justify-center">
               <Sparkles className="w-5 h-5 text-primary" />
@@ -1477,7 +1477,7 @@ export default function ReportDetail() {
 
       {/* ═══════════════ EXECUTIVE SUMMARY ═══════════════ */}
       {report.summary && (
-        <section className="bg-card border border-border rounded-2xl overflow-hidden">
+        <section className="bg-card border border-border rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-secondary/20">
             <div className="w-9 h-9 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center">
               <BarChart3 className="w-4.5 h-4.5 text-primary" />
@@ -1496,7 +1496,7 @@ export default function ReportDetail() {
       {/* ═══════════════ HIGHLIGHTS + NEXT STEPS ═══════════════ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {report.highlights && (
-          <section className="bg-card border border-border rounded-2xl overflow-hidden">
+          <section className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-warning/5">
               <div className="w-9 h-9 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center">
                 <Award className="w-4.5 h-4.5 text-warning" />
@@ -1513,7 +1513,7 @@ export default function ReportDetail() {
         )}
 
         {report.next_steps && (
-          <section className="bg-card border border-border rounded-2xl overflow-hidden">
+          <section className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="px-6 py-4 border-b border-border/50 flex items-center gap-3 bg-accent/5">
               <div className="w-9 h-9 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center">
                 <Target className="w-4.5 h-4.5 text-accent-foreground" />
@@ -1531,7 +1531,7 @@ export default function ReportDetail() {
       </div>
 
       {/* ═══════════════ CTA SECTION ═══════════════ */}
-      <div className="bg-card border border-border rounded-2xl p-6 no-print">
+      <div className="bg-card border border-border rounded-xl p-6 no-print">
         <div className="flex items-center gap-3 mb-4">
           <div className="w-10 h-10 rounded-xl bg-secondary flex items-center justify-center">
             <MessageCircle className="w-5 h-5 text-muted-foreground" />

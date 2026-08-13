@@ -297,7 +297,7 @@ export default function AdminApprovals() {
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <p className="heading-page">Aprovações</p>
+            <h1 className="heading-page">Aprovações</h1>
             {pendingCount > 0 && (
               <span className="text-[11px] px-2 py-0.5 rounded-full bg-warning/10 text-warning">
                 {pendingCount} {queue === "agency" ? "aguardando revisão interna" : "aguardando cliente"}
@@ -419,7 +419,7 @@ export default function AdminApprovals() {
           ) : null}
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 items-start stagger-children">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 auto-rows-fr stagger-children">
           {filtered.map((f: any) => {
             const badge = queue === "agency"
               ? agencyApprovalBadge[f.agency_approval_status] || agencyApprovalBadge.not_requested
@@ -428,7 +428,7 @@ export default function AdminApprovals() {
             const images = getCarouselImages(f);
             const isCarousel = images.length > 1;
             return (
-              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors flex flex-col"
+              <div key={f.id} className="bg-card border border-border rounded-xl overflow-hidden cursor-pointer hover:border-muted-foreground/30 transition-colors h-full flex flex-col"
                 onClick={() => setPreviewFile(f)}>
                 <CarouselPreview images={images} small />
                 <div className="p-4 space-y-2 flex-1 flex flex-col">

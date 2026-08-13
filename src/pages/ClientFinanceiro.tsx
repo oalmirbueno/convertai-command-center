@@ -223,8 +223,8 @@ export default function ClientFinanceiro() {
 
   // ===== RENDER =====
   return (
-    <div className="space-y-8 animate-fade-in w-full">
-      <h1 className="text-xl font-semibold text-foreground">Financeiro</h1>
+    <div className="space-y-6 animate-fade-in w-full">
+      <h1 className="heading-page">Financeiro</h1>
 
       {/* ========== SEÇÃO 1: MEU PLANO ========== */}
       <section>
@@ -235,7 +235,7 @@ export default function ClientFinanceiro() {
           </span>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl p-6">
+        <div className="bg-card border border-border rounded-xl p-6">
           {latestPlan ? (
             <>
               <div className="flex items-start justify-between flex-wrap gap-2">
@@ -306,7 +306,7 @@ export default function ClientFinanceiro() {
             </span>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid auto-rows-fr grid-cols-1 sm:grid-cols-2 gap-4">
             {(wallets || []).map((w: any) => {
               const balance = Number(w.balance);
               const gaugePercent = Math.min((balance / 2000) * 100, 100);
@@ -334,7 +334,7 @@ export default function ClientFinanceiro() {
               return (
                 <div
                   key={w.id}
-                  className="bg-card border border-border rounded-2xl p-5"
+                  className="h-full flex flex-col bg-card border border-border rounded-xl p-5"
                 >
                   <p className="text-[11px] uppercase tracking-wider text-muted-foreground">
                     {platformLabels[w.platform] || w.platform}
@@ -378,7 +378,7 @@ export default function ClientFinanceiro() {
               <div
                 key={r.id}
                 onClick={() => setRechargePopup(r)}
-                className="bg-card border border-warning/30 rounded-2xl p-5 cursor-pointer hover:border-warning/60 transition-colors"
+                className="bg-card border border-warning/30 rounded-xl p-5 cursor-pointer hover:border-warning/60 transition-colors"
               >
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
@@ -433,7 +433,7 @@ export default function ClientFinanceiro() {
               const sortedInstallments = [...installments].sort((a: any, b: any) => a.installment_number - b.installment_number);
 
               return (
-                <div key={pp.id} className="bg-card border border-border rounded-2xl p-5 space-y-4">
+                <div key={pp.id} className="bg-card border border-border rounded-xl p-5 space-y-4">
                   <div className="flex items-start justify-between flex-wrap gap-2">
                     <div>
                       <div className="flex items-center gap-2">
@@ -500,7 +500,7 @@ export default function ClientFinanceiro() {
           </span>
         </div>
 
-        <div className="bg-card border border-border rounded-2xl divide-y divide-border overflow-hidden">
+        <div className="bg-card border border-border rounded-xl divide-y divide-border overflow-hidden">
           {(!billing || billing.length === 0) ? (
             <p className="text-sm text-muted-foreground text-center py-6">
               Nenhum pagamento registrado

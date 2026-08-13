@@ -251,15 +251,16 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   };
 
   return (
-    <div className="space-y-8 animate-fade-in max-w-3xl mx-auto w-full">
+    <div className="space-y-6 animate-fade-in">
       <button onClick={() => navigate("/relatorios")} className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
         <ArrowLeft className="w-4 h-4" /> Voltar aos Relatórios
       </button>
 
-      <h1 className="text-xl font-semibold text-foreground">Novo Relatório</h1>
+      <h1 className="heading-page">Novo Relatório</h1>
 
+      <div className="max-w-3xl space-y-6">
       {/* INFORMAÇÕES BÁSICAS */}
-      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Informações Básicas</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
@@ -302,7 +303,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       </section>
 
       {/* MÉTRICAS */}
-      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Métricas de Performance</h2>
           <button
@@ -367,7 +368,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       </section>
 
       {/* DADOS DO GRÁFICO */}
-      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Dados do Gráfico</h2>
           <div className="flex gap-2">
@@ -447,7 +448,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       </section>
 
       {/* ANÁLISE E CONTEÚDO */}
-      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Análise e Conteúdo</h2>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Resumo Executivo</Label>
@@ -470,7 +471,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
       </section>
 
       {/* ANEXOS */}
-      <section className="bg-card border border-border rounded-2xl p-6 space-y-4">
+      <section className="bg-card border border-border rounded-xl p-6 space-y-4">
         <h2 className="text-sm font-semibold text-foreground uppercase tracking-wider">Anexos</h2>
         <div>
           <Label className="text-[11px] uppercase tracking-wider text-muted-foreground">Upload de Relatório Externo (PDF/PPTX)</Label>
@@ -505,6 +506,7 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
         >
           {saving ? <Loader2 className="w-4 h-4 animate-spin mx-auto" /> : "Publicar Relatório"}
         </button>
+      </div>
       </div>
     </div>
   );

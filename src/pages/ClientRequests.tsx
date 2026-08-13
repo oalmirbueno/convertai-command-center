@@ -107,7 +107,7 @@ export default function ClientRequests() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <p className="heading-page">Meus Pedidos</p>
+        <h1 className="heading-page">Meus Pedidos</h1>
         {!isImpersonating && (
           <button
             onClick={() => setCreateOpen(true)}

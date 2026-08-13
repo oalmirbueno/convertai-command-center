@@ -207,11 +207,11 @@ export default function AdminViewAsClient() {
         </div>
 
         {loadingClients ? (
-          <div className="space-y-2 max-w-lg mx-auto">
+          <div className="space-y-2 max-w-3xl">
             {[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
           </div>
         ) : (
-          <div className="space-y-2 max-w-lg mx-auto">
+          <div className="space-y-2 max-w-3xl">
             {(clients || []).filter((c: any) => c.plan_status === "active").map((c: any) => (
               <button
                 type="button"

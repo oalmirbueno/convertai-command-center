@@ -81,7 +81,7 @@ export default function AdminReports() {
     return (
       <div className="space-y-4">
         <Skeleton className="h-8 w-48" />
-        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-2xl" />)}
+        {[1, 2].map(i => <Skeleton key={i} className="h-40 w-full rounded-xl" />)}
       </div>
     );
   }
@@ -90,7 +90,7 @@ export default function AdminReports() {
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold text-foreground">Relatórios</h1>
+        <h1 className="heading-page">Relatórios</h1>
         <button onClick={() => navigate("/relatorios/novo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer">
           <Plus className="w-4 h-4" /> Novo Relatório
         </button>
@@ -136,7 +136,7 @@ function GroupedReports({ reports, metricLabels, formatNumber, formatDate, onVie
         const totalCount = modelKeys.reduce((acc, k) => acc + models[k].length, 0);
         const isOpen = !!openClients[client];
         return (
-          <div key={client} className="bg-card border border-border rounded-2xl overflow-hidden">
+          <div key={client} className="bg-card border border-border rounded-xl overflow-hidden">
             <button
               onClick={() => toggleClient(client)}
               className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-secondary/30 transition-colors cursor-pointer"
