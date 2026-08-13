@@ -441,9 +441,9 @@ export default function AdminApprovals() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
-                    <span className="truncate max-w-[120px]">{f.project?.name || "—"}</span>
+                    <span className="truncate max-w-[120px]">{f.project?.name || "-"}</span>
                     <span>•</span>
-                    <span className="truncate max-w-[120px]">{f.client?.company_name || f.client?.full_name || "—"}</span>
+                    <span className="truncate max-w-[120px]">{f.client?.company_name || f.client?.full_name || "-"}</span>
                   </div>
                   <p className="text-[11px] font-mono text-muted-foreground">{formatDate(f.created_at)}</p>
 
@@ -496,7 +496,7 @@ export default function AdminApprovals() {
                 <CarouselPreview images={getCarouselImages(previewFile)} />
               </div>
               <p className="text-xs text-muted-foreground">
-                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+                Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
               </p>
               {previewFile.caption && <div><p className="text-[11px] text-muted-foreground uppercase">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div><p className="text-[11px] text-muted-foreground uppercase">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}

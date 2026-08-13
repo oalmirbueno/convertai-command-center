@@ -46,7 +46,7 @@ export default function AdminBriefings() {
       const projectType = r?.tiposProjeto?.[0] || "outro";
 
       const { data: project, error } = await supabase.from("projects").insert({
-        name: `Projeto — ${tipos || "Novo"}`,
+        name: `Projeto · ${tipos || "Novo"}`,
         description: r?.objetivo || "",
         scope: JSON.stringify(r, null, 2),
         project_type: projectType,
@@ -91,9 +91,9 @@ export default function AdminBriefings() {
       { label: "Orçamento", value: r.orcamento },
       { label: "Observações", value: r.observacoes },
       ...(r.contato ? [
-        { label: "Contato — Nome", value: r.contato.nome },
-        { label: "Contato — WhatsApp", value: r.contato.whatsapp },
-        { label: "Contato — Email", value: r.contato.email },
+        { label: "Contato · Nome", value: r.contato.nome },
+        { label: "Contato · WhatsApp", value: r.contato.whatsapp },
+        { label: "Contato · Email", value: r.contato.email },
       ] : []),
     ];
     return (

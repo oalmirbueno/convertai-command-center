@@ -220,7 +220,7 @@ export default function VoiceAssistant() {
         title: "Voz indisponível neste navegador",
         description: isIOS
           ? "No iPhone use Safari + iOS 14.5+. Ou digite o comando abaixo."
-          : "Use Chrome ou Edge — ou digite o comando.",
+          : "Use Chrome ou Edge · ou digite o comando.",
         variant: "destructive",
       });
       return;
@@ -579,7 +579,7 @@ export default function VoiceAssistant() {
       if (/\b(financeiro|faturamento|mensalidade|parcela|recebível|reembolso|ads ?wallet|recarga|pagamento)\b/i.test(text))
         return "Financeiro está fora da jurisdição do agente.";
       if (/\b(cofre|senha|credencial)\b/i.test(text))
-        return "Cofre de senhas é área protegida — o agente não acessa.";
+        return "Cofre de senhas é área protegida · o agente não acessa.";
       if (/cliente\b/i.test(text))
         return "Excluir cliente requer ação manual do admin.";
     }
@@ -1611,7 +1611,7 @@ export default function VoiceAssistant() {
                       );
                     })()}
 
-                    {/* 🎙️ Ajustar o escopo com voz — re-roda a IA com instrução extra. */}
+                    {/* 🎙️ Ajustar o escopo com voz · re-roda a IA com instrução extra. */}
                     <div className="rounded-xl border border-border bg-secondary/30 p-3 space-y-2">
                       <p className="text-[10px] uppercase tracking-wider text-muted-foreground">
                         Não ficou bom? Ajuste com voz ou texto
@@ -1680,7 +1680,7 @@ export default function VoiceAssistant() {
                         <div>
                           <p className="text-xs font-semibold text-foreground">Confirmação final</p>
                           <p className="text-[11px] text-muted-foreground">
-                            Tudo será criado em sequência — projeto, milestones, tarefas e checklists. Reversível pelo "Desfazer".
+                            Tudo será criado em sequência · projeto, milestones, tarefas e checklists. Reversível pelo "Desfazer".
                           </p>
                         </div>
                       </div>

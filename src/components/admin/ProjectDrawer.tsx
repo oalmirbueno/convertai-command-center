@@ -231,7 +231,7 @@ export default function ProjectDrawer({ project, open, onClose, onEdit }: Props)
                   <div key={id} className="flex items-center gap-2 text-xs">
                     <Users className="w-3 h-3 text-muted-foreground" />
                     <span className="text-foreground">{name}</span>
-                    <span className="text-muted-foreground">— {count} task{count > 1 ? "s" : ""}</span>
+                    <span className="text-muted-foreground">- {count} task{count > 1 ? "s" : ""}</span>
                   </div>
                 ))}
               </div>

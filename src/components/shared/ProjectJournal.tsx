@@ -28,20 +28,27 @@ interface JournalEntry {
   file?: any;
 }
 
-/** Miniatura clicavel com URL assinada: o storage e privado, entao a URL
- *  precisa ser resolvida na hora - o file_url cru nao abria nada. */
-function JournalThumb({ file }: { file: any }) {
+/** Titulo e miniatura clicaveis com URL assinada: o storage e privado, a URL
+ *  precisa ser resolvida na hora. Vale para imagem, PDF e video. */
+function JournalFileLink({ file, title, isImage }: { file: any; title: string; isImage: boolean }) {
   const { url } = useResolvedFileUrl(file);
-  if (!url) return null;
+  if (!url) return <span>{title}</span>;
   return (
-    <a href={url} target="_blank" rel="noreferrer" title="Abrir material">
-      <img
-        src={url}
-        alt=""
-        loading="lazy"
-        className="mt-2 h-16 w-16 rounded-lg border border-border object-cover transition-transform hover:scale-105"
-      />
-    </a>
+    <>
+      <a href={url} target="_blank" rel="noreferrer" className="hover:text-primary hover:underline">
+        {title}
+      </a>
+      {isImage && (
+        <a href={url} target="_blank" rel="noreferrer" className="block" title="Abrir material">
+          <img
+            src={url}
+            alt=""
+            loading="lazy"
+            className="mt-2 h-16 w-16 rounded-lg border border-border object-cover transition-transform hover:scale-105"
+          />
+        </a>
+      )}
+    </>
   );
 }
 
@@ -293,7 +300,13 @@ export default function ProjectJournal({
                 </span>
                 <div className="min-w-0 flex-1 pt-0.5">
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-                    <p className={isNote ? "text-[13px] font-medium leading-snug text-foreground" : "text-[12px] leading-snug text-foreground/80"}>{entry.title}</p>
+                    <p className={isNote ? "text-[13px] font-medium leading-snug text-foreground" : "text-[12px] leading-snug text-foreground/80"}>
+                      {entry.file ? (
+                        <JournalFileLink file={entry.file} title={entry.title} isImage={Boolean(entry.previewUrl)} />
+                      ) : (
+                        entry.title
+                      )}
+                    </p>
                     <span className="text-[10px] text-muted-foreground">
                       {new Date(entry.at).toLocaleDateString("pt-BR", {
                         day: "2-digit",
@@ -308,7 +321,6 @@ export default function ProjectJournal({
                       {entry.body}
                     </p>
                   )}
-                  {entry.previewUrl && entry.file && <JournalThumb file={entry.file} />}
                 </div>
               </div>
             );

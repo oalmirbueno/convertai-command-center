@@ -658,7 +658,7 @@ export default function TimelinePage() {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Cliente</p>
-                    <p className="text-[13px] text-foreground mt-0.5">{clientProfile?.company_name || clientProfile?.full_name || "—"}</p>
+                    <p className="text-[13px] text-foreground mt-0.5">{clientProfile?.company_name || clientProfile?.full_name || "-"}</p>
                   </div>
                   <div>
                     <p className="text-[10px] uppercase tracking-wider text-muted-foreground">Início</p>

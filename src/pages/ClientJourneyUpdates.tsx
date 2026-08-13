@@ -199,14 +199,28 @@ export default function ClientJourneyUpdates() {
 
           <div className="space-y-5 px-5 py-5 sm:px-7 sm:py-6">
             <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-              {narrative.signals.map((signal) => (
-                <div key={signal.label} className="rounded-xl border border-border bg-secondary/25 p-3">
-                  <p className={`text-xl font-bold tabular-nums ${SIGNAL_TONE[signal.tone]}`}>
-                    {signal.value}
-                  </p>
-                  <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{signal.label}</p>
-                </div>
-              ))}
+              {narrative.signals.map((signal) => {
+                const signalTarget: Record<string, string> = {
+                  "Entregas concluídas no mês": "/documentos",
+                  "Em produção agora": "/projetos",
+                  "Publicações no ar": "/calendario",
+                  "Esperando você": "/aprovacoes",
+                };
+                const target = signalTarget[signal.label];
+                return (
+                  <button
+                    key={signal.label}
+                    type="button"
+                    onClick={() => target && navigate(target)}
+                    className="rounded-xl border border-border bg-secondary/25 p-3 text-left transition-colors hover:border-primary/40 hover:bg-secondary/40"
+                  >
+                    <p className={`text-xl font-bold tabular-nums ${SIGNAL_TONE[signal.tone]}`}>
+                      {signal.value}
+                    </p>
+                    <p className="mt-0.5 text-[11px] leading-snug text-muted-foreground">{signal.label}</p>
+                  </button>
+                );
+              })}
             </div>
 
             <div className="space-y-2">

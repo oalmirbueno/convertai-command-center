@@ -78,7 +78,7 @@ function answeredCount(s: Submission) {
 }
 
 function scoreTone(score: number | null) {
-  if (score == null) return { label: "—", className: "bg-secondary text-muted-foreground border-border" };
+  if (score == null) return { label: "-", className: "bg-secondary text-muted-foreground border-border" };
   if (score >= 80) return { label: `${score}`, className: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30" };
   if (score >= 60) return { label: `${score}`, className: "bg-sky-500/15 text-sky-400 border-sky-500/30" };
   if (score >= 40) return { label: `${score}`, className: "bg-amber-500/15 text-amber-400 border-amber-500/30" };
@@ -334,7 +334,7 @@ export default function AdminQuizSubmissions() {
                   const status = statusTone(s.status);
                   const planLabel = s.recommended_plan
                     ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan)
-                    : "—";
+                    : "-";
                   const answered = answeredCount(s);
                   const progressPct = Math.round((answered / ANSWER_FIELDS.length) * 100);
                   const lastActivity = s.submitted_at ?? s.updated_at ?? s.created_at;
@@ -403,7 +403,7 @@ export default function AdminQuizSubmissions() {
                       <TableCell className="text-sm text-muted-foreground">
                         {lastActivity
                           ? format(new Date(lastActivity), "dd MMM yyyy · HH:mm", { locale: ptBR })
-                          : "—"}
+                          : "-"}
                       </TableCell>
 
                       <TableCell>
@@ -502,7 +502,7 @@ function SubmissionDrawer({
   if (!submission) return null;
   const s = submission;
   const score = scoreTone(s.icp_fit_score);
-  const planLabel = s.recommended_plan ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan) : "—";
+  const planLabel = s.recommended_plan ? (PLAN_LABELS[s.recommended_plan] ?? s.recommended_plan) : "-";
 
   const sections: { title: string; items: { label: string; value: string | null }[] }[] = [
     {
@@ -550,13 +550,13 @@ function SubmissionDrawer({
             {s.lead_name || "Sem nome"}
           </SheetTitle>
           <SheetDescription>
-            {s.lead_company || "—"} ·{" "}
+            {s.lead_company || "-"} ·{" "}
             {s.submitted_at
               ? `submetido em ${format(new Date(s.submitted_at), "dd MMM yyyy · HH:mm", { locale: ptBR })}`
-              : `em andamento — última atividade ${
+              : `em andamento · última atividade ${
                   (s.updated_at ?? s.created_at)
                     ? format(new Date((s.updated_at ?? s.created_at) as string), "dd MMM yyyy · HH:mm", { locale: ptBR })
-                    : "—"
+                    : "-"
                 }`}
           </SheetDescription>
         </SheetHeader>
@@ -604,7 +604,7 @@ function SubmissionDrawer({
                       {it.label}
                     </div>
                     <div className="text-sm whitespace-pre-wrap text-foreground/90">
-                      {it.value || <span className="text-muted-foreground">— sem resposta —</span>}
+                      {it.value || <span className="text-muted-foreground">- sem resposta -</span>}
                     </div>
                   </div>
                 ))}

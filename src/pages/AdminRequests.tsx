@@ -442,7 +442,7 @@ export default function AdminRequests() {
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 text-[11px] text-muted-foreground">
                       <span>
-                        {client?.company_name || client?.full_name || "—"}
+                        {client?.company_name || client?.full_name || "-"}
                       </span>
                       <span>•</span>
                       <span>{project?.name || "Sem projeto"}</span>
@@ -519,7 +519,7 @@ export default function AdminRequests() {
                   <p className="text-sm text-foreground mt-1">
                     {getClient(selected.client_id)?.company_name ||
                       getClient(selected.client_id)?.full_name ||
-                      "—"}
+                      "-"}
                   </p>
                 </div>
                 <div>

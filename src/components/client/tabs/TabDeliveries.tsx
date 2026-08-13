@@ -233,7 +233,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
                     </span>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">Enviado por {f.uploader?.full_name || "—"} • {formatDate(f.created_at)}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Enviado por {f.uploader?.full_name || "-"} • {formatDate(f.created_at)}</p>
               </div>
             </div>
 
@@ -329,7 +329,7 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
               )}
 
               <p className="text-xs text-muted-foreground">
-                Enviado por {previewGroup?.parent.uploader?.full_name || "—"} • {formatDate(previewGroup?.parent.created_at || "")}
+                Enviado por {previewGroup?.parent.uploader?.full_name || "-"} • {formatDate(previewGroup?.parent.created_at || "")}
               </p>
               {previewGroup?.parent.caption && (
                 <div className="space-y-0.5">

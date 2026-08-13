@@ -197,7 +197,7 @@ export default function MetricsAudit({ metrics }: Props) {
                     <div className="text-right">
                       <p className="text-[9px] uppercase tracking-wider text-muted-foreground">Armazenado</p>
                       <p className={`text-sm font-mono font-bold ${c.stored == null ? "text-muted-foreground" : ok ? "text-foreground" : "text-destructive line-through"}`}>
-                        {c.stored == null ? "—" : c.format(Number(c.stored))}
+                        {c.stored == null ? "-" : c.format(Number(c.stored))}
                       </p>
                     </div>
                     <span className={`text-[10px] px-2 py-1 rounded-md border font-bold ${ok ? "text-primary bg-primary/10 border-primary/20" : "text-destructive bg-destructive/10 border-destructive/20"}`}>
@@ -213,7 +213,7 @@ export default function MetricsAudit({ metrics }: Props) {
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Os valores exibidos no relatório já usam o cálculo correto (coluna <span className="text-primary font-semibold">Calculado</span>).
               Os valores em <span className="text-destructive font-semibold line-through">vermelho</span> estavam errados na importação
-              — provavelmente o export trouxe colunas deslocadas ou somou taxas de várias campanhas.
+              · provavelmente o export trouxe colunas deslocadas ou somou taxas de várias campanhas.
             </p>
           )}
         </div>

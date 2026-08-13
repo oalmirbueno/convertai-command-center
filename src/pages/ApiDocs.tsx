@@ -64,7 +64,7 @@ const webhookRoutes = [
 
 /* ─── Edge Functions (real, from supabase/functions/) ──── */
 const edgeFunctions = [
-  { name: "api-gateway", desc: "Gateway unificado da API — ações CRUD escopadas", auth: "X-API-Key (SHA-256)", method: "POST", public: true },
+  { name: "api-gateway", desc: "Gateway unificado da API · ações CRUD escopadas", auth: "X-API-Key (SHA-256)", method: "POST", public: true },
   { name: "check-renewals", desc: "Verifica renovações de planos e marca inadimplentes", auth: "Sem JWT (cron)", method: "POST", public: true },
   { name: "check-task-reminders", desc: "Envia lembretes de tarefas próximas do vencimento", auth: "Sem JWT (cron)", method: "POST", public: true },
   { name: "manage-team", desc: "Gerencia membros da equipe (criar, atualizar roles)", auth: "Sem JWT (service role)", method: "POST", public: true },
@@ -813,9 +813,9 @@ function AuditLogViewer() {
                     {new Date(log.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                   </td>
                   <td className="py-1.5 pr-3"><code className="text-primary font-mono">{log.action}</code></td>
-                  <td className={`py-1.5 pr-3 font-bold ${statusColor(log.status_code)}`}>{log.status_code || "—"}</td>
-                  <td className="py-1.5 pr-3 text-muted-foreground">{log.key_name || "—"}</td>
-                  <td className="py-1.5 pr-3 text-muted-foreground font-mono">{log.ip_address || "—"}</td>
+                  <td className={`py-1.5 pr-3 font-bold ${statusColor(log.status_code)}`}>{log.status_code || "-"}</td>
+                  <td className="py-1.5 pr-3 text-muted-foreground">{log.key_name || "-"}</td>
+                  <td className="py-1.5 pr-3 text-muted-foreground font-mono">{log.ip_address || "-"}</td>
                   <td className="py-1.5 text-destructive truncate max-w-[200px]">{log.error_message || ""}</td>
                 </tr>
               ))}
@@ -853,7 +853,7 @@ function ActionCategory({ cat, isOpen, onToggle }: { cat: typeof actionDocs[0]; 
                 <Badge variant="secondary" className="text-[9px] font-mono">
                   {API_GATEWAY_ACTION_SCOPES[a.name]}
                 </Badge>
-                <span className="text-xs text-muted-foreground">— {a.desc}</span>
+                <span className="text-xs text-muted-foreground">- {a.desc}</span>
               </div>
               {a.required && (
                 <p className="text-[11px] text-muted-foreground">
@@ -995,7 +995,7 @@ Body (JSON):
           <Server className="w-5 h-5 text-primary" /> API & Integrações
         </p>
         <p className="text-sm text-muted-foreground mt-1">
-          Documentação completa da infraestrutura real da Aceleriq — rotas, autenticação, webhooks e testes ao vivo.
+          Documentação completa da infraestrutura real da Aceleriq · rotas, autenticação, webhooks e testes ao vivo.
         </p>
       </div>
 
@@ -1064,7 +1064,7 @@ Body (JSON):
                 <div className="grid sm:grid-cols-3 gap-3 mt-3">
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="font-medium text-foreground mb-1">🌐 API Gateway</p>
-                    <p>Edge Function unificada (<code className="bg-secondary px-1 rounded">api-gateway</code>) — {totalActions} ações CRUD via POST único, com audiência e escopo por ação.</p>
+                    <p>Edge Function unificada (<code className="bg-secondary px-1 rounded">api-gateway</code>) · {totalActions} ações CRUD via POST único, com audiência e escopo por ação.</p>
                   </div>
                   <div className="p-3 bg-secondary/50 rounded-lg">
                     <p className="font-medium text-foreground mb-1">🔗 Webhooks n8n</p>
@@ -1346,11 +1346,11 @@ Body (JSON):
         <TabsContent value="examples" className="mt-4 space-y-4">
           <div className="grid gap-4">
             <Card className="bg-card border-border">
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Health Check</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL · Health Check</CardTitle></CardHeader>
               <CardContent><CodeBlock code={curlExample} language="bash" /></CardContent>
             </Card>
             <Card className="bg-card border-border">
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL — Criar Cliente</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Terminal className="w-4 h-4" /> cURL · Criar Cliente</CardTitle></CardHeader>
               <CardContent><CodeBlock code={curlCreateClient} language="bash" /></CardContent>
             </Card>
             <Card className="bg-card border-border">
@@ -1362,7 +1362,7 @@ Body (JSON):
               <CardContent><CodeBlock code={pythonExample} language="python" /></CardContent>
             </Card>
             <Card className="bg-card border-border">
-              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Zap className="w-4 h-4" /> n8n — HTTP Request Node</CardTitle></CardHeader>
+              <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Zap className="w-4 h-4" /> n8n · HTTP Request Node</CardTitle></CardHeader>
               <CardContent><CodeBlock code={n8nExample} language="text" /></CardContent>
             </Card>
           </div>

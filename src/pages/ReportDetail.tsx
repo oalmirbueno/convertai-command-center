@@ -817,7 +817,7 @@ export default function ReportDetail() {
             Evolução e Análise Visual
           </h2>
 
-          {/* Main chart — Aceleriq futurist surface */}
+          {/* Main chart · Aceleriq futurist surface */}
           <div className="relative bg-card border border-border rounded-2xl p-5 sm:p-6 overflow-hidden group/chart hover:border-primary/30 transition-colors">
             {/* Tech grid backdrop */}
             <div className="absolute inset-0 opacity-[0.35] pointer-events-none"
@@ -872,7 +872,7 @@ export default function ReportDetail() {
             </div>
           </div>
 
-          {/* Análise por Métrica — agora abaixo do gráfico, cards lado-a-lado (estilo Rams) */}
+          {/* Análise por Métrica · agora abaixo do gráfico, cards lado-a-lado (estilo Rams) */}
           {colStats.length > 0 && (
             <div className="space-y-3">
               <div className="flex items-center justify-between flex-wrap gap-2 px-1">

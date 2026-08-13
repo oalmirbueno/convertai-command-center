@@ -2075,7 +2075,7 @@ export default function Workspace() {
                 </Button>
               </div>
               <div className="text-[11px] text-muted-foreground grid grid-cols-2 gap-2 pt-2 border-t border-border">
-                <div>Tipo: {selected.mime || "—"}</div>
+                <div>Tipo: {selected.mime || "-"}</div>
                 <div>Tamanho: {fmtSize(selected.size_bytes)}</div>
                 <div>Criado: {new Date(selected.created_at).toLocaleString("pt-BR")}</div>
                 {selected.inbox_scan_status && (

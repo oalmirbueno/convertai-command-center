@@ -175,7 +175,7 @@ export default function Login() {
         {/* Orb glow behind person */}
         <div className="absolute w-[500px] h-[500px] rounded-full pointer-events-none" style={{ background: "radial-gradient(circle, rgba(0,255,102,0.06) 0%, transparent 70%)", top: "25%", left: "15%", transform: "translate(-50%, -20%)" }} />
 
-        {/* Consultant image — far LEFT, fades to right */}
+        {/* Consultant image · far LEFT, fades to right */}
         <img
           src={consultantHero}
           alt="Consultora Aceleriq"
@@ -187,7 +187,7 @@ export default function Login() {
           }}
         />
 
-        {/* Content — RIGHT column, no overlap with image */}
+        {/* Content · RIGHT column, no overlap with image */}
         <div className="relative z-10 flex flex-col justify-between h-full ml-auto pr-14 pl-6 py-10" style={{ maxWidth: "340px" }}>
           {/* Spacer top */}
           <div />
@@ -204,7 +204,7 @@ export default function Login() {
                 Bom te ver<br />por aqui!
               </h2>
               <p className="text-[14px] text-muted-foreground leading-[1.8] mb-8">
-                Gerencie projetos, acompanhe entregas e receba relatórios inteligentes — tudo num só lugar.
+                Gerencie projetos, acompanhe entregas e receba relatórios inteligentes · tudo num só lugar.
               </p>
             </div>
 

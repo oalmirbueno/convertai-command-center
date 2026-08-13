@@ -12,8 +12,8 @@ export default defineTool({
       content: [{
         type: "text",
         text: authed
-          ? `ok — autenticado como ${ctx.getUserEmail() ?? ctx.getUserId()}`
-          : "ok — sem autenticação",
+          ? `ok · autenticado como ${ctx.getUserEmail() ?? ctx.getUserId()}`
+          : "ok · sem autenticação",
       }],
       structuredContent: {
         status: "ok",

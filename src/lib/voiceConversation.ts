@@ -77,15 +77,15 @@ export function suggestProjectNames(opts: {
   const cycle = cycleByType[type || "other"] || cycleByType.other;
 
   const out = new Set<string>();
-  if (hint && cli) out.add(`${hint} — ${cli}`);
+  if (hint && cli) out.add(`${hint} · ${cli}`);
   if (hint) out.add(hint);
   if (cli) {
-    out.add(`${label} — ${cli} — ${monthYear}`);
-    out.add(`${cycle[0]} ${cli} — ${monthYear}`);
+    out.add(`${label} · ${cli} · ${monthYear}`);
+    out.add(`${cycle[0]} ${cli} · ${monthYear}`);
     out.add(`${cli} ${cycle[1]} ${quarter}`);
     out.add(`${cycle[2]} ${cli}`);
   } else {
-    out.add(`${label} — ${monthYear}`);
+    out.add(`${label} · ${monthYear}`);
     out.add(`${cycle[0]} ${monthYear}`);
     out.add(`${cycle[1]} ${quarter}`);
   }

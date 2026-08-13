@@ -80,7 +80,7 @@ export default function HelpButton({ onFullTour, onPageTour, pageTourLabel }: He
         style={{
           boxShadow: "0 4px 20px hsl(var(--primary) / 0.4)",
         }}
-        aria-label="Ajuda — Tour de aprendizado"
+        aria-label="Ajuda · Tour de aprendizado"
       >
         <HelpCircle className="w-5 h-5 group-hover:rotate-12 transition-transform" />
       </button>

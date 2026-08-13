@@ -87,7 +87,7 @@ export default function AdminProjection() {
     showMonthly ? activeClients.map((c: any) => ({
       id: `rec-${c.id}`,
       label: c.plan_name ? `Renovação: ${c.plan_name}` : "Renovação Mensal",
-      client: c.company_name || c.full_name || "—",
+      client: c.company_name || c.full_name || "-",
       amount: Number(c.plan_value),
       due: c.plan_renewal_date || "",
       brand: "AcelerIQ",
@@ -106,7 +106,7 @@ export default function AdminProjection() {
           .map((i: any) => ({
             id: `inst-${i.id}`,
             label: `${pp.project?.name || "Projeto"}: ${i.installment_number === 0 ? "Entrada" : `Parcela ${i.installment_number}`}`,
-            client: pp.client?.company_name || pp.client?.full_name || "—",
+            client: pp.client?.company_name || pp.client?.full_name || "-",
             amount: Number(i.amount),
             due: i.due_date,
             brand: getProjectBrand(pp.project?.project_type),

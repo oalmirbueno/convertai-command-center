@@ -955,7 +955,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </button>
             </div>
 
-            {/* Projeto (pill combobox) — largura contida, não estoura */}
+            {/* Projeto (pill combobox) · largura contida, não estoura */}
             <div className="relative min-w-0 flex-1 sm:flex-none sm:w-[220px] max-w-full">
               <FolderIcon className="w-3.5 h-3.5 text-muted-foreground absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
               <select
@@ -983,7 +983,7 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
               </span>
             )}
 
-            {/* Ações agrupadas — sem ml-auto pra não deixar buraco visual */}
+            {/* Ações agrupadas · sem ml-auto pra não deixar buraco visual */}
             <div className="flex items-center shrink-0 rounded-full border border-border/70 bg-background/70 overflow-hidden h-8 sm:h-7 divide-x divide-border/70 ml-auto sm:ml-0">
               <button
                 onClick={() => setAutoFix(v => !v)}
@@ -2658,7 +2658,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         const activeProject = projectId ? projects.find(p => p.id === projectId) : null;
         if (activeProject) chunks.push(`## Projeto selecionado\n- Nome: ${activeProject.name}\n- Status: ${activeProject.status || "-"}\n- Progresso: ${activeProject.progress ?? 0}%\n- Prazo: ${activeProject.deadline || "-"}\n- Escopo: ${activeProject.scope || "-"}\n- Objetivos: ${activeProject.objectives || "-"}\n- Descrição: ${activeProject.description || "-"}`);
         if (projects.length) {
-          chunks.push(`## Projetos do cliente (${projects.length})\n${projects.map(p => `- ${p.name} · ${p.status || "-"} · ${p.progress ?? 0}% · ${p.brand || "-"}${p.deadline ? ` · prazo ${p.deadline}` : ""}${p.description ? ` — ${String(p.description).slice(0, 140)}` : ""}`).join("\n")}`);
+          chunks.push(`## Projetos do cliente (${projects.length})\n${projects.map(p => `- ${p.name} · ${p.status || "-"} · ${p.progress ?? 0}% · ${p.brand || "-"}${p.deadline ? ` · prazo ${p.deadline}` : ""}${p.description ? ` · ${String(p.description).slice(0, 140)}` : ""}`).join("\n")}`);
           const ids = projectId ? [projectId] : projects.map(p => p.id);
           const [taskRes, milRes] = await Promise.all([
             supabase.from("tasks").select("title,status,priority,due_date,description,project_id").in("project_id", ids).order("updated_at", { ascending: false }).limit(80),
@@ -2667,9 +2667,9 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           const tasks = (taskRes.data as any[]) || [];
           stats.tasks = tasks.length;
           const opened = tasks.filter(t => t.status !== "done" && t.status !== "concluido").slice(0, 25);
-          if (opened.length) chunks.push(`## Tarefas abertas (${opened.length})\n${opened.map(t => `- [${t.status || "-"}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · vence ${t.due_date}` : ""}${t.description ? ` — ${String(t.description).slice(0, 120)}` : ""}`).join("\n")}`);
+          if (opened.length) chunks.push(`## Tarefas abertas (${opened.length})\n${opened.map(t => `- [${t.status || "-"}${t.priority ? "/" + t.priority : ""}] ${t.title}${t.due_date ? ` · vence ${t.due_date}` : ""}${t.description ? ` · ${String(t.description).slice(0, 120)}` : ""}`).join("\n")}`);
           const mils = (milRes.data as any[]) || [];
-          if (mils.length) chunks.push(`## Marcos do projeto\n${mils.map(m => `- [${m.status || "-"}] ${m.title}${m.target_date ? ` · ${m.target_date}` : ""}${m.description ? ` — ${String(m.description).slice(0, 120)}` : ""}`).join("\n")}`);
+          if (mils.length) chunks.push(`## Marcos do projeto\n${mils.map(m => `- [${m.status || "-"}] ${m.title}${m.target_date ? ` · ${m.target_date}` : ""}${m.description ? ` · ${String(m.description).slice(0, 120)}` : ""}`).join("\n")}`);
         }
         const briefs = (briefRes.data as any[]) || [];
         briefs.forEach((brief, idx) => {
@@ -2689,19 +2689,19 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
           chunks.push(`## Arquivos do Workspace (${workspaceNodes.length})\n${workspaceNodes.slice(0, 120).map(n => `- ${n.kind === "folder" ? "Pasta" : "Arquivo"}: ${n.name}${n.mime ? ` · ${n.mime}` : ""}${n.size_bytes ? ` · ${Math.round(Number(n.size_bytes) / 1024)}KB` : ""}`).join("\n")}`);
         }
         const reports = (reportRes.data as any[]) || [];
-        if (reports.length) chunks.push(`## Relatórios e aprendizados\n${reports.map(r => `- ${r.title || "Relatório"} · ${r.status || "-"}${r.period_start ? ` · ${r.period_start} a ${r.period_end || "-"}` : ""}${r.summary ? ` — ${String(r.summary).slice(0, 180)}` : ""}${r.next_steps ? ` · próximos: ${String(r.next_steps).slice(0, 140)}` : ""}`).join("\n")}`);
+        if (reports.length) chunks.push(`## Relatórios e aprendizados\n${reports.map(r => `- ${r.title || "Relatório"} · ${r.status || "-"}${r.period_start ? ` · ${r.period_start} a ${r.period_end || "-"}` : ""}${r.summary ? ` · ${String(r.summary).slice(0, 180)}` : ""}${r.next_steps ? ` · próximos: ${String(r.next_steps).slice(0, 140)}` : ""}`).join("\n")}`);
         const updates = (updateRes.data as any[]) || [];
         if (updates.length) chunks.push(`## Atualizações recentes do projeto\n${updates.map(u => `- ${u.created_at?.slice(0, 10) || ""} · ${u.update_type || "update"}: ${u.message}`).join("\n")}`);
         const doc = docRes.data as any;
         if (doc?.notes) chunks.push(`## Notas publicadas/Studio do projeto\n${String(doc.notes).slice(0, 3000)}`);
         const vault = (vaultRes.data as any[]) || [];
-        if (vault.length) chunks.push(`## Links e sistemas do cliente\n${vault.map(v => `- ${v.category || "item"}: ${v.title}${v.url ? ` · ${v.url}` : ""}${v.username ? ` · usuário: ${v.username}` : ""}${v.notes ? ` — ${String(v.notes).slice(0, 100)}` : ""}`).join("\n")}`);
+        if (vault.length) chunks.push(`## Links e sistemas do cliente\n${vault.map(v => `- ${v.category || "item"}: ${v.title}${v.url ? ` · ${v.url}` : ""}${v.username ? ` · usuário: ${v.username}` : ""}${v.notes ? ` · ${String(v.notes).slice(0, 100)}` : ""}`).join("\n")}`);
         setContextStats(stats);
         if (!systemFiles.length && !workspaceNodes.length) {
           chunks.push("## Observação de contexto\nNenhum arquivo foi encontrado para este cliente/projeto nas bases de arquivos do sistema e do Workspace.");
         }
         const contracts = (contractRes.data as any[]) || [];
-        if (contracts.length) chunks.push(`## Contratos\n${contracts.map(c => `- ${c.title || c.original_file_name || "Contrato"} · ${c.status || "-"}${c.description ? ` — ${String(c.description).slice(0, 120)}` : ""}`).join("\n")}`);
+        if (contracts.length) chunks.push(`## Contratos\n${contracts.map(c => `- ${c.title || c.original_file_name || "Contrato"} · ${c.status || "-"}${c.description ? ` · ${String(c.description).slice(0, 120)}` : ""}`).join("\n")}`);
       }
       if (folderId) {
         const { data: nodes } = await supabase.from("workspace_nodes").select("name,kind,mime").eq("parent_id", folderId).limit(60);
@@ -2720,18 +2720,18 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         stats.workspaceFiles ? `${stats.workspaceFiles} arquivo(s) no workspace` : null,
       ].filter(Boolean).join(" · ") || "base ainda enxuta";
       const prompt = [
-        `[MODO ORQUESTRADOR AUTÔNOMO — ${clientLabel}]`,
+        `[MODO ORQUESTRADOR AUTÔNOMO · ${clientLabel}]`,
         `Você é o Diretor de Pré-Produção da AcelerIQ operando sobre ${projectLabel}. Você acabou de ler o dossiê completo (${scopeSummary}). Assuma o comando como se fosse a primeira reunião de kickoff interno da conta.`,
         "",
         "PRINCÍPIOS:",
         `- Fale sempre nomeando ${clientLabel}, o(s) projeto(s), tarefas, briefing, arquivos e datas reais que estão no dossiê. Nunca use frases genéricas do tipo "o cliente" ou "o projeto".`,
         "- Cite pelo nome ao menos 3 evidências concretas do dossiê (arquivo, tarefa, item do briefing, marco, valor do plano, prazo).",
-        "- Se algo estiver ausente ou inconsistente, aponte com clareza — não invente.",
+        "- Se algo estiver ausente ou inconsistente, aponte com clareza · não invente.",
         "- Se o pedido pedir dados atuais (mercado, concorrência, notícia, benchmark), diga explicitamente o que buscaria na web e prossiga com a análise do que tem em mãos.",
         "",
         "FORMATO (Markdown limpo, uma ideia por linha, sem emoji, sem asterisco decorativo):",
         "",
-        `## Leitura do momento — ${clientLabel}`,
+        `## Leitura do momento · ${clientLabel}`,
         "2 a 4 linhas descrevendo onde a conta está agora, com base em plano, status de projetos, briefing e últimos entregáveis.",
         "",
         "## Sinais fortes",
@@ -2751,7 +2751,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
         "----- DOSSIÊ REAL -----",
         dossier,
       ].join("\n");
-      await send(prompt, { displayText: `Analisar contexto completo — ${clientLabel}` });
+      await send(prompt, { displayText: `Analisar contexto completo · ${clientLabel}` });
 
 
 
@@ -2941,7 +2941,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
 
 
       <div className="flex flex-col h-full flex-1 min-w-0">
-        {/* Header: cliente + toggle sidebar + nova — no mobile empilha em 2 linhas */}
+        {/* Header: cliente + toggle sidebar + nova · no mobile empilha em 2 linhas */}
         <div className="flex flex-wrap items-center gap-1.5 px-2 sm:px-3 py-2 sm:py-1.5 border-b border-border bg-secondary/30">
           {!sidebarOpen && (
             <button onClick={() => setSidebarOpen(true)}
@@ -3036,7 +3036,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                     const url = a.url || "";
                     const mime = a.meta || "";
                     if (url && (isImg(url) || isImg(mime))) return `- ![${a.name}](${url})\n  [Baixar](${url})`;
-                    if (url && (isVid(url) || isVid(mime))) return `- 🎬 **${a.name}** — [Reproduzir](${url}) · [Baixar](${url})`;
+                    if (url && (isVid(url) || isVid(mime))) return `- 🎬 **${a.name}** · [Reproduzir](${url}) · [Baixar](${url})`;
                     if (url) return `- 📎 [${a.name}](${url})`;
                     return `- 📎 ${a.name} · ref \`wsfile:${a.id}\``;
                   });
@@ -3365,7 +3365,7 @@ function AgentChat({ clientId, clientName, projectId, folderId, folderPath, avai
                   const url = window.prompt("Cole o link (o agente vai ler o conteúdo):");
                   if (!url) return;
                   const clean = url.trim();
-                  if (!/^https?:\/\//i.test(clean)) { alert("URL inválida — use http:// ou https://"); return; }
+                  if (!/^https?:\/\//i.test(clean)) { alert("URL inválida · use http:// ou https://"); return; }
                   const name = (() => { try { return new URL(clean).hostname.replace(/^www\./, ""); } catch { return "link"; } })();
                   const ref: FileRef = { id: `url-${crypto.randomUUID()}`, name, kind: "file", url: clean };
                   setAttached(prev => [...prev, ref]);

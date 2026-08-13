@@ -728,7 +728,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   {assignmentOptions.map((m: any) => <option key={m.id} value={m.id}>{m.full_name}</option>)}
                 </select>
               ) : (
-                <p className="text-[13px] text-foreground">{assignee?.full_name || "—"}</p>
+                <p className="text-[13px] text-foreground">{assignee?.full_name || "-"}</p>
               )}
             </div>
             <div className="space-y-1">
@@ -738,7 +738,7 @@ export default function TaskDetailDrawer({ task, onClose, teamMembers, projects,
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50" />
               ) : (
                 <p className="text-[13px] text-foreground">
-                  {dueDate ? new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "—"}
+                  {dueDate ? new Date(dueDate).toLocaleDateString("pt-BR", { day: "2-digit", month: "long", year: "numeric" }) : "-"}
                 </p>
               )}
             </div>

@@ -180,7 +180,7 @@ export default function AdminContracts({ clientId: lockedClientId }: { clientId?
                     </div>
                     <h3 className="font-medium text-foreground truncate">{c.title}</h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Para: <span className="text-foreground">{client?.full_name || "—"}</span>
+                      Para: <span className="text-foreground">{client?.full_name || "-"}</span>
                       {client?.company_name && <span className="text-muted-foreground"> · {client.company_name}</span>}
                     </p>
                     <div className="flex flex-wrap items-center gap-3 mt-3 text-xs">

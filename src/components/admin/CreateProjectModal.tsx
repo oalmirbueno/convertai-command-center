@@ -441,7 +441,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
               <label className="text-[11px] uppercase tracking-wider text-muted-foreground mb-1.5 block">Brand</label>
               <select value={brand} onChange={(e) => setBrand(e.target.value as any)}
                 className="w-full bg-secondary border border-border rounded-[10px] px-3 py-2 text-[13px] text-foreground focus:outline-none focus:border-primary/50">
-                <option value="">— Definir depois —</option>
+                <option value="">- Definir depois -</option>
                 <option value="aceleriq">AcelerIQ</option>
                 <option value="sitebolt">SiteBolt</option>
               </select>
@@ -456,7 +456,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
                 <span className="text-[10px] text-muted-foreground">Evita duplicar lançamento</span>
               </div>
 
-              {/* Seletor de modo financeiro — evita duplicidade quando já cobrado no cadastro do cliente */}
+              {/* Seletor de modo financeiro · evita duplicidade quando já cobrado no cadastro do cliente */}
               <div className="grid grid-cols-3 gap-1.5">
                 {[
                   { v: "create", label: "Gerar plano", hint: "Entrada + parcelas" },
@@ -511,7 +511,7 @@ export default function CreateProjectModal({ open, onClose, editProject }: Props
                 </p>
               )}
               {financialMode === "already" && (
-                <p className="text-[11px] text-muted-foreground">Valor apenas para referência do projeto. Nenhuma fatura será criada aqui — use quando a cobrança já foi lançada no cadastro do cliente ou fora do sistema.</p>
+                <p className="text-[11px] text-muted-foreground">Valor apenas para referência do projeto. Nenhuma fatura será criada aqui · use quando a cobrança já foi lançada no cadastro do cliente ou fora do sistema.</p>
               )}
               {financialMode === "none" && (
                 <p className="text-[11px] text-muted-foreground">Projeto sem cobrança associada (cortesia, bônus ou trabalho interno).</p>

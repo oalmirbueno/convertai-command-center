@@ -1054,7 +1054,7 @@ export default function EditorialDetailSheet({
                                   .timeZone,
                             }).format(new Date(event.created_at))}
                             {event.from_status || event.to_status
-                              ? ` · ${event.from_status || "—"} → ${event.to_status || "—"}`
+                              ? ` · ${event.from_status || "-"} → ${event.to_status || "-"}`
                               : ""}
                           </p>
                           <p className="mt-1 text-[10px] text-muted-foreground">

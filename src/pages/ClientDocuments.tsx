@@ -228,7 +228,7 @@ export default function ClientDocuments() {
                       {f.version > 1 && <span className="text-xs text-muted-foreground ml-1">v{f.version}</span>}
                     </p>
                     <p className="text-[11px] text-muted-foreground">
-                      {f.project?.name || "—"} • {formatDate(f.created_at)}
+                      {f.project?.name || "-"} • {formatDate(f.created_at)}
                     </p>
                   </div>
                   <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 ${badge.cls}`}>{badge.label}</span>
@@ -284,7 +284,7 @@ export default function ClientDocuments() {
               </div>
 
               <p className="text-xs text-muted-foreground">
-                Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+                Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
               </p>
               {previewFile.caption && (
                 <div className="space-y-0.5">

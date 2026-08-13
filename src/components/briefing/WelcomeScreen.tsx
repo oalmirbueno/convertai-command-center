@@ -41,7 +41,7 @@ export default function WelcomeScreen({ onStart, hasRestoredProgress }: Props) {
             style={{ animation: "fadeIn 0.5s ease-out 0.55s both" }}
           >
             Vou te fazer algumas perguntas estratégicas para entender seu negócio a fundo.
-            Com base nas suas respostas, nossa equipe vai montar a estratégia ideal — sob medida para você.
+            Com base nas suas respostas, nossa equipe vai montar a estratégia ideal · sob medida para você.
           </p>
         </div>
 

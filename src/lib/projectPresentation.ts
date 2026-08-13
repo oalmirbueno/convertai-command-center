@@ -28,7 +28,7 @@ export function sanitizeClientText(input?: string | null) {
     .replace(/`+/g, "")
     .replace(/\[(AJUSTE|ANEXO|DOCUMENTO)[^\]]*\]/gi, "")
     .split("\n")
-    .map((line) => line.trim().replace(/^[•*\-–—]\s*/, ""))
+    .map((line) => line.trim().replace(/^[•*\-–-]\s*/, ""))
     .filter((line) => line && !/^(contexto da ia|direcionamento do admin|base contratual|prompt|instrução interna)/i.test(line))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n")
@@ -38,7 +38,7 @@ export function sanitizeClientText(input?: string | null) {
 const TYPE_INTRO: Record<string, string> = {
   trafego: "Operação estratégica de tráfego pago organizada em ciclos de estruturação, leitura de performance e otimização contínua, com foco em previsibilidade de resultado.",
   social_media: "Presença digital conduzida de forma estratégica, com planejamento editorial, produção consistente e leitura periódica do que gera mais conexão com a audiência.",
-  video: "Produção audiovisual estruturada por etapas claras de roteiro, captação, edição e entrega — garantindo consistência criativa e qualidade técnica em cada corte.",
+  video: "Produção audiovisual estruturada por etapas claras de roteiro, captação, edição e entrega · garantindo consistência criativa e qualidade técnica em cada corte.",
   video_ai: "Produção de vídeos com IA orientada por roteiro, direção visual e refinamento de consistência, entregando peças prontas para distribuição com identidade preservada.",
   site: "Desenvolvimento do site organizado em fases de arquitetura, design, implementação e publicação, priorizando performance, clareza e experiência do visitante.",
   landing_page: "Landing page construída em ciclos de copy, design e otimização orientados à conversão, com rastreamento e revisão antes da publicação.",
@@ -69,7 +69,7 @@ export function buildClientProjectFields(opts: {
 
   // Structure: list each milestone with its task count — so the description matches what's actually in the kanban/timeline.
   const structureLines = plan.length
-    ? plan.map((m, i) => `${i + 1}. ${m.title} — ${m.tasks?.length || 0} ${m.tasks?.length === 1 ? "entrega" : "entregas"}`)
+    ? plan.map((m, i) => `${i + 1}. ${m.title} · ${m.tasks?.length || 0} ${m.tasks?.length === 1 ? "entrega" : "entregas"}`)
     : [];
   const structure = structureLines.length
     ? `${plan.length} etapa${plan.length > 1 ? "s" : ""} · ${taskTotal} ${taskTotal === 1 ? "entrega" : "entregas"} totais\n${structureLines.join("\n")}`

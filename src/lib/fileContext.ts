@@ -90,7 +90,7 @@ export async function readFileContext(file: File): Promise<FileContext> {
     }
     return {
       ...base, kind: "binary", text: "", truncated: false, charCount: 0,
-      warning: "Formato binário — anexo será salvo, mas não foi possível ler o conteúdo.",
+      warning: "Formato binário · anexo será salvo, mas não foi possível ler o conteúdo.",
     };
   } catch (err: any) {
     return {

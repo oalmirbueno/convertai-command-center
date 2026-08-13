@@ -130,7 +130,7 @@ export default function ExtractedFramesPreview({ fileId, kind }: Props) {
             >
               <div className="aspect-[4/3] bg-white p-2 border-b border-border overflow-hidden relative">
                 <div className="text-[6px] leading-[8px] text-muted-foreground/80 whitespace-pre-wrap font-mono line-clamp-[14]">
-                  {preview || "—"}
+                  {preview || "-"}
                 </div>
                 <div className="absolute top-1 right-1 bg-background/80 border border-border rounded px-1 text-[9px] font-medium">
                   {i + 1}

@@ -129,7 +129,7 @@ const compactCurrency = (value: number) =>
   }).format(Number(value) || 0);
 
 const dateLabel = (value?: string | null) => {
-  if (!value) return "—";
+  if (!value) return "-";
   const dateKey = value.slice(0, 10);
   const [year, month, day] = dateKey.split("-").map(Number);
   if (!year || !month || !day) return value;
@@ -154,7 +154,7 @@ const versionCoversDate = (version: FinancePlanVersion, dateKey: string) =>
 
 const percentageLabel = (value: number | null) =>
   value === null
-    ? "—"
+    ? "-"
     : new Intl.NumberFormat("pt-BR", { style: "percent", minimumFractionDigits: 1, maximumFractionDigits: 2 }).format(value);
 
 const percentageInputValue = (value: number | null) =>
@@ -477,7 +477,7 @@ function EntryCard({
         <div><p className="text-xs text-muted-foreground">{cashMode ? "Valor líquido" : "Valor"}</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</p></div>
         <div><p className="text-xs text-muted-foreground">{cashMode ? "Liquidação" : "Vencimento"}</p><p className="mt-1 font-medium">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</p></div>
         {cashMode ? (
-          <div className="col-span-2"><p className="text-xs text-muted-foreground">Competência de origem</p><p className="mt-1 font-medium">{entry.competence ? competenceLabel(entry.competence.slice(0, 7)) : "—"}</p></div>
+          <div className="col-span-2"><p className="text-xs text-muted-foreground">Competência de origem</p><p className="mt-1 font-medium">{entry.competence ? competenceLabel(entry.competence.slice(0, 7)) : "-"}</p></div>
         ) : (
           <>
             <div><p className="text-xs text-muted-foreground">Liquidado</p><p className="mt-1 font-mono tabular-nums">{currency(entry.settledAmount)}</p></div>
@@ -591,7 +591,7 @@ function CashFlowTab({ mode, competence, readOnly }: { mode: FinanceMode; compet
                     </td>
                     <td className="px-4 py-4 text-muted-foreground">{dateLabel(cashMode ? entry.settledAt : entry.dueDate)}</td>
                     <td className="px-4 py-4 text-right font-mono tabular-nums">{currency(cashMode ? entry.signedAmount : entry.amount)}</td>
-                    <td className="px-4 py-4 text-right font-mono tabular-nums">{cashMode ? "—" : currency(entry.outstandingAmount)}</td>
+                    <td className="px-4 py-4 text-right font-mono tabular-nums">{cashMode ? "-" : currency(entry.outstandingAmount)}</td>
                     <td className="px-4 py-4"><StatusBadge status={entry.status} /></td>
                     <td className="px-4 py-4 text-right">
                       {canSettle ? <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={() => openSettlement(entry)}>Liquidar</Button> : <span className="text-xs text-muted-foreground">Somente leitura</span>}
@@ -720,9 +720,9 @@ function ClientRow({
           </p>
         )}
       </div>
-      <div><p className="text-xs text-muted-foreground">Operacional mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "—"}</p></div>
-      <div><p className="text-xs text-muted-foreground">Bruto mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "—"}</p></div>
-      <div><p className="text-xs text-muted-foreground">Em aberto</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "—"}</p></div>
+      <div><p className="text-xs text-muted-foreground">Operacional mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.planAmount) : "-"}</p></div>
+      <div><p className="text-xs text-muted-foreground">Bruto mensal</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums">{hasConfiguredTerm ? currency(summary.finalPlanAmount) : "-"}</p></div>
+      <div><p className="text-xs text-muted-foreground">Em aberto</p><p className="mt-1 font-mono text-sm font-semibold tabular-nums text-warning">{summary ? currency(summary.openAmount) : "-"}</p></div>
       {!readOnly && (
         <Button type="button" variant="outline" className="min-h-11 w-full lg:w-auto" onClick={() => onAssign(client)}>
           {hasConfiguredTerm ? "Alterar vínculo" : "Vincular plano"}
@@ -1031,7 +1031,7 @@ function FixedCostsTab({ readOnly }: { readOnly: boolean }) {
             <Card key={rule.id} className={cn("shadow-none", !rule.isActive && "opacity-65")}>
               <CardContent className="p-5">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{rule.name}</h3><StatusBadge status={rule.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-sm text-muted-foreground">{rule.category || "Sem categoria"} · vence no dia {rule.dueDay || "—"}</p></div>
+                  <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h3 className="font-semibold text-foreground">{rule.name}</h3><StatusBadge status={rule.isActive ? "active" : "inactive"} /></div><p className="mt-1 text-sm text-muted-foreground">{rule.category || "Sem categoria"} · vence no dia {rule.dueDay || "-"}</p></div>
                   <p className="shrink-0 font-mono text-lg font-semibold tabular-nums">{currency(rule.amount)}</p>
                 </div>
                 {rule.description && <p className="mt-4 text-sm leading-6 text-muted-foreground">{rule.description}</p>}
@@ -1322,12 +1322,12 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Saldo inicial</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.openingBalance || 0)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Reserva alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.reserveTarget || 0)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Janela de previsão</p><p className="mt-1 font-semibold">{settings.data?.forecastMonths || 6} meses</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Meta mensal</p><p className="mt-1 font-mono font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "—" : currency(settings.data?.monthlyGoal || 0)}</p></div>
+          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Meta mensal</p><p className="mt-1 font-mono font-semibold tabular-nums">{settings.data?.monthlyGoal === null ? "-" : currency(settings.data?.monthlyGoal || 0)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Retenção do crescimento</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.growthRetentionRate ?? null)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Margem mínima</p><p className="mt-1 font-semibold">{percentageLabel(settings.data?.desiredMinimumMargin ?? null)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Pró-labore atual / alvo</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.currentProLabore || 0)} / {currency(settings.data?.targetProLabore || 0)}</p></div>
           <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Custo direto padrão</p><p className="mt-1 font-mono font-semibold tabular-nums">{currency(settings.data?.defaultDirectCost || 0)}</p></div>
-          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Reserva mínima</p><p className="mt-1 font-semibold">{settings.data?.minimumReserveMonths ?? "—"} meses</p></div>
+          <div><p className="text-xs uppercase tracking-wide text-muted-foreground">Reserva mínima</p><p className="mt-1 font-semibold">{settings.data?.minimumReserveMonths ?? "-"} meses</p></div>
           <div className="sm:col-span-2"><p className="text-xs uppercase tracking-wide text-muted-foreground">Alocação de custos</p><p className="mt-1 font-semibold">{ALLOCATION_METHOD_LABELS[settings.data?.allocationMethod || "equal"]}{settings.data?.includeProLaboreInAllocation ? " · inclui pró-labore" : " · sem pró-labore"}</p></div>
         </CardContent>
       </Card>
@@ -1419,7 +1419,7 @@ function PlansTab({ readOnly }: { readOnly: boolean }) {
           <div className="space-y-6">
             <fieldset className="grid gap-4 rounded-xl border p-4 sm:grid-cols-2 lg:grid-cols-3">
               <legend className="px-2 text-sm font-semibold text-foreground">Base e metas</legend>
-              <div className="space-y-2"><Label htmlFor="settings-currency">Moeda</Label><Select value={settingsDraft.currency} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, currency: value }))}><SelectTrigger id="settings-currency" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BRL">BRL — Real</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label htmlFor="settings-currency">Moeda</Label><Select value={settingsDraft.currency} onValueChange={(value) => setSettingsDraft((draft) => ({ ...draft, currency: value }))}><SelectTrigger id="settings-currency" className="h-11"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="BRL">BRL · Real</SelectItem></SelectContent></Select></div>
               <div className="space-y-2"><Label htmlFor="settings-due-day">Vencimento padrão</Label><Input id="settings-due-day" type="number" inputMode="numeric" min="1" max="28" className="h-11" value={settingsDraft.defaultDueDay} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, defaultDueDay: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-forecast">Meses de previsão</Label><Input id="settings-forecast" type="number" inputMode="numeric" min="1" max="24" className="h-11" value={settingsDraft.forecastMonths} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, forecastMonths: Number(event.target.value) }))} /></div>
               <div className="space-y-2"><Label htmlFor="settings-opening">Saldo inicial</Label><Input id="settings-opening" type="number" inputMode="decimal" step="0.01" className="h-11" value={settingsDraft.openingBalance} onChange={(event) => setSettingsDraft((draft) => ({ ...draft, openingBalance: Number(event.target.value) }))} /></div>

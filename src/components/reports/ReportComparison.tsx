@@ -280,7 +280,7 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (!significant(delta)) { severity = "expected"; narrative = "Investimento estável no período."; break; }
         severity = "expected";
         narrative = delta > 0
-          ? `Mais verba alocada (+${delta.toFixed(0)}%) — escala em andamento.`
+          ? `Mais verba alocada (+${delta.toFixed(0)}%) · escala em andamento.`
           : `Menos verba alocada (${delta.toFixed(0)}%). Quedas proporcionais em volume são esperadas e não indicam piora.`;
         break;
       }
@@ -293,10 +293,10 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (Math.abs(spendPct) < SMALL) {
           if (delta > 0) {
             severity = "gain";
-            narrative = `Crescimento real de ${delta.toFixed(0)}% com a mesma verba — campanha mais produtiva.`;
+            narrative = `Crescimento real de ${delta.toFixed(0)}% com a mesma verba · campanha mais produtiva.`;
           } else if (delta < -BIG) {
             severity = "attention";
-            narrative = `Queda de ${Math.abs(delta).toFixed(0)}% sem mudança de verba — vale revisar criativos/segmentação.`;
+            narrative = `Queda de ${Math.abs(delta).toFixed(0)}% sem mudança de verba · vale revisar criativos/segmentação.`;
           } else {
             severity = "expected";
             narrative = `Pequena oscilação dentro da margem natural do leilão.`;
@@ -307,13 +307,13 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (spendPct > 0) {
           if (efficiencyDelta > 5) {
             severity = "gain";
-            narrative = `Volume subiu ${delta.toFixed(0)}% enquanto a verba subiu ${spendPct.toFixed(0)}% — ganho real de eficiência.`;
+            narrative = `Volume subiu ${delta.toFixed(0)}% enquanto a verba subiu ${spendPct.toFixed(0)}% · ganho real de eficiência.`;
           } else if (efficiencyDelta < -BIG) {
             severity = "attention";
             narrative = `Aumento de verba (+${spendPct.toFixed(0)}%) sem retorno proporcional em volume (${delta > 0 ? "+" : ""}${delta.toFixed(0)}%).`;
           } else {
             severity = "expected";
-            narrative = `Volume cresceu junto com a verba — escala saudável.`;
+            narrative = `Volume cresceu junto com a verba · escala saudável.`;
           }
           break;
         }
@@ -321,7 +321,7 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (spendPct < 0) {
           if (efficiencyDelta > 5) {
             severity = "gain";
-            narrative = `Verba caiu ${Math.abs(spendPct).toFixed(0)}% mas volume caiu menos (${delta.toFixed(0)}%) — campanha ficou mais eficiente.`;
+            narrative = `Verba caiu ${Math.abs(spendPct).toFixed(0)}% mas volume caiu menos (${delta.toFixed(0)}%) · campanha ficou mais eficiente.`;
           } else if (efficiencyDelta < -BIG) {
             severity = "attention";
             narrative = `Volume caiu além da redução de verba (${delta.toFixed(0)}% vs ${spendPct.toFixed(0)}%).`;
@@ -336,8 +336,8 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
       case "ctr": {
         if (!significant(delta, 5)) { severity = "expected"; narrative = "Qualidade do clique estável."; break; }
         if (delta > 0) { severity = "gain"; narrative = `Público mais qualificado: CTR +${delta.toFixed(1)}%.`; }
-        else if (delta < -BIG) { severity = "attention"; narrative = `CTR caiu ${Math.abs(delta).toFixed(1)}% — vale rodar criativos novos.`; }
-        else { severity = "expected"; narrative = `CTR oscilou ${delta.toFixed(1)}% — dentro da variação natural.`; }
+        else if (delta < -BIG) { severity = "attention"; narrative = `CTR caiu ${Math.abs(delta).toFixed(1)}% · vale rodar criativos novos.`; }
+        else { severity = "expected"; narrative = `CTR oscilou ${delta.toFixed(1)}% · dentro da variação natural.`; }
         break;
       }
 
@@ -347,16 +347,16 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (!significant(delta)) { severity = "expected"; narrative = "Custo unitário estável."; break; }
         if (delta < 0) {
           severity = "gain";
-          narrative = `Custo caiu ${Math.abs(delta).toFixed(0)}% — mídia mais eficiente.`;
+          narrative = `Custo caiu ${Math.abs(delta).toFixed(0)}% · mídia mais eficiente.`;
         } else if (k === "cpc" && ctrPct > 5) {
           severity = "expected";
-          narrative = `CPC subiu ${delta.toFixed(0)}%, mas CTR também (+${ctrPct.toFixed(1)}%) — público mais qualificado custa mais. Saudável.`;
+          narrative = `CPC subiu ${delta.toFixed(0)}%, mas CTR também (+${ctrPct.toFixed(1)}%) · público mais qualificado custa mais. Saudável.`;
         } else if (delta < BIG) {
           severity = "expected";
-          narrative = `Custo subiu ${delta.toFixed(0)}% — variação típica do leilão.`;
+          narrative = `Custo subiu ${delta.toFixed(0)}% · variação típica do leilão.`;
         } else {
           severity = "attention";
-          narrative = `Custo subiu ${delta.toFixed(0)}% — considere renovar criativos ou ajustar público.`;
+          narrative = `Custo subiu ${delta.toFixed(0)}% · considere renovar criativos ou ajustar público.`;
         }
         break;
       }
@@ -365,21 +365,21 @@ function analyze(curT: Totals, prevT: Totals, normalize: boolean, ratio: number)
         if (!significant(delta)) { severity = "expected"; narrative = "Frequência estável."; break; }
         if (cur > 4 && delta > 0) {
           severity = "attention";
-          narrative = `Frequência em ${cur.toFixed(1)}x — risco de fadiga. Considere ampliar o público.`;
+          narrative = `Frequência em ${cur.toFixed(1)}x · risco de fadiga. Considere ampliar o público.`;
         } else if (delta > 0) {
-          severity = "expected"; narrative = `Frequência subiu para ${cur.toFixed(1)}x — ainda saudável.`;
+          severity = "expected"; narrative = `Frequência subiu para ${cur.toFixed(1)}x · ainda saudável.`;
         } else {
-          severity = "expected"; narrative = `Frequência caiu para ${cur.toFixed(1)}x — público sendo renovado.`;
+          severity = "expected"; narrative = `Frequência caiu para ${cur.toFixed(1)}x · público sendo renovado.`;
         }
         break;
       }
 
       case "roas": {
         if (!significant(delta, 5)) { severity = "expected"; narrative = `ROAS estável em ${cur.toFixed(2)}x.`; break; }
-        if (delta > 0) { severity = "gain"; narrative = `ROAS subiu para ${cur.toFixed(2)}x — cada R$ 1 retornou R$ ${cur.toFixed(2)}.`; }
-        else if (cur >= 2) { severity = "expected"; narrative = `ROAS em ${cur.toFixed(2)}x — segue lucrativo.`; }
-        else if (cur >= 1) { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x — acima do ponto de equilíbrio mas merece atenção.`; }
-        else { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x — abaixo do ponto de equilíbrio.`; }
+        if (delta > 0) { severity = "gain"; narrative = `ROAS subiu para ${cur.toFixed(2)}x · cada R$ 1 retornou R$ ${cur.toFixed(2)}.`; }
+        else if (cur >= 2) { severity = "expected"; narrative = `ROAS em ${cur.toFixed(2)}x · segue lucrativo.`; }
+        else if (cur >= 1) { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x · acima do ponto de equilíbrio mas merece atenção.`; }
+        else { severity = "attention"; narrative = `ROAS em ${cur.toFixed(2)}x · abaixo do ponto de equilíbrio.`; }
         break;
       }
     }
@@ -450,7 +450,7 @@ export default function ReportComparison({
         <div className="flex items-center gap-2.5 min-w-0">
           <GitCompareArrows className="w-4 h-4 text-muted-foreground shrink-0" />
           <p className="text-[12px] text-muted-foreground">
-            Primeiro relatório deste projeto — sem comparação disponível.
+            Primeiro relatório deste projeto · sem comparação disponível.
           </p>
         </div>
       </div>
@@ -564,7 +564,7 @@ export default function ReportComparison({
           <div className="flex items-start gap-2 rounded-xl border border-warning/30 bg-warning/5 px-3.5 py-2.5">
             <Info className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
             <p className="text-[11px] text-foreground leading-relaxed">
-              Períodos com tamanhos diferentes ({curDays}d × {prevDays}d) — volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR/CPC/CPM/ROAS) são comparadas direto.
+              Períodos com tamanhos diferentes ({curDays}d × {prevDays}d) · volumes do período atual foram ajustados para a mesma base diária. Taxas (CTR/CPC/CPM/ROAS) são comparadas direto.
             </p>
           </div>
         )}
@@ -581,7 +581,7 @@ export default function ReportComparison({
                   {gains.map(r => (
                     <li key={r.key} className="text-[12px] text-foreground leading-snug">
                       <span className="font-semibold">{META[r.key].label}</span>
-                      <span className="text-muted-foreground"> — {r.narrative}</span>
+                      <span className="text-muted-foreground"> · {r.narrative}</span>
                     </li>
                   ))}
                 </ul>
@@ -596,7 +596,7 @@ export default function ReportComparison({
                   {attention.map(r => (
                     <li key={r.key} className="text-[12px] text-foreground leading-snug">
                       <span className="font-semibold">{META[r.key].label}</span>
-                      <span className="text-muted-foreground"> — {r.narrative}</span>
+                      <span className="text-muted-foreground"> · {r.narrative}</span>
                     </li>
                   ))}
                 </ul>

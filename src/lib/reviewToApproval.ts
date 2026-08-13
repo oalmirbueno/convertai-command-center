@@ -271,7 +271,7 @@ export async function sendTaskAttachmentsToApproval(
       parentAttachment,
       {
         ...secureFields(parentAttachment),
-        caption: `Carrossel — ${taskTitle}`,
+        caption: `Carrossel · ${taskTitle}`,
         client_id: project.client_id,
         description: `Gerado automaticamente da tarefa "${taskTitle}"`,
         file_name: buildGraphicName(taskTitle, parentAttachment.file_name),

@@ -179,9 +179,9 @@ export function summarizeIntent(intent: ParsedIntent): string {
     case "update_task_status":
       return `Atualizar tarefa "${intent.taskHint}" → ${intent.status}`;
     case "report_pending":
-      return `Relatório de tarefas pendentes${intent.clientHint ? ` — ${intent.clientHint}` : ""}`;
+      return `Relatório de tarefas pendentes${intent.clientHint ? ` · ${intent.clientHint}` : ""}`;
     case "report_overview":
-      return `Resumo de projetos${intent.clientHint ? ` — ${intent.clientHint}` : ""}`;
+      return `Resumo de projetos${intent.clientHint ? ` · ${intent.clientHint}` : ""}`;
     case "upload_file":
       return `Anexar arquivo${intent.folder ? ` em ${intent.folder}` : ""}${intent.clientHint ? ` (${intent.clientHint})` : ""}`;
     default:

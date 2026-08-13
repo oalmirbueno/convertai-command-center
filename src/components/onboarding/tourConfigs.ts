@@ -10,7 +10,7 @@ export interface TourStep {
 }
 
 /* ═══════════════════════════════════════════════════════
-   ADMIN TOUR — Linguagem de gestor de agência
+   ADMIN TOUR · Linguagem de gestor de agência
    ═══════════════════════════════════════════════════════ */
 export const adminTourSteps: TourStep[] = [
   // ── Boas-vindas ──
@@ -25,7 +25,7 @@ export const adminTourSteps: TourStep[] = [
   // ── Dashboard ──
   {
     target: "[data-tour='nav-dashboard']",
-    title: "Dashboard — Visão Geral",
+    title: "Dashboard · Visão Geral",
     description:
       "O painel principal da sua agência. Aqui você vê projetos ativos, tarefas pendentes, métricas e o feed de atualizações em tempo real.",
     placement: "bottom",
@@ -43,7 +43,7 @@ export const adminTourSteps: TourStep[] = [
     target: "[data-tour='dash-quick-actions']",
     title: "Ações Rápidas",
     description:
-      "Crie projetos, cadastre clientes, gere links de briefing ou registre atas de reunião — tudo com um clique, sem sair do dashboard.",
+      "Crie projetos, cadastre clientes, gere links de briefing ou registre atas de reunião · tudo com um clique, sem sair do dashboard.",
     placement: "bottom",
     route: "/dashboard",
   },
@@ -77,7 +77,7 @@ export const adminTourSteps: TourStep[] = [
   // ── Kanban ──
   {
     target: "[data-tour='nav-kanban']",
-    title: "Kanban — Gestão de Tarefas",
+    title: "Kanban · Gestão de Tarefas",
     description:
       "Visualize todas as tarefas da agência em colunas: Backlog, Em Andamento, Revisão e Concluído.",
     placement: "bottom",
@@ -182,7 +182,7 @@ export const adminTourSteps: TourStep[] = [
 ];
 
 /* ═══════════════════════════════════════════════════════
-   CLIENT TOUR — Linguagem de cliente / empresa
+   CLIENT TOUR · Linguagem de cliente / empresa
    ═══════════════════════════════════════════════════════ */
 export const clientTourSteps: TourStep[] = [
   // ── Boas-vindas ──
@@ -190,7 +190,7 @@ export const clientTourSteps: TourStep[] = [
     target: "[data-tour='welcome']",
     title: "Bem-vindo ao portal da sua empresa! 🎉",
     description:
-      "Aqui você acompanha o progresso dos projetos da sua empresa, aprova entregas, envia solicitações e visualiza relatórios — tudo em um só lugar.",
+      "Aqui você acompanha o progresso dos projetos da sua empresa, aprova entregas, envia solicitações e visualiza relatórios · tudo em um só lugar.",
     placement: "center",
   },
 
@@ -292,7 +292,7 @@ export const clientTourSteps: TourStep[] = [
 ];
 
 /* ═══════════════════════════════════════════════════════
-   TEAM TOUR — Linguagem de colaborador / membro da equipe
+   TEAM TOUR · Linguagem de colaborador / membro da equipe
    ═══════════════════════════════════════════════════════ */
 export const teamTourSteps: TourStep[] = [
   // ── Boas-vindas ──
@@ -327,7 +327,7 @@ export const teamTourSteps: TourStep[] = [
   // ── Kanban ──
   {
     target: "[data-tour='nav-kanban']",
-    title: "Suas Tarefas — Kanban",
+    title: "Suas Tarefas · Kanban",
     description:
       "Gerencie suas tarefas visualmente no quadro Kanban. Mova os cards entre colunas conforme avança nas entregas.",
     placement: "bottom",
@@ -380,7 +380,7 @@ export const teamTourSteps: TourStep[] = [
 ];
 
 /* ═══════════════════════════════════════════════════════
-   PAGE-SPECIFIC TOURS — Acionados pelo botão (?) na página atual
+   PAGE-SPECIFIC TOURS · Acionados pelo botão (?) na página atual
    Cada rota tem versões admin, client e team quando aplicável
    ═══════════════════════════════════════════════════════ */
 

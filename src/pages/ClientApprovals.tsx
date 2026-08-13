@@ -270,7 +270,7 @@ export default function ClientApprovals() {
                       </span>
                     )}
                   </div>
-                  <p className="text-[11px] text-muted-foreground">{f.project?.name || "—"} • {formatDate(f.created_at)}</p>
+                  <p className="text-[11px] text-muted-foreground">{f.project?.name || "-"} • {formatDate(f.created_at)}</p>
                   <span className={`inline-block text-[11px] px-2.5 py-1 rounded-full border ${badge.cls}`}>{badge.label}</span>
                   {f.approval_status === "rejected" && f.feedback && (
                     <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-3">
@@ -360,7 +360,7 @@ export default function ClientApprovals() {
                 </Button>
               </div>
 
-              <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}</p>
+              <p className="text-xs text-muted-foreground">Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}</p>
               {previewFile.caption && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Legenda</p><p className="text-sm text-foreground">{previewFile.caption}</p></div>}
               {previewFile.carousel_text && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Texto do Carrossel</p><p className="text-sm text-foreground whitespace-pre-wrap">{previewFile.carousel_text}</p></div>}
               {previewFile.description && <div className="space-y-0.5"><p className="text-[11px] text-muted-foreground uppercase tracking-wider">Descrição</p><p className="text-sm text-foreground">{previewFile.description}</p></div>}

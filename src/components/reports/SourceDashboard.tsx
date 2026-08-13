@@ -197,7 +197,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
         </span>
       </div>
 
-      {/* Hero KPI strip — refinado com sub-métrica */}
+      {/* Hero KPI strip · refinado com sub-métrica */}
       {heroKpis.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {heroKpis.map((k, i) => (
@@ -218,7 +218,7 @@ export default function SourceDashboard({ source, sourceLabel, rows, dimensionKe
         </div>
       )}
 
-      {/* Funil de conversão (Ads) — design SVG premium, mesma linguagem do funil inteligente */}
+      {/* Funil de conversão (Ads) · design SVG premium, mesma linguagem do funil inteligente */}
       {funnelStages && funnelStages.length >= 2 && (() => {
         const sorted = [...funnelStages].sort((a, b) => b.value - a.value);
         const top = sorted[0].value;

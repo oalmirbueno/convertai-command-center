@@ -123,7 +123,7 @@ export default function ClientVaultPage() {
               Cofre de Acessos
             </h1>
             <p className="text-[13px] text-muted-foreground mt-1 max-w-xl">
-              Centralize senhas, links úteis e sistemas em um único lugar — protegido,
+              Centralize senhas, links úteis e sistemas em um único lugar · protegido,
               organizado e acessível em segundos.
             </p>
           </div>
@@ -144,7 +144,7 @@ export default function ClientVaultPage() {
       </div>
 
       <div className={isHubMode ? "grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-5" : ""}>
-        {/* Client selector — hub mode only (admin/team not impersonating) */}
+        {/* Client selector · hub mode only (admin/team not impersonating) */}
         {isHubMode && (
           <aside className="space-y-3">
             <div className="bg-card border border-border rounded-2xl p-3">

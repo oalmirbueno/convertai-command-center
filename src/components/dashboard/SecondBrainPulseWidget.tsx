@@ -57,9 +57,9 @@ async function fetchPulse(): Promise<PulseResponse> {
 }
 
 function relTime(iso?: string): string {
-  if (!iso) return "—";
+  if (!iso) return "-";
   try { return formatDistanceToNow(new Date(iso), { addSuffix: true, locale: ptBR }); }
-  catch { return "—"; }
+  catch { return "-"; }
 }
 
 export default function SecondBrainPulseWidget() {
@@ -76,7 +76,7 @@ export default function SecondBrainPulseWidget() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <Brain className="w-4 h-4 text-primary" />
-          <p className="label-sm">Segundo Cérebro — Pulse</p>
+          <p className="label-sm">Segundo Cérebro · Pulse</p>
           {data?.configured && (
             <span className="flex items-center gap-1 text-[10px] text-success font-mono">
               <Radio className="w-3 h-3 animate-pulse" />
@@ -130,7 +130,7 @@ export default function SecondBrainPulseWidget() {
                 <p className="font-mono text-sm text-foreground">{data.pulse.head.short}</p>
                 <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{data.pulse.head.message}</p>
                 <p className="text-[10px] text-muted-foreground mt-2">
-                  {data.pulse.head.author ?? "—"} · {relTime(data.pulse.head.committed_at)}
+                  {data.pulse.head.author ?? "-"} · {relTime(data.pulse.head.committed_at)}
                 </p>
                 <p className="text-[10px] text-muted-foreground mt-0.5">
                   branch <span className="font-mono">{data.pulse.branch}</span> · {data.pulse.latency_ms}ms {data.pulse.cached ? "· cache" : ""}
@@ -147,7 +147,7 @@ export default function SecondBrainPulseWidget() {
               <GitCommit className="w-3 h-3" /> Commits recentes
             </p>
             <div className="space-y-1.5 max-h-40 overflow-auto pr-1">
-              {data.commits.length === 0 && <p className="text-xs text-muted-foreground">—</p>}
+              {data.commits.length === 0 && <p className="text-xs text-muted-foreground">-</p>}
               {data.commits.map((c) => (
                 <a
                   key={c.sha}
@@ -159,7 +159,7 @@ export default function SecondBrainPulseWidget() {
                   <span className="font-mono text-primary/80">{c.short}</span>{" "}
                   <span className="text-foreground line-clamp-1">{c.message}</span>
                   <span className="block text-[10px] text-muted-foreground">
-                    {c.author ?? "—"} · {relTime(c.committed_at)}
+                    {c.author ?? "-"} · {relTime(c.committed_at)}
                   </span>
                 </a>
               ))}

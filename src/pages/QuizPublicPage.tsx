@@ -73,19 +73,19 @@ const QUESTIONS: Question[] = [
       .map(v => ({ value: v, label: v })) },
   { id: "maturity_digital", category: "maturidade", type: "single_select",
     label: "Como está sua maturidade digital hoje?",
-    helper: "Seja honesto — vamos te encontrar onde você está.",
+    helper: "Seja honesto · vamos te encontrar onde você está.",
     options: [
-      { value: "baixa", label: "Baixa — começando do zero" },
-      { value: "media", label: "Média — presença sem método" },
-      { value: "alta", label: "Alta — já opera digitalmente" },
+      { value: "baixa", label: "Baixa · começando do zero" },
+      { value: "media", label: "Média · presença sem método" },
+      { value: "alta", label: "Alta · já opera digitalmente" },
     ] },
   { id: "ai_readiness", category: "maturidade", type: "single_select",
     label: "Qual seu nível de prontidão para IA?",
     helper: "IA real, não só ChatGPT pra escrever post.",
     options: [
-      { value: "baixa", label: "Baixa — nunca usou IA" },
-      { value: "media", label: "Média — usa ChatGPT pessoal sem estrutura" },
-      { value: "alta", label: "Alta — já tem agente/automação com IA" },
+      { value: "baixa", label: "Baixa · nunca usou IA" },
+      { value: "media", label: "Média · usa ChatGPT pessoal sem estrutura" },
+      { value: "alta", label: "Alta · já tem agente/automação com IA" },
     ] },
 ];
 

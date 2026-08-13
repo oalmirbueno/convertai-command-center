@@ -1205,7 +1205,7 @@ export default function AdminFiles() {
                         </p>
                         {isCarousel && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{carouselChildren.length + 1}</span>}
                       </div>
-                      <p className="text-[11px] text-muted-foreground truncate">{f.project?.name || "—"} • {formatDate(f.created_at)}</p>
+                      <p className="text-[11px] text-muted-foreground truncate">{f.project?.name || "-"} • {formatDate(f.created_at)}</p>
                       <div className="flex items-center justify-between gap-2">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
                         <div className="flex items-center gap-2">
@@ -1247,7 +1247,7 @@ export default function AdminFiles() {
                           )}
                         </div>
                         <p className="text-[11px] text-muted-foreground">
-                          {f.project?.name || "—"} • {formatDate(f.created_at)}
+                          {f.project?.name || "-"} • {formatDate(f.created_at)}
                         </p>
                       </div>
                       <div className="hidden md:flex items-center gap-2">
@@ -1354,7 +1354,7 @@ export default function AdminFiles() {
                   Cliente: {(approvalBadge[previewFile.approval_status] || approvalBadge.none).label}
                 </span>
                 <span className="text-xs text-muted-foreground">
-                  Enviado por {previewFile.uploader?.full_name || "—"} • {formatDate(previewFile.created_at)}
+                  Enviado por {previewFile.uploader?.full_name || "-"} • {formatDate(previewFile.created_at)}
                 </span>
               </div>
               {previewFile.caption && (

@@ -70,21 +70,21 @@ export const parseAppDate = (value?: string | null): Date | null => {
 
 /** Format a date string/Date as dd/mm/yyyy in BR timezone. */
 export const formatBRDate = (value?: string | null | Date): string => {
-  if (!value) return "—";
+  if (!value) return "-";
   if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
     const d = parseAppDate(value);
-    return d ? d.toLocaleDateString("pt-BR") : "—";
+    return d ? d.toLocaleDateString("pt-BR") : "-";
   }
   const d = typeof value === "string" ? new Date(value) : value;
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleDateString("pt-BR", { timeZone: TZ });
 };
 
 /** Format a timestamp as dd/mm/yyyy HH:mm in BR timezone. */
 export const formatBRDateTime = (value?: string | null | Date): string => {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? new Date(value) : value;
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleString("pt-BR", {
     timeZone: TZ,
     day: "2-digit",
@@ -97,9 +97,9 @@ export const formatBRDateTime = (value?: string | null | Date): string => {
 
 /** Format time-only as HH:mm in BR timezone. */
 export const formatBRTime = (value?: string | null | Date): string => {
-  if (!value) return "—";
+  if (!value) return "-";
   const d = typeof value === "string" ? new Date(value) : value;
-  if (isNaN(d.getTime())) return "—";
+  if (isNaN(d.getTime())) return "-";
   return d.toLocaleTimeString("pt-BR", {
     timeZone: TZ,
     hour: "2-digit",

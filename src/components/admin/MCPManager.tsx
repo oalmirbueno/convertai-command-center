@@ -163,7 +163,7 @@ function generateToken() {
   return `mcp_live_${b64}`;
 }
 
-const fmtDate = (v: string | null) => v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—";
+const fmtDate = (v: string | null) => v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "-";
 
 function keyStatus(k: ApiKey): { label: string; tone: "green" | "amber" | "red" | "muted" } {
   if (k.revoked_at) return { label: "Revogada", tone: "red" };
@@ -305,7 +305,7 @@ export default function MCPManager() {
           </h3>
           <p className="text-[11px] text-muted-foreground mt-0.5 max-w-2xl">
             Painel administrativo do servidor MCP do Aceleriq OS. Gere credenciais escopadas para ChatGPT, Claude, Codex, Hermes, OpenClaw e outros agentes autorizados.
-            Os tokens são exibidos <span className="font-semibold text-foreground">uma única vez</span> — nunca são armazenados em texto claro.
+            Os tokens são exibidos <span className="font-semibold text-foreground">uma única vez</span> · nunca são armazenados em texto claro.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -582,13 +582,13 @@ export default function MCPManager() {
                         <tr key={a.id} className="border-b border-border/50 hover:bg-secondary/40">
                           <td className="py-1.5 px-2 whitespace-nowrap">{fmtDate(a.created_at)}</td>
                           <td className="py-1.5 px-2 font-mono">{a.tool_name}</td>
-                          <td className="py-1.5 px-2 truncate max-w-[160px]">{a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "—"}</td>
+                          <td className="py-1.5 px-2 truncate max-w-[160px]">{a.key_id ? (keyById.get(a.key_id)?.name ?? a.key_id.slice(0, 8)) : "-"}</td>
                           <td className="py-1.5 px-2">
                             {a.success
                               ? <Badge className="text-[10px] bg-emerald-500/15 text-emerald-500 border-0">{a.status_code ?? 200}</Badge>
                               : <Badge variant="destructive" className="text-[10px]" title={a.error_message ?? ""}>{a.status_code ?? "err"} · {a.error_code ?? "fail"}</Badge>}
                           </td>
-                          <td className="py-1.5 px-2 text-right font-mono">{a.duration_ms ?? "—"}</td>
+                          <td className="py-1.5 px-2 text-right font-mono">{a.duration_ms ?? "-"}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -631,7 +631,7 @@ export default function MCPManager() {
               <ShieldCheck className="w-4 h-4 text-emerald-500" /> Credencial criada
             </DialogTitle>
             <DialogDescription className="text-xs">
-              <span className="font-semibold text-amber-500">Este token será mostrado apenas uma vez.</span> Copie e guarde em local seguro (gerenciador de senhas, cofre da equipe). Após fechar, não será possível recuperá-lo — apenas rotacionar ou revogar.
+              <span className="font-semibold text-amber-500">Este token será mostrado apenas uma vez.</span> Copie e guarde em local seguro (gerenciador de senhas, cofre da equipe). Após fechar, não será possível recuperá-lo · apenas rotacionar ou revogar.
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
@@ -662,7 +662,7 @@ export default function MCPManager() {
             </div>
           </div>
           <DialogFooter>
-            <Button onClick={() => { setIssuedToken(null); setTokenRevealed(false); }}>Concluí — guardei em local seguro</Button>
+            <Button onClick={() => { setIssuedToken(null); setTokenRevealed(false); }}>Concluí · guardei em local seguro</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -671,7 +671,7 @@ export default function MCPManager() {
       <ConfirmModal
         open={!!revokeFor}
         title="Revogar credencial"
-        description={`A credencial "${revokeFor?.name}" será desativada imediatamente. Chamadas futuras retornarão 401. A ação é irreversível — para restaurar, crie uma nova credencial.`}
+        description={`A credencial "${revokeFor?.name}" será desativada imediatamente. Chamadas futuras retornarão 401. A ação é irreversível · para restaurar, crie uma nova credencial.`}
         confirmLabel="Revogar"
         onConfirm={async () => { if (revokeFor) await revokeCredential(revokeFor); setRevokeFor(null); }}
         onCancel={() => setRevokeFor(null)}
@@ -874,7 +874,7 @@ function TestConnectionDialog({ open, onOpenChange, keyName }: { open: boolean; 
           <div>
             <Label className="text-xs">Token</Label>
             <Input type="password" value={token} onChange={e => setToken(e.target.value)} placeholder="mcp_live_…" className="font-mono text-xs" />
-            <p className="text-[10px] text-muted-foreground mt-1">O token não é gravado em nenhum lugar — usado apenas nesta chamada.</p>
+            <p className="text-[10px] text-muted-foreground mt-1">O token não é gravado em nenhum lugar · usado apenas nesta chamada.</p>
           </div>
           {result && (
             <div className={`p-2.5 rounded border text-[11px] ${result.ok ? "border-emerald-500/30 bg-emerald-500/5 text-emerald-500" : "border-red-500/30 bg-red-500/5 text-red-500"}`}>
