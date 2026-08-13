@@ -11,6 +11,7 @@ import {
   History,
   Loader2,
   Pencil,
+  RefreshCw,
   RotateCcw,
   Send,
   XCircle,
@@ -65,8 +66,10 @@ import {
 import { cn } from "@/lib/utils";
 import {
   AUTOPUBLISH_STAGE_LABELS,
+  retryAutopublish,
   useAutopublishStatus,
 } from "@/hooks/useAutopublishStatus";
+import { useQueryClient } from "@tanstack/react-query";
 
 type PublicationAction =
   | "schedule"
@@ -152,12 +155,27 @@ function publicationFileReady(
  * aqui, com o passo em que parou e o motivo.
  */
 function PublicationDeliveryStatus({ publicationId }: { publicationId: string }) {
+  const queryClient = useQueryClient();
   const { data } = useAutopublishStatus(publicationId);
+  const [retrying, setRetrying] = useState(false);
   if (!data) return null;
 
   const failed = data.stage === "failed";
   const done = data.stage === "done";
   if (done && !data.last_error) return null;
+
+  const handleRetry = async () => {
+    setRetrying(true);
+    try {
+      await retryAutopublish(publicationId);
+      toast.success("Reprocessando. O motor retoma em até um minuto.");
+      await queryClient.invalidateQueries({ queryKey: ["autopublish-status", publicationId] });
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível reprocessar.");
+    } finally {
+      setRetrying(false);
+    }
+  };
 
   return (
     <div
@@ -173,13 +191,30 @@ function PublicationDeliveryStatus({ publicationId }: { publicationId: string })
       ) : (
         <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin text-sky-500" />
       )}
-      <div className="min-w-0">
+      <div className="min-w-0 flex-1">
         <p className={cn("text-xs font-medium", failed ? "text-destructive" : "text-sky-500")}>
           {AUTOPUBLISH_STAGE_LABELS[data.stage]}
           {data.attempts > 1 && ` · ${data.attempts} tentativas`}
         </p>
         {data.last_error && (
           <p className="mt-0.5 break-words text-xs text-muted-foreground">{data.last_error}</p>
+        )}
+        {failed && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="mt-2 h-7 gap-1 px-2 text-xs"
+            disabled={retrying}
+            onClick={handleRetry}
+          >
+            {retrying ? (
+              <Loader2 className="h-3 w-3 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3 w-3" />
+            )}
+            Tentar de novo
+          </Button>
         )}
       </div>
     </div>

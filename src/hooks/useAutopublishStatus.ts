@@ -14,7 +14,17 @@ import { supabase } from "@/integrations/supabase/client";
 export interface AutopublishStatus {
   publication_id: string;
   client_id: string;
-  stage: "queued" | "children" | "parent" | "publish" | "permalink" | "done" | "failed";
+  stage:
+    | "queued"
+    | "children"
+    | "parent"
+    | "processing"
+    | "publish"
+    | "verify"
+    | "recover"
+    | "permalink"
+    | "done"
+    | "failed";
   attempts: number;
   last_error: string | null;
   permalink: string | null;
@@ -26,11 +36,24 @@ export const AUTOPUBLISH_STAGE_LABELS: Record<AutopublishStatus["stage"], string
   queued: "Na fila para publicar",
   children: "Enviando os cartões do carrossel",
   parent: "Montando o carrossel",
+  processing: "Instagram processando o vídeo",
   publish: "Publicando no Instagram",
+  verify: "Conferindo com o Instagram se já saiu",
+  recover: "Recuperando o link do post",
   permalink: "Confirmando o link do post",
   done: "Publicado pelo painel",
   failed: "Não conseguiu publicar",
 };
+
+/** Reprocessa uma publicação que falhou. Sem risco de post duplicado: se a
+ *  publicação chegou a ser despachada, o motor recomeça pela verificação. */
+export async function retryAutopublish(publicationId: string) {
+  const { data, error } = await (supabase as any).rpc("retry_autopublish", {
+    p_publication_id: publicationId,
+  });
+  if (error) throw error;
+  return data;
+}
 
 export function useAutopublishStatus(publicationId?: string | null, enabled = true) {
   return useQuery({
