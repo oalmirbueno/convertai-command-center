@@ -104,7 +104,22 @@ export default function ProjectJournal({
     const list: JournalEntry[] = [];
 
     for (const note of data.notes) {
-      if (!canWrite && !note.client_visible) continue;
+      if (!canWrite && !note.client_visible) {
+        // Nota interna gerada pelo sistema ("X" concluida) vira linguagem de
+        // cliente automaticamente; texto interno livre continua privado.
+        const doneMatch = /^[""“]?"?(.+?)"?[""”]?\s+conclu[ií]da\.?$/i.exec(
+          (note.message || "").trim(),
+        );
+        if (doneMatch) {
+          list.push({
+            at: note.created_at,
+            kind: "auto",
+            icon: "approved",
+            title: `Etapa concluída: ${doneMatch[1].replace(/^"|"$/g, "")}`,
+          });
+        }
+        continue;
+      }
       list.push({
         at: note.created_at,
         kind: "note",

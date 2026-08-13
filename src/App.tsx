@@ -69,33 +69,35 @@ const queryClient = new QueryClient({
 
 function LoadingScreen() {
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="min-h-screen flex items-center justify-center overflow-hidden bg-background">
       <div className="relative flex items-center justify-center">
-        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/15 blur-2xl" />
-        {/* Entrada: a marca sobe e assenta; o ponto do i cai, quica e se junta -
-            uma vinheta rapida, sem piscar. A logo tem versao para cada tema. */}
-        <img
-          src={aceleriqLogo}
-          alt="Aceleriq"
-          className="brand-logo relative h-24 w-auto animate-[brandIn_0.9s_cubic-bezier(0.22,1,0.36,1)_both] drop-shadow-[0_0_28px_hsl(var(--primary)/0.35)]"
+        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/12 blur-2xl" />
+        {/* Aceleracao: a marca entra em velocidade da esquerda, com rastro de
+            movimento, e freia suave na posicao. Sem piscar, sem elementos extras. */}
+        <span
+          aria-hidden="true"
+          className="absolute right-[55%] top-[38%] h-[2px] w-24 rounded-full bg-primary/60 animate-[speedline_0.7s_ease-out_both]"
         />
         <span
           aria-hidden="true"
-          className="absolute left-[63%] top-[18%] h-2.5 w-2.5 rounded-full bg-primary animate-[dotDrop_1.1s_cubic-bezier(0.34,1.56,0.64,1)_both]"
+          className="absolute right-[52%] top-[58%] h-[2px] w-16 rounded-full bg-primary/35 animate-[speedline_0.7s_0.08s_ease-out_both]"
+        />
+        <img
+          src={aceleriqLogo}
+          alt="Aceleriq"
+          className="brand-logo relative h-24 w-auto animate-[accelIn_0.75s_cubic-bezier(0.16,1,0.3,1)_both] drop-shadow-[0_0_28px_hsl(var(--primary)/0.35)]"
         />
       </div>
       <style>{`
-        @keyframes brandIn {
-          0%   { transform: translateY(14px) scale(0.96); opacity: 0; }
-          60%  { transform: translateY(-2px) scale(1.01); opacity: 1; }
-          100% { transform: translateY(0) scale(1); opacity: 1; }
+        @keyframes accelIn {
+          0%   { transform: translateX(-160px) skewX(-8deg); opacity: 0; filter: blur(6px); }
+          55%  { transform: translateX(10px) skewX(2deg); opacity: 1; filter: blur(0.5px); }
+          100% { transform: translateX(0) skewX(0); opacity: 1; filter: blur(0); }
         }
-        @keyframes dotDrop {
-          0%   { transform: translateY(-46px) scale(0.6); opacity: 0; }
-          45%  { transform: translateY(0) scale(1.15); opacity: 1; }
-          62%  { transform: translateY(-10px) scale(0.95); }
-          78%  { transform: translateY(0) scale(1.05); }
-          100% { transform: translateY(0) scale(1); opacity: 0.9; }
+        @keyframes speedline {
+          0%   { transform: translateX(-140px) scaleX(1.4); opacity: 0; }
+          30%  { opacity: 1; }
+          100% { transform: translateX(60px) scaleX(0.2); opacity: 0; }
         }
       `}</style>
     </div>

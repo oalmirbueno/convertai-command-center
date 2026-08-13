@@ -459,12 +459,22 @@ export default function ClientJourneyDashboard({
       {/* Linha de etapas: em que ponto do processo o trabalho esta agora */}
       <FadeUp>
         {(() => {
-          const stages = ["Estruturação", "Produção", "Aprovação", "Programado", "No ar"];
+          // Etapas genericas de growth: valem para qualquer servico (social,
+          // trafego, site, avulso, hibrido). A etapa e lida dos dados reais.
+          const stages = ["Planejamento", "Produção", "Sua aprovação", "Entrega", "Acompanhamento"];
+          const hasDeliveries = deliveredFiles.length > 0;
           const currentStage =
-            published.length > 0 ? 4 :
-            scheduled.length > 0 ? 3 :
+            published.length > 0 || latestReport ? 4 :
+            hasDeliveries || scheduled.length > 0 ? 3 :
             pendingFiles.length > 0 ? 2 :
             activeProjects.length > 0 ? 1 : 0;
+          const stageHints = [
+            "Estamos organizando a base do trabalho.",
+            "As entregas estão sendo produzidas agora.",
+            "Tem material esperando o seu OK.",
+            "Entregas liberadas e trabalho rodando.",
+            "No ar e medindo resultado para otimizar.",
+          ];
           return (
             <div className="rounded-2xl border border-border bg-card px-4 py-4 sm:px-6">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -499,6 +509,9 @@ export default function ClientJourneyDashboard({
                   );
                 })}
               </ol>
+              <p className="mt-3 text-center text-[11px] text-muted-foreground">
+                {stageHints[currentStage]}
+              </p>
             </div>
           );
         })()}
