@@ -1269,6 +1269,46 @@ export default function EditorialCalendar() {
 
   // Arrastar para "Publicado / concluído" = validação manual da equipe:
   // confirma as publicações agendadas como publicadas pelo fluxo oficial.
+  /**
+   * Arrastar tarefa para Concluído = tarefa feita. Ela sai do quadro na hora
+   * (atualização otimista) e o Kanban central acompanha.
+   */
+  const markTaskDone = useCallback(
+    async (task: EditorialInboxTask) => {
+      if (!permissions.canEdit) return;
+      const moveKey = `task:${task.id}`;
+      if (!beginEditorialMove(moveKey)) return;
+      queryClient.setQueriesData({ queryKey: ["tasks"] }, (value) =>
+        updateCachedTaskStatus(value, task.id, "done"),
+      );
+      try {
+        const { data, error } = await supabase
+          .from("tasks")
+          .update({ status: "done" })
+          .eq("id", task.id)
+          .eq("status", task.status)
+          .select("id")
+          .maybeSingle();
+        if (error) throw error;
+        if (!data) {
+          throw new Error("A tarefa mudou em outra sessão. Atualize e tente novamente.");
+        }
+        const { notifyOpsTaskUpdated } = await import("@/lib/opsTaskSync");
+        notifyOpsTaskUpdated(task.id);
+        toast.success("Tarefa concluída. Também atualizada no Kanban central.");
+      } catch (error: unknown) {
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+        toast.error(
+          error instanceof Error ? error.message : "Não foi possível concluir a tarefa.",
+        );
+      } finally {
+        finishEditorialMove(moveKey);
+        await queryClient.invalidateQueries({ queryKey: ["tasks"] });
+      }
+    },
+    [permissions.canEdit, beginEditorialMove, finishEditorialMove, queryClient],
+  );
+
   const markPostPublished = useCallback(
     async (bundle: EditorialPostBundle) => {
       if (!permissions.canPublish) {
@@ -1345,10 +1385,9 @@ export default function EditorialCalendar() {
       if (overData.kind === "date") {
         openCreateFromTask(task, String(overData.dateKey));
       } else if (overData.kind === "stage" && overData.stage === "delivery") {
-        // Antes o solto aqui não fazia NADA e o cartão voltava sem explicação.
-        toast.error(
-          "Tarefa sozinha não conta como publicada. Toque nela, use Criar e vincular conteúdo, e o conteúdo criado pode ser concluído.",
-        );
+        // Soltou em Concluído, concluiu. Sem sermão: a tarefa é marcada como
+        // feita, sai do quadro e o Kanban central acompanha.
+        void markTaskDone(task);
       } else if (overData.kind === "stage" && overData.productionStatus) {
         void moveTaskToStage(
           task,

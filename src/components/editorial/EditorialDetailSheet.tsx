@@ -497,6 +497,11 @@ export default function EditorialDetailSheet({
     }
     setAdminActing(true);
     try {
+      // Versão fresca também aqui: evita o recuso por versão antiga.
+      const current = await loadEditorialPostForMutation(
+        post.post.id,
+        post.post.client_id,
+      );
       await savePost.mutateAsync({
         payload: {
           id: post.post.id,
@@ -531,7 +536,7 @@ export default function EditorialDetailSheet({
             },
           ],
         },
-        expectedVersion: post.post.version,
+        expectedVersion: current.post.version,
       });
 
       // Releitura pelo caminho oficial (mesma trilha blindada do calendário).
@@ -571,16 +576,31 @@ export default function EditorialDetailSheet({
   const adminConcludeNow = async (bundle: EditorialPublicationBundle) => {
     setAdminActing(true);
     try {
+      // Versão fresca antes de agir: a tela pode estar segurando uma versão
+      // antiga e o banco recusaria por segurança (o famoso "só funciona na
+      // segunda tentativa").
+      const fresh = await loadEditorialPostForMutation(
+        post!.post.id,
+        post!.post.client_id,
+      );
+      const target = fresh.publications.find(
+        ({ publication }) => publication.id === bundle.publication.id,
+      );
+      if (!target || !["planned", "scheduled", "failed"].includes(target.publication.status)) {
+        toast.info("Esta publicação já foi concluída ou cancelada.");
+        return;
+      }
       await transitionPublication.mutateAsync({
-        publicationId: bundle.publication.id,
+        publicationId: target.publication.id,
         action: "publish",
-        expectedVersion: bundle.publication.version,
-        permalink: bundle.publication.permalink || "https://www.instagram.com/",
+        expectedVersion: target.publication.version,
+        permalink: target.publication.permalink || "https://www.instagram.com/",
         publishedAt: new Date().toISOString(),
       });
       toast.success("Concluído: o painel já conta esta publicação como no ar.");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Não foi possível concluir.";
+      const message =
+        (error as { message?: string } | null)?.message || "Não foi possível concluir.";
       toast.error(
         /approved|publishable|ready|immutable/i.test(message)
           ? "O material ainda não está aprovado. Use Aprovar tudo agora primeiro."
@@ -732,25 +752,32 @@ export default function EditorialDetailSheet({
   };
 
   const handleArchive = async () => {
-    // Antes o botão ficava travado enquanto houvesse agendamento, pedindo para
-    // cancelar um por um. Apagar tem que ser um passo só: os agendamentos
-    // pendentes são cancelados aqui mesmo e o conteúdo sai do calendário.
-    const scheduled = post.publications.filter(
+    // Apagar em um passo: cancela agendamentos pendentes e arquiva.
+    const scheduledCount = post.publications.filter(
       ({ publication }) => publication.status === "scheduled",
-    );
+    ).length;
     const proceed = await confirmDialog({
       title: "Apagar este conteúdo do calendário?",
       description:
-        scheduled.length > 0
-          ? `Ele tem ${scheduled.length} publicação(ões) agendada(s), que serão canceladas junto. Nada é publicado depois disso e o histórico fica preservado.`
+        scheduledCount > 0
+          ? `Ele tem ${scheduledCount} publicação(ões) agendada(s), que serão canceladas junto. Nada é publicado depois disso e o histórico fica preservado.`
           : "Ele sai do calendário ativo, mas o histórico fica preservado.",
-      confirmLabel: scheduled.length > 0 ? "Cancelar e apagar" : "Apagar",
+      confirmLabel: scheduledCount > 0 ? "Cancelar e apagar" : "Apagar",
       destructive: true,
     });
     if (!proceed) return;
 
     try {
-      for (const bundle of scheduled) {
+      // O bug do "apagar não funciona": a tela segurava uma VERSÃO antiga do
+      // conteúdo e o banco recusava por segurança na primeira tentativa (na
+      // segunda, já atualizada, ia). Agora a versão fresca é buscada na hora,
+      // então funciona de primeira, sempre.
+      const fresh = await loadEditorialPostForMutation(
+        post.post.id,
+        post.post.client_id,
+      );
+      for (const bundle of fresh.publications) {
+        if (bundle.publication.status !== "scheduled") continue;
         await transitionPublication.mutateAsync({
           publicationId: bundle.publication.id,
           action: "cancel",
@@ -761,20 +788,29 @@ export default function EditorialDetailSheet({
           externalPostId: null,
           failureCode: null,
           failureReason: "Conteúdo removido do calendário pela equipe.",
+          deferRefresh: true,
         });
       }
+      // Cancelamentos podem ter avançado a versão do conteúdo: relê antes de
+      // arquivar para o passo final também ir de primeira.
+      const latest = await loadEditorialPostForMutation(
+        post.post.id,
+        post.post.client_id,
+      );
       await archivePost.mutateAsync({
-        postId: post.post.id,
-        expectedVersion: post.post.version,
+        postId: latest.post.id,
+        expectedVersion: latest.post.version,
       });
       toast.success("Conteúdo removido do calendário.");
       onArchived();
     } catch (error: unknown) {
+      // Erro do banco não é instanceof Error: extrai a mensagem de qualquer jeito.
       const message =
-        error instanceof Error ? error.message : "Não foi possível apagar o conteúdo.";
+        (error as { message?: string } | null)?.message ||
+        "Não foi possível apagar o conteúdo.";
       toast.error(
         /version|vers[aã]o|changed/i.test(message)
-          ? "O conteúdo mudou enquanto você apagava. Feche, abra de novo e repita."
+          ? "O conteúdo mudou agora mesmo em outra tela. Tente de novo que vai."
           : message,
       );
     }
