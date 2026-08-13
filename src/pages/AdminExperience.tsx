@@ -888,22 +888,27 @@ export default function AdminExperience() {
         );
       })()}
 
-      {/* Resumo vivo */}
+      {/* Resumo vivo: cada cartao e um atalho para a aba onde se age */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
         {[
-          { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse },
-          { label: "Em atenção", value: attention, color: "text-warning", icon: Clock },
-          { label: "Risco alto", value: risk, color: "text-destructive", icon: ShieldAlert },
-          { label: "Rascunhos na fila", value: draftReports.length, color: "text-primary", icon: FileText },
-          { label: "Pulsos respondidos", value: pulseAnswers, color: "text-info", icon: Star },
+          { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse, tab: "carteira" },
+          { label: "Em atenção", value: attention, color: "text-warning", icon: Clock, tab: "carteira" },
+          { label: "Risco alto", value: risk, color: "text-destructive", icon: ShieldAlert, tab: "carteira" },
+          { label: "Rascunhos na fila", value: draftReports.length, color: "text-primary", icon: FileText, tab: "fila" },
+          { label: "Pulsos respondidos", value: pulseAnswers, color: "text-info", icon: Star, tab: "radar" },
         ].map((s) => (
-          <div key={s.label} className="bg-card border border-border rounded-xl p-4">
+          <button
+            key={s.label}
+            type="button"
+            onClick={() => setActiveTab(s.tab)}
+            className="bg-card border border-border rounded-xl p-4 text-left transition-colors hover:border-primary/40 cursor-pointer"
+          >
             <div className="flex items-center justify-between mb-1">
               <s.icon className={`w-4 h-4 ${s.color}`} />
               <span className={`text-2xl font-bold tabular-nums ${s.color}`}>{s.value}</span>
             </div>
             <p className="text-[11px] text-muted-foreground">{s.label}</p>
-          </div>
+          </button>
         ))}
       </div>
 
@@ -916,6 +921,18 @@ export default function AdminExperience() {
           <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
           <TabsTrigger value="historico" className="text-[13px] rounded-md shrink-0">Histórico ({publishedReports.length})</TabsTrigger>
         </TabsList>
+
+        {/* O que esta aba faz, em uma linha: guia sem precisar aprender */}
+        <p className="px-1 text-[11px] leading-relaxed text-muted-foreground">
+          {({
+            carteira: "A saúde de cada cliente recorrente e o porquê da nota. Toque em um cliente para agir.",
+            perfis: "Tudo de um cliente em um só lugar: o que enviar na semana, a mensagem pronta do grupo e o Diário do Trabalho.",
+            avulsos: "Os clientes de projeto fechado: entrega, prazo e a próxima oferta natural.",
+            radar: "As oportunidades do mês para vender mais, geradas dos dados reais.",
+            fila: "O que foi gerado e espera a sua revisão. Revise, edite e publique: o cliente vê na hora.",
+            historico: "A linha do tempo completa do que já aconteceu e foi enviado.",
+          } as Record<string, string>)[activeTab]}
+        </p>
 
         {/* ── Carteira recorrente ── */}
         <TabsContent value="carteira">
