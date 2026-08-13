@@ -7,6 +7,13 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
+import {
+  buildRadarIdeas,
+  radarIdeaForClient,
+  RADAR_LENSES,
+  type RadarClientContext,
+  type RadarIdea,
+} from "@/lib/radarIdeas";
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
 import {
@@ -29,7 +36,7 @@ const RITUALS = [
   { value: "rota_semana", label: "Rota da Semana (abertura)", cadence: "Semanal · segunda", why: "Abre a semana com foco e a única ação necessária do cliente" },
   { value: "meio_semana", label: "Check do Meio da Semana", cadence: "Semanal · quarta", why: "Mantém o cliente por dentro do andamento no meio do ciclo" },
   { value: "prova_movimento", label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta", why: "Fecha a semana provando o que avançou e o próximo passo" },
-  { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal", why: "Leva uma oportunidade proativa antes de o cliente pedir" },
+  { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal", why: "Leva uma ideia de diferenciação antes de o cliente pedir" },
   { value: "marco_90", label: "Marco 90", cadence: "Trimestral", why: "Mostra o antes e depois do trimestre com evidências" },
 ] as const;
 
@@ -86,6 +93,8 @@ export default function AdminExperience() {
   const [genClientId, setGenClientId] = useState("__all__");
   const [genRitual, setGenRitual] = useState<string>(ritualForToday());
   const [genPreviews, setGenPreviews] = useState<DraftPreview[] | null>(null);
+  /** Ideia do Radar escolhida pela equipe para virar mensagem do cliente. */
+  const [genIdeaId, setGenIdeaId] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
@@ -304,51 +313,87 @@ export default function AdminExperience() {
   const publishedReports = (reports || []).filter((r: any) => r.status === "published");
 
   // ───────── Radar do mês: oportunidades com foco em retenção e expansão ─────────
-  const opportunities = useMemo(() => {
-    const out: { clientId: string; clientName: string; kind: string; title: string; detail: string }[] = [];
-    healthRows.forEach((row) => {
-      const name = row.client.company_name || row.client.full_name;
-      if (row.pulse && row.pulse.score >= 4 && (daysSince(row.pulse.date) ?? 99) <= 60) {
-        out.push({
-          clientId: row.client.id,
-          clientName: name,
-          kind: "depoimento",
-          title: `${name}: pedir depoimento ou indicação`,
-          detail: `Avaliou a experiência com nota ${row.pulse.score}/5. Momento ideal para pedir um depoimento ou uma indicação de empresa parecida.`,
-        });
-      }
-      const value = Number(row.client.plan_value || 0);
-      if (value > 0 && value < 997 && row.level === "healthy") {
-        out.push({
-          clientId: row.client.id,
-          clientName: name,
-          kind: "reajuste",
-          title: `${name}: plano abaixo da tabela de entrada`,
-          detail: `Mensalidade atual de ${fmt(value)} com relação saudável. Candidato ao degrau "Agora" da tabela oficial.`,
-        });
-      }
-    });
-    oneOffClients.forEach((client: any) => {
-      const clientProjects = (projects || []).filter((p: any) => p.client_id === client.id && !p.deleted_at);
+  /**
+   * O Radar do mês: ideias de diferenciação por cliente, montadas do contexto
+   * real dele. A leitura é a do marketing de diferenciação (Fator X): a ideia
+   * nasce do que o cliente JÁ tem, e a agência chega com ela pronta antes de
+   * ele pedir. A leitura comercial de cada ideia fica só para a equipe.
+   */
+  const opportunities = useMemo<RadarIdea[]>(() => {
+    const now = new Date();
+    const d30 = new Date(now.getTime() - 30 * 86400000);
+
+    const buildContext = (client: any, isOneOff: boolean): RadarClientContext => {
+      const clientProjects = (projects || []).filter(
+        (p: any) => p.client_id === client.id && !p.deleted_at,
+      );
+      const activeProjects = clientProjects.filter((p: any) => p.status !== "done");
+      const services = [
+        ...new Set(
+          (activeProjects.length > 0 ? activeProjects : clientProjects)
+            .map((p: any) => p.project_type)
+            .filter(Boolean),
+        ),
+      ] as string[];
+
+      const clientPubs = (allPublications || []).filter(
+        (p: any) => p.client_id === client.id && p.status === "published",
+      );
+      const publishedLast30 = clientPubs.filter(
+        (p: any) => p.published_at && new Date(p.published_at) >= d30,
+      ).length;
+
+      const releasedLast30 = (releasedFiles || []).filter(
+        (f: any) => f.client_id === client.id && new Date(f.created_at) >= d30,
+      ).length;
+
+      const firstProject = clientProjects
+        .map((p: any) => p.created_at)
+        .filter(Boolean)
+        .sort()[0];
+      const startedDays = daysSince(firstProject);
+      const monthsTogether = startedDays !== null ? Math.max(1, Math.round(startedDays / 30)) : 1;
+
       const doneProjects = clientProjects.filter((p: any) => p.status === "done");
       const lastDone = doneProjects
         .map((p: any) => p.updated_at || p.created_at)
         .sort()
         .reverse()[0];
-      const age = daysSince(lastDone);
-      if (doneProjects.length > 0 && age !== null && age >= 21 && clientProjects.every((p: any) => p.status === "done")) {
-        const name = client.company_name || client.full_name;
-        out.push({
-          clientId: client.id,
-          clientName: name,
-          kind: "reativacao",
-          title: `${name}: projeto entregue há ${age} dias`,
-          detail: "Cliente avulso sem trabalho ativo. Oferecer manutenção recorrente ou um novo projeto (diagnóstico express como porta de entrada).",
-        });
-      }
+      const idleDays =
+        isOneOff && doneProjects.length > 0 && clientProjects.every((p: any) => p.status === "done")
+          ? daysSince(lastDone)
+          : null;
+
+      const health = healthRows.find((row) => row.client.id === client.id);
+
+      return {
+        clientId: client.id,
+        clientName: client.company_name || client.full_name,
+        services,
+        pulseScore: health?.pulse?.score ?? null,
+        pulseAgeDays: health?.pulse ? daysSince(health.pulse.date) : null,
+        releasedLast30,
+        publishedLast30,
+        publishedTotal: clientPubs.length,
+        hasPublishedReport: (reports || []).some(
+          (r: any) => r.client_id === client.id && r.status === "published",
+        ),
+        monthsTogether,
+        isOneOff,
+        idleDays,
+        month: now.getMonth(),
+      };
+    };
+
+    const out: RadarIdea[] = [];
+    healthRows.forEach((row) => {
+      out.push(...buildRadarIdeas(buildContext(row.client, false), 3));
     });
-    return out;
-  }, [healthRows, oneOffClients, projects]);
+    oneOffClients.forEach((client: any) => {
+      out.push(...buildRadarIdeas(buildContext(client, true), 2));
+    });
+    return out.sort((a, b) => b.score - a.score);
+  }, [healthRows, oneOffClients, projects, releasedFiles, allPublications, reports]);
 
   // ───────── Rascunhos: montagem com dados reais e processo explicado ─────────
   // Estrutura oficial de cada mensagem: o que fizemos, por que fizemos,
@@ -441,20 +486,14 @@ export default function AdminExperience() {
         ? `Com as entregas desta semana liberadas, o próximo movimento é colocá-las para trabalhar. Acompanhamos os sinais de cada frente e trazemos a leitura interpretada na próxima atualização.`
         : `Semana de construção interna. Na próxima atualização mostramos o material pronto e o sinal que ele deve mover.`;
 
-    // Recomendação do Radar derivada da oportunidade detectada (ou do gap de frente)
-    const oppForClient = opportunities.find((o) => o.clientId === client.id);
-    const radarRecommendation = oppForClient
-      ? oppForClient.kind === "depoimento"
-        ? `Registrar esse bom momento: gravar um depoimento curto (ou autorizar um case) e indicar uma empresa parceira que se beneficiaria do mesmo trabalho. Custo zero para você e valor enorme para a parceria.`
-        : oppForClient.kind === "reajuste"
-          ? `Atualizar o plano para a tabela vigente, garantindo a continuidade do padrão de entrega com escopo protegido por escrito. Sem surpresa: nada muda antes de você aprovar.`
-          : `Retomar a operação com um novo ciclo: um acompanhamento mensal enxuto ou um diagnóstico express para mapear o próximo passo de maior impacto.`
-      : activeProjects.some((p: any) => p.project_type === "social_media") && !activeProjects.some((p: any) => p.project_type === "traffic")
-        ? `Testar um impulso de tráfego pago sobre os conteúdos que melhor performaram: o perfil já produz material validado, e a mídia multiplica o alcance qualificado com investimento controlado.`
-        : `Consolidar a frente que mais gera sinal hoje e preparar o próximo ativo do funil (página, automação ou campanha) para a janela seguinte.`;
-    const radarWhyNow = pending === 0 && released7d > 0
-      ? `A operação está rodando em dia (entregas liberadas e nada pendente do seu lado), o que abre espaço para esse movimento sem tirar o foco do essencial.`
-      : `Cruzamos a movimentação do seu painel (entregas, aprovações e sinais das frentes) e este é o momento com melhor relação esforço x retorno.`;
+    // A ideia do Radar. Se a equipe escolheu uma na aba, é ela; senão vale a
+    // mais forte detectada para este cliente. `radarIdeaForClient` devolve só a
+    // parte que o cliente pode ler: a leitura comercial nunca chega aqui.
+    const chosenIdea =
+      opportunities.find((idea) => idea.id === genIdeaId && idea.id.startsWith(`${client.id}:`)) ||
+      opportunities.find((idea) => idea.id.startsWith(`${client.id}:`)) ||
+      null;
+    const radarText = chosenIdea ? radarIdeaForClient(chosenIdea) : null;
 
     const base = {
       client_id: client.id,
@@ -530,27 +569,37 @@ export default function AdminExperience() {
       };
     }
     if (ritual === "radar_aceleriq") {
-      const opp = opportunities.find((o) => o.clientId === client.id);
       return {
         ...base,
         title: `Radar Aceleriq · ${now.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}`,
         summary: [
-          `${name}, o Radar é o nosso ritual de antecipação: uma vez por mês trazemos uma oportunidade que enxergamos antes de você precisar pedir.`,
+          `${name}, o Radar é o nosso ritual de antecipação: uma vez por mês trazemos uma ideia que enxergamos antes de você precisar pedir.`,
           ``,
-          `OPORTUNIDADE DETECTADA`,
-          opp ? opp.detail : radarRecommendation,
+          `A IDEIA DESTE MÊS`,
+          radarText
+            ? radarText.opportunity
+            : `Dar um passo de diferenciação: sair do que todo mundo do seu setor faz e usar o que só a sua empresa tem.`,
           ``,
           `POR QUE AGORA`,
-          radarWhyNow,
+          radarText
+            ? radarText.whyNow
+            : `Cruzamos a movimentação do seu painel (entregas, publicações e sinais das frentes) e este é o momento com melhor relação esforço x retorno.`,
           ``,
-          `NOSSA RECOMENDAÇÃO`,
-          radarRecommendation,
+          `COMO A GENTE FAZ`,
+          radarText
+            ? radarText.recommendation
+            : `1. Leitura do que já existe e funciona hoje\n2. Produção da peça central da ideia\n3. Acompanhamento do sinal para decidir o próximo passo`,
+          ``,
+          `O QUE VAMOS OLHAR DEPOIS`,
+          radarText
+            ? radarText.signal
+            : `O sinal principal da frente que essa ideia move.`,
           ``,
           `COMO RESPONDER (basta dizer no grupo):`,
           `1. Pode seguir  ·  2. Deixar para o próximo ciclo  ·  3. Quero entender melhor`,
         ].filter(Boolean).join("\n"),
         next_steps: "Escolher uma das três opções acima. Se aprovado, entra na próxima janela de produção e você acompanha tudo pelo painel.",
-        highlights: "1 oportunidade proativa do mês, com recomendação e impacto esperado",
+        highlights: "1 ideia de diferenciação do mês, com o motivo e o sinal que vamos acompanhar",
       };
     }
     if (ritual === "marco_90") {
@@ -917,7 +966,7 @@ export default function AdminExperience() {
           <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
           <TabsTrigger value="perfis" className="text-[13px] rounded-md shrink-0">Perfis</TabsTrigger>
           <TabsTrigger value="avulsos" className="text-[13px] rounded-md shrink-0">Avulsos ({oneOffClients.length})</TabsTrigger>
-          <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar do mês ({opportunities.length})</TabsTrigger>
+          <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar de ideias ({opportunities.length})</TabsTrigger>
           <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
           <TabsTrigger value="historico" className="text-[13px] rounded-md shrink-0">Histórico ({publishedReports.length})</TabsTrigger>
         </TabsList>
@@ -928,7 +977,7 @@ export default function AdminExperience() {
             carteira: "A saúde de cada cliente recorrente e o porquê da nota. Toque em um cliente para agir.",
             perfis: "Tudo de um cliente em um só lugar: o que enviar na semana, a mensagem pronta do grupo e o Diário do Trabalho.",
             avulsos: "Os clientes de projeto fechado: entrega, prazo e a próxima oferta natural.",
-            radar: "As oportunidades do mês para vender mais, geradas dos dados reais.",
+            radar: "As ideias de diferenciação do mês, uma por cliente, montadas do contexto real dele.",
             fila: "O que foi gerado e espera a sua revisão. Revise, edite e publique: o cliente vê na hora.",
             historico: "A linha do tempo completa do que já aconteceu e foi enviado.",
           } as Record<string, string>)[activeTab]}
@@ -1237,40 +1286,96 @@ export default function AdminExperience() {
         <TabsContent value="radar">
           <div className="space-y-2">
             {opportunities.length > 0 && (
-              <p className="text-[11px] text-muted-foreground px-1 pb-1">
-                O painel encontrou estas chances de reter e vender mais. Cada uma vira um Radar Aceleriq para o cliente com um toque, sempre passando pela sua revisão antes.
-              </p>
+              <div className="rounded-xl border border-border bg-card p-4">
+                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                  O Radar é o ritual de antecipação: uma vez por mês a Aceleriq chega com uma ideia
+                  de diferenciação que o cliente até já pensou em fazer e nunca executou. Cada ideia
+                  nasce do que ele já tem (frentes contratadas, material produzido, Pulso e tempo de
+                  casa), na leitura do marketing de diferenciação: o que torna a marca desejada já
+                  existe dentro do negócio.
+                </p>
+                <p className="mt-2 text-[11px] leading-relaxed text-warning">
+                  A faixa de valor e o serviço avulso aparecem só para a equipe. Isso nunca entra na
+                  mensagem que o cliente recebe: para ele é ideia, não proposta comercial.
+                </p>
+              </div>
             )}
             {opportunities.length === 0 && (
               <div className="bg-card border border-border rounded-xl p-8 text-center text-sm text-muted-foreground">
-                Nenhuma oportunidade detectada agora. O radar observa Pulsos altos (depoimento e indicação), planos abaixo da tabela e avulsos prontos para reativação.
+                Nenhuma ideia no radar agora. Assim que houver material produzido, publicações no ar
+                ou Pulso respondido, as ideias do mês aparecem aqui por cliente.
               </div>
             )}
-            {opportunities.map((opp, i) => (
-              <div key={`${opp.clientId}-${opp.kind}-${i}`} className="bg-card border border-border rounded-xl p-4 flex gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
-                  <Radar className="w-4 h-4" />
-                </span>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[13px] font-medium text-foreground">{opp.title}</p>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">{opp.detail}</p>
-                  <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 mt-2">
-                    <button
-                      onClick={() => { setGenClientId(opp.clientId); setGenRitual("radar_aceleriq"); setGenPreviews(null); setGeneratorOpen(true); }}
-                      className="text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
-                    >
-                      Gerar Radar para o cliente
-                    </button>
-                    <button
-                      onClick={() => { setProfileClientId(opp.clientId); setActiveTab("perfis"); }}
-                      className="text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
-                    >
-                      Ver perfil do cliente
-                    </button>
+            {opportunities.map((idea) => {
+              const lens = RADAR_LENSES[idea.lens];
+              const [low, high] = idea.internal.range;
+              return (
+                <div key={idea.id} className="bg-card border border-border rounded-xl p-4 flex gap-3">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-info/10 text-info">
+                    <Radar className="w-4 h-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                        {lens.label}
+                      </span>
+                      <p className="text-[13px] font-medium text-foreground">{idea.title}</p>
+                    </div>
+                    <p className="text-[12px] text-foreground/80 mt-1.5">{idea.pitch}</p>
+
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      <span className="text-foreground/70">Por que agora: </span>
+                      {idea.whyNow}
+                    </p>
+
+                    <ul className="mt-2 space-y-0.5">
+                      {idea.moves.map((move) => (
+                        <li key={move} className="text-[11px] text-muted-foreground">
+                          · {move}
+                        </li>
+                      ))}
+                    </ul>
+
+                    <p className="text-[11px] text-muted-foreground mt-2">
+                      <span className="text-foreground/70">Sinal que vamos olhar: </span>
+                      {idea.signal}
+                    </p>
+
+                    {/* Leitura da equipe. Nunca vai para o cliente. */}
+                    <div className="mt-2.5 rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-wider text-warning">
+                        Só a equipe vê
+                      </p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Se aprovada, vira: <span className="text-foreground/80">{idea.internal.offer}</span>
+                        {high > 0 && ` · faixa ${fmt(low)} a ${fmt(high)}`} · esforço {idea.internal.effort}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:flex sm:flex-wrap gap-2 mt-2.5">
+                      <button
+                        onClick={() => {
+                          setGenClientId(idea.id.split(":")[0]);
+                          setGenRitual("radar_aceleriq");
+                          setGenIdeaId(idea.id);
+                          setGenPreviews(null);
+                          setGeneratorOpen(true);
+                        }}
+                        className="text-[11px] px-3 py-2 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                      >
+                        Levar esta ideia ao cliente
+                      </button>
+                      <button
+                        onClick={() => { setProfileClientId(idea.id.split(":")[0]); setActiveTab("perfis"); }}
+                        className="text-[11px] px-3 py-2 rounded-lg bg-secondary text-muted-foreground hover:text-foreground transition-colors cursor-pointer border border-border"
+                      >
+                        Ver perfil do cliente
+                      </button>
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </TabsContent>
 
@@ -1497,7 +1602,7 @@ export default function AdminExperience() {
       </Tabs>
 
       {/* Modal gerador: selecionar, PRÉ-VISUALIZAR e só então criar */}
-      <Dialog open={generatorOpen} onOpenChange={(v) => { setGeneratorOpen(v); if (!v) setGenPreviews(null); }}>
+      <Dialog open={generatorOpen} onOpenChange={(v) => { setGeneratorOpen(v); if (!v) { setGenPreviews(null); setGenIdeaId(null); } }}>
         <DialogContent className="bg-card border-border max-w-lg max-h-[85vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="text-foreground">
