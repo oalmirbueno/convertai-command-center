@@ -349,6 +349,78 @@ export default function ClientJourneyUpdates() {
         </section>
       )}
 
+      {/* ── O case vivo: de onde saímos para onde chegamos ── */}
+      {(() => {
+        const projects = (snapshot?.projects || []) as any[];
+        if (projects.length === 0) return null;
+        const startDates = projects
+          .map((project) => project.created_at)
+          .filter(Boolean)
+          .sort();
+        const startedAt = startDates[0];
+        if (!startedAt) return null;
+        const started = new Date(startedAt);
+        const monthsTogether = Math.max(
+          1,
+          Math.round((Date.now() - started.getTime()) / (30 * 24 * 60 * 60 * 1000)),
+        );
+        const materials = (snapshot?.allFiles || []).length;
+        const postsLive = (snapshot?.publications || []).filter((p: any) => p.status === "published").length;
+        const reportsCount = (snapshot?.reports || []).length;
+        const series = buildGrowthSeries((snapshot?.reports || []) as any[]);
+        const firstPoint = series[0];
+        const lastPoint = series[series.length - 1];
+        const contactsGrowth =
+          firstPoint && lastPoint && firstPoint !== lastPoint && firstPoint.contacts > 0
+            ? Math.round(((lastPoint.contacts - firstPoint.contacts) / firstPoint.contacts) * 100)
+            : null;
+        if (materials === 0 && postsLive === 0 && reportsCount === 0) return null;
+        return (
+          <section className="overflow-hidden rounded-2xl border border-primary/25 bg-card">
+            <div className="border-b border-border bg-primary/[0.04] px-5 py-4 sm:px-7">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+                A sua história com a Aceleriq
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {monthsTogether === 1 ? "No primeiro mês" : `Em ${monthsTogether} meses`} de trabalho, isto foi construído:
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-0 sm:grid-cols-[1fr,auto,1fr]">
+              <div className="p-5 sm:p-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                  Quando começou · {started.toLocaleDateString("pt-BR", { month: "long", year: "numeric" })}
+                </p>
+                <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                  <li>Nenhum material produzido por aqui</li>
+                  <li>Nenhuma publicação registrada</li>
+                  <li>Sem medição de resultados</li>
+                </ul>
+              </div>
+              <div className="hidden items-center justify-center px-2 sm:flex" aria-hidden="true">
+                <ArrowUpRight className="h-6 w-6 text-primary" />
+              </div>
+              <div className="border-t border-border p-5 sm:border-l sm:border-t-0 sm:p-6">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">Hoje</p>
+                <ul className="mt-3 space-y-1.5 text-[13px] leading-relaxed text-foreground">
+                  {materials > 0 && (
+                    <li><span className="font-semibold text-primary">{materials}</span> materia(is) produzidos e entregues</li>
+                  )}
+                  {postsLive > 0 && (
+                    <li><span className="font-semibold text-sky-500">{postsLive}</span> publicação(ões) no ar</li>
+                  )}
+                  {reportsCount > 0 && (
+                    <li><span className="font-semibold text-amber-500">{reportsCount}</span> relatório(s) de resultado medidos</li>
+                  )}
+                  {contactsGrowth !== null && contactsGrowth > 0 && (
+                    <li>Contatos crescendo <span className="font-semibold text-emerald-500">{contactsGrowth}%</span> entre o primeiro e o último período medido</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
+
       {/* ── Crescimento do negócio: contatos e alcance dos relatórios reais ── */}
       {(() => {
         const series = buildGrowthSeries((snapshot?.reports || []) as any[]);
