@@ -13,6 +13,10 @@ import {
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
+import { buildGrowthSeries } from "@/lib/reportGrowth";
+import {
+  ResponsiveContainer, ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, CartesianGrid,
+} from "recharts";
 
 /**
  * Onde Estamos: o retrato do trabalho em tempo real.
@@ -94,7 +98,7 @@ export default function ClientJourneyUpdates() {
             .eq("client_id", clientId!),
           supabase
             .from("reports")
-            .select("id, title, summary, next_steps, metrics, created_at")
+            .select("id, title, summary, next_steps, metrics, created_at, period_start, period_end")
             .eq("client_id", clientId!)
             .eq("status", "published")
             .order("created_at", { ascending: false })
@@ -330,6 +334,55 @@ export default function ClientJourneyUpdates() {
           ))}
         </section>
       )}
+
+      {/* ── Crescimento do negócio: contatos e alcance dos relatórios reais ── */}
+      {(() => {
+        const series = buildGrowthSeries((snapshot?.reports || []) as any[]);
+        if (series.length < 2) return null;
+        const totalSpend = series.reduce((sum, point) => sum + point.spend, 0);
+        const totalContacts = series.reduce((sum, point) => sum + point.contacts, 0);
+        const totalRevenue = series.reduce((sum, point) => sum + point.revenue, 0);
+        const money = (value: number) =>
+          new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(value);
+        return (
+          <section className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="border-b border-border px-5 py-4 sm:px-7">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Crescimento do seu negócio
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                {totalContacts > 0
+                  ? `${totalContacts.toLocaleString("pt-BR")} pessoa(s) chegaram até vocês nos períodos medidos`
+                  : "A resposta do público ao longo do tempo"}
+                {totalSpend > 0 && ` · ${money(totalSpend)} investidos`}
+                {totalRevenue > 0 && ` · ${money(totalRevenue)} em retorno`}
+              </p>
+            </div>
+            <div className="px-2 py-4 sm:px-4">
+              <ResponsiveContainer width="100%" height={220}>
+                <ComposedChart data={series} margin={{ top: 8, right: 12, left: -14, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
+                  <XAxis dataKey="label" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} />
+                  <YAxis yAxisId="contacts" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} allowDecimals={false} />
+                  <YAxis yAxisId="reach" orientation="right" tick={{ fontSize: 10, fill: "hsl(var(--muted-foreground))" }} axisLine={false} tickLine={false} width={44} tickFormatter={(v: number) => (v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v))} />
+                  <Tooltip
+                    contentStyle={{ background: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: 10, fontSize: 12, color: "hsl(var(--foreground))" }}
+                    itemStyle={{ color: "hsl(var(--foreground))" }}
+                    labelStyle={{ color: "hsl(var(--primary))", fontSize: 10 }}
+                    formatter={(value: any, name: string) => [Number(value).toLocaleString("pt-BR"), name === "contacts" ? "Contatos" : "Alcance"]}
+                  />
+                  <Bar yAxisId="contacts" dataKey="contacts" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} maxBarSize={28} />
+                  <Line yAxisId="reach" type="monotone" dataKey="reach" stroke="#0EA5E9" strokeWidth={2} dot={{ r: 3 }} />
+                </ComposedChart>
+              </ResponsiveContainer>
+              <div className="flex flex-wrap gap-3 px-3 pt-1 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-sm bg-primary" /> Pessoas que chamaram vocês</span>
+                <span className="flex items-center gap-1.5"><span className="h-0.5 w-3 rounded bg-sky-500" /> Pessoas alcançadas</span>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Linha de evolução: do ponto A até hoje, mês a mês ── */}
       {(() => {
