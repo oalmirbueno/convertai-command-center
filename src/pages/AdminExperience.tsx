@@ -1344,11 +1344,15 @@ export default function AdminExperience() {
                     {/* Leitura da equipe. Nunca vai para o cliente. */}
                     <div className="mt-2.5 rounded-lg border border-warning/25 bg-warning/[0.06] px-3 py-2">
                       <p className="text-[10px] uppercase tracking-wider text-warning">
-                        Só a equipe vê
+                        Só a equipe vê · sugestão
                       </p>
                       <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Se aprovada, vira: <span className="text-foreground/80">{idea.internal.offer}</span>
-                        {high > 0 && ` · faixa ${fmt(low)} a ${fmt(high)}`} · esforço {idea.internal.effort}
+                        Se aprovada, pode virar: <span className="text-foreground/80">{idea.internal.offer}</span>
+                        {high > 0 && ` · referência ${fmt(low)} a ${fmt(high)}`} · esforço {idea.internal.effort}
+                      </p>
+                      <p className="text-[10px] text-muted-foreground/70 mt-1">
+                        Você decide se cobra, quanto cobra ou se entrega como cortesia. A faixa é só
+                        um ponto de partida e nada disso vai para o cliente.
                       </p>
                     </div>
 

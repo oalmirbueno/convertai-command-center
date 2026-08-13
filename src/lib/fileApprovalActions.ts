@@ -48,6 +48,32 @@ export function releaseFileToClient(fileId: string, mode: FileReleaseMode) {
   });
 }
 
+/**
+ * O cliente aprovou por fora (no grupo, no WhatsApp, no telefone) e a equipe
+ * registra por ele. Guarda quem registrou e por onde veio o aceite, para o
+ * histórico nunca fingir que o cliente clicou no painel.
+ */
+export type OfflineApprovalChannel =
+  | "grupo"
+  | "whatsapp"
+  | "ligacao"
+  | "presencial"
+  | "email";
+
+export function recordOfflineClientApproval(
+  fileId: string,
+  expectedVersion: number,
+  channel: OfflineApprovalChannel,
+  note?: string | null,
+) {
+  return runApprovalRpc("record_offline_client_approval", {
+    p_file_id: fileId,
+    p_expected_version: expectedVersion,
+    p_channel: channel,
+    p_note: note?.trim() || null,
+  });
+}
+
 export function decideFileApproval(
   fileId: string,
   expectedVersion: number,

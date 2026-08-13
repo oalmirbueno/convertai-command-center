@@ -637,12 +637,14 @@ export default function EditorialAccountSetup({
 
         {canManage && (
           <div className="mt-4 rounded-xl border border-primary/25 bg-primary/[0.04] p-4">
+            {/* Dentro do agendamento o espaço é estreito: sem min-w-0 no texto
+                e shrink-0 no botão, o botão era espremido e saía do lugar. */}
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <div className="rounded-lg bg-primary/10 p-2 text-primary">
+              <div className="flex min-w-0 items-start gap-3">
+                <div className="shrink-0 rounded-lg bg-primary/10 p-2 text-primary">
                   <Cable className="h-5 w-5" aria-hidden="true" />
                 </div>
-                <div>
+                <div className="min-w-0">
                   <p className="text-sm font-semibold text-foreground">
                     Conexão oficial Meta
                   </p>
@@ -657,6 +659,7 @@ export default function EditorialAccountSetup({
                 type="button"
                 onClick={handleStartMetaConnection}
                 disabled={pending}
+                className="w-full shrink-0 sm:w-auto"
               >
                 {startConnection.isPending ? (
                   <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />

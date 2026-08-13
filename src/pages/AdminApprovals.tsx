@@ -10,17 +10,20 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { AlertTriangle, FileImage, FileText, Film, Loader2, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
+import { AlertTriangle, FileImage, FileText, Film, Loader2, MessageSquare, RefreshCw, ChevronLeft, ChevronRight } from "lucide-react";
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { downloadFile } from "@/lib/fileActions";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import {
+  recordOfflineClientApproval,
   releaseFileToClient,
   reviewFileAgency,
   type FileApprovalDecision,
   type FileReleaseMode,
 } from "@/lib/fileApprovalActions";
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
+import { useConfirm } from "@/components/shared/confirmDialog";
+import { supabase } from "@/integrations/supabase/client";
 
 const clientApprovalBadge: Record<string, { cls: string; label: string }> = {
   pending: { cls: "bg-warning/10 text-warning border-warning/20", label: "Aguardando cliente" },
@@ -125,7 +128,8 @@ function CarouselPreview({ images, small }: { images: any[]; small?: boolean }) 
 }
 
 export default function AdminApprovals() {
-  const { profile } = useAuth();
+  const { profile, user } = useAuth();
+  const confirmDialog = useConfirm();
   const { data: allFiles, isLoading } = useAllFiles();
   const { data: clients } = useClients();
   const queryClient = useQueryClient();
@@ -280,6 +284,54 @@ export default function AdminApprovals() {
     } catch (error: any) {
       toast({
         title: "Não foi possível liberar a entrega",
+        description: error?.message || "Tente novamente.",
+        variant: "destructive",
+      });
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  /**
+   * O cliente respondeu "pode publicar" no grupo e não vai entrar no painel.
+   * Em vez de deixar o material travado (e a publicação agendada não sair), a
+   * equipe registra o aceite por aqui. Fica gravado quem registrou e por onde
+   * veio, e o cliente vê no diário que a aprovação dele foi registrada.
+   */
+  const handleOfflineApproval = async (file: any) => {
+    if (!canReviewAndRelease) return;
+    const confirmed = await confirmDialog({
+      title: "Registrar aprovação dada no grupo?",
+      description:
+        `O cliente aprovou "${file.file_name}" fora do painel e você está registrando por ele. ` +
+        "Fica gravado que quem registrou foi você, e o material segue para publicação. " +
+        "Use só quando o aceite realmente aconteceu.",
+      confirmLabel: "Sim, o cliente aprovou",
+    });
+    if (!confirmed) return;
+
+    setSubmitting(true);
+    try {
+      await recordOfflineClientApproval(file.id, Number(file.version ?? 1), "grupo");
+      // O cliente enxerga o registro no Diário do Trabalho, sem sombra.
+      if (file.project_id && user?.id) {
+        await supabase.from("updates").insert({
+          project_id: file.project_id,
+          author_id: user.id,
+          message: `Aprovação registrada pela equipe: você aprovou "${file.file_name}" pelo grupo. Seguimos para a publicação.`,
+          update_type: "progress",
+          client_visible: true,
+        });
+      }
+      await refreshApprovalQueues();
+      setPreviewFile(null);
+      toast({
+        title: "Aprovação registrada",
+        description: "O material foi destravado e segue para a publicação.",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Não foi possível registrar",
         description: error?.message || "Tente novamente.",
         variant: "destructive",
       });
@@ -638,6 +690,21 @@ export default function AdminApprovals() {
                     Enviar para aprovação
                   </Button>
                 </>
+              )}
+            {/* Cliente que aprova pelo grupo e não entra no painel: a equipe
+                registra o aceite aqui para nada ficar travado. */}
+            {queue === "client"
+              && previewFile?.approval_status === "pending"
+              && canReviewAndRelease && (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1"
+                  disabled={submitting}
+                  onClick={() => handleOfflineApproval(previewFile)}
+                >
+                  <MessageSquare className="w-3 h-3" /> Aprovou no grupo
+                </Button>
               )}
             {previewFile?.[statusField] === "rejected" && (
               <>
