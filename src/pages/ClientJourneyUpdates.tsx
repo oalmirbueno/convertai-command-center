@@ -54,11 +54,11 @@ export default function ClientJourneyUpdates() {
   const { data: snapshot, isLoading, isError } = useQuery({
     queryKey: ["client-journey-live", clientId],
     queryFn: async () => {
-      const [projects, tasks, milestones, approvals, publications, reports] =
+      const [projects, tasks, milestones, approvals, allFiles, publications, reports] =
         await Promise.all([
           supabase
             .from("projects")
-            .select("id, name, status, billing_mode, deadline, objectives")
+            .select("id, name, status, billing_mode, deadline, objectives, project_type, created_at")
             .eq("client_id", clientId!)
             .is("deleted_at", null),
           supabase
@@ -78,6 +78,15 @@ export default function ClientJourneyUpdates() {
             .eq("status", "ready")
             .is("archived_at", null)
             .is("parent_file_id", null),
+          supabase
+            .from("files")
+            .select("id, created_at, approval_status, visibility")
+            .eq("client_id", clientId!)
+            .in("visibility", ["client_shared", "approval"])
+            .eq("status", "ready")
+            .is("archived_at", null)
+            .is("parent_file_id", null)
+            .limit(500),
           supabase
             .from("editorial_publications")
             .select("status, scheduled_at, published_at, permalink, platform")
@@ -102,6 +111,7 @@ export default function ClientJourneyUpdates() {
           (milestone) => milestone.project_id && projectIds.has(milestone.project_id),
         ),
         approvals: approvals.data || [],
+        allFiles: allFiles.data || [],
         publications: publications.data || [],
         reports: reports.data || [],
       };
@@ -241,7 +251,12 @@ export default function ClientJourneyUpdates() {
             return (
               <div key={project.id} className="rounded-xl border border-border bg-card p-4">
                 <div className="flex items-baseline justify-between gap-3">
-                  <p className="truncate text-[13px] font-medium text-foreground">{project.name}</p>
+                  <p className="flex min-w-0 items-baseline gap-2 truncate text-[13px] font-medium text-foreground">
+                    <span className="truncate">{project.name}</span>
+                    <span className="shrink-0 rounded-full border border-primary/25 bg-primary/10 px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-primary">
+                      {({ social_media: "Social", trafego: "Tráfego", site: "Site", automacao: "Automação", design: "Design", video: "Vídeo", seo: "SEO" } as Record<string, string>)[(project as any).project_type] || "Projeto"}
+                    </span>
+                  </p>
                   <span className="shrink-0 text-[11px] text-muted-foreground">
                     {view.mode === "percent" ? `${view.percent}%` : view.label}
                   </span>
@@ -296,6 +311,75 @@ export default function ClientJourneyUpdates() {
           ))}
         </section>
       )}
+
+      {/* ── Linha de evolução: do ponto A até hoje, mês a mês ── */}
+      {(() => {
+        const monthKey = (value: string) => value.slice(0, 7);
+        const monthLabel = (key: string) =>
+          new Date(`${key}-15T12:00:00`).toLocaleDateString("pt-BR", { month: "short", year: "2-digit" });
+        const buckets = new Map<string, { entregas: number; publicacoes: number; relatorios: number }>();
+        const bump = (at: string | null | undefined, field: "entregas" | "publicacoes" | "relatorios") => {
+          if (!at) return;
+          const key = monthKey(at);
+          const bucket = buckets.get(key) || { entregas: 0, publicacoes: 0, relatorios: 0 };
+          bucket[field] += 1;
+          buckets.set(key, bucket);
+        };
+        for (const file of (snapshot?.allFiles || []) as any[]) bump(file.created_at, "entregas");
+        for (const publication of (snapshot?.publications || []) as any[]) {
+          if (publication.status === "published") bump(publication.published_at, "publicacoes");
+        }
+        for (const report of (snapshot?.reports || []) as any[]) bump(report.created_at, "relatorios");
+        const keys = Array.from(buckets.keys()).sort();
+        if (keys.length === 0) return null;
+        let running = 0;
+        const rows = keys.map((key) => {
+          const bucket = buckets.get(key)!;
+          const total = bucket.entregas + bucket.publicacoes + bucket.relatorios;
+          running += total;
+          return { key, ...bucket, total, running };
+        });
+        const peak = Math.max(...rows.map((row) => row.total), 1);
+        return (
+          <section className="overflow-hidden rounded-2xl border border-border bg-card">
+            <div className="border-b border-border px-5 py-4 sm:px-7">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                Sua evolução desde o início
+              </p>
+              <p className="mt-1 text-sm font-semibold text-foreground">
+                Do ponto de partida até hoje: {rows[rows.length - 1].running} movimento(s) de trabalho registrados.
+              </p>
+            </div>
+            <div className="space-y-2.5 px-5 py-5 sm:px-7">
+              {rows.map((row) => (
+                <div key={row.key} className="flex items-center gap-3">
+                  <span className="w-14 shrink-0 text-[10px] font-semibold uppercase text-muted-foreground">
+                    {monthLabel(row.key)}
+                  </span>
+                  <div className="h-3 flex-1 overflow-hidden rounded-full bg-secondary/50">
+                    <div
+                      className="flex h-full overflow-hidden rounded-full"
+                      style={{ width: `${Math.max(6, (row.total / peak) * 100)}%` }}
+                    >
+                      {row.entregas > 0 && <span className="h-full bg-primary" style={{ flex: row.entregas }} />}
+                      {row.publicacoes > 0 && <span className="h-full bg-sky-500" style={{ flex: row.publicacoes }} />}
+                      {row.relatorios > 0 && <span className="h-full bg-amber-500" style={{ flex: row.relatorios }} />}
+                    </div>
+                  </div>
+                  <span className="w-20 shrink-0 text-right text-[10px] tabular-nums text-muted-foreground">
+                    {row.total} · total {row.running}
+                  </span>
+                </div>
+              ))}
+              <div className="flex flex-wrap gap-3 pt-2 text-[10px] text-muted-foreground">
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-primary" /> Entregas</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-sky-500" /> Publicações</span>
+                <span className="flex items-center gap-1.5"><span className="h-2 w-2 rounded-full bg-amber-500" /> Relatórios</span>
+              </div>
+            </div>
+          </section>
+        );
+      })()}
 
       {/* ── Diário do trabalho: cada movimento, na hora ── */}
       {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
