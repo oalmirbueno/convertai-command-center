@@ -88,6 +88,14 @@ export default defineConfig(({ command, mode }) => {
   return {
     define,
 
+    // Por padrão o Vite gera código para navegadores recentes (Chrome 87+), e
+    // quem estivesse abaixo disso nem conseguia LER o arquivo do painel: a tela
+    // ficava preta, sem erro visível. Baixando o alvo, o próprio build converte
+    // a sintaxe moderna e o painel volta a abrir em máquinas mais antigas.
+    build: {
+      target: ["es2019", "chrome66", "firefox60", "safari12", "edge79"],
+    },
+
     server: {
       host: "::",
       port: 8080,

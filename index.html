@@ -42,6 +42,109 @@
 </head>
   <body>
     <div id="root"></div>
+
+    <!--
+      Rede de seguranca FORA do codigo do app.
+
+      O painel inteiro (inclusive a auto-recuperacao de versao) vive dentro de um
+      arquivo JavaScript moderno. Se o navegador da pessoa for antigo demais para
+      ler esse arquivo, nada daquilo roda: a pagina fica preta e sem explicacao,
+      e atualizar mil vezes nao adianta. O bloco abaixo e escrito em JavaScript
+      antigo de proposito, para funcionar em QUALQUER navegador, e transformar a
+      tela preta numa mensagem que diz o que fazer.
+    -->
+    <div id="app-fallback" style="display:none;position:fixed;inset:0;z-index:2147483647;background:#0D0D0D;color:#F5F5F5;font-family:'Outfit',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;padding:24px;overflow:auto;-webkit-box-align:center;-webkit-box-pack:center;">
+      <div style="max-width:460px;margin:0 auto;padding-top:12vh;text-align:center;">
+        <p id="app-fallback-title" style="font-size:20px;font-weight:700;margin:0 0 12px;">Não foi possível abrir o painel</p>
+        <p id="app-fallback-text" style="font-size:14px;line-height:1.6;color:rgba(245,245,245,0.75);margin:0 0 20px;"></p>
+        <button id="app-fallback-retry" type="button" style="min-height:48px;padding:14px 28px;border:0;border-radius:12px;background:#00FF66;color:#0D0D0D;font-size:15px;font-weight:700;cursor:pointer;">Tentar novamente</button>
+        <p style="font-size:12px;line-height:1.6;color:rgba(245,245,245,0.45);margin:20px 0 0;">
+          Se continuar assim, mande esta tela para a Aceleriq:
+        </p>
+        <p id="app-fallback-info" style="font-size:11px;line-height:1.5;color:rgba(245,245,245,0.45);word-break:break-word;margin:6px 0 0;"></p>
+      </div>
+    </div>
+
+    <noscript>
+      <div style="position:fixed;inset:0;background:#0D0D0D;color:#F5F5F5;font-family:system-ui,sans-serif;padding:24px;text-align:center;">
+        <p style="font-size:16px;padding-top:12vh;">O painel precisa de JavaScript ativado no navegador para funcionar.</p>
+      </div>
+    </noscript>
+
+    <script>
+      (function () {
+        var shown = false;
+
+        function show(title, text) {
+          if (shown) return;
+          shown = true;
+          var box = document.getElementById("app-fallback");
+          if (!box) return;
+          var titleEl = document.getElementById("app-fallback-title");
+          var textEl = document.getElementById("app-fallback-text");
+          var infoEl = document.getElementById("app-fallback-info");
+          if (titleEl) titleEl.innerHTML = title;
+          if (textEl) textEl.innerHTML = text;
+          if (infoEl) infoEl.innerHTML = navigator.userAgent;
+          box.style.display = "block";
+
+          // Internet lenta: se o painel terminar de carregar depois do aviso,
+          // o aviso sai da frente sozinho em vez de tapar a tela para sempre.
+          var watch = window.setInterval(function () {
+            if (!appMounted()) return;
+            window.clearInterval(watch);
+            box.style.display = "none";
+            shown = false;
+          }, 1000);
+        }
+
+        var retry = document.getElementById("app-fallback-retry");
+        if (retry) {
+          retry.onclick = function () {
+            var url = window.location.href.split("#")[0];
+            url += (url.indexOf("?") < 0 ? "?" : "&") + "v=" + new Date().getTime();
+            window.location.replace(url);
+          };
+        }
+
+        // O app so termina de montar quando ha conteudo dentro de #root.
+        function appMounted() {
+          var root = document.getElementById("root");
+          return !!(root && root.children && root.children.length > 0);
+        }
+
+        var OLD_BROWSER_TEXT =
+          "O navegador deste computador está em uma versão antiga e não consegue carregar o painel. " +
+          "Atualize o Google Chrome (ou abra o painel pelo celular) e o acesso volta ao normal.";
+
+        // Navegador sem suporte a modulos (Chrome anterior ao 61, por exemplo)
+        // nunca vai executar o app. Avisa na hora, sem esperar.
+        if (!("noModule" in document.createElement("script"))) {
+          show("Navegador desatualizado", OLD_BROWSER_TEXT);
+          return;
+        }
+
+        // Erro de leitura do codigo tambem significa navegador antigo demais.
+        window.addEventListener("error", function (event) {
+          if (appMounted()) return;
+          var message = String((event && event.message) || "");
+          if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(message)) {
+            show("Navegador desatualizado", OLD_BROWSER_TEXT);
+          }
+        }, true);
+
+        // Rede final: passou o tempo e nada apareceu na tela.
+        window.setTimeout(function () {
+          if (appMounted()) return;
+          show(
+            "Não foi possível abrir o painel",
+            "O painel não terminou de carregar neste aparelho. Toque em Tentar novamente. " +
+              "Se não resolver, o navegador pode estar desatualizado: atualize o Google Chrome ou abra o painel pelo celular."
+          );
+        }, 12000);
+      })();
+    </script>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
