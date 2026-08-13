@@ -485,7 +485,7 @@ export default function EditorialDetailSheet({
       <Sheet open={open} onOpenChange={onOpenChange}>
         <SheetContent
           side="bottom"
-          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-t-2xl border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl data-[state=open]:animate-in data-[state=closed]:animate-out"
+          className="inset-x-0 bottom-0 top-auto mx-auto flex h-[92dvh] w-full max-w-4xl flex-col gap-0 overflow-hidden rounded-t-2xl border border-border p-0 sm:inset-x-auto sm:left-1/2 sm:top-1/2 sm:h-auto sm:h-[88dvh] sm:max-h-[88dvh] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-2xl data-[state=open]:animate-in data-[state=closed]:animate-out"
         >
           <SheetHeader className="shrink-0 border-b border-border bg-card px-5 py-4 text-left sm:px-7 sm:py-5">
             <div className="flex items-start justify-between gap-4 pr-8">

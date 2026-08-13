@@ -33,26 +33,65 @@ export default function ClientPlainSummary({
   nextSteps,
 }: Props) {
   const data = useMemo(() => {
-    const num = (key: string) => {
-      const value = Number(metrics?.[key]);
-      return Number.isFinite(value) ? value : 0;
+    // Muitos relatórios usam métricas com nomes próprios (investimento_brl,
+    // conversas, reservas...). Classifica cada chave pelo nome, em qualquer
+    // idioma, para a leitura clara funcionar com QUALQUER relatório real.
+    const normalize = (key: string) =>
+      key
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[̀-ͯ]/g, "");
+    const isRateKey = (key: string) =>
+      /^custo|cpc|cpm|cpa|ctr|taxa|rate|_pct|roas|frequen|medio|media|avg|per_|_por_/.test(key);
+    const bucketOf = (key: string): string | null => {
+      if (isRateKey(key)) return null;
+      if (/investi|spend|verba|gasto|orcamento/.test(key)) return "spend";
+      if (/receita|revenue|faturamento/.test(key)) return "revenue";
+      if (/venda|compra|purchase|reserva|pedido|booking|checkout_conclu/.test(key)) return "purchases";
+      if (/conversa|lead|mensagem|msg|contato|whatsapp|direct|conversion/.test(key)) return "contacts";
+      if (/clique|click|visita|trafego|traffic|sessao|sessions/.test(key)) return "visits";
+      if (/alcance|impress|reach/.test(key)) return "reach";
+      if (/seguidor|follower/.test(key)) return "followers";
+      if (/engaj|curtida|like|coment|comment|compartilh|share|salv|save|view/.test(key)) return "engagement";
+      return null;
     };
-    const prev = (key: string) => {
-      const value = Number(previousMetrics?.[key]);
-      return Number.isFinite(value) ? value : 0;
+    const sumBuckets = (source: Record<string, any> | null | undefined) => {
+      const totals: Record<string, number> = {};
+      for (const [rawKey, rawValue] of Object.entries(source || {})) {
+        if (rawKey === "custom" || rawKey.startsWith("__")) continue;
+        const value = Number(rawValue);
+        if (!Number.isFinite(value) || value <= 0) continue;
+        const bucket = bucketOf(normalize(rawKey));
+        if (!bucket) continue;
+        totals[bucket] = (totals[bucket] || 0) + value;
+      }
+      const custom = (source as any)?.custom;
+      if (custom && typeof custom === "object") {
+        for (const [rawKey, rawValue] of Object.entries(custom)) {
+          const value = Number(rawValue);
+          if (!Number.isFinite(value) || value <= 0) continue;
+          const bucket = bucketOf(normalize(rawKey));
+          if (!bucket) continue;
+          totals[bucket] = (totals[bucket] || 0) + value;
+        }
+      }
+      return totals;
     };
 
-    const reach = num("reach") || num("impressions");
-    const prevReach = prev("reach") || prev("impressions");
-    const visits = num("profile_visits") + num("clicks") + num("traffic");
-    const prevVisits = prev("profile_visits") + prev("clicks") + prev("traffic");
-    const contacts = num("messages") + num("conversions") + num("leads");
-    const prevContacts = prev("messages") + prev("conversions") + prev("leads");
-    const purchases = num("purchases");
-    const revenue = num("revenue");
-    const spend = num("ad_spend");
-    const followers = num("followers_gained");
-    const engagement = num("engagement") + num("likes") + num("comments") + num("shares") + num("saves");
+    const now = sumBuckets(metrics);
+    const before = sumBuckets(previousMetrics);
+
+    const reach = now.reach || 0;
+    const prevReach = before.reach || 0;
+    const visits = now.visits || 0;
+    const prevVisits = before.visits || 0;
+    const contacts = now.contacts || 0;
+    const prevContacts = before.contacts || 0;
+    const purchases = now.purchases || 0;
+    const revenue = now.revenue || 0;
+    const spend = now.spend || 0;
+    const followers = now.followers || 0;
+    const engagement = now.engagement || 0;
 
     const costPerContact = contacts > 0 && spend > 0 ? spend / contacts : null;
     const costPerPurchase = purchases > 0 && spend > 0 ? spend / purchases : null;

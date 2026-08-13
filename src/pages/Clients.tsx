@@ -1178,18 +1178,18 @@ export default function Clients() {
                       </span>
                     </div>
                     <div className="space-y-2 text-[13px]">
-                      {avulsosList.map((c) => renderClientRow(c))}
-                    </div>
-                    <div className="flex flex-wrap gap-1.5 px-1 pt-1">
                       {avulsosList.map((c) => (
-                        <button
-                          key={c.id}
-                          type="button"
-                          onClick={() => toggleOneOffDone(c, true)}
-                          className="rounded-md border border-border bg-transparent px-2 py-1 text-[10px] text-muted-foreground transition-colors hover:border-success/40 hover:text-success"
-                        >
-                          Concluir {c.company_name || c.full_name}
-                        </button>
+                        <div key={c.id} className="relative">
+                          {renderClientRow(c)}
+                          <button
+                            type="button"
+                            onClick={(event) => { event.stopPropagation(); toggleOneOffDone(c, true); }}
+                            title="Marcar este avulso como concluído"
+                            className="absolute right-3 top-1/2 z-10 -translate-y-1/2 rounded-lg border border-success/30 bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success transition-colors hover:bg-success/20"
+                          >
+                            Concluir
+                          </button>
+                        </div>
                       ))}
                     </div>
                   </div>
