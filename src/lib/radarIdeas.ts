@@ -144,6 +144,8 @@ export function radarMomentLine(ctx: RadarClientContext): string {
 export interface RadarIdea {
   id: string;
   lens: RadarLens;
+  /** De onde a ideia veio: playbook local ou geração com IA e busca na web. */
+  source?: "playbook" | "ia";
   /** Nome da jogada, do jeito que o cliente lê. */
   title: string;
   /** Uma frase que explica a ideia. */
@@ -420,6 +422,7 @@ export function buildRadarIdeas(ctx: RadarClientContext, limit = 3): RadarIdea[]
     ideas.push({
       id: `${ctx.clientId}:${play.id}`,
       lens: play.lens,
+      source: "playbook",
       title: play.title(ctx),
       pitch: play.pitch,
       moment,
@@ -448,8 +451,8 @@ export function radarIdeaForClient(idea: RadarIdea): {
     opportunity: idea.pitch,
     // O contexto real primeiro, o motivo depois: o cliente lê o retrato do
     // próprio negócio antes da recomendação, e a ideia deixa de parecer
-    // genérica.
-    whyNow: `${idea.moment}\n\n${idea.whyNow}`,
+    // genérica. Ideia gerada por IA já traz o contexto embutido no motivo.
+    whyNow: idea.moment ? `${idea.moment}\n\n${idea.whyNow}` : idea.whyNow,
     recommendation: idea.moves.map((move, index) => `${index + 1}. ${move}`).join("\n"),
     signal: idea.signal,
   };

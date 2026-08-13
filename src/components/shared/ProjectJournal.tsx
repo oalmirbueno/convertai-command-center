@@ -156,6 +156,7 @@ export default function ProjectJournal({
             kind: "auto",
             icon: "approved",
             title: `Etapa concluída: ${doneMatch[1].replace(/^"|"$/g, "")}`,
+            body: "Mais um passo do plano vencido. O andamento completo está em Onde Estamos.",
           });
         }
         continue;
@@ -174,12 +175,18 @@ export default function ProjectJournal({
         (file.mime_type || "").startsWith("image/") ||
         /\.(png|jpe?g|webp|gif)$/i.test(file.file_name || "");
       const previewUrl = isImage ? "resolver" : null;
+      // Cada registro explica O MOMENTO: o que aquilo significa no fluxo do
+      // trabalho e qual é o próximo passo. Linha de entrega seca não conta
+      // história nenhuma.
       if (!file.approval_requested_at && !file.client_decided_at) {
         list.push({
           at: file.created_at,
           kind: "auto",
           icon: "file",
           title: `Novo material no projeto: ${file.file_name}`,
+          body: canWrite
+            ? "Produzido e revisado internamente. Já está disponível na área de documentos do cliente."
+            : "Produzido e revisado pela equipe. Já está disponível para você na área de Documentos.",
           previewUrl,
           file,
         });
@@ -190,6 +197,9 @@ export default function ProjectJournal({
           kind: "auto",
           icon: "file",
           title: canWrite ? `Material enviado para aprovação do cliente: ${file.file_name}` : `Material enviado para sua aprovação: ${file.file_name}`,
+          body: canWrite
+            ? "Passou pela revisão interna e agora aguarda o aceite do cliente para liberar o agendamento."
+            : "Passou pela nossa revisão de qualidade e agora é com você: sua aprovação libera o agendamento e a publicação na data planejada.",
           previewUrl,
           file,
         });
@@ -200,6 +210,9 @@ export default function ProjectJournal({
           kind: "auto",
           icon: "approved",
           title: `Material aprovado: ${file.file_name}`,
+          body: canWrite
+            ? "Aprovação registrada. O material segue para agendamento e publicação."
+            : "Aprovação registrada. A partir daqui o material segue para agendamento e vai ao ar na data combinada, sem você precisar fazer mais nada.",
           previewUrl,
           file,
         });
@@ -212,6 +225,9 @@ export default function ProjectJournal({
           kind: "auto",
           icon: "publication",
           title: `Publicação no ar (${publication.platform === "instagram" ? "Instagram" : publication.platform})`,
+          body: canWrite
+            ? "Conteúdo publicado no perfil do cliente, conforme o calendário aprovado."
+            : "Conteúdo publicado no seu perfil, na data combinada. O desempenho dele entra na próxima leitura de resultados.",
         });
       }
     }
@@ -221,6 +237,9 @@ export default function ProjectJournal({
         kind: "auto",
         icon: "report",
         title: `Atualização publicada: ${report.title}`,
+        body: canWrite
+          ? "Atualização visível para o cliente na área de Relatórios."
+          : "Leitura completa disponível na área de Relatórios: o que foi feito, os números e o próximo passo.",
       });
     }
 

@@ -19,9 +19,10 @@ import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
 import {
   HeartPulse, AlertTriangle, Sparkles, FileText, Send, CheckCircle2,
-  Clock, ArrowUpRight, ShieldAlert, Radar, Star, UserCircle, Trash2,
+  Clock, ArrowUpRight, ShieldAlert, Radar, Star, UserCircle, Trash2, Loader2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const fmt = (v: number) => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(v || 0);
@@ -111,6 +112,10 @@ export default function AdminExperience() {
   const [genPreviews, setGenPreviews] = useState<DraftPreview[] | null>(null);
   /** Ideia do Radar escolhida pela equipe para virar mensagem do cliente. */
   const [genIdeaId, setGenIdeaId] = useState<string | null>(null);
+  /** Ideias geradas com IA e busca na web, por cliente. */
+  const [aiIdeas, setAiIdeas] = useState<Record<string, RadarIdea[]>>({});
+  const [aiClientId, setAiClientId] = useState<string>("");
+  const [aiLoading, setAiLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
@@ -421,6 +426,64 @@ export default function AdminExperience() {
     return out.sort((a, b) => b.score - a.score);
   }, [healthRows, projects, releasedFiles, allPublications, reports, pendingApprovalFiles]);
 
+  // IA na frente, playbook depois. É esta lista que a tela e as mensagens usam.
+  const allRadarIdeas = useMemo<RadarIdea[]>(
+    () => [...Object.values(aiIdeas).flat(), ...opportunities],
+    [aiIdeas, opportunities],
+  );
+
+  /**
+   * Gera as ideias do mês com IA e busca na web, a partir do contexto real do
+   * cliente. O motor local continua como base; a IA entra para trazer ideias
+   * específicas do nicho, ancoradas em tendência atual.
+   */
+  const generateAiIdeas = async () => {
+    if (!aiClientId || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke("radar-ideas", {
+        body: { client_id: aiClientId },
+      });
+      if (error) throw new Error(error.message || "O gerador não respondeu.");
+      if (data?.error) throw new Error(data.error);
+      const stamp = Date.now();
+      const mapped: RadarIdea[] = (data?.ideas || []).map((idea: any, index: number) => ({
+        id: `${aiClientId}:ia-${stamp}-${index}`,
+        lens: "tendencia" as const,
+        source: "ia" as const,
+        title: `${data?.client_name || "Cliente"}: ${String(idea?.titulo || "Ideia do mês")}`,
+        pitch: String(idea?.descricao || ""),
+        moment: "",
+        whyNow: String(idea?.por_que_agora || ""),
+        moves: Array.isArray(idea?.passos) ? idea.passos.slice(0, 4).map(String) : [],
+        signal: String(idea?.sinal || "O sinal principal da frente que a ideia move."),
+        internal: {
+          offer: String(idea?.interno_oferta || "A definir pela equipe"),
+          range: [
+            Number(idea?.interno_faixa_min) || 0,
+            Number(idea?.interno_faixa_max) || 0,
+          ] as [number, number],
+          effort:
+            idea?.interno_esforco === "alto" || idea?.interno_esforco === "baixo"
+              ? idea.interno_esforco
+              : ("medio" as const),
+        },
+        score: 200 - index,
+      }));
+      if (mapped.length === 0) throw new Error("A IA não devolveu ideias válidas.");
+      setAiIdeas((previous) => ({ ...previous, [aiClientId]: mapped }));
+      toast.success(
+        data?.web_search
+          ? "Ideias geradas com busca na web."
+          : "Ideias geradas (sem busca na web disponível neste momento).",
+      );
+    } catch (error: any) {
+      toast.error(error?.message || "Não foi possível gerar as ideias agora.");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   // ───────── Rascunhos: montagem com dados reais e processo explicado ─────────
   // Estrutura oficial de cada mensagem: o que fizemos, por que fizemos,
   // qual sinal vamos observar e quando revisamos.
@@ -465,6 +528,40 @@ export default function AdminExperience() {
     const fridayReview = "Na sexta-feira voltamos com a Prova de Movimento mostrando o que avançou e o que aprendemos.";
     const mondayReview = "Na segunda-feira abrimos o próximo ciclo com a nova Rota da Semana.";
 
+    // Âncora da semana: segunda 00:00. O meio e o fim da semana falam do que
+    // aconteceu DESDE SEGUNDA, não de uma janela móvel de 7 dias - é isso que
+    // faz a Rota, o Check e a Prova contarem UMA história contínua, sem
+    // repetição entre elas.
+    const weekStart = new Date(now);
+    weekStart.setHours(0, 0, 0, 0);
+    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7));
+    const weekEnd = new Date(weekStart.getTime() + 5 * 86400000);
+    const weekRangeLabel = `${weekStart.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })} a ${weekEnd.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}`;
+
+    const releasedSinceMonday = (releasedFiles || []).filter(
+      (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekStart,
+    );
+    const releasedMondayNames = releasedSinceMonday.slice(0, 6).map((f: any) => f.file_name).join(", ");
+    const releasedMondayExtra = Math.max(0, releasedSinceMonday.length - 6);
+    const publishedSinceMonday = clientPubs.filter(
+      (p: any) => p.status === "published" && p.published_at && new Date(p.published_at) >= weekStart,
+    );
+    // Publicações agendadas para sair ainda ESTA semana.
+    const scheduledThisWeek = clientPubs.filter(
+      (p: any) =>
+        p.status === "scheduled" && p.scheduled_at &&
+        new Date(p.scheduled_at) >= now && new Date(p.scheduled_at) <= weekEnd,
+    );
+    // Etapas com data dentro desta semana: o que a Rota promete atacar.
+    const milestonesThisWeek = (allMilestones || [])
+      .filter((m: any) => {
+        if (!projectIds.has(m.project_id) || m.status === "completed" || !m.target_date) return false;
+        const due = new Date(`${m.target_date}T12:00:00`);
+        return due >= weekStart && due <= weekEnd;
+      })
+      .slice(0, 3)
+      .map((m: any) => m.title);
+
     // Foco da semana derivado do que realmente está acontecendo, com variação
     const seed = client.id + ritual;
     const focus = pending > 0
@@ -502,8 +599,8 @@ export default function AdminExperience() {
     // mais forte detectada para este cliente. `radarIdeaForClient` devolve só a
     // parte que o cliente pode ler: a leitura comercial nunca chega aqui.
     const chosenIdea =
-      opportunities.find((idea) => idea.id === genIdeaId && idea.id.startsWith(`${client.id}:`)) ||
-      opportunities.find((idea) => idea.id.startsWith(`${client.id}:`)) ||
+      allRadarIdeas.find((idea) => idea.id === genIdeaId && idea.id.startsWith(`${client.id}:`)) ||
+      allRadarIdeas.find((idea) => idea.id.startsWith(`${client.id}:`)) ||
       null;
     const radarText = chosenIdea ? radarIdeaForClient(chosenIdea) : null;
 
@@ -520,20 +617,33 @@ export default function AdminExperience() {
     };
 
     if (ritual === "meio_semana") {
+      // O meio de semana ATUALIZA a Rota de segunda: fala do que mudou desde
+      // ela, nunca repete a abertura.
+      const midOpening = pickVariant([
+        `Meio de semana, ${name}. Atualização direta do que mudou desde a Rota de segunda.`,
+        `${name}, check de quarta: o que já andou desde a abertura da semana e o que fecha até sexta.`,
+        `Metade da semana vencida, ${name}. Aqui está o movimento real desde segunda.`,
+      ], seed);
       return {
         ...base,
         title: `Check do Meio da Semana · ${dateLabel}`,
         summary: [
-          `Passando no meio da semana para manter você por dentro de tudo, ${name}.`,
+          midOpening,
           ``,
-          `O QUE JÁ ANDOU DESDE SEGUNDA`,
-          released7d > 0
-            ? `Liberamos ${released7d} entrega(s) no painel${releasedNames ? `: ${releasedNames}` : ""}. Cada uma já passou pela nossa revisão interna de qualidade antes de chegar até você.`
-            : `A semana está em fase de produção: os materiais estão sendo construídos e passam pela nossa revisão interna antes de aparecerem no painel.`,
+          `O QUE MUDOU DESDE SEGUNDA`,
+          releasedSinceMonday.length > 0
+            ? `${releasedSinceMonday.length} entrega(s) liberadas no painel desde a abertura da semana: ${releasedMondayNames}${releasedMondayExtra > 0 ? ` e mais ${releasedMondayExtra}` : ""}. Cada uma passou pela revisão interna antes de chegar até você.`
+            : `As entregas da semana estão em produção e revisão interna. Elas aparecem no painel no momento em que forem liberadas, e você recebe o aviso.`,
+          publishedSinceMonday.length > 0
+            ? `${publishedSinceMonday.length} publicação(ões) já foram ao ar nesta semana, no calendário aprovado.`
+            : ``,
           ``,
-          `O QUE ESTÁ EM PRODUÇÃO AGORA`,
-          activeProjects.length > 0 ? frontsText : `Preparação das próximas entregas do seu ciclo, com revisão interna de qualidade antes de qualquer material chegar até você.`,
-          nextMilestones ? `Próximas etapas no radar: ${nextMilestones}.` : ``,
+          `O QUE FECHA ATÉ SEXTA`,
+          milestonesThisWeek.length > 0
+            ? `Etapas com data nesta semana: ${milestonesThisWeek.join("; ")}.`
+            : scheduledThisWeek.length > 0
+              ? `${scheduledThisWeek.length} publicação(ões) agendada(s) para sair ainda nesta semana.`
+              : `Fechamento da produção em andamento para a Prova de Movimento de sexta chegar com a semana completa.`,
           ``,
           pending > 0
             ? `O QUE DEPENDE DE VOCÊS\n${pending} material(is) aguardando aprovação (${pendingNames}). Sua aprovação libera o agendamento na data planejada. Sem ela, o cronograma da semana trava.`
@@ -544,21 +654,30 @@ export default function AdminExperience() {
         next_steps: pending > 0
           ? `Aprovar os materiais pendentes ainda hoje (${pendingNames}). Leva 2 minutos na área de Aprovações.`
           : "Nenhuma ação necessária agora. A próxima parada é a Prova de Movimento na sexta.",
-        highlights: "Check de meio de semana: andamento, produção e o que depende de vocês",
+        highlights: `Desde segunda: ${releasedSinceMonday.length} entrega(s), ${publishedSinceMonday.length} publicação(ões) no ar`,
       };
     }
     if (ritual === "prova_movimento") {
+      // A sexta fecha a história que a Rota abriu: puxa TUDO o que a semana
+      // entregou, desde segunda, com nome e sobrenome, e aponta a próxima.
+      const closeOpening = pickVariant([
+        `Fechando a semana de ${weekRangeLabel}, ${name}. Aqui está tudo o que ela entregou.`,
+        `${name}, sexta é dia de prova: o balanço completo da semana de ${weekRangeLabel}.`,
+        `Semana de ${weekRangeLabel} encerrada, ${name}. O que prometemos na Rota e o que aconteceu de fato:`,
+      ], seed);
       return {
         ...base,
         title: `Prova de Movimento · ${dateLabel}`,
         summary: [
-          `Fechamento da semana de ${name}, com o processo aberto para você ver.`,
+          closeOpening,
           ``,
-          `O QUE FIZEMOS`,
-          released7d > 0
-            ? `${released7d} entrega(s) concluídas e liberadas no painel${releasedNames ? `: ${releasedNames}` : ""}.`
-            : `Semana de construção interna: produção e preparação das próximas entregas (bastidores que aparecem no painel assim que liberados).`,
-          publishedWeek.length > 0 ? `${publishedWeek.length} publicação(ões) foram ao ar nesta semana, conforme o calendário aprovado por vocês.` : ``,
+          `TUDO O QUE A SEMANA ENTREGOU`,
+          releasedSinceMonday.length > 0
+            ? `${releasedSinceMonday.length} entrega(s) concluídas e liberadas no painel: ${releasedMondayNames}${releasedMondayExtra > 0 ? ` e mais ${releasedMondayExtra}` : ""}.`
+            : `Semana de construção interna: produção e preparação das próximas entregas. Elas aparecem no painel na hora em que forem liberadas.`,
+          publishedSinceMonday.length > 0
+            ? `${publishedSinceMonday.length} publicação(ões) foram ao ar, no calendário aprovado por vocês.`
+            : ``,
           ``,
           `POR QUE FIZEMOS`,
           activeProjects.length > 0
@@ -567,6 +686,13 @@ export default function AdminExperience() {
           ``,
           `O QUE VAMOS OBSERVAR`,
           observation,
+          ``,
+          `PRÓXIMOS PASSOS`,
+          [
+            nextMilestones ? `Avançar em ${nextMilestones}.` : ``,
+            nextPubText ? `Próxima publicação confirmada: ${nextPubText}.` : ``,
+            `A nova Rota chega segunda com o plano da próxima semana, continuando desta linha do tempo.`,
+          ].filter(Boolean).join("\n"),
           ``,
           pending > 0 ? `PENDÊNCIA: ${pending} material(is) aguardando sua aprovação (${pendingNames}).` : `PENDÊNCIA: nenhuma. Tudo em dia do seu lado.`,
           ``,
@@ -577,7 +703,7 @@ export default function AdminExperience() {
           : nextMilestones
             ? `O próximo passo é nosso: avançar em ${nextMilestones}. Você acompanha tudo pelo painel e a nova Rota chega segunda.`
             : `O próximo passo é nosso: preparar o ciclo da próxima semana. A nova Rota chega segunda-feira com o plano completo.`,
-        highlights: `${released7d} entrega(s) na semana · processo aberto do que, por quê e qual sinal`,
+        highlights: `Semana ${weekRangeLabel}: ${releasedSinceMonday.length} entrega(s) e ${publishedSinceMonday.length} publicação(ões) no ar`,
       };
     }
     if (ritual === "radar_aceleriq") {
@@ -664,10 +790,31 @@ export default function AdminExperience() {
       ...base,
       title: `Rota da Semana · ${dateLabel}`,
       summary: [
-        `Bom dia, ${name}! Abrindo a semana com o plano claro, do nosso jeito: você nunca fica sem saber o que está acontecendo.`,
+        pickVariant([
+          `Bom dia, ${name}! Abrindo a semana de ${weekRangeLabel} com o plano claro: início, meio e fim já desenhados.`,
+          `${name}, nova semana, novo ciclo (${weekRangeLabel}). Aqui está o caminho que vamos percorrer até sexta.`,
+          `Segunda-feira, ${name}: o plano da semana de ${weekRangeLabel}, na sequência em que ele vai acontecer.`,
+        ], seed),
         ``,
         `FOCO DESTA SEMANA`,
         focus,
+        ``,
+        `COMO A SEMANA SE DESENROLA`,
+        [
+          `• Início (segunda e terça): ${
+            pending > 0
+              ? `destravar as aprovações pendentes (${pendingNames}) e abrir a produção da semana.`
+              : milestonesThisWeek.length > 0
+                ? `atacar ${milestonesThisWeek[0]}.`
+                : `abrir a produção das entregas do ciclo.`
+          }`,
+          `• Meio (quarta): check de andamento aqui no grupo, com o que já foi liberado e o que fecha até sexta.`,
+          `• Fim (sexta): ${
+            scheduledThisWeek.length > 0
+              ? `${scheduledThisWeek.length} publicação(ões) no ar e a Prova de Movimento com o balanço completo da semana.`
+              : `entregas da semana liberadas no painel e a Prova de Movimento com o balanço completo.`
+          }`,
+        ].join("\n"),
         ``,
         `O QUE VAMOS FAZER E POR QUÊ`,
         activeProjects.length > 0
@@ -978,7 +1125,7 @@ export default function AdminExperience() {
           <TabsTrigger value="carteira" className="text-[13px] rounded-md shrink-0">Carteira ({healthRows.length})</TabsTrigger>
           <TabsTrigger value="perfis" className="text-[13px] rounded-md shrink-0">Perfis</TabsTrigger>
           <TabsTrigger value="avulsos" className="text-[13px] rounded-md shrink-0">Avulsos ({oneOffClients.length})</TabsTrigger>
-          <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar de ideias ({opportunities.length})</TabsTrigger>
+          <TabsTrigger value="radar" className="text-[13px] rounded-md shrink-0">Radar de ideias ({allRadarIdeas.length})</TabsTrigger>
           <TabsTrigger value="fila" className="text-[13px] rounded-md shrink-0">Fila de revisão ({draftReports.length})</TabsTrigger>
           <TabsTrigger value="historico" className="text-[13px] rounded-md shrink-0">Histórico ({publishedReports.length})</TabsTrigger>
         </TabsList>
@@ -1310,6 +1457,38 @@ export default function AdminExperience() {
                   A faixa de valor e o serviço avulso aparecem só para a equipe. Isso nunca entra na
                   mensagem que o cliente recebe: para ele é ideia, não proposta comercial.
                 </p>
+
+                {/* Gerador com IA: ideias específicas do nicho, com busca na web. */}
+                <div className="mt-3 flex flex-col gap-2 border-t border-border pt-3 sm:flex-row sm:items-center">
+                  <Select value={aiClientId} onValueChange={setAiClientId}>
+                    <SelectTrigger className="w-full sm:w-64 rounded-lg bg-secondary text-xs">
+                      <SelectValue placeholder="Escolher cliente..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {portfolioClients.map((client: any) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.company_name || client.full_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <button
+                    type="button"
+                    disabled={!aiClientId || aiLoading}
+                    onClick={() => void generateAiIdeas()}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[12px] font-semibold text-primary-foreground transition-opacity disabled:opacity-50"
+                  >
+                    {aiLoading ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="h-3.5 w-3.5" />
+                    )}
+                    {aiLoading ? "Pesquisando e gerando..." : "Gerar ideias com IA + busca na web"}
+                  </button>
+                  <p className="text-[10px] text-muted-foreground sm:ml-auto">
+                    A IA lê o contexto real do cliente e busca tendências do nicho antes de propor.
+                  </p>
+                </div>
               </div>
             )}
             {opportunities.length === 0 && (
@@ -1318,7 +1497,7 @@ export default function AdminExperience() {
                 ou Pulso respondido, as ideias do mês aparecem aqui por cliente.
               </div>
             )}
-            {opportunities.map((idea) => {
+            {allRadarIdeas.map((idea) => {
               const lens = RADAR_LENSES[idea.lens];
               const [low, high] = idea.internal.range;
               return (
@@ -1329,17 +1508,23 @@ export default function AdminExperience() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-[10px] px-2 py-0.5 rounded-full bg-primary/10 text-primary">
-                        {lens.label}
+                        {idea.source === "ia" ? "IA + busca na web" : lens.label}
                       </span>
                       <p className="text-[13px] font-medium text-foreground">{idea.title}</p>
                     </div>
-                    <p className="text-[12px] text-foreground/80 mt-1.5">{idea.pitch}</p>
+
+                    {/* A IDEIA, descrita por completo. */}
+                    <p className="mt-1.5 text-[12px] leading-relaxed text-foreground/85">
+                      {idea.pitch}
+                    </p>
 
                     {/* O retrato real do cliente: é ele que faz a ideia deixar
-                        de parecer genérica. */}
-                    <p className="mt-2 rounded-lg bg-secondary/40 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                      {idea.moment}
-                    </p>
+                        de parecer genérica. A IA já embute o contexto no motivo. */}
+                    {idea.moment && (
+                      <p className="mt-2 rounded-lg bg-secondary/40 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                        {idea.moment}
+                      </p>
+                    )}
 
                     <p className="text-[11px] text-muted-foreground mt-2">
                       <span className="text-foreground/70">Por que agora: </span>
