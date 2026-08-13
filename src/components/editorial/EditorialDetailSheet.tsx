@@ -202,9 +202,11 @@ function PublicationDeliveryStatus({ publicationId }: { publicationId: string })
       <div className="min-w-0 flex-1">
         <p className={cn("text-xs font-medium", failed ? "text-destructive" : "text-sky-500")}>
           {AUTOPUBLISH_STAGE_LABELS[data.stage]}
-          {data.attempts > 1 && ` · ${data.attempts} tentativas`}
+          {/* "Tentativas" é contagem de idas à Meta, não de erros; mostrar
+              durante o processo assustava sem motivo. Só aparece na falha. */}
+          {failed && data.attempts > 1 && ` · ${data.attempts} idas à Meta`}
         </p>
-        {data.last_error && (
+        {failed && data.last_error && (
           <p className="mt-0.5 break-words text-xs text-muted-foreground">{data.last_error}</p>
         )}
         {failed && (
@@ -1205,7 +1207,12 @@ export default function EditorialDetailSheet({
 
                     {isStaff && <PublicationDeliveryStatus publicationId={publication.id} />}
 
-                    {isStaff && bundle.internal?.failure_reason && (
+                    {/* Falha do motor já aparece no bloco acima; repetir o
+                        mesmo texto aqui era o card com "duas falhas". Este
+                        bloco fica só para falha registrada manualmente. */}
+                    {isStaff &&
+                      bundle.internal?.failure_reason &&
+                      bundle.internal?.failure_code !== "autopublish" && (
                       <div className="flex gap-2 rounded-lg border border-destructive/20 bg-destructive/5 p-3">
                         <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
                         <div>
