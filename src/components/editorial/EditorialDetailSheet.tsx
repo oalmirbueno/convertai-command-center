@@ -40,6 +40,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import CarouselSlider from "@/components/shared/CarouselSlider";
 import {
+  loadEditorialPostForMutation,
   useEditorialEditorOptions,
   useEditorialMutations,
   useEditorialPostEvents,
@@ -533,15 +534,15 @@ export default function EditorialDetailSheet({
         expectedVersion: post.post.version,
       });
 
-      const { data: freshPubs, error } = await supabase
-        .from("editorial_publications")
-        .select("id, version, status, permalink")
-        .eq("post_id", post.post.id);
-      if (error) throw error;
-      const pending = (freshPubs || []).filter((p: any) =>
-        ["planned", "scheduled", "failed"].includes(p.status),
+      // Releitura pelo caminho oficial (mesma trilha blindada do calendário).
+      const freshBundle = await loadEditorialPostForMutation(
+        post.post.id,
+        post.post.client_id,
       );
-      for (const publication of pending) {
+      const pending = freshBundle.publications.filter(({ publication }) =>
+        ["planned", "scheduled", "failed"].includes(publication.status),
+      );
+      for (const { publication } of pending) {
         await transitionPublication.mutateAsync({
           publicationId: publication.id,
           action: "publish",
