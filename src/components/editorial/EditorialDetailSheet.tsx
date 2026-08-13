@@ -461,6 +461,109 @@ export default function EditorialDetailSheet({
   };
 
   /**
+   * Concluir o conteúdo INTEIRO, funcione como for:
+   * - com publicações pendentes, conclui todas;
+   * - sem nenhuma publicação criada, cria uma na hora (com a conta do
+   *   cliente) e conclui em seguida. Era o caso em que o card abria sem
+   *   nenhum botão e nada podia ser feito.
+   */
+  const adminConcludePost = async () => {
+    if (!post) return;
+    const concludable = post.publications.filter(({ publication }) =>
+      ["planned", "scheduled", "failed"].includes(publication.status),
+    );
+    if (concludable.length > 0) {
+      for (const bundle of concludable) {
+        await adminConcludeNow(bundle);
+      }
+      return;
+    }
+    if (post.publications.length > 0) {
+      toast.info("As publicações deste conteúdo já estão publicadas ou canceladas.");
+      return;
+    }
+
+    // Sem publicação criada: cria com a conta do cliente e conclui.
+    const accountId =
+      inlineAccountId || (inlineAccounts.length === 1 ? inlineAccounts[0].id : "");
+    if (!accountId) {
+      toast.error(
+        inlineAccounts.length === 0
+          ? "Conecte ou cadastre a conta do cliente para concluir por aqui."
+          : "Escolha a conta no bloco Programar publicação logo abaixo e toque em Concluir de novo.",
+      );
+      return;
+    }
+    setAdminActing(true);
+    try {
+      await savePost.mutateAsync({
+        payload: {
+          id: post.post.id,
+          idempotency_key: crypto.randomUUID(),
+          mutation_id: crypto.randomUUID(),
+          client_id: post.post.client_id,
+          project_id: post.post.project_id,
+          primary_file_id: post.post.primary_file_id,
+          title: post.post.title,
+          content_type: post.post.content_type,
+          objective: post.post.objective,
+          default_caption: post.post.default_caption,
+          production_status: post.post.production_status,
+          task_id: (post as any).internal?.task_id || null,
+          responsible_id: (post as any).internal?.responsible_id || null,
+          internal_notes: (post as any).internal?.internal_notes || null,
+          revision_of_post_id: null,
+          publications: [
+            {
+              id: null,
+              idempotency_key: crypto.randomUUID(),
+              external_account_id: accountId,
+              file_id: null,
+              caption: post.post.default_caption,
+              first_comment: null,
+              alt_text: null,
+              asset_file_ids: [],
+              // Alguns minutos à frente para passar em qualquer validação de
+              // horário; a baixa logo abaixo marca o publicado real.
+              scheduled_at: new Date(Date.now() + 2 * 60_000).toISOString(),
+              scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+            },
+          ],
+        },
+        expectedVersion: post.post.version,
+      });
+
+      const { data: freshPubs, error } = await supabase
+        .from("editorial_publications")
+        .select("id, version, status, permalink")
+        .eq("post_id", post.post.id);
+      if (error) throw error;
+      const pending = (freshPubs || []).filter((p: any) =>
+        ["planned", "scheduled", "failed"].includes(p.status),
+      );
+      for (const publication of pending) {
+        await transitionPublication.mutateAsync({
+          publicationId: publication.id,
+          action: "publish",
+          expectedVersion: publication.version,
+          permalink: publication.permalink || "https://www.instagram.com/",
+          publishedAt: new Date().toISOString(),
+        });
+      }
+      toast.success("Concluído: publicação registrada e contada no painel.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Não foi possível concluir.";
+      toast.error(
+        /approved|publishable|ready|immutable/i.test(message)
+          ? "O material ainda não está aprovado. Use Aprovar tudo agora primeiro."
+          : message,
+      );
+    } finally {
+      setAdminActing(false);
+    }
+  };
+
+  /**
    * Concluir agora: marca a publicação como publicada para o painel somar,
    * mesmo sem o link real (entra um link padrão, editável depois).
    */
@@ -881,6 +984,42 @@ export default function EditorialDetailSheet({
                 </div>
               )}
             </section>
+
+            {/* Barra de poder do admin: funciona SEMPRE, inclusive quando o
+                conteúdo ainda não tem nenhuma publicação criada (antes, nesse
+                caso, o card abria sem botão nenhum). */}
+            {canPublish && !isImpersonating && (
+              <section className="flex flex-wrap items-center gap-2 rounded-xl border border-primary/25 bg-primary/[0.04] p-3">
+                <p className="mr-auto text-[11px] leading-relaxed text-muted-foreground">
+                  Ações rápidas do admin, valem para este conteúdo inteiro.
+                </p>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={adminActing || !post.post.primary_file_id}
+                  onClick={() => adminApproveNow(post.post.primary_file_id)}
+                  title={post.post.primary_file_id ? "Registra revisão, liberação e aceite do cliente em um passo" : "Sem material vinculado para aprovar"}
+                >
+                  {adminActing ? (
+                    <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <FileCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                  )}
+                  Aprovar tudo agora
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  disabled={adminActing}
+                  onClick={() => void adminConcludePost()}
+                  title="Marca como publicado para o painel somar. O link pode ser ajustado depois."
+                >
+                  <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                  Concluir agora
+                </Button>
+              </section>
+            )}
 
             <section className="space-y-3">
               <div className="flex items-center justify-between">
