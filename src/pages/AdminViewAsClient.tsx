@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useContext, useEffect, useState } from "react";
+import { useSearchParams, useNavigate, UNSAFE_NavigationContext } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useClients } from "@/hooks/useSupabaseData";
 import { ImpersonationProvider } from "@/contexts/ImpersonationContext";
@@ -38,6 +38,41 @@ export default function AdminViewAsClient() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const clientId = searchParams.get("client");
+  const { navigator } = useContext(UNSAFE_NavigationContext);
+
+  // Dentro do espelho do cliente, qualquer atalho interno das paginas
+  // (Aprovacoes, Onde Estamos, Cofre...) navegava para a rota REAL e jogava
+  // o admin de volta nas telas dele. Aqui a navegacao e interceptada e vira
+  // troca de aba, mantendo o admin vendo exatamente o que o cliente ve.
+  useEffect(() => {
+    if (!clientId) return;
+    const tabByPath: Record<string, string> = {
+      "/dashboard": "dashboard",
+      "/onde-estamos": "onde-estamos",
+      "/aprovacoes": "aprovacoes",
+      "/calendario": "calendario",
+      "/documentos": "documentos",
+      "/relatorios": "relatorios",
+      "/pedidos": "pedidos",
+      "/cofre": "cofre",
+      "/financeiro": "financeiro",
+      "/projetos": "dashboard",
+    };
+    const originalPush = navigator.push;
+    const guardedPush: typeof navigator.push = (...args: any[]) => {
+      const target = typeof args[0] === "string" ? args[0] : args[0]?.pathname || "";
+      const tab = tabByPath[target.split("?")[0]];
+      if (tab) {
+        originalPush.call(navigator, `/ver-como-cliente?client=${clientId}&tab=${tab}`);
+        return;
+      }
+      originalPush.apply(navigator, args as any);
+    };
+    navigator.push = guardedPush;
+    return () => {
+      if (navigator.push === guardedPush) navigator.push = originalPush;
+    };
+  }, [navigator, clientId]);
   const projectId = searchParams.get("project");
   const tabParam = searchParams.get("tab") || "dashboard";
   const activeTab = clientTabs.some((tab) => tab.id === tabParam)
