@@ -80,10 +80,16 @@ export default function ClientJourneyUpdates() {
             .limit(40),
         ]);
 
+      // Tarefas e marcos vem sem filtro de cliente no banco; recorta aqui
+      // pelos projetos DESTE cliente. Sem isso, um admin abrindo a pagina
+      // via o painel inteiro somado (609 entregas "em producao").
+      const projectIds = new Set((projects.data || []).map((project) => project.id));
       return {
         projects: projects.data || [],
-        tasks: tasks.data || [],
-        milestones: milestones.data || [],
+        tasks: (tasks.data || []).filter((task) => task.project_id && projectIds.has(task.project_id)),
+        milestones: (milestones.data || []).filter(
+          (milestone) => milestone.project_id && projectIds.has(milestone.project_id),
+        ),
         approvals: approvals.data || [],
         publications: publications.data || [],
         reports: reports.data || [],

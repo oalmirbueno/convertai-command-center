@@ -484,11 +484,15 @@ function financialStatusMeta(status: string | null) {
   if (["pending", "open", "expected", "scheduled", "pendente", "aberto", "previsto"].includes(normalized)) {
     return { label: "A receber", className: "border-warning/30 bg-warning/10 text-warning" };
   }
-  return { label: status || "Sem cobrança", className: "border-border bg-secondary/60 text-muted-foreground" };
+  if (["not_configured", "unconfigured", "none"].includes(normalized)) {
+    return { label: "Definir cobrança", className: "border-border bg-secondary/60 text-muted-foreground" };
+  }
+  return { label: status ? "Revisar cobrança" : "Sem cobrança", className: "border-border bg-secondary/60 text-muted-foreground" };
 }
 
 function formatCurrency(value: number | null) {
-  return value == null ? "-" : currencyFormatter.format(value);
+  if (value == null || value === 0) return "-";
+  return currencyFormatter.format(value);
 }
 
 function formatPercent(value: number | null) {
@@ -1125,7 +1129,7 @@ export default function Clients() {
                         <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Custo direto</p>
                         {financial?.directCostEstimated && (
                           <span className="rounded bg-warning/10 px-1 py-0.5 text-[7px] font-semibold uppercase tracking-wide text-warning">
-                            Estimated
+                            Estimativa
                           </span>
                         )}
                       </div>
