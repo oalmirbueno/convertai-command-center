@@ -28,27 +28,41 @@ interface JournalEntry {
   file?: any;
 }
 
-/** Titulo e miniatura clicaveis com URL assinada: o storage e privado, a URL
- *  precisa ser resolvida na hora. Vale para imagem, PDF e video. */
-function JournalFileLink({ file, title, isImage }: { file: any; title: string; isImage: boolean }) {
-  const { url } = useResolvedFileUrl(file);
+/** Titulo clicavel com URL assinada. O resolvedor espera campos camelCase
+ *  (storageBucket/fileUrl) - passar a linha crua do banco fazia a URL voltar
+ *  vazia e nada era clicavel. */
+function useJournalFileUrl(file: any) {
+  return useResolvedFileUrl({
+    fileUrl: file?.file_url || null,
+    storageBucket: file?.storage_bucket || null,
+    storagePath: file?.storage_path || null,
+  } as any);
+}
+
+function JournalFileTitle({ file, title }: { file: any; title: string }) {
+  const { url } = useJournalFileUrl(file);
   if (!url) return <span>{title}</span>;
   return (
-    <>
-      <a href={url} target="_blank" rel="noreferrer" className="hover:text-primary hover:underline">
-        {title}
-      </a>
-      {isImage && (
-        <a href={url} target="_blank" rel="noreferrer" className="block" title="Abrir material">
-          <img
-            src={url}
-            alt=""
-            loading="lazy"
-            className="mt-2 h-16 w-16 rounded-lg border border-border object-cover transition-transform hover:scale-105"
-          />
-        </a>
-      )}
-    </>
+    <a href={url} target="_blank" rel="noreferrer" className="hover:text-primary hover:underline">
+      {title}
+    </a>
+  );
+}
+
+/** Miniatura em elemento proprio, fora do paragrafo do titulo (bloco dentro
+ *  de <p> e HTML invalido e quebrava o layout inteiro da linha). */
+function JournalFileThumb({ file }: { file: any }) {
+  const { url } = useJournalFileUrl(file);
+  if (!url) return null;
+  return (
+    <a href={url} target="_blank" rel="noreferrer" className="mt-2 block w-fit" title="Abrir material">
+      <img
+        src={url}
+        alt=""
+        loading="lazy"
+        className="h-16 w-16 rounded-lg border border-border object-cover transition-transform hover:scale-105"
+      />
+    </a>
   );
 }
 
@@ -175,7 +189,7 @@ export default function ProjectJournal({
           at: file.approval_requested_at,
           kind: "auto",
           icon: "file",
-          title: `Material enviado para sua aprovação: ${file.file_name}`,
+          title: canWrite ? `Material enviado para aprovação do cliente: ${file.file_name}` : `Material enviado para sua aprovação: ${file.file_name}`,
           previewUrl,
           file,
         });
@@ -302,7 +316,7 @@ export default function ProjectJournal({
                   <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                     <p className={isNote ? "text-[13px] font-medium leading-snug text-foreground" : "text-[12px] leading-snug text-foreground/80"}>
                       {entry.file ? (
-                        <JournalFileLink file={entry.file} title={entry.title} isImage={Boolean(entry.previewUrl)} />
+                        <JournalFileTitle file={entry.file} title={entry.title} />
                       ) : (
                         entry.title
                       )}
@@ -321,6 +335,7 @@ export default function ProjectJournal({
                       {entry.body}
                     </p>
                   )}
+                  {entry.file && entry.previewUrl && <JournalFileThumb file={entry.file} />}
                 </div>
               </div>
             );

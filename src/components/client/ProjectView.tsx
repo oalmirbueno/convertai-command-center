@@ -179,6 +179,69 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
+            {/* Como funciona este servico: o processo desenhado, curto e claro */}
+            {(() => {
+              const FLOWS: Record<string, { title: string; steps: { label: string; hint: string }[] }> = {
+                social_media: {
+                  title: "Como funciona o seu Social Media",
+                  steps: [
+                    { label: "Estratégia", hint: "Definimos os temas do ciclo" },
+                    { label: "Criação", hint: "Artes e legendas produzidas" },
+                    { label: "Sua aprovação", hint: "Você dá o OK no painel" },
+                    { label: "Publicação", hint: "Sai na conta certa, na hora certa" },
+                    { label: "Medição", hint: "Resultados viram relatório" },
+                  ],
+                },
+                trafego: {
+                  title: "Como funciona o seu Tráfego",
+                  steps: [
+                    { label: "Público", hint: "Quem deve ver o anúncio" },
+                    { label: "Criativos", hint: "Anúncios produzidos" },
+                    { label: "Veiculação", hint: "Campanha no ar com verba" },
+                    { label: "Otimização", hint: "Ajustes para custo menor" },
+                    { label: "Relatório", hint: "Investido × retorno explicado" },
+                  ],
+                },
+                site: {
+                  title: "Como funciona o seu Site",
+                  steps: [
+                    { label: "Estrutura", hint: "Mapa das páginas" },
+                    { label: "Design", hint: "Visual e identidade" },
+                    { label: "Sua aprovação", hint: "Você valida o caminho" },
+                    { label: "Construção", hint: "Página no ar" },
+                    { label: "Entrega", hint: "Publicado e revisado" },
+                  ],
+                },
+              };
+              const flow = FLOWS[project.project_type] || {
+                title: "Como funciona este projeto",
+                steps: [
+                  { label: "Planejamento", hint: "Escopo e objetivos" },
+                  { label: "Produção", hint: "Mão na massa" },
+                  { label: "Sua aprovação", hint: "Você valida no painel" },
+                  { label: "Entrega", hint: "Material liberado" },
+                  { label: "Acompanhamento", hint: "Resultado medido" },
+                ],
+              };
+              return (
+                <div className="mb-6 rounded-2xl border border-border bg-card p-4 sm:p-5">
+                  <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                    {flow.title}
+                  </p>
+                  <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {flow.steps.map((step, index) => (
+                      <div key={step.label} className="relative rounded-xl border border-border bg-secondary/25 p-3">
+                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary/15 text-[10px] font-bold text-primary">
+                          {index + 1}
+                        </span>
+                        <p className="mt-2 text-[12px] font-semibold text-foreground">{step.label}</p>
+                        <p className="mt-0.5 text-[10px] leading-snug text-muted-foreground">{step.hint}</p>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
             <TabOverview project={project} />
           </TabsContent>
           <TabsContent value="deliveries" className="mt-6">
