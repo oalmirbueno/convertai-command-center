@@ -225,6 +225,13 @@ export function useClients() {
         }));
       }
 
+      // Cliente: a "lista de clientes" e ele mesmo. O caminho de admin abaixo
+      // consulta user_roles, que o RLS bloqueia para clientes - e o erro
+      // derrubava a agenda inteira no lado do cliente.
+      if (profile?.role === "client") {
+        return profile ? [{ ...profile, projectCount: 0 }] : [];
+      }
+
       // Admin: all clients
       const { data: clientRoles, error: rolesError } = await supabase
         .from("user_roles")

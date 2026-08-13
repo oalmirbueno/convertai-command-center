@@ -9,6 +9,7 @@ import {
   CheckCircle2, Clock, Sparkles, ExternalLink, AlertCircle,
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
+import ProjectJournal from "@/components/shared/ProjectJournal";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 
 /**
@@ -278,6 +279,9 @@ export default function ClientJourneyUpdates() {
           ))}
         </section>
       )}
+
+      {/* ── Diário do trabalho: cada movimento, na hora ── */}
+      {clientId && <ProjectJournal clientId={clientId} canWrite={false} />}
 
       {/* ── Atualizações escritas pela Aceleriq ── */}
       {rituals.length > 0 && (

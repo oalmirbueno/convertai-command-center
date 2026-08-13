@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import ProjectJournal from "@/components/shared/ProjectJournal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
 import { useBilling } from "@/hooks/useFinancialData";
@@ -1145,6 +1146,10 @@ export default function AdminExperience() {
                         </div>
                       );
                     })()}
+
+                    <div className="bg-card border border-border rounded-xl p-5">
+                      <ProjectJournal clientId={client.id} canWrite />
+                    </div>
 
                     <div className="bg-card border border-border rounded-xl p-5 space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Contexto agora</span>
