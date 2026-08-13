@@ -70,6 +70,13 @@ import {
   useAutopublishStatus,
 } from "@/hooks/useAutopublishStatus";
 import { useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import {
+  recordOfflineClientApproval,
+  releaseFileToClient,
+  requestFileAgencyReview,
+  reviewFileAgency,
+} from "@/lib/fileApprovalActions";
 
 type PublicationAction =
   | "schedule"
@@ -394,6 +401,91 @@ export default function EditorialDetailSheet({
   };
   const confirmDialog = useConfirm();
   const isStaff = canEdit || canPublish;
+  const sheetQueryClient = useQueryClient();
+  const [adminActing, setAdminActing] = useState(false);
+
+  /**
+   * Poder total do admin sem sair da agenda: aprova o material de ponta a
+   * ponta em um clique (revisão interna, liberação e o aceite do cliente dado
+   * fora do painel). Cada passo usa a RPC oficial, então toda trava de
+   * segurança continua valendo e tudo fica auditado.
+   */
+  const adminApproveNow = async (fileId: string | null) => {
+    if (!fileId) {
+      toast.error("Este conteúdo não tem material vinculado para aprovar.");
+      return;
+    }
+    const proceed = await confirmDialog({
+      title: "Aprovar tudo agora?",
+      description:
+        "Registra em um passo a revisão interna, a liberação e o aceite do cliente (dado no grupo ou fora do painel). Use quando o aceite realmente aconteceu.",
+      confirmLabel: "Aprovar tudo",
+    });
+    if (!proceed) return;
+    setAdminActing(true);
+    try {
+      const freshFile = async () => {
+        const { data, error } = await supabase
+          .from("files")
+          .select("id, version, approval_status, agency_approval_status, visibility")
+          .eq("id", fileId)
+          .single();
+        if (error) throw error;
+        return data as any;
+      };
+      let file = await freshFile();
+      if (file.agency_approval_status === "not_requested") {
+        await requestFileAgencyReview(fileId);
+        file = await freshFile();
+      }
+      if (file.agency_approval_status !== "approved") {
+        await reviewFileAgency(fileId, "approved");
+        file = await freshFile();
+      }
+      if (file.visibility !== "approval") {
+        await releaseFileToClient(fileId, "approval");
+        file = await freshFile();
+      }
+      if (file.approval_status !== "approved") {
+        await recordOfflineClientApproval(fileId, Number(file.version ?? 1), "grupo");
+      }
+      toast.success("Material aprovado de ponta a ponta. Já pode agendar ou concluir.");
+      await sheetQueryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+    } catch (error: unknown) {
+      toast.error(
+        error instanceof Error ? error.message : "Não foi possível aprovar agora.",
+      );
+    } finally {
+      setAdminActing(false);
+    }
+  };
+
+  /**
+   * Concluir agora: marca a publicação como publicada para o painel somar,
+   * mesmo sem o link real (entra um link padrão, editável depois).
+   */
+  const adminConcludeNow = async (bundle: EditorialPublicationBundle) => {
+    setAdminActing(true);
+    try {
+      await transitionPublication.mutateAsync({
+        publicationId: bundle.publication.id,
+        action: "publish",
+        expectedVersion: bundle.publication.version,
+        permalink: bundle.publication.permalink || "https://www.instagram.com/",
+        publishedAt: new Date().toISOString(),
+      });
+      toast.success("Concluído: o painel já conta esta publicação como no ar.");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Não foi possível concluir.";
+      toast.error(
+        /approved|publishable|ready|immutable/i.test(message)
+          ? "O material ainda não está aprovado. Use Aprovar tudo agora primeiro."
+          : message,
+      );
+    } finally {
+      setAdminActing(false);
+    }
+  };
   const {
     data: events,
     isLoading: loadingEvents,
@@ -969,6 +1061,39 @@ export default function EditorialDetailSheet({
 
                     {canPublish && !isImpersonating && (
                       <div className="flex flex-wrap gap-2 border-t border-border pt-3">
+                        {/* Poder total do admin, sem sair da agenda. */}
+                        {!ready && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            disabled={adminActing}
+                            onClick={() =>
+                              adminApproveNow(
+                                publication.file_id || post.post.primary_file_id,
+                              )
+                            }
+                          >
+                            {adminActing ? (
+                              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+                            ) : (
+                              <FileCheck2 className="mr-1.5 h-3.5 w-3.5" />
+                            )}
+                            Aprovar tudo agora
+                          </Button>
+                        )}
+                        {["planned", "scheduled", "failed"].includes(publication.status) && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant={ready ? "default" : "outline"}
+                            disabled={adminActing}
+                            onClick={() => void adminConcludeNow(bundle)}
+                            title="Marca como publicado para o painel somar. O link pode ser ajustado depois."
+                          >
+                            <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
+                            Concluir agora
+                          </Button>
+                        )}
                         {["planned", "scheduled"].includes(
                           publication.status,
                         ) && (

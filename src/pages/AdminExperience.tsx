@@ -116,6 +116,8 @@ export default function AdminExperience() {
   const [aiIdeas, setAiIdeas] = useState<Record<string, RadarIdea[]>>({});
   const [aiClientId, setAiClientId] = useState<string>("");
   const [aiLoading, setAiLoading] = useState(false);
+  /** Prévia aberta da mensagem do grupo (ver antes de copiar). */
+  const [groupMsgPreview, setGroupMsgPreview] = useState<string | null>(null);
   const [generating, setGenerating] = useState(false);
   const [expandedHealth, setExpandedHealth] = useState<string | null>(null);
   const [profileClientId, setProfileClientId] = useState("");
@@ -1321,17 +1323,49 @@ export default function AdminExperience() {
                         { moment: "abertura" as const, label: "Abertura da semana (segunda)" },
                         { moment: "meio" as const, label: "Meio da semana (quarta)" },
                         { moment: "fechamento" as const, label: "Fechamento (sexta)" },
-                      ].map((m) => (
-                        <button
-                          key={m.moment}
-                          onClick={() => copyText(buildGroupMessage(client, m.moment), `Mensagem de ${m.label.toLowerCase()} copiada!`)}
-                          className="w-full flex items-center justify-between px-3.5 py-2.5 rounded-lg border border-border bg-secondary/30 text-left cursor-pointer hover:border-primary/40 transition-colors"
-                        >
-                          <span className="text-[12px] text-foreground">{m.label}</span>
-                          <span className="text-[10px] text-primary flex items-center gap-1"><Send className="w-3 h-3" /> Copiar</span>
-                        </button>
-                      ))}
-                      <p className="text-[10px] text-muted-foreground">Montada na hora com entregas, frentes e pendências reais. O texto varia a cada semana para nunca soar repetido.</p>
+                      ].map((m) => {
+                        const isPreviewOpen = groupMsgPreview === m.moment;
+                        return (
+                        <div key={m.moment} className="rounded-lg border border-border bg-secondary/30 overflow-hidden">
+                          <div className="w-full flex items-center justify-between px-3.5 py-2.5">
+                            <span className="text-[12px] text-foreground">{m.label}</span>
+                            <span className="flex items-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => setGroupMsgPreview(isPreviewOpen ? null : m.moment)}
+                                className="text-[10px] text-muted-foreground hover:text-foreground flex items-center gap-1 cursor-pointer"
+                              >
+                                {isPreviewOpen ? "Fechar" : "Ver"}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => copyText(buildGroupMessage(client, m.moment), `Mensagem de ${m.label.toLowerCase()} copiada!`)}
+                                className="text-[10px] text-primary flex items-center gap-1 cursor-pointer"
+                              >
+                                <Send className="w-3 h-3" /> Copiar
+                              </button>
+                            </span>
+                          </div>
+                          {/* Ver antes de enviar: o texto completo, gerado na
+                              hora com os dados reais e a lógica da semana. */}
+                          {isPreviewOpen && (
+                            <div className="border-t border-border bg-background/60 px-3.5 py-3">
+                              <p className="whitespace-pre-line text-[11.5px] leading-relaxed text-muted-foreground">
+                                {buildGroupMessage(client, m.moment)}
+                              </p>
+                              <button
+                                type="button"
+                                onClick={() => copyText(buildGroupMessage(client, m.moment), "Mensagem copiada! É só colar no WhatsApp.")}
+                                className="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary/10 px-3 py-1.5 text-[11px] text-primary hover:bg-primary/20 transition-colors cursor-pointer"
+                              >
+                                <Send className="w-3 h-3" /> Copiar esta mensagem
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                        );
+                      })}
+                      <p className="text-[10px] text-muted-foreground">Montada na hora com entregas, frentes e pendências reais, seguindo a linha da semana (abertura, meio e fechamento). O texto varia a cada semana para nunca soar repetido.</p>
                     </div>
 
                     {(() => {

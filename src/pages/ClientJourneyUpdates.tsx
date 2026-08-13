@@ -11,6 +11,53 @@ import {
   CheckCircle2, Clock, Sparkles, ExternalLink, AlertCircle,
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
+
+/**
+ * O narrador do mês: a IA escreve 3 a 5 frases contando o mês do cliente a
+ * partir da linha do tempo real do painel. Cache local de 24 horas por
+ * cliente e mês, para a página abrir na hora e a IA não rodar a cada visita.
+ * Sem movimento no mês ou com o narrador indisponível, o card simplesmente
+ * não aparece: nunca um erro na cara do cliente.
+ */
+function MonthNarrative({ clientId }: { clientId: string }) {
+  const monthKey = new Date().toISOString().slice(0, 7);
+  const cacheKey = `aceleriq-narrative-${clientId}-${monthKey}`;
+
+  const { data } = useQuery({
+    queryKey: ["journey-narrative", clientId, monthKey],
+    queryFn: async (): Promise<{ narrative: string | null; month?: string }> => {
+      try {
+        const cached = localStorage.getItem(cacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Date.now() - (parsed.at || 0) < 24 * 3600_000) return parsed.value;
+        }
+      } catch { /* cache corrompido: gera de novo */ }
+
+      const { data: result, error } = await supabase.functions.invoke("journey-narrative", {
+        body: { client_id: clientId },
+      });
+      if (error || result?.error) return { narrative: null };
+      const value = { narrative: result?.narrative ?? null, month: result?.month };
+      try {
+        localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), value }));
+      } catch { /* armazenamento cheio: segue sem cache */ }
+      return value;
+    },
+    staleTime: 24 * 3600_000,
+    retry: false,
+  });
+
+  if (!data?.narrative) return null;
+  return (
+    <section className="rounded-xl border border-primary/25 bg-primary/[0.04] p-5 sm:p-6">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-primary">
+        O seu mês{data.month ? ` de ${data.month}` : ""}, contado pela Aceleriq
+      </p>
+      <p className="mt-2 text-[13.5px] leading-relaxed text-foreground/90">{data.narrative}</p>
+    </section>
+  );
+}
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
@@ -184,6 +231,9 @@ export default function ClientJourneyUpdates() {
           </p>
         </div>
       )}
+
+      {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
+      {clientId && <MonthNarrative clientId={clientId} />}
 
       {/* ── Retrato automático do momento ── */}
       {narrative && (

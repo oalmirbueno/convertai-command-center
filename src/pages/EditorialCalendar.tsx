@@ -522,10 +522,11 @@ export default function EditorialCalendar() {
   const [dragSummary, setDragSummary] = useState<DragSummary | null>(null);
   const sensors = useSensors(
     useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
+      // O arrasto tem que colar no cursor: 2px de tolerância, sem espera.
+      activationConstraint: { distance: 2 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 180, tolerance: 8 },
+      activationConstraint: { delay: 120, tolerance: 8 },
     }),
     useSensor(KeyboardSensor),
   );
@@ -1278,19 +1279,24 @@ export default function EditorialCalendar() {
           bundle.post.id,
           bundle.post.client_id,
         );
-        const scheduled = completeBundle.publications.filter(
-          ({ publication }) => publication.status === "scheduled",
+        // Concluir vale para o que está planejado, agendado ou em falha: o
+        // admin marca como publicado e o painel soma. O link padrão existe
+        // porque a baixa oficial exige um link válido; quando a equipe tiver o
+        // link real do post, é só editar no detalhe.
+        const concludable = completeBundle.publications.filter(
+          ({ publication }) => ["planned", "scheduled", "failed"].includes(publication.status),
         );
-        if (scheduled.length === 0) {
+        if (concludable.length === 0) {
           throw new Error(
-            "Para concluir, primeiro agende a publicação (o conteúdo aprovado vai para a coluna Programado e daí você conclui).",
+            "Nada para concluir aqui: as publicações deste conteúdo já estão publicadas ou canceladas.",
           );
         }
-        for (const { publication } of scheduled) {
+        for (const { publication } of concludable) {
           await transitionPublication.mutateAsync({
             publicationId: publication.id,
             action: "publish",
             expectedVersion: publication.version,
+            permalink: publication.permalink || "https://www.instagram.com/",
             publishedAt: new Date().toISOString(),
             deferRefresh: true,
           });
