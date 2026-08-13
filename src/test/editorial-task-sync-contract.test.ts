@@ -119,7 +119,9 @@ describe("editorial design task workspace contract", () => {
   it("shows only publishable Kanban deadlines in every editorial view", () => {
     expect(page).toContain("isPublishableTask(task)");
     expect(page).toMatch(
-      /view === "board"\s*\? productionTasks\s*:\s*editorialDeadlineTasks/,
+      // Atualizado de proposito: tarefa vinculada a conteudo some de TODAS
+      // as visoes (deadlineTasksUnlinked), nao so do quadro.
+      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksUnlinked/,
     );
     expect(page).toContain(
       "editorialDeadlineTasks.filter((task) => !linkedTaskIds.has(task.id))",
