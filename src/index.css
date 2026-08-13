@@ -387,3 +387,30 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+
+/* ── Modo claro: contraste da marca e da navegacao ──
+   A logo oficial e feita para fundo escuro (texto branco). No tema claro,
+   inverte a luminosidade preservando o verde da marca. */
+.light .brand-logo {
+  filter: invert(1) hue-rotate(180deg) saturate(1.15);
+}
+
+/* Navegacao no claro: letras mais firmes e fundo levemente tonalizado,
+   sem o branco chapado. */
+.light nav a,
+.light nav button {
+  --tw-text-opacity: 1;
+}
+.light .app-topbar {
+  background: hsl(160 25% 12% / 0.97);
+}
+
+/* Fundo do app no claro: leve gradiente para nao ficar tudo branco. */
+.light body {
+  background:
+    radial-gradient(1200px 500px at 85% -10%, hsl(var(--primary) / 0.06), transparent 60%),
+    radial-gradient(900px 400px at -10% 110%, hsl(var(--primary) / 0.05), transparent 55%),
+    hsl(var(--background));
+  background-attachment: fixed;
+}

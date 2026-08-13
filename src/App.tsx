@@ -71,20 +71,31 @@ function LoadingScreen() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <div className="relative flex items-center justify-center">
-        {/* halo pulsante */}
-        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/15 blur-2xl animate-[ping_1.6s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
-        <span className="absolute inline-flex h-24 w-24 rounded-full bg-primary/25 blur-xl animate-[ping_2.2s_cubic-bezier(0.4,0,0.6,1)_infinite]" />
-        {/* logo com respiração suave */}
+        <span className="absolute inline-flex h-40 w-40 rounded-full bg-primary/15 blur-2xl" />
+        {/* Entrada: a marca sobe e assenta; o ponto do i cai, quica e se junta -
+            uma vinheta rapida, sem piscar. A logo tem versao para cada tema. */}
         <img
           src={aceleriqLogo}
           alt="Aceleriq"
-          className="relative h-24 w-auto drop-shadow-[0_0_28px_hsl(var(--primary)/0.55)] animate-[breathe_1.8s_ease-in-out_infinite]"
+          className="brand-logo relative h-24 w-auto animate-[brandIn_0.9s_cubic-bezier(0.22,1,0.36,1)_both] drop-shadow-[0_0_28px_hsl(var(--primary)/0.35)]"
+        />
+        <span
+          aria-hidden="true"
+          className="absolute left-[63%] top-[18%] h-2.5 w-2.5 rounded-full bg-primary animate-[dotDrop_1.1s_cubic-bezier(0.34,1.56,0.64,1)_both]"
         />
       </div>
       <style>{`
-        @keyframes breathe {
-          0%, 100% { transform: scale(1);    opacity: .95; filter: drop-shadow(0 0 22px hsl(var(--primary)/.45)); }
-          50%      { transform: scale(1.06); opacity: 1;   filter: drop-shadow(0 0 38px hsl(var(--primary)/.75)); }
+        @keyframes brandIn {
+          0%   { transform: translateY(14px) scale(0.96); opacity: 0; }
+          60%  { transform: translateY(-2px) scale(1.01); opacity: 1; }
+          100% { transform: translateY(0) scale(1); opacity: 1; }
+        }
+        @keyframes dotDrop {
+          0%   { transform: translateY(-46px) scale(0.6); opacity: 0; }
+          45%  { transform: translateY(0) scale(1.15); opacity: 1; }
+          62%  { transform: translateY(-10px) scale(0.95); }
+          78%  { transform: translateY(0) scale(1.05); }
+          100% { transform: translateY(0) scale(1); opacity: 0.9; }
         }
       `}</style>
     </div>

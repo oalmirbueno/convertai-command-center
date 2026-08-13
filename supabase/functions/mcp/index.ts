@@ -2,6 +2,83 @@
 // To take ownership, delete this banner line; the plugin then leaves the file alone.
 // supabase function: mcp
 // Bundled from src/lib/mcp/index.ts by @lovable.dev/mcp-js.
+// src/lib/mcp/tools/register-client-update.ts
+import { defineTool as defineToolRcu } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zRcu } from "npm:zod@^3.25.76";
+var register_client_update_default = defineToolRcu({
+  name: "register_client_update",
+  title: "Registrar atualizacao no diario do cliente",
+  description: "Registra no Diario do Trabalho o que foi feito, por que e o proximo passo. O cliente ve a ACAO em tempo real no painel (sem autor). Use client_visible=false para nota interna da equipe.",
+  inputSchema: {
+    client_id: zRcu.string().uuid().describe("Cliente dono do diario."),
+    message: zRcu.string().min(5).max(4000).describe("O que foi feito, por que foi feito e qual o proximo passo."),
+    client_visible: zRcu.boolean().optional().describe("true (padrao) = cliente ve; false = nota interna.")
+  },
+  annotations: { readOnlyHint: false, idempotentHint: false, openWorldHint: false },
+  handler: async ({ client_id, message, client_visible }, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    const projects = await sb.from("projects").select("id").eq("client_id", client_id).is("deleted_at", null).limit(1);
+    const project = projects.data && projects.data[0];
+    if (!project) {
+      return { content: [{ type: "text", text: "Cliente sem projeto ativo: crie um projeto antes de registrar o diario." }], isError: true };
+    }
+    const { error } = await sb.from("updates").insert({
+      project_id: project.id,
+      author_id: ctx.getUserId(),
+      message,
+      update_type: "progress",
+      client_visible: client_visible !== false
+    });
+    if (error) {
+      return { content: [{ type: "text", text: `Nao foi possivel registrar: ${error.message}` }], isError: true };
+    }
+    return { content: [{ type: "text", text: "Atualizacao registrada. O cliente ja ve no Diario do Trabalho." }] };
+  }
+});
+
+// src/lib/mcp/tools/get-client-journal.ts
+import { defineTool as defineToolGcj } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zGcj } from "npm:zod@^3.25.76";
+var get_client_journal_default = defineToolGcj({
+  name: "get_client_journal",
+  title: "Ler o diario e o retrato do cliente",
+  description: "Puxa o contexto vivo de um cliente: notas do diario, materiais enviados/aprovados, publicacoes agendadas e no ar, e atualizacoes publicadas. Use antes de escrever qualquer coisa sobre o cliente.",
+  inputSchema: {
+    client_id: zGcj.string().uuid().describe("Cliente."),
+    limit: zGcj.number().int().min(1).max(100).optional().describe("Maximo de itens por fonte (padrao 25).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, limit }, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    const max = limit ?? 25;
+    const projects = await sb.from("projects").select("id, name, status, billing_mode, deadline").eq("client_id", client_id).is("deleted_at", null);
+    const projectIds = (projects.data || []).map((row) => row.id);
+    const [notes, files, publications, reports] = await Promise.all([
+      projectIds.length
+        ? sb.from("updates").select("message, update_type, client_visible, created_at").in("project_id", projectIds).order("created_at", { ascending: false }).limit(max)
+        : Promise.resolve({ data: [] }),
+      sb.from("files").select("file_name, visibility, approval_status, approval_requested_at, client_decided_at, created_at").eq("client_id", client_id).is("archived_at", null).is("parent_file_id", null).order("created_at", { ascending: false }).limit(max),
+      sb.from("editorial_publications").select("status, platform, scheduled_at, published_at, permalink, delivery_mode").eq("client_id", client_id).order("scheduled_at", { ascending: false }).limit(max),
+      sb.from("reports").select("title, status, created_at, period_start, period_end").eq("client_id", client_id).order("created_at", { ascending: false }).limit(max)
+    ]);
+    const payload = {
+      projects: projects.data || [],
+      journal_notes: notes.data || [],
+      files: files.data || [],
+      publications: publications.data || [],
+      reports: reports.data || []
+    };
+    return {
+      content: [{ type: "text", text: `Contexto do cliente: ${(projects.data || []).length} projeto(s), ${(notes.data || []).length} nota(s), ${(files.data || []).length} arquivo(s), ${(publications.data || []).length} publicacao(oes), ${(reports.data || []).length} relatorio(s).` }],
+      structuredContent: payload
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 import { auth, defineMcp } from "npm:@lovable.dev/mcp-js@0.23.0";
 
@@ -1324,8 +1401,8 @@ var authIssuer = `${supabaseUrl}/auth/v1`;
 var mcp_default = defineMcp({
   name: "aceleriq-os",
   title: "Aceleriq OS",
-  version: "1.1.0",
-  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban.",
+  version: "1.2.0",
+  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban. Use `get_client_journal` para puxar o contexto vivo de um cliente e `register_client_update` para registrar no Diario do Trabalho o que foi feito (o cliente ve a acao em tempo real).",
   auth: auth.oauth.issuer({
     issuer: authIssuer,
     acceptedAudiences: "authenticated"
@@ -1338,7 +1415,9 @@ var mcp_default = defineMcp({
     list_editorial_calendar_default,
     list_contracts_default,
     create_task_default,
-    create_editorial_item_default
+    create_editorial_item_default,
+    register_client_update_default,
+    get_client_journal_default
   ]
 });
 
