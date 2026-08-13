@@ -5,7 +5,7 @@ import {
   DndContext,
   DragOverlay,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
   TouchSensor,
   closestCenter,
   useSensor,
@@ -520,13 +520,16 @@ export default function EditorialCalendar() {
     useState<EditorialPostBundle | null>(null);
   const [draftSeed, setDraftSeed] = useState<EditorialDraftSeed | null>(null);
   const [dragSummary, setDragSummary] = useState<DragSummary | null>(null);
+  // Mouse e toque separados de propósito: com o cartão inteiro arrastável, o
+  // PointerSensor capturaria o toque e quebraria o scroll no celular. Mouse
+  // ativa com 3px (instantâneo, clique preservado); no toque, segurar 150ms
+  // inicia o arrasto e o scroll continua livre.
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      // O arrasto tem que colar no cursor: 2px de tolerância, sem espera.
-      activationConstraint: { distance: 2 },
+    useSensor(MouseSensor, {
+      activationConstraint: { distance: 3 },
     }),
     useSensor(TouchSensor, {
-      activationConstraint: { delay: 120, tolerance: 8 },
+      activationConstraint: { delay: 150, tolerance: 8 },
     }),
     useSensor(KeyboardSensor),
   );
@@ -1341,6 +1344,11 @@ export default function EditorialCalendar() {
       const task = activeData.task as EditorialInboxTask;
       if (overData.kind === "date") {
         openCreateFromTask(task, String(overData.dateKey));
+      } else if (overData.kind === "stage" && overData.stage === "delivery") {
+        // Antes o solto aqui não fazia NADA e o cartão voltava sem explicação.
+        toast.error(
+          "Tarefa sozinha não conta como publicada. Toque nela, use Criar e vincular conteúdo, e o conteúdo criado pode ser concluído.",
+        );
       } else if (overData.kind === "stage" && overData.productionStatus) {
         void moveTaskToStage(
           task,
@@ -1445,8 +1453,8 @@ export default function EditorialCalendar() {
               <Send className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" />
               <p>
                 {view === "board"
-                  ? "Aqui ficam rascunho, produção e aprovação. O agendamento acontece na Agenda. Nenhuma rede social é acionada automaticamente."
-                  : "Prazos do Kanban aparecem em roxo. Publicações mostram plataforma e horário. Nenhuma rede social é acionada automaticamente."}
+                  ? "Aqui ficam rascunho, produção e aprovação. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."
+                  : "Prazos do Kanban aparecem em roxo. Conteúdo aprovado e agendado no Instagram publica sozinho pelo painel na data marcada."}
               </p>
             </div>
           </div>

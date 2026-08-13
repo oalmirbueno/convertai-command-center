@@ -517,9 +517,12 @@ function PublicationPill({
             }
           : undefined
       }
+      // Arrasta pelo cartão inteiro; o clique continua abrindo o conteúdo.
+      {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
         "group relative min-h-11 w-full rounded-lg border text-left transition-colors hover:border-primary/40",
         stageClasses[stage] || stageClasses.draft,
+        draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
       data-content-density={compact ? "compact" : "comfortable"}
@@ -1231,8 +1234,12 @@ function BoardPostCard({
             }
           : undefined
       }
+      // O cartão INTEIRO arrasta (o grip virou só indicador). Clique continua
+      // funcionando: o sensor só vira arrasto depois de mover alguns pixels.
+      {...(draggable && !moving ? { ...listeners, ...attributes } : {})}
       className={cn(
         "group rounded-xl border border-border bg-background/90 p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/35 hover:shadow-md motion-reduce:transition-none",
+        draggable && !moving && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
     >
@@ -1364,8 +1371,11 @@ function BoardTaskCard({
             }
           : undefined
       }
+      // Arrasta pelo cartão inteiro; clique nos botões continua normal.
+      {...(draggable ? { ...listeners, ...attributes } : {})}
       className={cn(
         "group rounded-xl border border-primary/20 bg-primary/[0.035] p-3.5 shadow-sm transition-[border-color,box-shadow] duration-150 hover:border-primary/45 hover:shadow-md motion-reduce:transition-none",
+        draggable && "cursor-grab active:cursor-grabbing",
         isDragging && "opacity-30",
       )}
     >

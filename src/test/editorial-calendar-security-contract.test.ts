@@ -83,11 +83,12 @@ describe("editorial calendar integration contract", () => {
     expect(editorialSources).not.toMatch(
       /access_token|refresh_token|client_secret|oauth_token/i,
     );
+    // O texto mudou quando a publicacao automatica passou a existir de
+    // verdade. A garantia tecnica continua identica (as asserts acima):
+    // o FRONTEND nunca chama API social nem guarda credencial; quem publica
+    // e o motor no banco, e a tela agora diz isso ao usuario.
     expect(page).toMatch(
-      /Nenhuma\s+rede\s+social\s+é\s+acionada\s+automaticamente\./,
-    );
-    expect(detail).toMatch(
-      /Nenhuma\s+plataforma\s+externa\s+é\s+acionada\s+automaticamente\./,
+      /publica\s+sozinho\s+pelo\s+painel\s+na\s+data\s+marcada\./,
     );
   });
 
