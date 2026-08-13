@@ -11,6 +11,9 @@ import { describe, expect, it } from "vitest";
  */
 const read = (path: string) => readFileSync(resolve(process.cwd(), path), "utf8");
 const v3 = read("supabase/migrations/20260813210000_autopublish_v3_hardening.sql");
+const publishAll = read(
+  "supabase/migrations/20260813220000_autopublish_publish_all_scheduled.sql",
+);
 
 describe("publicação nunca duplica", () => {
   it("o passo de publicação registra que foi despachado", () => {
@@ -80,6 +83,18 @@ describe("robustez de rede", () => {
 
   it("story vai para stories, não para o feed", () => {
     expect(v3).toContain("media_type=STORIES");
+  });
+});
+
+describe("agendou e aprovou, publica", () => {
+  it("a marcacao interna de entrega deixa de ser trava de entrada", () => {
+    // O caso real: post agendado ficou preso porque nasceu 'manual' (dois
+    // caminhos do painel nem enviavam a marcacao). Decisao de produto:
+    // agendamento de Instagram aprovado E para publicar sozinho.
+    expect(publishAll).toContain("delivery_mode IN (''manual'', ''automatic'')");
+    expect(publishAll).toContain("pg_get_functiondef");
+    // Patch idempotente: rodar duas vezes nao quebra.
+    expect(publishAll).toContain("Patch ja aplicado");
   });
 });
 

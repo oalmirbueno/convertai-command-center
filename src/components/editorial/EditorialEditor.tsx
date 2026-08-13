@@ -62,6 +62,7 @@ import {
   type EditorialApprovedMediaAsset,
 } from "@/lib/editorialMedia";
 import { isPublishableTask } from "@/lib/taskDeliveryTypes";
+import { canDeliverAutomatically } from "@/lib/editorialScheduler";
 
 interface Option {
   id: string;
@@ -600,6 +601,8 @@ export default function EditorialEditor({
               "Um dos horários não existe no fuso selecionado. Ajuste a data.",
             );
           }
+          const assetIds =
+            approvedAssetFileIds.get(publication.fileId || primaryFileId) || [];
           return {
             id: publication.id || null,
             idempotency_key: publication.idempotencyKey,
@@ -608,10 +611,13 @@ export default function EditorialEditor({
             caption: publication.caption.trim() || null,
             first_comment: publication.firstComment.trim() || null,
             alt_text: publication.altText.trim() || null,
-            asset_file_ids:
-              approvedAssetFileIds.get(
-                publication.fileId || primaryFileId,
-              ) || [],
+            asset_file_ids: assetIds,
+            // Declara a entrega automática quando a lista congelada existe e
+            // cabe no limite da Meta. Sem isto o registro nascia "manual" e o
+            // motor antigo nunca olhava para ele.
+            delivery_mode: canDeliverAutomatically(assetIds)
+              ? "automatic"
+              : "manual",
             scheduled_at: scheduledAt,
             scheduled_timezone: publication.timezone,
           };

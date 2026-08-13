@@ -536,25 +536,50 @@ export default function EditorialDetailSheet({
   };
 
   const handleArchive = async () => {
+    // Antes o botão ficava travado enquanto houvesse agendamento, pedindo para
+    // cancelar um por um. Apagar tem que ser um passo só: os agendamentos
+    // pendentes são cancelados aqui mesmo e o conteúdo sai do calendário.
+    const scheduled = post.publications.filter(
+      ({ publication }) => publication.status === "scheduled",
+    );
     const proceed = await confirmDialog({
-      title: "Arquivar este conteúdo?",
-      description: "Ele sai do calendário ativo, mas o histórico fica preservado.",
-      confirmLabel: "Arquivar",
+      title: "Apagar este conteúdo do calendário?",
+      description:
+        scheduled.length > 0
+          ? `Ele tem ${scheduled.length} publicação(ões) agendada(s), que serão canceladas junto. Nada é publicado depois disso e o histórico fica preservado.`
+          : "Ele sai do calendário ativo, mas o histórico fica preservado.",
+      confirmLabel: scheduled.length > 0 ? "Cancelar e apagar" : "Apagar",
+      destructive: true,
     });
     if (!proceed) return;
 
     try {
+      for (const bundle of scheduled) {
+        await transitionPublication.mutateAsync({
+          publicationId: bundle.publication.id,
+          action: "cancel",
+          expectedVersion: bundle.publication.version,
+          scheduledAt: null,
+          timezone: bundle.publication.scheduled_timezone,
+          permalink: null,
+          externalPostId: null,
+          failureCode: null,
+          failureReason: "Conteúdo removido do calendário pela equipe.",
+        });
+      }
       await archivePost.mutateAsync({
         postId: post.post.id,
         expectedVersion: post.post.version,
       });
-      toast.success("Conteúdo arquivado.");
+      toast.success("Conteúdo removido do calendário.");
       onArchived();
     } catch (error: unknown) {
+      const message =
+        error instanceof Error ? error.message : "Não foi possível apagar o conteúdo.";
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível arquivar o conteúdo.",
+        /version|vers[aã]o|changed/i.test(message)
+          ? "O conteúdo mudou enquanto você apagava. Feche, abra de novo e repita."
+          : message,
       );
     }
   };
@@ -1168,29 +1193,16 @@ export default function EditorialDetailSheet({
                   type="button"
                   variant="ghost"
                   className="text-destructive hover:text-destructive"
-                  disabled={
-                    archivePost.isPending ||
-                    post.publications.some(
-                      ({ publication }) =>
-                        publication.status === "scheduled",
-                    )
-                  }
-                  title={
-                    post.publications.some(
-                      ({ publication }) =>
-                        publication.status === "scheduled",
-                    )
-                      ? "Cancele primeiro as publicações agendadas"
-                      : "Arquivar conteúdo"
-                  }
+                  disabled={archivePost.isPending || transitionPublication.isPending}
+                  title="Apagar do calendário (agendamentos pendentes são cancelados junto)"
                   onClick={handleArchive}
                 >
-                  {archivePost.isPending ? (
+                  {archivePost.isPending || transitionPublication.isPending ? (
                     <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
                   ) : (
                     <Archive className="mr-1.5 h-4 w-4" />
                   )}
-                  Arquivar
+                  Apagar
                 </Button>
               )}
               <div className="flex flex-wrap justify-end gap-2">
