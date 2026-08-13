@@ -578,9 +578,18 @@ export default function ClientJourneyDashboard({
         </section>
 
 
-      {/* Projetos com prazo e Entregas recentes lado a lado, cada um com o proprio scroll */}
-      <div className="grid auto-rows-fr grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="h-full max-h-[420px] overflow-y-auto pr-1 rounded-xl">
+      {/* Projetos com prazo e Entregas recentes lado a lado, cada um com o
+          proprio scroll. Sem projetos com prazo, as Entregas ocupam a linha
+          inteira: era a celula vazia esticada que criava o buraco branco. */}
+      <div
+        className={
+          closedProjects.length > 0 || doneProjects.length > 0
+            ? "grid grid-cols-1 gap-6 lg:grid-cols-2"
+            : "grid grid-cols-1 gap-6"
+        }
+      >
+        {(closedProjects.length > 0 || doneProjects.length > 0) && (
+        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-xl">
             {/* 6 · Projetos com começo e fim: porcentagem + marcos */}
             {(closedProjects.length > 0 || doneProjects.length > 0) && (
               <section className="space-y-3">
@@ -635,7 +644,8 @@ export default function ClientJourneyDashboard({
               </section>
             )}
         </div>
-        <div className="h-full max-h-[420px] overflow-y-auto pr-1 rounded-xl">
+        )}
+        <div className="max-h-[420px] overflow-y-auto pr-1 rounded-xl">
             {/* 9 · Entregas recentes (histórico de valor) */}
             <section className="space-y-3">
               <h2 className="text-sm font-semibold text-foreground">Entregas recentes</h2>

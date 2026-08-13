@@ -72,7 +72,7 @@ export default function ClientJourneyUpdates() {
             .is("deleted_at", null),
           supabase
             .from("milestones")
-            .select("project_id, title, status, target_date")
+            .select("project_id, title, status, target_date, updated_at")
             .is("deleted_at", null),
           supabase
             .from("files")
@@ -537,9 +537,29 @@ export default function ClientJourneyUpdates() {
                   </button>
                   {isOpen && (
                     <div className="ml-16 mt-1.5 space-y-1 border-l border-border pl-3 pb-1">
-                      {row.entregas > 0 && (
-                        <p className="text-[11px] text-muted-foreground"><span className="font-semibold text-primary">{row.entregas}</span> material(is) trabalhado(s) neste mês</p>
+                      {/* Entregas com nome: o mês deixa de ser só um número. */}
+                      {(snapshot?.allFiles || [])
+                        .filter((file: any) => file.created_at?.startsWith(row.key))
+                        .slice(0, 5)
+                        .map((file: any) => (
+                          <p key={file.id} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                            <span className="truncate">{file.file_name}</span>
+                          </p>
+                        ))}
+                      {row.entregas > 5 && (
+                        <p className="text-[11px] text-muted-foreground/70">e mais {row.entregas - 5} material(is) neste mês</p>
                       )}
+                      {/* Etapas do plano vencidas no mês. */}
+                      {((snapshot?.milestones || []) as any[])
+                        .filter((m: any) => m.status === "completed" && (m.updated_at || m.target_date || "").startsWith(row.key))
+                        .slice(0, 4)
+                        .map((m: any, index: number) => (
+                          <p key={`ms-${index}`} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" />
+                            <span className="truncate">Etapa concluída: {m.title}</span>
+                          </p>
+                        ))}
                       {(snapshot?.publications || [])
                         .filter((pub: any) => pub.status === "published" && pub.published_at && pub.published_at.startsWith(row.key))
                         .map((pub: any, index: number) => (

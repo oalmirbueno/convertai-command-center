@@ -206,18 +206,20 @@ export default function AdminViewAsClient() {
           </p>
         </div>
 
+        {/* Centralizado e em duas colunas no desktop: a lista acompanha o
+            título, sem aquele vazio todo à direita. */}
         {loadingClients ? (
-          <div className="space-y-2 max-w-3xl">
-            {[1,2,3].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
+          <div className="mx-auto grid max-w-4xl auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
+            {[1,2,3,4].map(i => <Skeleton key={i} className="h-16 w-full rounded-xl" />)}
           </div>
         ) : (
-          <div className="space-y-2 max-w-3xl">
+          <div className="mx-auto grid max-w-4xl auto-rows-fr grid-cols-1 gap-3 sm:grid-cols-2">
             {(clients || []).filter((c: any) => c.plan_status === "active").map((c: any) => (
               <button
                 type="button"
                 key={c.id}
                 onClick={() => selectClient(c)}
-                className="flex w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-colors hover:border-primary/30"
+                className="flex h-full w-full items-center gap-4 rounded-xl border border-border bg-card px-5 py-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_4px_20px_-8px_hsl(var(--primary)/0.25)]"
               >
                 <Avatar className="w-10 h-10 shrink-0">
                   <AvatarFallback className="bg-primary text-primary-foreground text-sm font-semibold">
@@ -225,10 +227,10 @@ export default function AdminViewAsClient() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
-                  <p className="text-[11px] text-muted-foreground">{c.email}</p>
+                  <p className="truncate text-sm font-medium text-foreground">{c.company_name || c.full_name}</p>
+                  <p className="truncate text-[11px] text-muted-foreground">{c.email}</p>
                 </div>
-                <Eye className="w-4 h-4 text-muted-foreground" />
+                <Eye className="w-4 h-4 shrink-0 text-muted-foreground" />
               </button>
             ))}
           </div>

@@ -97,7 +97,7 @@ export default function ProjectJournal({
         .is("deleted_at", null);
       const projectIds = (projects.data || []).map((project) => project.id);
 
-      const [notes, files, publications, reports] = await Promise.all([
+      const [notes, files, publications, reports, doneTasks, doneMilestones] = await Promise.all([
         projectIds.length
           ? supabase
               .from("updates")
@@ -125,6 +125,28 @@ export default function ProjectJournal({
           .eq("status", "published")
           .order("created_at", { ascending: false })
           .limit(20),
+        // Trabalho concluído também é evolução: tarefas e etapas fechadas
+        // entram na linha do tempo, venham do painel, do Kanban ou de agente.
+        projectIds.length
+          ? supabase
+              .from("tasks")
+              .select("title, status, updated_at, project_id")
+              .in("project_id", projectIds)
+              .in("status", ["done", "completed"])
+              .is("deleted_at", null)
+              .order("updated_at", { ascending: false })
+              .limit(25)
+          : Promise.resolve({ data: [] as any[] }),
+        projectIds.length
+          ? supabase
+              .from("milestones")
+              .select("title, status, updated_at, target_date, project_id")
+              .in("project_id", projectIds)
+              .eq("status", "completed")
+              .is("deleted_at", null)
+              .order("updated_at", { ascending: false })
+              .limit(15)
+          : Promise.resolve({ data: [] as any[] }),
       ]);
 
       return {
@@ -133,6 +155,8 @@ export default function ProjectJournal({
         files: files.data || [],
         publications: publications.data || [],
         reports: reports.data || [],
+        doneTasks: (doneTasks.data as any[]) || [],
+        doneMilestones: (doneMilestones.data as any[]) || [],
       };
     },
     enabled: !!clientId,
@@ -243,6 +267,33 @@ export default function ProjectJournal({
       });
     }
 
+    // Tarefa fechada e etapa vencida também são evolução visível.
+    const projectNameById = new Map(
+      (data.projects || []).map((project: any) => [project.id, project.name]),
+    );
+    for (const task of data.doneTasks || []) {
+      list.push({
+        at: task.updated_at,
+        kind: "auto",
+        icon: "approved",
+        title: `Trabalho concluído: ${task.title}`,
+        body: projectNameById.has(task.project_id)
+          ? `Fechado dentro de ${projectNameById.get(task.project_id)}. Mais um passo do plano vencido.`
+          : "Mais um passo do plano vencido.",
+      });
+    }
+    for (const milestone of data.doneMilestones || []) {
+      list.push({
+        at: milestone.updated_at || milestone.target_date,
+        kind: "auto",
+        icon: "approved",
+        title: `Etapa do projeto concluída: ${milestone.title}`,
+        body: projectNameById.has(milestone.project_id)
+          ? `Marco de ${projectNameById.get(milestone.project_id)} fechado. O plano avança para a próxima etapa.`
+          : "Marco fechado. O plano avança para a próxima etapa.",
+      });
+    }
+
     return list
       .filter((entry) => entry.at)
       .sort((a, b) => (a.at < b.at ? 1 : -1))
@@ -314,11 +365,33 @@ export default function ProjectJournal({
       ) : (
         <>
         <div className="relative max-h-[380px] space-y-0 overflow-y-auto rounded-xl border border-border/60 bg-secondary/[0.15] p-3 pr-2">
-          {(showAll ? entries : entries.slice(0, 12)).map((entry, index, visible) => {
-            const EntryIcon = ICONS[entry.icon];
-            const isNote = entry.kind === "note";
-            return (
-              <div key={`${entry.at}-${index}`} className="relative flex gap-3 pb-4">
+          {(() => {
+            // Agrupado por dia: a linha do tempo vira leitura, não lista solta.
+            const visible = showAll ? entries : entries.slice(0, 12);
+            const dayLabel = (at: string) => {
+              const date = new Date(at);
+              const startOfDay = (value: Date) =>
+                new Date(value.getFullYear(), value.getMonth(), value.getDate()).getTime();
+              const diffDays = Math.round((startOfDay(new Date()) - startOfDay(date)) / 86400000);
+              if (diffDays === 0) return "Hoje";
+              if (diffDays === 1) return "Ontem";
+              return date.toLocaleDateString("pt-BR", { day: "2-digit", month: "long" });
+            };
+            let previousDay = "";
+            return visible.map((entry, index) => {
+              const day = dayLabel(entry.at);
+              const showDayHeader = day !== previousDay;
+              previousDay = day;
+              const EntryIcon = ICONS[entry.icon];
+              const isNote = entry.kind === "note";
+              return (
+                <div key={`${entry.at}-${index}`}>
+                  {showDayHeader && (
+                    <p className="pb-2 pt-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                      {day}
+                    </p>
+                  )}
+                  <div className="relative flex gap-3 pb-4">
                 {index < visible.length - 1 && (
                   <span className="absolute left-[13px] top-7 h-full w-px bg-border" aria-hidden="true" />
                 )}
@@ -341,9 +414,7 @@ export default function ProjectJournal({
                       )}
                     </p>
                     <span className="text-[10px] text-muted-foreground">
-                      {new Date(entry.at).toLocaleDateString("pt-BR", {
-                        day: "2-digit",
-                        month: "short",
+                      {new Date(entry.at).toLocaleTimeString("pt-BR", {
                         hour: "2-digit",
                         minute: "2-digit",
                       })}
@@ -355,10 +426,12 @@ export default function ProjectJournal({
                     </p>
                   )}
                   {entry.file && entry.previewUrl && <JournalFileThumb file={entry.file} />}
+                  </div>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
         {entries.length > 12 && (
           <button
