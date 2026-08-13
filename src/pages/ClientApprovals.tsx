@@ -14,6 +14,7 @@ import { AlertTriangle, FileImage, FileText, Film, Archive, ExternalLink, Downlo
 import FilePreviewContent from "@/components/shared/FilePreviewContent";
 import { openFile, downloadFile } from "@/lib/fileActions";
 import { notifyAdmin } from "@/lib/notifyHelpers";
+import { orderEditorialCarouselFiles } from "@/lib/editorialMedia";
 import { isCarouselAssetGroup, mediaKindFromFile, resolveFileUrl, useResolvedFileUrl } from "@/lib/fileUrls";
 import { PLATFORM_LABELS, type EditorialPlatform } from "@/lib/editorial";
 
@@ -169,7 +170,9 @@ export default function ClientApprovals() {
   const getCarouselImages = (f: any) => {
     const children = childrenMap.get(f.id) || [];
     if (isCarouselAssetGroup(f, children)) {
-      return [f, ...children.sort((a: any, b: any) => a.file_name.localeCompare(b.file_name))];
+      // Ordem numerica real dos cards: "card 2" antes de "card 10" (o
+      // localeCompare alfabetico embaralhava a sequencia do carrossel).
+      return orderEditorialCarouselFiles(f, children);
     }
     return [f];
   };
