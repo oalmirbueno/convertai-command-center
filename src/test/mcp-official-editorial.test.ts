@@ -146,9 +146,11 @@ describe("official MCP editorial helpers", () => {
 
 describe("official MCP editorial contract", () => {
   it("registers both editorial tools and documents their non-publishing boundary", () => {
-    // Versao fixada de proposito: subir exige decisao consciente. 1.3.0 passou
-    // a documentar a organizacao de pastas e tipos de arquivo para os agentes.
-    expect(index).toContain('version: "1.3.0"');
+    // Versao fixada de proposito: subir exige decisao consciente. 1.4.0
+    // adiciona get_client_metrics (metricas reais do Instagram, leitura) e
+    // instrui os agentes a citarem numeros verdadeiros com variacao.
+    expect(index).toContain('version: "1.4.0"');
+    expect(index).toContain("getClientMetricsTool");
     expect(index).toContain("listEditorialCalendarTool");
     expect(index).toContain("createEditorialItemTool");
     expect(index).toContain("sem aprovar, agendar ou publicar");

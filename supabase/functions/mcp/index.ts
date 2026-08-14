@@ -1395,14 +1395,54 @@ var list_contracts_default = defineTool8({
   }
 });
 
+// src/lib/mcp/tools/get-client-metrics.ts
+import { defineTool as defineToolMetrics } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zMetrics } from "npm:zod@^3.25.76";
+var get_client_metrics_default = defineToolMetrics({
+  name: "get_client_metrics",
+  title: "M\xE9tricas reais do Instagram",
+  description: "Retorna as m\xE9tricas semanais reais do Instagram do cliente (seguidores, alcance, intera\xE7\xF5es, visitas ao perfil) e o desempenho por publica\xE7\xE3o (curtidas, coment\xE1rios, alcance, salvos, compartilhamentos). Use para dar direcionamento com n\xFAmeros verdadeiros e entender a crescente. Dados coletados da Meta automaticamente toda semana.",
+  inputSchema: {
+    client_id: zMetrics.string().uuid().describe("Cliente dono da conta."),
+    weeks: zMetrics.number().int().min(1).max(52).optional().describe("Semanas de hist\xF3rico (padr\xE3o 8)."),
+    include_posts: zMetrics.boolean().optional().describe("Incluir desempenho por publica\xE7\xE3o (padr\xE3o true).")
+  },
+  annotations: { readOnlyHint: true, idempotentHint: true, openWorldHint: false },
+  handler: async ({ client_id, weeks, include_posts }, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    const { data: weekRows, error: weekError } = await sb.from("social_metrics_weekly").select(
+      "week_start, week_end, followers, media_count, reach, profile_views, accounts_engaged, total_interactions, captured_at"
+    ).eq("client_id", client_id).order("week_start", { ascending: false }).limit(weeks ?? 8);
+    if (weekError) {
+      return { content: [{ type: "text", text: weekError.message }], isError: true };
+    }
+    let posts = [];
+    if (include_posts !== false) {
+      const { data: postRows, error: postError } = await sb.from("social_post_metrics").select(
+        "media_id, media_type, caption, permalink, posted_at, like_count, comments_count, reach, saved, shares, total_interactions"
+      ).eq("client_id", client_id).order("posted_at", { ascending: false }).limit(25);
+      if (postError) {
+        return { content: [{ type: "text", text: postError.message }], isError: true };
+      }
+      posts = postRows ?? [];
+    }
+    return {
+      content: [{ type: "text", text: `${weekRows?.length ?? 0} semanas de m\xE9tricas e ${posts.length} publica\xE7\xF5es.` }],
+      structuredContent: { weeks: weekRows ?? [], posts }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var supabaseUrl = String("https://gicbrgagstyvbaaumprj.supabase.co").replace(/\/$/, "");
 var authIssuer = `${supabaseUrl}/auth/v1`;
 var mcp_default = defineMcp({
   name: "aceleriq-os",
   title: "Aceleriq OS",
-  version: "1.3.0",
-  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban. Use `get_client_journal` para puxar o contexto vivo de um cliente e `register_client_update` para registrar no Diario do Trabalho o que foi feito (o cliente ve a acao em tempo real). ORGANIZACAO DE ARQUIVOS: toda pasta do cliente e uma destas: materiais (artes das redes), criativos (pecas de anuncio), identidade (logo, manual da marca, fontes), base (fotos e videos brutos do cliente), entregas, estrategicos, operacionais, relatorios, contratos. Dentro da pasta o tipo e um destes: carrossel, post, story, video, logo, foto, documento, contrato, relatorio, estrategico, briefing, outro. Sempre escolha a pasta E o tipo corretos ao arquivar algo, porque o cliente filtra por eles na tela dele. ESCRITA VOLTADA AO CLIENTE: qualquer texto que o cliente le deve ser em portugues claro, sem jargao e SEM TRAVESSAO (use ' - ' ou ' . ').",
+  version: "1.4.0",
+  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `get_client_metrics` para as METRICAS REAIS do Instagram do cliente (semanas com seguidores, alcance e interacoes + desempenho por publicacao) sempre que for analisar resultados ou dar direcionamento - cite os numeros e a variacao, nunca invente, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban. Use `get_client_journal` para puxar o contexto vivo de um cliente e `register_client_update` para registrar no Diario do Trabalho o que foi feito (o cliente ve a acao em tempo real). ORGANIZACAO DE ARQUIVOS: toda pasta do cliente e uma destas: materiais (artes das redes), criativos (pecas de anuncio), identidade (logo, manual da marca, fontes), base (fotos e videos brutos do cliente), entregas, estrategicos, operacionais, relatorios, contratos. Dentro da pasta o tipo e um destes: carrossel, post, story, video, logo, foto, documento, contrato, relatorio, estrategico, briefing, outro. Sempre escolha a pasta E o tipo corretos ao arquivar algo, porque o cliente filtra por eles na tela dele. ESCRITA VOLTADA AO CLIENTE: qualquer texto que o cliente le deve ser em portugues claro, sem jargao e SEM TRAVESSAO (use ' - ' ou ' . ').",
   auth: auth.oauth.issuer({
     issuer: authIssuer,
     acceptedAudiences: "authenticated"
@@ -1414,6 +1454,7 @@ var mcp_default = defineMcp({
     list_tasks_default,
     list_editorial_calendar_default,
     list_contracts_default,
+    get_client_metrics_default,
     create_task_default,
     create_editorial_item_default,
     register_client_update_default,
