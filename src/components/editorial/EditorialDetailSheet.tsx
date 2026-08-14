@@ -493,8 +493,10 @@ export default function EditorialDetailSheet({
     setAdminActing(true);
     try {
       const freshFile = async () => {
-        const { data, error } = await supabase
-          .from("files")
+        // A tabela files tem grants por coluna; a equipe lê pela view
+        // staff_files_secure (ler direto dava "permission denied for table files").
+        const { data, error } = await (supabase as any)
+          .from("staff_files_secure")
           .select("id, version, approval_status, agency_approval_status, visibility")
           .eq("id", fileId)
           .single();
