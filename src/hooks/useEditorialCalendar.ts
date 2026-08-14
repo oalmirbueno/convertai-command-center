@@ -261,7 +261,18 @@ export async function findEditorialPostIdByPrimaryFile(
     .limit(1)
     .maybeSingle();
   if (error) return null;
-  return (data as { id: string } | null)?.id ?? null;
+  const direct = (data as { id: string } | null)?.id ?? null;
+  if (direct) return direct;
+  // A arte tambem pode estar presa numa PUBLICACAO nao cancelada.
+  const { data: pub } = await editorialDb
+    .from("editorial_publications")
+    .select("post_id")
+    .eq("client_id", clientId)
+    .eq("file_id", fileId)
+    .neq("status", "cancelled")
+    .limit(1)
+    .maybeSingle();
+  return (pub as { post_id: string } | null)?.post_id ?? null;
 }
 
 export function useEditorialLinkedTaskIds(
