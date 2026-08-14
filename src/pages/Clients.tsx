@@ -524,13 +524,57 @@ export default function Clients() {
   // Preço oficial dos planos: é o desempate quando o cadastro tem o plano mas
   // nenhum valor preenchido (o caso do "Sem vínculo" com tudo zerado).
   const { data: financePlans } = useFinancePlans();
+  const normalizePlanName = (value: string) =>
+    value
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .toLowerCase()
+      .replace(/^plano\s+/, "")
+      .trim();
   const planByName = useMemo(() => {
     const map = new Map<string, any>();
     for (const plan of financePlans || []) {
-      if (plan?.name) map.set(plan.name.trim().toLowerCase(), plan);
+      if (plan?.name) map.set(normalizePlanName(plan.name), plan);
     }
     return map;
   }, [financePlans]);
+  const planVersionById = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const plan of financePlans || []) {
+      for (const version of plan?.versions || []) map.set(version.id, version);
+    }
+    return map;
+  }, [financePlans]);
+
+  // O caso real do "escolhi o plano e coloquei outro valor e não puxou": o
+  // valor vive no TERMO do cliente (financeiro v2). Quando o resumo oficial
+  // não devolve a linha, lemos o termo direto, para o valor digitado nunca
+  // sumir da lista.
+  const { data: rawClientTerms } = useQuery({
+    queryKey: ["clients-terms-fallback"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("financial_client_terms")
+        .select("client_id, status, pricing_mode, operational_amount, final_amount, direct_cost_amount, direct_cost_estimated, billing_period, plan_version_id")
+        .is("ends_on", null);
+      if (error) return [];
+      return data || [];
+    },
+    enabled: isAdmin,
+    staleTime: 30_000,
+  });
+  const termByClient = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const term of rawClientTerms || []) {
+      if (!term.client_id) continue;
+      const current = map.get(term.client_id);
+      // Termo ativo ganha de rascunho; senão fica o primeiro encontrado.
+      if (!current || (term.status === "active" && current.status !== "active")) {
+        map.set(term.client_id, term);
+      }
+    }
+    return map;
+  }, [rawClientTerms]);
   const financialPayload = financialQuery.data;
   const financialLoading = financialQuery.isLoading || financialQuery.isPending;
   const financialError = financialQuery.isError;
@@ -974,15 +1018,50 @@ export default function Clients() {
             // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
             // operacional do plano do perfil para a linha nunca ficar sem soma.
             const profileValue = Number((c as any).plan_value) || 0;
+            // Degrau 1.5: o termo do cliente lido direto (o valor que a equipe
+            // digitou ao escolher o plano mora aqui e não pode sumir).
+            const directTerm = !financialRecord && !internal ? termByClient.get(String(c.id)) : null;
+            const termVersion = directTerm?.plan_version_id
+              ? planVersionById.get(directTerm.plan_version_id)
+              : null;
+            const termOperational =
+              Number(directTerm?.operational_amount) || Number(termVersion?.amount) || 0;
             // Terceiro degrau (o bug do "tudo zerado"): cadastro tem o PLANO
             // mas nenhum valor. O preço oficial do plano no Financeiro vale.
             const matchedPlan =
-              !financialRecord && !internal && profileValue <= 0 && c.plan_name
-                ? planByName.get(String(c.plan_name).trim().toLowerCase())
+              !financialRecord && !directTerm && !internal && profileValue <= 0 && c.plan_name
+                ? planByName.get(normalizePlanName(String(c.plan_name)))
                 : null;
             const matchedVersion = matchedPlan?.currentVersion || matchedPlan?.versions?.[0] || null;
             const financial = financialRecord
               ? financialRecord
+              : directTerm && termOperational > 0
+                ? ({
+                    clientId: String(c.id),
+                    planName: c.plan_name || null,
+                    pricingMode:
+                      directTerm.pricing_mode === "linked" || directTerm.pricing_mode === "custom"
+                        ? directTerm.pricing_mode
+                        : null,
+                    operationalAmount: termOperational,
+                    finalAmount: Number(directTerm.final_amount) || termOperational,
+                    planAmount: termOperational,
+                    finalPlanAmount: Number(directTerm.final_amount) || termOperational,
+                    billingPeriod: directTerm.billing_period || null,
+                    termStatus: directTerm.status || null,
+                    reviewRequired: false,
+                    directCost: Number(directTerm.direct_cost_amount) || null,
+                    directCostEstimated: !!directTerm.direct_cost_estimated,
+                    marginPercent:
+                      termOperational > 0 && Number(directTerm.direct_cost_amount) > 0
+                        ? ((termOperational - Number(directTerm.direct_cost_amount)) / termOperational) * 100
+                        : null,
+                    dueLabel: null,
+                    billingStatus: c.plan_status || null,
+                    receivableAmount: null,
+                    overdueAmount: null,
+                    raw: {},
+                  } as ClientFinancialView)
               : profileValue > 0 && !internal
                 ? ({
                     clientId: String(c.id),
