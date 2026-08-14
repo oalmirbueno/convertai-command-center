@@ -42,6 +42,41 @@ export function useSocialMetricsWeekly(clientId?: string, weeks = 26) {
   });
 }
 
+// Publicacoes recentes da conta, com curtidas e comentarios reais da Meta.
+export interface SocialPostMetric {
+  id: string;
+  client_id: string;
+  external_account_id: string;
+  media_id: string;
+  media_type: string | null;
+  caption: string | null;
+  permalink: string | null;
+  posted_at: string | null;
+  like_count: number | null;
+  comments_count: number | null;
+  captured_at: string;
+}
+
+export function useSocialPostMetrics(clientId?: string, limit = 25) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["social-post-metrics", user?.id, clientId ?? "all", limit],
+    queryFn: async () => {
+      let query = (supabase as any)
+        .from("social_post_metrics")
+        .select("*")
+        .order("posted_at", { ascending: false })
+        .limit(limit);
+      if (clientId) query = query.eq("client_id", clientId);
+      const { data, error } = await query;
+      if (error) throw error;
+      return (data || []) as SocialPostMetric[];
+    },
+    enabled: !!user && !!clientId,
+    staleTime: 60_000,
+  });
+}
+
 export async function collectSocialMetricsNow() {
   const { data, error } = await (supabase as any).rpc(
     "collect_social_metrics_now",

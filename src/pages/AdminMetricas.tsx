@@ -1,6 +1,17 @@
 import { useMemo, useState } from "react";
-import { Link } from "react-router-dom";
-import { BarChart3, RefreshCw, TrendingDown, TrendingUp } from "lucide-react";
+import { Link, useSearchParams } from "react-router-dom";
+import {
+  ArrowLeft,
+  BarChart3,
+  ChevronRight,
+  ExternalLink,
+  Heart,
+  MessageCircle,
+  RefreshCw,
+  Search,
+  TrendingDown,
+  TrendingUp,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -10,6 +21,7 @@ import {
   collectSocialMetricsNow,
   formatMetricNumber,
   useSocialMetricsWeekly,
+  useSocialPostMetrics,
   weekDeltaPct,
   type SocialMetricsWeek,
 } from "@/hooks/useSocialMetrics";
@@ -20,6 +32,12 @@ const fmtWeek = (row: SocialMetricsWeek) => {
     return `${day}/${month}`;
   };
   return `${d(row.week_start)} a ${d(row.week_end)}`;
+};
+
+const MEDIA_TYPE_LABELS: Record<string, string> = {
+  IMAGE: "Post",
+  CAROUSEL_ALBUM: "Carrossel",
+  VIDEO: "Reel/Vídeo",
 };
 
 function DeltaBadge({ pct }: { pct: number | null }) {
@@ -37,6 +55,198 @@ function DeltaBadge({ pct }: { pct: number | null }) {
   );
 }
 
+/**
+ * Dossiê completo de UM cliente: as semanas com variação, o histórico de
+ * alcance e o ranking do que performou (curtidas + comentários por post).
+ */
+function ClientMetricsDetail({
+  clientId,
+  clientName,
+  rows,
+  onBack,
+}: {
+  clientId: string;
+  clientName: string;
+  rows: SocialMetricsWeek[];
+  onBack: () => void;
+}) {
+  const { data: posts } = useSocialPostMetrics(clientId, 25);
+  const latest = rows[0];
+  const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
+  const rankedPosts = useMemo(
+    () =>
+      [...(posts || [])].sort(
+        (a, b) =>
+          (b.like_count || 0) + (b.comments_count || 0) -
+          ((a.like_count || 0) + (a.comments_count || 0)),
+      ),
+    [posts],
+  );
+  const topEngagement = rankedPosts.length
+    ? (rankedPosts[0].like_count || 0) + (rankedPosts[0].comments_count || 0)
+    : 0;
+
+  return (
+    <div className="space-y-5">
+      <button
+        type="button"
+        onClick={onBack}
+        className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+      >
+        <ArrowLeft className="h-3.5 w-3.5" /> Todos os clientes
+      </button>
+
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <Link
+              to={`/clientes?client=${clientId}`}
+              className="text-base font-bold text-foreground hover:text-primary"
+            >
+              {clientName}
+            </Link>
+            {latest && (
+              <p className="text-[11px] text-muted-foreground">
+                Última semana coletada: {fmtWeek(latest)}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {latest && (
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            {[
+              { label: "Seguidores", value: latest.followers, delta: weekDeltaPct(rows, "followers") },
+              { label: "Alcance na semana", value: latest.reach, delta: weekDeltaPct(rows, "reach") },
+              { label: "Interações", value: latest.total_interactions, delta: weekDeltaPct(rows, "total_interactions") },
+              { label: "Visitas ao perfil", value: latest.profile_views, delta: weekDeltaPct(rows, "profile_views") },
+              { label: "Contas engajadas", value: latest.accounts_engaged, delta: weekDeltaPct(rows, "accounts_engaged") },
+              { label: "Publicações no perfil", value: latest.media_count, delta: null },
+            ].map((item) => (
+              <div key={item.label} className="rounded-xl border border-border bg-secondary/25 p-3">
+                <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  {item.label}
+                </p>
+                <div className="mt-1 flex items-center gap-1.5">
+                  <p className="font-mono text-sm font-semibold text-foreground">
+                    {formatMetricNumber(item.value)}
+                  </p>
+                  <DeltaBadge pct={item.delta} />
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {rows.length > 1 && (
+          <div className="mt-4">
+            <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Alcance semana a semana
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {rows.slice(0, 12).map((row) => (
+                <div key={row.id} className="flex items-center gap-2">
+                  <span className="w-24 shrink-0 font-mono text-[10px] text-muted-foreground">
+                    {fmtWeek(row)}
+                  </span>
+                  <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-primary/70"
+                      style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
+                    />
+                  </div>
+                  <span className="w-20 shrink-0 text-right font-mono text-[10px] text-foreground">
+                    {formatMetricNumber(row.reach)}
+                  </span>
+                  <span className="hidden w-24 shrink-0 text-right font-mono text-[10px] text-muted-foreground sm:block">
+                    {formatMetricNumber(row.followers)} seg.
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
+        <p className="text-sm font-semibold text-foreground">O que performou</p>
+        <p className="mt-0.5 text-[11px] text-muted-foreground">
+          Publicações recentes ordenadas por engajamento (curtidas + comentários),
+          direto da conta. Atualiza sozinho a cada 3 dias.
+        </p>
+        {rankedPosts.length === 0 ? (
+          <p className="mt-4 text-xs text-muted-foreground">
+            Ainda sem publicações coletadas. Clique em "Atualizar agora" no topo;
+            os posts chegam em alguns minutos.
+          </p>
+        ) : (
+          <div className="mt-3 space-y-2">
+            {rankedPosts.slice(0, 10).map((post, index) => {
+              const engagement = (post.like_count || 0) + (post.comments_count || 0);
+              return (
+                <div
+                  key={post.id}
+                  className="flex items-center gap-3 rounded-xl border border-border bg-secondary/20 px-3 py-2.5"
+                >
+                  <span
+                    className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
+                      index === 0
+                        ? "bg-primary/15 text-primary"
+                        : "bg-secondary text-muted-foreground"
+                    }`}
+                  >
+                    {index + 1}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-medium text-foreground">
+                      {post.caption?.trim() || "(sem legenda)"}
+                    </p>
+                    <p className="mt-0.5 text-[10px] text-muted-foreground">
+                      {MEDIA_TYPE_LABELS[post.media_type || ""] || post.media_type || "Post"}
+                      {post.posted_at
+                        ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}`
+                        : ""}
+                    </p>
+                    <div className="mt-1 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-secondary">
+                      <div
+                        className="h-full rounded-full bg-primary/70"
+                        style={{
+                          width: `${Math.max((engagement / Math.max(topEngagement, 1)) * 100, 3)}%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3 text-[11px] font-medium text-foreground">
+                    <span className="inline-flex items-center gap-1">
+                      <Heart className="h-3.5 w-3.5 text-destructive" />
+                      {formatMetricNumber(post.like_count)}
+                    </span>
+                    <span className="inline-flex items-center gap-1">
+                      <MessageCircle className="h-3.5 w-3.5 text-primary" />
+                      {formatMetricNumber(post.comments_count)}
+                    </span>
+                    {post.permalink && (
+                      <a
+                        href={post.permalink}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="text-muted-foreground transition-colors hover:text-primary"
+                        aria-label="Abrir no Instagram"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminMetricas() {
   const { profile } = useAuth();
   const isStaff = ["admin", "manager", "design", "traffic"].includes(profile?.role || "");
@@ -44,6 +254,9 @@ export default function AdminMetricas() {
   const { data: rows, isLoading } = useSocialMetricsWeekly();
   const queryClient = useQueryClient();
   const [collecting, setCollecting] = useState(false);
+  const [search, setSearch] = useState("");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedClientId = searchParams.get("client") || "";
 
   const clientNames = useMemo(() => {
     const map = new Map<string, string>();
@@ -60,11 +273,29 @@ export default function AdminMetricas() {
       list.push(row);
       map.set(row.client_id, list);
     }
-    // Dentro de cada cliente já vem ordenado da semana mais nova para a antiga.
     return [...map.entries()].sort((a, b) =>
       (clientNames.get(a[0]) || "").localeCompare(clientNames.get(b[0]) || "", "pt-BR"),
     );
   }, [rows, clientNames]);
+
+  const filteredHubs = useMemo(() => {
+    const term = search.trim().toLocaleLowerCase("pt-BR");
+    if (!term) return byClient;
+    return byClient.filter(([clientId]) =>
+      (clientNames.get(clientId) || "").toLocaleLowerCase("pt-BR").includes(term),
+    );
+  }, [byClient, clientNames, search]);
+
+  const openClient = (clientId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("client", clientId);
+    setSearchParams(next);
+  };
+  const closeClient = () => {
+    const next = new URLSearchParams(searchParams);
+    next.delete("client");
+    setSearchParams(next);
+  };
 
   const refreshNow = async () => {
     setCollecting(true);
@@ -73,9 +304,12 @@ export default function AdminMetricas() {
       toast.success(
         result.dispatched > 0
           ? `Coleta disparada para a Meta (${result.dispatched} chamadas). Os números chegam em alguns minutos.`
-          : "Tudo em dia: a última semana fechada já está coletada.",
+          : "Tudo em dia: semanas e publicações já coletadas.",
       );
-      await queryClient.invalidateQueries({ queryKey: ["social-metrics-weekly"] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["social-metrics-weekly"] }),
+        queryClient.invalidateQueries({ queryKey: ["social-post-metrics"] }),
+      ]);
     } catch (error: unknown) {
       toast.error(
         (error as { message?: string })?.message || "Não foi possível atualizar agora.",
@@ -87,14 +321,16 @@ export default function AdminMetricas() {
 
   if (!isStaff) {
     return (
-      <div className="p-6 text-sm text-muted-foreground">
-        Esta área é da equipe.
-      </div>
+      <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>
     );
   }
 
+  const selectedRows = selectedClientId
+    ? byClient.find(([clientId]) => clientId === selectedClientId)?.[1] || []
+    : [];
+
   return (
-    <div className="mx-auto w-full max-w-6xl space-y-6 p-4 sm:p-6">
+    <div className="mx-auto w-full max-w-6xl space-y-5 p-4 sm:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="flex items-center gap-2 text-xl font-bold text-foreground">
@@ -102,9 +338,8 @@ export default function AdminMetricas() {
             Métricas · Instagram real
           </h1>
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
-            Números coletados direto da Meta, toda semana fechada (segunda a
-            domingo), pelas contas conectadas no painel. O cliente vê os dele em
-            Onde Estamos; aqui a equipe vê todos.
+            Um hub por cliente. Clique para abrir o dossiê completo: semanas com
+            variação, alcance e o ranking do que performou por publicação.
           </p>
         </div>
         <Button size="sm" onClick={refreshNow} disabled={collecting} className="gap-2">
@@ -113,89 +348,84 @@ export default function AdminMetricas() {
         </Button>
       </div>
 
-      {isLoading ? (
+      {selectedClientId ? (
+        <ClientMetricsDetail
+          clientId={selectedClientId}
+          clientName={clientNames.get(selectedClientId) || "Cliente"}
+          rows={selectedRows}
+          onBack={closeClient}
+        />
+      ) : isLoading ? (
         <p className="text-sm text-muted-foreground">Carregando métricas...</p>
       ) : byClient.length === 0 ? (
         <div className="rounded-2xl border border-border bg-card p-6 text-sm text-muted-foreground">
-          Nenhuma métrica coletada ainda. Clique em "Atualizar agora": a coleta
-          é disparada para todas as contas Instagram conectadas e os números da
-          última semana fechada chegam em alguns minutos. Depois disso, o robô
-          coleta sozinho toda semana.
+          Nenhuma métrica coletada ainda. Clique em "Atualizar agora": a coleta é
+          disparada para todas as contas Instagram conectadas e os números chegam
+          em alguns minutos. Depois disso, o robô coleta sozinho toda semana.
         </div>
       ) : (
-        byClient.map(([clientId, list]) => {
-          const latest = list[0];
-          const maxReach = Math.max(...list.map((row) => row.reach || 0), 1);
-          return (
-            <div key={clientId} className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <Link
-                    to={`/clientes?client=${clientId}`}
-                    className="text-sm font-semibold text-foreground hover:text-primary"
-                  >
-                    {clientNames.get(clientId) || "Cliente"}
-                  </Link>
-                  <p className="text-[11px] text-muted-foreground">
-                    Última semana coletada: {fmtWeek(latest)}
-                  </p>
-                </div>
-              </div>
-
-              <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
-                {[
-                  { label: "Seguidores", value: latest.followers, delta: weekDeltaPct(list, "followers") },
-                  { label: "Alcance na semana", value: latest.reach, delta: weekDeltaPct(list, "reach") },
-                  { label: "Interações", value: latest.total_interactions, delta: weekDeltaPct(list, "total_interactions") },
-                  { label: "Visitas ao perfil", value: latest.profile_views, delta: weekDeltaPct(list, "profile_views") },
-                  { label: "Contas engajadas", value: latest.accounts_engaged, delta: weekDeltaPct(list, "accounts_engaged") },
-                  { label: "Publicações no perfil", value: latest.media_count, delta: null },
-                ].map((item) => (
-                  <div key={item.label} className="rounded-xl border border-border bg-secondary/25 p-3">
-                    <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                      {item.label}
+        <>
+          {byClient.length > 6 && (
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar cliente..."
+                className="w-full rounded-xl border border-border bg-secondary px-9 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:border-primary/50 focus:outline-none"
+              />
+            </div>
+          )}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {filteredHubs.map(([clientId, list]) => {
+              const latest = list[0];
+              const reachDelta = weekDeltaPct(list, "reach");
+              const followersDelta = weekDeltaPct(list, "followers");
+              return (
+                <button
+                  key={clientId}
+                  type="button"
+                  onClick={() => openClient(clientId)}
+                  className="group rounded-2xl border border-border bg-card p-4 text-left transition-colors hover:border-primary/40"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="truncate text-sm font-semibold text-foreground">
+                      {clientNames.get(clientId) || "Cliente"}
                     </p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <p className="font-mono text-sm font-semibold text-foreground">
-                        {formatMetricNumber(item.value)}
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                  </div>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    Semana {fmtWeek(latest)}
+                  </p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    <div>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Seguidores
                       </p>
-                      <DeltaBadge pct={item.delta} />
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <p className="font-mono text-sm font-semibold text-foreground">
+                          {formatMetricNumber(latest.followers)}
+                        </p>
+                        <DeltaBadge pct={followersDelta} />
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                        Alcance
+                      </p>
+                      <div className="mt-0.5 flex items-center gap-1.5">
+                        <p className="font-mono text-sm font-semibold text-foreground">
+                          {formatMetricNumber(latest.reach)}
+                        </p>
+                        <DeltaBadge pct={reachDelta} />
+                      </div>
                     </div>
                   </div>
-                ))}
-              </div>
-
-              {list.length > 1 && (
-                <div className="mt-4">
-                  <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Histórico semanal (alcance)
-                  </p>
-                  <div className="mt-2 space-y-1.5">
-                    {list.slice(0, 12).map((row) => (
-                      <div key={row.id} className="flex items-center gap-2">
-                        <span className="w-24 shrink-0 font-mono text-[10px] text-muted-foreground">
-                          {fmtWeek(row)}
-                        </span>
-                        <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
-                          <div
-                            className="h-full rounded-full bg-primary/70"
-                            style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
-                          />
-                        </div>
-                        <span className="w-20 shrink-0 text-right font-mono text-[10px] text-foreground">
-                          {formatMetricNumber(row.reach)}
-                        </span>
-                        <span className="hidden w-24 shrink-0 text-right font-mono text-[10px] text-muted-foreground sm:block">
-                          {formatMetricNumber(row.followers)} seg.
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          );
-        })
+                </button>
+              );
+            })}
+          </div>
+        </>
       )}
     </div>
   );
