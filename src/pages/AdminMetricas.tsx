@@ -307,6 +307,9 @@ function ClientMetricsDetail({
                       {post.posted_at
                         ? ` · ${new Date(post.posted_at).toLocaleDateString("pt-BR")}`
                         : ""}
+                      {post.reach != null ? ` · alcance ${formatMetricNumber(post.reach)}` : ""}
+                      {post.saved != null ? ` · ${formatMetricNumber(post.saved)} salvos` : ""}
+                      {post.shares != null ? ` · ${formatMetricNumber(post.shares)} compart.` : ""}
                     </p>
                     <div className="mt-1 h-1.5 w-full max-w-[220px] overflow-hidden rounded-full bg-secondary">
                       <div

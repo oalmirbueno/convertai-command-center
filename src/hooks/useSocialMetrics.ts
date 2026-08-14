@@ -56,6 +56,10 @@ export interface SocialPostMetric {
   posted_at: string | null;
   like_count: number | null;
   comments_count: number | null;
+  reach: number | null;
+  saved: number | null;
+  shares: number | null;
+  total_interactions: number | null;
   captured_at: string;
 }
 
