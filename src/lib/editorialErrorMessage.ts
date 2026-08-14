@@ -21,6 +21,11 @@ const TRANSLATIONS: Array<{ test: RegExp; message: string }> = [
     message: "Este conteúdo foi atualizado por outra pessoa. A tela recarrega e é só tentar de novo.",
   },
   {
+    test: /terminal file versions are immutable/i,
+    message:
+      "Este material já está em estado final (aprovado, rejeitado ou disponibilizado). Se foi disponibilizado ao cliente, já vale como aprovado; para mudar a arte, crie uma revisão.",
+  },
+  {
     test: /must be readable root files|file must match the client and project/i,
     message: "O material escolhido não pertence a este cliente e projeto.",
   },

@@ -504,6 +504,23 @@ export default function EditorialDetailSheet({
         return data as any;
       };
       let file = await freshFile();
+      if (file.approval_status === "rejected") {
+        toast.error(
+          "Este material foi rejeitado e a decisão é final. Crie uma revisão para aprovar a nova versão.",
+        );
+        return;
+      }
+      // Disponibilizado ao cliente = aprovado pela regra da casa: nada a fazer.
+      if (
+        file.visibility === "client_shared" &&
+        file.agency_approval_status === "approved"
+      ) {
+        toast.success(
+          "Este material já foi disponibilizado ao cliente e conta como aprovado. Já pode agendar ou concluir.",
+        );
+        await sheetQueryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
+        return;
+      }
       if (file.agency_approval_status === "not_requested") {
         await requestFileAgencyReview(fileId);
         file = await freshFile();

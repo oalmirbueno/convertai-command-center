@@ -227,11 +227,17 @@ export function canPublishEditorial(role: string | null | undefined) {
 export function isEditorialFilePublishable(
   file: EditorialApprovalFile | null | undefined,
 ) {
+  // Dois estados finais valem para publicar:
+  // - fluxo de aprovação concluído (cliente aprovou no painel ou no grupo);
+  // - material DISPONIBILIZADO ao cliente (client_shared): a regra da casa é
+  //   que disponibilizar dispensa a aprovação do cliente.
   return Boolean(
     file
     && file.agency_approval_status === "approved"
-    && file.visibility === "approval"
-    && file.approval_status === "approved"
+    && (
+      (file.visibility === "approval" && file.approval_status === "approved")
+      || file.visibility === "client_shared"
+    )
     && file.locked_at
     && file.archived_at == null
     && (file.status ?? "ready") === "ready",
