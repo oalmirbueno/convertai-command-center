@@ -753,6 +753,48 @@ export default function Clients() {
     (pp.installments || []).filter((i: any) => i.status === "pending" || i.status === "partial")
   );
 
+  // Leitura simples da cobrança de CADA cliente na lista: Atrasado ganha de
+  // A receber, que ganha de Em dia. É a mesma fonte real dos KPIs (billing),
+  // sem os termos internos do Financeiro (rascunho/revisar) que só confundiam.
+  const billingReadByClient = new Map<
+    string,
+    { tone: "late" | "due" | "paid"; label: string; detail: string }
+  >();
+  for (const bill of (kpiBilling || []) as any[]) {
+    if (!bill?.client_id || bill.type === "ads_recharge") continue;
+    const clientKey = String(bill.client_id);
+    const due = parseAppDate(bill.due_date);
+    const pendingLike = bill.status === "pending" || bill.status === "partial";
+    const current = billingReadByClient.get(clientKey);
+    if (pendingLike && due && kpiToday && due < kpiToday) {
+      if (current?.tone !== "late") {
+        billingReadByClient.set(clientKey, {
+          tone: "late",
+          label: "Atrasado",
+          detail: `Venceu ${formatBRDate(bill.due_date)}`,
+        });
+      }
+      continue;
+    }
+    if (current?.tone === "late") continue;
+    if (pendingLike && kpiInThisMonth(bill.due_date)) {
+      billingReadByClient.set(clientKey, {
+        tone: "due",
+        label: "A receber",
+        detail: `Vence ${formatBRDate(bill.due_date)}`,
+      });
+      continue;
+    }
+    if (current) continue;
+    if (bill.status === "paid" && kpiInThisMonth(bill.paid_date || bill.due_date)) {
+      billingReadByClient.set(clientKey, {
+        tone: "paid",
+        label: "Em dia",
+        detail: `Pago em ${formatBRDate(bill.paid_date || bill.due_date)}`,
+      });
+    }
+  }
+
   // Recebido REAL no mês corrente (mensalidades + parcelas de projetos)
   const receivedMonthBills = (kpiBilling || [])
     .filter((b: any) => (b.status === "paid" || b.status === "partial") && b.type !== "ads_recharge" && kpiInThisMonth(b.paid_date || b.due_date))
@@ -1131,13 +1173,27 @@ export default function Clients() {
                   // (vencimento/status) em vez de fingir que não há financeiro.
                   : financialRecord || undefined;
             const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
+            // Leitura da cobrança em uma frase, sem jargão interno: primeiro
+            // a verdade do billing (Atrasado / A receber / Em dia); sem
+            // cobrança no mês, diz isso com todas as letras.
+            const billingRead = internal ? null : billingReadByClient.get(String(c.id));
             const statusMeta = internal
               ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
-              : financialRecord
-                ? financialStatusMeta(financialRecord.billingStatus)
-                : financial
-                  ? { label: "Valor do cadastro", className: "border-info/30 bg-info/10 text-info" }
-                  : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
+              : billingRead
+                ? {
+                    label: billingRead.label,
+                    className:
+                      billingRead.tone === "late"
+                        ? "border-destructive/30 bg-destructive/10 text-destructive"
+                        : billingRead.tone === "due"
+                          ? "border-warning/30 bg-warning/10 text-warning"
+                          : "border-success/30 bg-success/10 text-success",
+                  }
+                : (c.client_type || "recurring") === "one_off"
+                  ? { label: "Por projeto", className: "border-border bg-secondary/60 text-muted-foreground" }
+                  : financial
+                    ? { label: "Sem cobrança este mês", className: "border-border bg-secondary/60 text-muted-foreground" }
+                    : { label: "Sem cobrança criada", className: "border-border bg-secondary/60 text-muted-foreground" };
             // O selo conta de ONDE o valor veio, na ordem real dos degraus.
             const priceSource =
               financialRecord && recordValue > 0
@@ -1334,9 +1390,11 @@ export default function Clients() {
                       </p>
                     </div>
                     <div className="col-span-2 sm:col-span-1">
-                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Vencimento / status</p>
+                      <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Cobrança do mês</p>
                       <div className="mt-0.5 flex items-center gap-1.5">
-                        <span className="font-mono text-xs text-foreground">{financial?.dueLabel || "-"}</span>
+                        <span className="font-mono text-xs text-foreground">
+                          {billingRead?.detail || financial?.dueLabel || "-"}
+                        </span>
                         <span className={`rounded-md border px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide ${statusMeta.className}`}>
                           {statusMeta.label}
                         </span>
