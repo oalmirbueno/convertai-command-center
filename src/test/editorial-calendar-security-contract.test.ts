@@ -106,8 +106,13 @@ describe("editorial calendar integration contract", () => {
     );
     expect(hook).toContain("const exposeInternal = actualStaff && !forceClientView");
     expect(hook).toContain("internal: null");
+    // Intencao atualizada (decisao do dono em 2026-08-14): o cliente ve o
+    // cronograma COMPLETO (planejado/agendado/publicado); o corte por
+    // snapshot interno saiu do front. Quem protege dono e dados internos e
+    // a RLS (editorial_client_can_read_post/publication + RLS das tabelas
+    // *_internal), e a visao do cliente continua sem cancelados.
     expect(hook).toContain(
-      "internal?.included_in_approval_snapshot === true",
+      '["planned", "scheduled", "published"].includes(publication.status)',
     );
     expect(hook).toContain("bundle.publications.length > 0");
     expect(detail).toContain("!isImpersonating");

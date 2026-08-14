@@ -734,38 +734,20 @@ async function readEditorialCalendar(
         ...bundle,
         internal: null,
         publications: bundle.publications
-          .filter(({ publication, internal, file }) => {
-            if (!["scheduled", "published"].includes(publication.status)) {
-              return false;
-            }
-            // Cliente REAL nao carrega dados internos: a RLS do banco ja
-            // devolve apenas o que ele pode ver. Exigir snapshot aqui
-            // deixava o calendario do cliente SEMPRE vazio.
-            if (!actualStaff) return true;
-            const effectiveFile = publication.file_id
-              ? file
-              : bundle.primaryFile;
-            return (
-              internal?.included_in_approval_snapshot === true &&
-              isFilePublishable(effectiveFile)
-            );
-          })
+          // Cronograma COMPLETO na visao do cliente (decisao do dono):
+          // planejado, agendado e publicado. O que nao entra e cancelado.
+          // A RLS do banco continua garantindo o dono e escondendo internos.
+          .filter(({ publication }) =>
+            ["planned", "scheduled", "published"].includes(publication.status),
+          )
           .map((publication) => ({
             ...publication,
             internal: null,
           })),
       }))
-      .filter(
-        (bundle) =>
-          bundle.post.production_status === "ready" &&
-          bundle.publications.length > 0 &&
-          // Checagens internas so quando os dados internos existem (staff
-          // no modo Ver como Cliente); cliente real confia na RLS.
-          (!actualStaff ||
-            (isFilePublishable(bundle.primaryFile) &&
-              postInternalById.get(bundle.post.id)?.approval_fingerprint !=
-                null)),
-      );
+      // Todos os conteudos vivos entram (backlog, producao, pronto): o
+      // cliente ve o trabalho planejado, nao um calendario vazio.
+      .filter((bundle) => bundle.post.production_status !== "archived");
   }
 
   if (hasPeriodFilter) {
