@@ -40,11 +40,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
+  loadEditorialPostForMutation,
   useEditorialEditorOptions,
   useEditorialMutations,
   type EditorialFileRow,
   type EditorialPostBundle,
 } from "@/hooks/useEditorialCalendar";
+import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
 import {
   EDITORIAL_DEFAULT_TIME_ZONE,
   isoUtcToZonedDateTimeLocal,
@@ -285,6 +287,16 @@ export default function EditorialEditor({
     };
   }, [navigator, open]);
 
+  // Passo 2 no MESMO popup: depois de salvar um conteúdo novo sem plano de
+  // publicação, o modal vira a tela de programar (conta + horário), sem
+  // fechar e abrir outro.
+  const [afterSave, setAfterSave] = useState<
+    null | { postId: string; clientId: string }
+  >(null);
+  const [afterAccountId, setAfterAccountId] = useState("");
+  const [afterWhen, setAfterWhen] = useState("");
+  const [afterSaving, setAfterSaving] = useState(false);
+
   const {
     data: options,
     isLoading: loadingOptions,
@@ -309,6 +321,10 @@ export default function EditorialEditor({
   useEffect(() => {
     if (!open) {
       initializedEditorKeyRef.current = null;
+      setAfterSave(null);
+      setAfterAccountId("");
+      setAfterWhen("");
+      setAfterSaving(false);
       return;
     }
 
@@ -649,6 +665,21 @@ export default function EditorialEditor({
       setHasChanges(false);
       dirtyNavigationRef.current = false;
       savingNavigationRef.current = false;
+      // Conteúdo novo sem plano de publicação: em vez de fechar e abrir
+      // outro popup, o próprio modal vira a etapa de programar.
+      if (!post && !revisionOf && publicationPayload.length === 0) {
+        const availableAccounts = (options?.accounts || []).filter(
+          (account) => !cancelledAccountIds.has(account.id),
+        );
+        setAfterAccountId(
+          availableAccounts.length === 1 ? availableAccounts[0].id : "",
+        );
+        setAfterWhen(defaultScheduledAt || "");
+        setAfterSave({ postId: result.post_id, clientId });
+        onSaved(result.post_id);
+        toast.success("Conteúdo criado. Agora programe a publicação, sem sair daqui.");
+        return;
+      }
       toast.success(
         post
           ? "Conteúdo atualizado."
@@ -689,6 +720,106 @@ export default function EditorialEditor({
     }
   };
 
+  // Programa a publicação do conteúdo recém-salvo dentro do mesmo modal.
+  // Lê o post fresco do banco e reaproveita publicação viva se existir, para
+  // nunca nascer card duplicado.
+  const programAfterSave = async () => {
+    if (!afterSave) return;
+    if (!afterAccountId) {
+      toast.error("Escolha a conta que vai receber a publicação.");
+      return;
+    }
+    let scheduledAtIso: string | null = null;
+    if (afterWhen) {
+      scheduledAtIso = zonedDateTimeLocalToIso(
+        afterWhen,
+        EDITORIAL_DEFAULT_TIME_ZONE,
+      );
+      if (!scheduledAtIso) {
+        toast.error("Data ou horário inválido. Ajuste e tente de novo.");
+        return;
+      }
+    }
+    setAfterSaving(true);
+    try {
+      const fresh = await loadEditorialPostForMutation(
+        afterSave.postId,
+        afterSave.clientId,
+      );
+      const active = fresh.publications.find(({ publication }) =>
+        ["planned", "scheduled", "failed"].includes(publication.status),
+      );
+      const plans: Record<string, unknown>[] = fresh.publications
+        .filter(({ publication }) => publication.status === "planned")
+        .map(({ publication, internal }) => {
+          const isTarget = active?.publication.id === publication.id;
+          return {
+            id: publication.id,
+            idempotency_key: internal?.idempotency_key || newIdempotencyKey(),
+            external_account_id: isTarget
+              ? afterAccountId
+              : publication.external_account_id,
+            file_id: publication.file_id,
+            caption: publication.caption,
+            first_comment: publication.first_comment,
+            alt_text: publication.alt_text,
+            scheduled_at: isTarget ? scheduledAtIso : publication.scheduled_at,
+            scheduled_timezone: isTarget
+              ? EDITORIAL_DEFAULT_TIME_ZONE
+              : publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
+          };
+        });
+      if (!active) {
+        plans.push({
+          id: null,
+          idempotency_key: newIdempotencyKey(),
+          external_account_id: afterAccountId,
+          file_id: null,
+          caption: fresh.post.default_caption,
+          first_comment: null,
+          alt_text: null,
+          asset_file_ids: [],
+          scheduled_at: scheduledAtIso,
+          scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+        });
+      }
+      await savePost.mutateAsync({
+        payload: {
+          id: fresh.post.id,
+          idempotency_key:
+            fresh.internal?.idempotency_key || newIdempotencyKey(),
+          mutation_id: newIdempotencyKey(),
+          client_id: fresh.post.client_id,
+          project_id: fresh.post.project_id,
+          primary_file_id: fresh.post.primary_file_id,
+          title: fresh.post.title,
+          content_type: fresh.post.content_type,
+          objective: fresh.post.objective,
+          default_caption: fresh.post.default_caption,
+          production_status: fresh.post.production_status,
+          task_id: fresh.internal?.task_id || null,
+          responsible_id: fresh.internal?.responsible_id || null,
+          internal_notes: fresh.internal?.internal_notes || null,
+          revision_of_post_id: fresh.internal?.revision_of_post_id ?? null,
+          publications: plans,
+        },
+        expectedVersion: fresh.post.version,
+      });
+      toast.success(
+        scheduledAtIso
+          ? "Publicação programada. Com o material aprovado, sai sozinha no horário."
+          : "Conta definida. Escolha o horário quando quiser, pelo card.",
+      );
+      onOpenChange(false);
+    } catch (error: unknown) {
+      toast.error(
+        editorialErrorMessage(error, "Não foi possível programar a publicação."),
+      );
+    } finally {
+      setAfterSaving(false);
+    }
+  };
+
   const requestOpenChange = (nextOpen: boolean) => {
     if (!nextOpen && savePost.isPending) return;
     if (!nextOpen && hasChanges) {
@@ -709,6 +840,69 @@ export default function EditorialEditor({
   return (
     <Dialog open={open} onOpenChange={requestOpenChange}>
       <DialogContent className="bottom-[max(0.5rem,env(safe-area-inset-bottom))] top-[max(0.5rem,env(safe-area-inset-top))] flex w-[calc(100vw-1rem)] max-w-5xl translate-y-0 flex-col gap-0 overflow-hidden p-0 sm:bottom-auto sm:top-1/2 sm:max-h-[calc(100dvh-3rem)] sm:translate-y-[-50%]">
+        {afterSave && (
+          <div className="absolute inset-0 z-50 flex flex-col bg-background">
+            <div className="shrink-0 border-b border-border px-4 py-4 pr-12 sm:px-6 sm:py-5">
+              <p className="text-base font-semibold text-foreground">
+                Conteúdo salvo. Programar a publicação?
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Sem sair daqui: escolha a conta e o horário. Aprovado e
+                agendado, publica sozinho.
+              </p>
+            </div>
+            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4 py-4 sm:px-6">
+              <div className="space-y-2">
+                <Label htmlFor="after-save-account">Conta</Label>
+                <Select value={afterAccountId} onValueChange={setAfterAccountId}>
+                  <SelectTrigger id="after-save-account">
+                    <SelectValue placeholder="Selecione a conta" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(options?.accounts || []).map((item) => (
+                      <SelectItem key={item.id} value={item.id}>
+                        {PLATFORM_LABELS[item.platform as EditorialPlatform] ||
+                          item.platform}
+                        {" · "}
+                        {item.handle || item.display_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="after-save-when">Data e horário</Label>
+                <Input
+                  id="after-save-when"
+                  type="datetime-local"
+                  value={afterWhen}
+                  onChange={(event) => setAfterWhen(event.target.value)}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  Sem horário, a conta fica definida e você agenda depois pelo
+                  card.
+                </p>
+              </div>
+            </div>
+            <DialogFooter className="shrink-0 border-t border-border px-4 py-3 sm:px-6">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={afterSaving}
+                onClick={() => onOpenChange(false)}
+              >
+                Agora não
+              </Button>
+              <Button
+                type="button"
+                disabled={afterSaving || !afterAccountId}
+                onClick={() => void programAfterSave()}
+              >
+                {afterSaving ? "Programando..." : "Programar publicação"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
         <DialogHeader className="shrink-0 border-b border-border bg-background px-4 py-4 pr-12 text-left sm:px-6 sm:py-5 sm:pr-14">
           <DialogTitle>
             {post

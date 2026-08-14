@@ -1856,13 +1856,12 @@ export default function EditorialCalendar() {
               setDraftSeed(null);
             }
           }}
-          onSaved={(postId) => {
+          onSaved={() => {
+            // O editor agora resolve o próximo passo (programar) no próprio
+            // popup; abrir o card por cima era o "outro popup" com delay.
             setEditingPost(null);
             setRevisionSource(null);
             setDraftSeed(null);
-            const next = new URLSearchParams(searchParams);
-            next.set("content", postId);
-            setSearchParams(next);
           }}
         />
 
