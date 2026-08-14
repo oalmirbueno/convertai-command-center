@@ -115,8 +115,24 @@ Deno.serve(async (req) => {
     const approvedMonth = files.filter((f: any) => f.approval_status === "approved").length;
 
     const monthName = monthStart.toLocaleDateString("pt-BR", { month: "long" });
+    // Metricas reais do Instagram: o narrador cita numeros verdadeiros.
+    const { data: igWeeks } = await db
+      .from("social_metrics_weekly")
+      .select("week_start, week_end, followers, reach, total_interactions")
+      .eq("client_id", clientId)
+      .order("week_start", { ascending: false })
+      .limit(2);
+    const igFact = (() => {
+      const latest = igWeeks?.[0];
+      if (!latest) return null;
+      const prev = igWeeks?.[1];
+      const pct = (a: number | null, b: number | null | undefined) =>
+        a != null && b ? ` (${a >= b ? "+" : ""}${Math.round(((a - b) / b) * 100)}%)` : "";
+      return `Instagram na última semana medida: ${latest.followers ?? "?"} seguidores${pct(latest.followers, prev?.followers)}, alcance ${latest.reach ?? "?"}${pct(latest.reach, prev?.reach)}, ${latest.total_interactions ?? "?"} interações`;
+    })();
     const facts = [
       `Mês: ${monthName}`,
+      ...(igFact ? [igFact] : []),
       `Frentes ativas: ${projects.filter((p: any) => p.status !== "done").map((p: any) => p.name).join("; ") || "nenhuma"}`,
       `Materiais produzidos no mês: ${files.length}${files.length > 0 ? ` (exemplos: ${files.slice(0, 4).map((f: any) => f.file_name).join(", ")})` : ""}`,
       `Materiais aprovados pelo cliente no mês: ${approvedMonth}`,

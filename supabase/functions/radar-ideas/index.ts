@@ -132,8 +132,48 @@ Deno.serve(async (req) => {
       ? Math.max(1, Math.round((Date.now() - new Date(firstProject).getTime()) / (30 * 86400000)))
       : 1;
 
+    // Metricas REAIS do Instagram (coletadas da Meta pelo robo semanal):
+    // a IA passa a citar numeros verdadeiros e tendencia, nunca genericos.
+    const { data: igWeeks } = await db
+      .from("social_metrics_weekly")
+      .select("week_start, week_end, followers, reach, total_interactions, profile_views")
+      .eq("client_id", clientId)
+      .order("week_start", { ascending: false })
+      .limit(4);
+    const { data: igPosts } = await db
+      .from("social_post_metrics")
+      .select("caption, media_type, like_count, comments_count, reach, saved, shares")
+      .eq("client_id", clientId)
+      .order("posted_at", { ascending: false })
+      .limit(10);
+    const igLines: string[] = [];
+    if (igWeeks && igWeeks.length > 0) {
+      const latest = igWeeks[0];
+      const prev = igWeeks[1];
+      const pct = (a: number | null, b: number | null) =>
+        a != null && b ? ` (${a >= b ? "+" : ""}${Math.round(((a - b) / b) * 100)}% vs semana anterior)` : "";
+      igLines.push(
+        `Instagram REAL (semana ${latest.week_start} a ${latest.week_end}): ` +
+          `${latest.followers ?? "?"} seguidores${pct(latest.followers, prev?.followers)}, ` +
+          `alcance ${latest.reach ?? "?"}${pct(latest.reach, prev?.reach)}, ` +
+          `interações ${latest.total_interactions ?? "?"}${pct(latest.total_interactions, prev?.total_interactions)}`,
+      );
+    }
+    if (igPosts && igPosts.length > 0) {
+      const top = [...igPosts].sort(
+        (a: any, b: any) =>
+          (b.like_count || 0) + (b.comments_count || 0) - ((a.like_count || 0) + (a.comments_count || 0)),
+      )[0];
+      igLines.push(
+        `Post que mais performou: "${String(top.caption || "").slice(0, 80)}" (${top.media_type || "post"}, ` +
+          `${top.like_count ?? 0} curtidas, ${top.comments_count ?? 0} comentários` +
+          `${top.reach != null ? `, alcance ${top.reach}` : ""}${top.saved != null ? `, ${top.saved} salvos` : ""})`,
+      );
+    }
+
     const context = [
       `Cliente: ${clientName}`,
+      ...igLines,
       `Tempo de casa: ${months} mes(es)`,
       `Frentes contratadas: ${
         [...new Set(projects.map((p: any) => p.project_type).filter(Boolean))].join(", ") ||
