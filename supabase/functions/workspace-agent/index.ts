@@ -122,7 +122,7 @@ Deno.serve(async (req) => {
       const folderP = preview?.context?.folder_path || "raiz";
       const providers = resolveAiProviderChain({
         primaryModels: [specialMode === "structure" ? "gpt-5-mini" : "gpt-4o-mini"],
-        lovableModels: ["google/gemini-2.5-flash"],
+        lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
       });
       if (!providers.length) return json({ error: "sem_motor" }, 500);
 
@@ -480,7 +480,7 @@ Regras absolutas:
 
     const routerProviders = resolveAiProviderChain({
       primaryModels: ["gpt-5-mini"],
-      lovableModels: ["google/gemini-2.5-flash"],
+      lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash", "openai/gpt-5-mini"],
     });
 
     type Orq = {

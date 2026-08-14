@@ -41,6 +41,16 @@ type FetchLike = (
 const OPENAI_BASE_URL = "https://api.openai.com/v1";
 const LOVABLE_BASE_URL = "https://ai.gateway.lovable.dev/v1";
 
+// Cadeia padrão do gateway Lovable: modelo atual primeiro, estáveis depois.
+// Um nome de modelo aposentado no meio da cadeia não derruba nada, só gasta
+// uma tentativa; manter esta lista curta e válida é o que dá resiliência.
+export const DEFAULT_LOVABLE_MODEL_CHAIN = [
+  "google/gemini-3-flash-preview",
+  "google/gemini-2.5-flash",
+  "openai/gpt-5-mini",
+  "google/gemini-2.5-flash-lite",
+] as const;
+
 function readRuntimeEnv(name: AiProviderEnvName): string | undefined {
   return Deno.env.get(name);
 }
@@ -214,9 +224,18 @@ export async function requestAiChatCompletion(
       }
 
       if (lastResponse?.body) await lastResponse.body.cancel().catch(() => {});
+      // A causa real de cada tentativa vai para o log da função: é o que
+      // transforma "a IA não funciona" em "401 no provider X, 402 no Y".
+      const snippet = await response.clone().text()
+        .then((text) => text.slice(0, 300))
+        .catch(() => "");
+      console.warn(`[ai] ${provider.label} -> HTTP ${response.status} ${snippet}`);
       lastResponse = response;
       lastProvider = provider;
     } catch (error) {
+      console.warn(
+        `[ai] ${provider.label} -> ${error instanceof Error ? error.message : String(error)}`,
+      );
       lastError = error;
     }
   }

@@ -110,8 +110,8 @@ Gere SEMPRE que houver projeto/plan. Regras absolutas:
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 const LOVABLE_COMPAT_MODEL_CHAIN = [
   "google/gemini-3-flash-preview",
-  "google/gemini-3.1-flash-lite-preview",
   "google/gemini-2.5-flash",
+  "openai/gpt-5-mini",
   "google/gemini-2.5-flash-lite",
 ];
 
@@ -485,8 +485,10 @@ Deno.serve(async (req) => {
       // ou incompatibilidade de payload do provider anterior.
     }
 
-    // Se TODOS falharem, degrada elegante — não trava o usuário.
+    // Se TODOS falharem, degrada elegante — não trava o usuário — e deixa a
+    // causa real registrada no log da função para diagnóstico.
     if (!parsed) {
+      console.warn(`[assistente] todos os modelos falharam: ${errors.join(" | ")}`);
       return new Response(JSON.stringify({
         intent: { kind: "unknown", raw: body.text },
         suggestedClientIds: [],

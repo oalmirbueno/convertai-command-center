@@ -45,13 +45,17 @@ function MonthNarrative({ clientId }: { clientId: string }) {
       });
       if (error || result?.error) return { narrative: null };
       const value = { narrative: result?.narrative ?? null, month: result?.month };
-      try {
-        localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), value }));
-      } catch { /* armazenamento cheio: segue sem cache */ }
+      // Só uma resposta com texto entra no cache de 24h. Falha ou mês sem
+      // movimento não ficam gravados: na próxima visita tenta de novo.
+      if (value.narrative) {
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), value }));
+        } catch { /* armazenamento cheio: segue sem cache */ }
+      }
       return value;
     },
     staleTime: 24 * 3600_000,
-    retry: false,
+    retry: 1,
   });
 
   if (!data?.narrative) return null;

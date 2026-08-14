@@ -10,12 +10,13 @@
 import { corsHeaders } from "npm:@supabase/supabase-js@2/cors";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import {
+  DEFAULT_LOVABLE_MODEL_CHAIN,
   requestAiChatCompletion,
   resolveAiProviderChain,
 } from "../_shared/ai-provider.ts";
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
-const LOVABLE_COMPAT_MODEL_CHAIN = ["google/gemini-2.5-flash"];
+const LOVABLE_COMPAT_MODEL_CHAIN = DEFAULT_LOVABLE_MODEL_CHAIN;
 
 const SYSTEM_PROMPT = `Você escreve o "resumo do mês" para o cliente de uma agência de growth marketing brasileira (Aceleriq). O leitor é dono de negócio, leigo em marketing.
 
@@ -150,29 +151,68 @@ Deno.serve(async (req) => {
       (reportsRes.data || []).length > 0;
     if (!hasMovement) return jsonResponse({ narrative: null });
 
-    const providers = resolveAiProviderChain({
-      primaryModels: PRIMARY_MODEL_CHAIN,
-      lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
+    // Narrador de reserva: se toda a cadeia de IA falhar, o mês ainda é
+    // contado com os mesmos fatos reais, em texto montado aqui. O cliente
+    // nunca fica sem o resumo por causa de provider.
+    const fallbackNarrative = (() => {
+      const parts: string[] = [];
+      if (files.length > 0) {
+        parts.push(
+          `Em ${monthName}, a gente produziu ${files.length} ${files.length === 1 ? "material" : "materiais"} para vocês` +
+            (approvedMonth > 0 ? `, e ${approvedMonth} já ${approvedMonth === 1 ? "foi aprovado" : "foram aprovados"} por vocês` : "") +
+            ".",
+        );
+      } else if (publishedMonth.length > 0) {
+        parts.push(`Em ${monthName}, a sua presença seguiu em movimento.`);
+      }
+      if (publishedMonth.length > 0) {
+        parts.push(
+          `${publishedMonth.length} ${publishedMonth.length === 1 ? "publicação foi ao ar" : "publicações foram ao ar"} no calendário combinado.`,
+        );
+      }
+      if (scheduledAhead.length > 0) {
+        parts.push(
+          `Os próximos dias já estão garantidos, com ${scheduledAhead.length} ${scheduledAhead.length === 1 ? "publicação agendada" : "publicações agendadas"}.`,
+        );
+      }
+      if ((milestonesData || []).length > 0) {
+        parts.push(`Também fechamos etapas importantes do projeto neste mês.`);
+      }
+      parts.push("Qualquer dúvida sobre o que vem a seguir, é só chamar a gente.");
+      return parts.join(" ");
+    })();
+
+    const aiNarrative = await (async () => {
+      try {
+        const providers = resolveAiProviderChain({
+          primaryModels: PRIMARY_MODEL_CHAIN,
+          lovableModels: LOVABLE_COMPAT_MODEL_CHAIN,
+        });
+        const { response, provider } = await requestAiChatCompletion(providers, {
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: `FATOS DO MÊS (painel, dados reais):\n${facts}` },
+          ],
+          temperature: 0.5,
+        });
+        if (!response.ok) {
+          console.warn(`[narrador] cadeia esgotada, último: ${provider.label} HTTP ${response.status}`);
+          return null;
+        }
+        const completion = await response.json();
+        const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
+        return String(parsed?.narrative || "").trim() || null;
+      } catch (error) {
+        console.warn(`[narrador] falha: ${error instanceof Error ? error.message : String(error)}`);
+        return null;
+      }
+    })();
+
+    return jsonResponse({
+      narrative: aiNarrative || fallbackNarrative,
+      month: monthName,
+      source: aiNarrative ? "ai" : "fallback",
     });
-
-    const { response } = await requestAiChatCompletion(providers, {
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: `FATOS DO MÊS (painel, dados reais):\n${facts}` },
-      ],
-      temperature: 0.5,
-    });
-
-    if (!response.ok) {
-      return jsonResponse({ error: `Narrador indisponível (${response.status}).` }, 502);
-    }
-
-    const completion = await response.json();
-    const parsed = extractJson(completion?.choices?.[0]?.message?.content || "");
-    const narrative = String(parsed?.narrative || "").trim();
-    if (!narrative) return jsonResponse({ narrative: null });
-
-    return jsonResponse({ narrative, month: monthName });
   } catch (error) {
     return jsonResponse(
       { error: error instanceof Error ? error.message : "Erro inesperado." },

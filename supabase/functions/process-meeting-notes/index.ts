@@ -19,7 +19,7 @@ Deno.serve(async (req) => {
     const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const providers = resolveAiProviderChain({
       primaryModels: ["gpt-4o-mini"],
-      lovableModels: ["google/gemini-3-flash-preview"],
+      lovableModels: ["google/gemini-3-flash-preview", "google/gemini-2.5-flash"],
     });
 
     const adminClient = createClient(supabaseUrl, serviceRoleKey);

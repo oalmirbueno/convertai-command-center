@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
-import { ChevronLeft, ChevronRight, HelpCircle, ListChecks, Star } from "lucide-react";
+import {
+  ChevronLeft, ChevronRight, HelpCircle, ListChecks, RefreshCw, Sparkles, Star,
+} from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -66,6 +68,13 @@ const mondayOf = (base: Date) => {
   return d;
 };
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
+const addDays = (base: Date, days: number) => {
+  const d = new Date(base);
+  d.setDate(d.getDate() + days);
+  return d;
+};
+// Quantas semanas de história alimentam a linha do tempo e a continuidade.
+const HISTORY_WEEKS = 8;
 const fmt = (d: Date) =>
   d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
 
@@ -133,6 +142,93 @@ export default function AdminCiclo() {
     }
     return map;
   }, [rows]);
+
+  // Historia das ultimas semanas: alimenta a linha do tempo da carteira, o
+  // sparkline por cliente e a deteccao de pendencia herdada.
+  const realMonday = useMemo(() => mondayOf(new Date()), []);
+  const { data: historyRows } = useQuery({
+    queryKey: ["weekly-cycle-history", area],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("weekly_cycle_progress")
+        .select("client_id, week_start, step")
+        .eq("area", area)
+        .gte("week_start", isoDate(addDays(realMonday, -(HISTORY_WEEKS - 1) * 7)));
+      if (error) throw error;
+      return (data || []) as Array<{ client_id: string; week_start: string; step: number }>;
+    },
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
+  // Conjunto de etapas 1..6 feitas por cliente em cada semana da historia.
+  const historySets = useMemo(() => {
+    const map = new Map<string, Set<number>>();
+    for (const row of historyRows || []) {
+      if (row.step > 6) continue;
+      const key = `${row.client_id}:${row.week_start}`;
+      if (!map.has(key)) map.set(key, new Set());
+      map.get(key)!.add(row.step);
+    }
+    return map;
+  }, [historyRows]);
+
+  // Linha do tempo da carteira: % das etapas 1..6 fechadas em cada semana.
+  const timeline = useMemo(() => {
+    const weeks: Array<{ key: string; label: string; pct: number; offset: number }> = [];
+    const clientCount = activeClients.length;
+    for (let offset = -(HISTORY_WEEKS - 1); offset <= 0; offset += 1) {
+      const key = isoDate(addDays(realMonday, offset * 7));
+      let done = 0;
+      for (const client of activeClients) {
+        done += historySets.get(`${client.id}:${key}`)?.size || 0;
+      }
+      weeks.push({
+        key,
+        label: fmt(addDays(realMonday, offset * 7)),
+        pct: clientCount > 0 ? done / (clientCount * 6) : 0,
+        offset,
+      });
+    }
+    return weeks;
+  }, [activeClients, historySets, realMonday]);
+
+  // Coach da semana: a IA le o checklist real e diz onde focar. Cache local de
+  // 6 horas por semana e area; falha nunca aparece para o usuario, so some.
+  const coachCacheKey = `aceleriq-coach-${area}-${weekKey}`;
+  const { data: coach, isFetching: coachLoading, refetch: refetchCoach } = useQuery({
+    queryKey: ["cycle-coach", area, weekKey],
+    queryFn: async (): Promise<{ coach: string | null; closed?: number; total_clients?: number } | null> => {
+      try {
+        const cached = localStorage.getItem(coachCacheKey);
+        if (cached) {
+          const parsed = JSON.parse(cached);
+          if (Date.now() - (parsed.at || 0) < 6 * 3600_000) return parsed.value;
+        }
+      } catch { /* cache corrompido: gera de novo */ }
+      const { data, error } = await supabase.functions.invoke("cycle-coach", {
+        body: { week_start: weekKey, area },
+      });
+      if (error || data?.error || !data?.coach) return null;
+      const value = {
+        coach: data.coach as string,
+        closed: data.closed as number | undefined,
+        total_clients: data.total_clients as number | undefined,
+      };
+      try {
+        localStorage.setItem(coachCacheKey, JSON.stringify({ at: Date.now(), value }));
+      } catch { /* armazenamento cheio: segue sem cache */ }
+      return value;
+    },
+    enabled: !!user && weekOffset <= 0,
+    staleTime: 6 * 3600_000,
+    retry: 0,
+  });
+
+  const refreshCoach = () => {
+    try { localStorage.removeItem(coachCacheKey); } catch { /* sem cache */ }
+    void refetchCoach();
+  };
 
   const toggle = async (clientId: string, step: number) => {
     if (!canWrite) return;
@@ -231,6 +327,74 @@ export default function AdminCiclo() {
         ))}
       </div>
 
+      {/* Linha do tempo: as ultimas semanas da carteira, tocavel */}
+      <div className="rounded-2xl border border-border bg-card p-3">
+        <div className="flex items-center justify-between">
+          <p className="text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Linha do tempo · {HISTORY_WEEKS} semanas
+          </p>
+          {timeline.length > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              hoje: {Math.round((timeline[timeline.length - 1]?.pct || 0) * 100)}%
+            </p>
+          )}
+        </div>
+        <div className="mt-2 flex items-end gap-1.5">
+          {timeline.map((week) => {
+            const selected = week.offset === weekOffset;
+            return (
+              <button
+                key={week.key}
+                type="button"
+                onClick={() => setWeekOffset(week.offset)}
+                className="group flex flex-1 flex-col items-center gap-1"
+                aria-label={`Semana de ${week.label}: ${Math.round(week.pct * 100)}%`}
+              >
+                <span className="flex h-14 w-full items-end overflow-hidden rounded-md bg-secondary/40">
+                  <span
+                    className={`block w-full rounded-md transition-all ${
+                      selected ? "bg-primary" : week.pct >= 1 ? "bg-success/70" : "bg-primary/40 group-hover:bg-primary/60"
+                    }`}
+                    style={{ height: `${Math.max(week.pct * 100, week.pct > 0 ? 8 : 3)}%` }}
+                  />
+                </span>
+                <span className={`text-[9px] ${selected ? "font-bold text-primary" : "text-muted-foreground"}`}>
+                  {week.label}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Coach da semana: IA lendo o checklist real */}
+      {(coach?.coach || coachLoading) && (
+        <div className="rounded-2xl border border-primary/25 bg-primary/[0.04] p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-primary">
+              <Sparkles className="h-3.5 w-3.5" /> Coach da semana
+              {typeof coach?.closed === "number" && typeof coach?.total_clients === "number" && (
+                <span className="rounded-md bg-primary/10 px-1.5 py-0.5 text-[9px] font-bold normal-case tracking-normal">
+                  {coach.closed}/{coach.total_clients} fechados
+                </span>
+              )}
+            </p>
+            <button
+              type="button"
+              onClick={refreshCoach}
+              disabled={coachLoading}
+              className="rounded-lg p-1.5 text-muted-foreground hover:text-foreground"
+              aria-label="Atualizar coach"
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${coachLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          <p className="mt-1.5 text-[13px] leading-relaxed text-foreground/90">
+            {coach?.coach || "Lendo a semana da carteira…"}
+          </p>
+        </div>
+      )}
+
       {/* Legenda */}
       {showLegend && (
         <div className="rounded-2xl border border-primary/25 bg-card p-4">
@@ -278,6 +442,29 @@ export default function AdminCiclo() {
             doneMap.has(`${client.id}:${area}:${index + 1}`) ? 1 : 0,
           ).reduce((sum: number, value) => sum + value, 0);
           const complete = doneCount === clientTotal;
+
+          // Continuidade: o que a semana anterior deixou em aberto.
+          const prevKey = isoDate(addDays(weekStart, -7));
+          const prevSet = historySets.get(`${client.id}:${prevKey}`);
+          const prevIncomplete =
+            addDays(weekStart, -7) < realMonday && (prevSet?.size || 0) < totalSteps;
+          const inheritedStep = prevIncomplete
+            ? Array.from({ length: totalSteps }, (_, i) => i + 1).find(
+                (step) => !prevSet?.has(step),
+              ) || null
+            : null;
+
+          // Proximo passo desta semana: a primeira etapa ainda nao marcada.
+          const nextStep = complete
+            ? null
+            : Array.from({ length: clientTotal }, (_, i) => i + 1).find(
+                (step) => !doneMap.has(`${client.id}:${area}:${step}`),
+              ) || null;
+          const nextLabel = nextStep
+            ? nextStep <= totalSteps
+              ? cycle.steps[nextStep - 1]
+              : ONBOARDING_STEPS[nextStep - totalSteps - 1]
+            : null;
           return (
             <div
               key={client.id}
@@ -332,6 +519,11 @@ export default function AdminCiclo() {
                   );
                 })}
               </div>
+              {inheritedStep !== null && (prevSet?.size || 0) > 0 && (
+                <p className="mt-1.5 rounded-lg bg-amber-500/10 px-2 py-1 text-[10.5px] font-medium text-amber-600 dark:text-amber-400">
+                  Semana passada fechou {prevSet?.size || 0}/{totalSteps}, parou na etapa {inheritedStep}
+                </p>
+              )}
               {isNew && (
                 <div className="mt-1.5 grid grid-cols-4 gap-1.5">
                   {ONBOARDING_STEPS.map((step, index) => {
@@ -357,6 +549,37 @@ export default function AdminCiclo() {
                   })}
                 </div>
               )}
+              <div className="mt-2 flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[11px] text-muted-foreground">
+                  {complete ? (
+                    <span className="font-medium text-success">Semana fechada ✦</span>
+                  ) : nextLabel ? (
+                    <>
+                      <span className="font-semibold text-foreground">Próximo:</span>{" "}
+                      {nextStep}. {nextLabel}
+                    </>
+                  ) : null}
+                </p>
+                <span className="flex shrink-0 items-center gap-[3px]" aria-hidden>
+                  {timeline.map((week) => {
+                    const fill =
+                      (historySets.get(`${client.id}:${week.key}`)?.size || 0) / totalSteps;
+                    return (
+                      <span
+                        key={week.key}
+                        className={`h-2 w-1.5 rounded-sm ${
+                          fill >= 1
+                            ? "bg-success/80"
+                            : fill > 0
+                              ? "bg-primary/50"
+                              : "bg-secondary"
+                        }`}
+                        style={fill > 0 && fill < 1 ? { opacity: 0.35 + fill * 0.65 } : undefined}
+                      />
+                    );
+                  })}
+                </span>
+              </div>
             </div>
           );
         })}

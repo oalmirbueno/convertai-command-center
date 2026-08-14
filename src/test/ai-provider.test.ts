@@ -203,7 +203,10 @@ describe("portable AI provider configuration", () => {
     expect(files).toContain("Deno.env.get('MCP_FILE_OCR_MODEL')");
     expect(agentImport).toContain('"google/gemini-2.5-flash"');
     expect(voice).toContain('response_format: { type: "json_object" }');
-    expect(voice).toContain('"google/gemini-3.1-flash-lite-preview"');
+    // Cadeia de compatibilidade do gateway: modelo atual primeiro e um
+    // reserva estável — sem nomes de modelo aposentados/inexistentes.
+    expect(voice).toContain('"google/gemini-3-flash-preview"');
+    expect(voice).toContain('"google/gemini-2.5-flash"');
     expect(workspace).toContain("{ messages, stream: true }");
     expect(workspace).toContain('if (!line.startsWith("data:")) continue');
     expect(workspace).toContain('primaryModels: ["gpt-5", "gpt-5-mini", "gpt-4.1", "gpt-4o-mini"]');

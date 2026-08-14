@@ -20,7 +20,11 @@ import {
 
 // Modelos com busca na web embutida primeiro; sem busca como reserva.
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini-search-preview", "gpt-4o-mini"];
-const LOVABLE_COMPAT_MODEL_CHAIN = ["google/gemini-2.5-flash"];
+const LOVABLE_COMPAT_MODEL_CHAIN = [
+  "google/gemini-3-flash-preview",
+  "google/gemini-2.5-flash",
+  "openai/gpt-5-mini",
+];
 
 const SYSTEM_PROMPT = `Você é o estrategista-chefe de crescimento da Aceleriq, uma agência de growth marketing brasileira. Sua especialidade é marketing de diferenciação (a escola do Fator X, de Pedro Superti): o que torna uma marca desejada já existe dentro do negócio; o trabalho é achar esse elemento e transformá-lo em movimento, vendendo visão de mundo e não produto, até a concorrência ficar irrelevante.
 

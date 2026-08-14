@@ -371,6 +371,12 @@ export default function VoiceAssistant() {
           kind: degraded ? "info" : "ok",
           text: `IA${note}: ${(data as any).narrative?.slice(0, 120) || "interpretação atualizada"}`,
         });
+        // Em degradação, mostra a causa técnica para a equipe conseguir agir
+        // (chave vencida, créditos, modelo aposentado) em vez de só "modo local".
+        const errs = (data as any)._errors;
+        if (degraded && Array.isArray(errs) && errs.length) {
+          appendLog({ kind: "info", text: `Diagnóstico IA: ${errs.slice(0, 3).join(" · ")}` });
+        }
       }
     } catch (err: any) {
       appendLog({ kind: "info", text: `IA em modo local: ${err?.message || "indisponível"}` });
