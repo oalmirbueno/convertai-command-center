@@ -168,6 +168,96 @@ function ClientMetricsDetail({
         )}
       </div>
 
+      {(() => {
+        // Leitura e direcionamento calculados dos numeros reais, sem achismo.
+        const lines: string[] = [];
+        const followersPct = weekDeltaPct(rows, "followers");
+        const reachPct = weekDeltaPct(rows, "reach");
+        if (reachPct != null) {
+          lines.push(
+            reachPct >= 0
+              ? `Alcance subiu ${reachPct.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% na semana. O conteúdo está encontrando gente nova; mantenha o ritmo.`
+              : `Alcance caiu ${Math.abs(reachPct).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% na semana. Vale variar formato e horário nos próximos posts.`,
+          );
+        }
+        if (followersPct != null && followersPct < 0) {
+          lines.push("Seguidores em queda leve: reforce conteúdo de valor (dica, bastidor, prova) antes de conteúdo de venda.");
+        }
+        const byType = new Map<string, { total: number; count: number }>();
+        for (const post of rankedPosts) {
+          const key = MEDIA_TYPE_LABELS[post.media_type || ""] || post.media_type || "Post";
+          const bucket = byType.get(key) || { total: 0, count: 0 };
+          bucket.total += (post.like_count || 0) + (post.comments_count || 0);
+          bucket.count += 1;
+          byType.set(key, bucket);
+        }
+        const typeAvgs = [...byType.entries()]
+          .filter(([, b]) => b.count >= 2)
+          .map(([type, b]) => ({ type, avg: b.total / b.count }))
+          .sort((a, b) => b.avg - a.avg);
+        if (typeAvgs.length >= 2) {
+          lines.push(
+            `${typeAvgs[0].type} engaja em média ${Math.round(typeAvgs[0].avg)} por post, contra ${Math.round(typeAvgs[typeAvgs.length - 1].avg)} de ${typeAvgs[typeAvgs.length - 1].type.toLowerCase()}: priorize ${typeAvgs[0].type.toLowerCase()}.`,
+          );
+        }
+        const recent30 = rankedPosts.filter(
+          (post) => post.posted_at && Date.now() - new Date(post.posted_at).getTime() < 30 * 86400000,
+        ).length;
+        if (recent30 > 0) {
+          lines.push(`Ritmo atual: ${recent30} publicações nos últimos 30 dias.`);
+        }
+        const top = rankedPosts[0];
+        const copySummary = () => {
+          const d = (value: string) => {
+            const [, month, day] = value.split("-");
+            return `${day}/${month}`;
+          };
+          const pct = (value: number | null) =>
+            value == null ? "" : ` (${value >= 0 ? "+" : ""}${value.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%)`;
+          const parts = [
+            `📊 ${clientName} · Instagram · semana ${latest ? `${d(latest.week_start)} a ${d(latest.week_end)}` : ""}`,
+            latest?.followers != null ? `Seguidores: ${formatMetricNumber(latest.followers)}${pct(followersPct)}` : "",
+            latest?.reach != null ? `Alcance: ${formatMetricNumber(latest.reach)}${pct(reachPct)}` : "",
+            latest?.total_interactions != null
+              ? `Interações: ${formatMetricNumber(latest.total_interactions)}${pct(weekDeltaPct(rows, "total_interactions"))}`
+              : "",
+            top
+              ? `Post destaque: "${(top.caption || "").slice(0, 70)}" · ${formatMetricNumber(top.like_count)} curtidas · ${formatMetricNumber(top.comments_count)} comentários`
+              : "",
+            lines[0] ? `Leitura: ${lines[0]}` : "",
+            "Acompanhamento contínuo pela Aceleriq 🚀",
+          ].filter(Boolean);
+          navigator.clipboard
+            .writeText(parts.join("\n"))
+            .then(() => toast.success("Resumo copiado. É só colar no grupo do cliente."))
+            .catch(() => toast.error("Não foi possível copiar. Selecione e copie manualmente."));
+        };
+        return (
+          <div className="rounded-2xl border border-primary/25 bg-card p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-semibold text-foreground">Leitura e direcionamento</p>
+              <Button size="sm" variant="outline" onClick={copySummary}>
+                Copiar resumo para o grupo
+              </Button>
+            </div>
+            {lines.length === 0 ? (
+              <p className="mt-2 text-xs text-muted-foreground">
+                Assim que houver 2 semanas coletadas, a leitura aparece aqui.
+              </p>
+            ) : (
+              <ul className="mt-2 space-y-1.5">
+                {lines.map((line) => (
+                  <li key={line} className="flex items-start gap-2 text-xs leading-relaxed text-foreground">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-primary" />
+                    {line}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        );
+      })()}
+
       <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
         <p className="text-sm font-semibold text-foreground">O que performou</p>
         <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -180,8 +270,8 @@ function ClientMetricsDetail({
             os posts chegam em alguns minutos.
           </p>
         ) : (
-          <div className="mt-3 space-y-2">
-            {rankedPosts.slice(0, 10).map((post, index) => {
+          <div className="mt-3 max-h-[520px] space-y-2 overflow-y-auto pr-1">
+            {rankedPosts.map((post, index) => {
               const engagement = (post.like_count || 0) + (post.comments_count || 0);
               return (
                 <div
@@ -197,6 +287,17 @@ function ClientMetricsDetail({
                   >
                     {index + 1}
                   </span>
+                  {(post.thumbnail_url || post.media_url) && (
+                    <img
+                      src={post.thumbnail_url || post.media_url || ""}
+                      alt=""
+                      loading="lazy"
+                      className="h-12 w-12 shrink-0 rounded-lg border border-border object-cover"
+                      onError={(event) => {
+                        (event.target as HTMLImageElement).style.display = "none";
+                      }}
+                    />
+                  )}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-medium text-foreground">
                       {post.caption?.trim() || "(sem legenda)"}

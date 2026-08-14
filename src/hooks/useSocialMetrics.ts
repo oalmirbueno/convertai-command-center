@@ -51,6 +51,8 @@ export interface SocialPostMetric {
   media_type: string | null;
   caption: string | null;
   permalink: string | null;
+  media_url: string | null;
+  thumbnail_url: string | null;
   posted_at: string | null;
   like_count: number | null;
   comments_count: number | null;
