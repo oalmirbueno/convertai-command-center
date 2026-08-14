@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useFiles, useProjects } from "@/hooks/useSupabaseData";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
@@ -82,9 +83,13 @@ export default function ClientDocuments() {
   const { decide, submitting, isReadOnly } = useFileApprovalDecision();
   const { toast } = useToast();
 
+  const [searchParams] = useSearchParams();
   const [activeFolder, setActiveFolder] = useState<FolderId | "todos">("todos");
   const [activeKind, setActiveKind] = useState<FileKindId | null>(null);
-  const [filterProject, setFilterProject] = useState("all");
+  // A aba Entregas do projeto aponta para ca com ?project=: uma area so.
+  const [filterProject, setFilterProject] = useState(
+    searchParams.get("project") || "all",
+  );
   const [confirmApprove, setConfirmApprove] = useState<string | null>(null);
   const [feedbackFileId, setFeedbackFileId] = useState<string | null>(null);
   const [feedbackText, setFeedbackText] = useState("");

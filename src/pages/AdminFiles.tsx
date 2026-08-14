@@ -18,7 +18,7 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
 import {
-  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List, RefreshCw,
+  Upload, FileImage, FileText, Film, Archive, Download, Trash2, FolderOpen, Pencil, Check, X, ChevronLeft, ChevronRight, FolderInput, Grid2X2, List, RefreshCw, Send,
 } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import FilePreviewContent, { prefetchImages } from "@/components/shared/FilePreviewContent";
@@ -1288,9 +1288,27 @@ export default function AdminFiles() {
                         {isCarousel && <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary shrink-0">{carouselChildren.length + 1}</span>}
                       </div>
                       <p className="text-[11px] text-muted-foreground truncate">{kindLabel(resolveKind(f))} • {f.project?.name || "Sem projeto"} • {formatDate(f.created_at)}</p>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="flex flex-wrap items-center gap-1.5">
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full ${reviewBadge.cls}`}>{reviewBadge.label}</span>
+                          {/* A raiz das reclamações: upload nasce interno e o
+                              cliente NÃO vê. Agora isso fica na cara. */}
+                          {f.visibility === "internal" ? (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning">Cliente não vê</span>
+                          ) : (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full bg-success/10 text-success">Visível ao cliente</span>
+                          )}
+                        </span>
                         <div className="flex items-center gap-2">
+                          {canReviewAndRelease && f.visibility === "internal" && isEditable && (
+                            <button
+                              onClick={(e) => { e.stopPropagation(); void handleDirectReleaseToClient(f, "client_shared"); }}
+                              title="Liberar ao cliente agora (revisão interna registrada junto)"
+                              className="text-warning hover:text-success transition-colors"
+                            >
+                              <Send className="w-4 h-4" />
+                            </button>
+                          )}
                           {isEditable && (
                             <button onClick={(e) => { e.stopPropagation(); setConfirmDeleteFile({ id: f.id, name: f.file_name }); }}
                               className="text-muted-foreground hover:text-destructive transition-colors">
@@ -1342,6 +1360,20 @@ export default function AdminFiles() {
                         <span className="text-[11px] text-muted-foreground">{f.uploader?.full_name}</span>
                       </div>
                       <span className={`text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline ${reviewBadge.cls}`}>{reviewBadge.label}</span>
+                      {f.visibility === "internal" ? (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0 bg-warning/15 text-warning">Cliente não vê</span>
+                      ) : (
+                        <span className="text-[10px] px-2 py-0.5 rounded-full shrink-0 hidden sm:inline bg-success/10 text-success">Visível ao cliente</span>
+                      )}
+                      {canReviewAndRelease && f.visibility === "internal" && isEditable && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); void handleDirectReleaseToClient(f, "client_shared"); }}
+                          title="Liberar ao cliente agora"
+                          className="text-warning hover:text-success transition-colors"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      )}
                       {isEditable && <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <button onClick={(e) => e.stopPropagation()} className="text-muted-foreground hover:text-foreground transition-colors" title="Mover de pasta">

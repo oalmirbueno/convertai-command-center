@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from "react";
+import { Link } from "react-router-dom";
 import { useFiles } from "@/hooks/useSupabaseData";
 import { useFileApprovalDecision } from "@/hooks/useFileApprovalDecision";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -144,9 +145,11 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
   const [previewGroup, setPreviewGroup] = useState<DeliveryGroup | null>(null);
   const [previewIndex, setPreviewIndex] = useState(0);
 
+  // MESMA regra da área Documentos: o banco (RLS) decide o que o cliente vê e
+  // a tela mostra o que chegar. Antes as duas áreas filtravam diferente e o
+  // mesmo arquivo aparecia numa e sumia na outra: era a "área duplicada".
   const groups = useMemo(() => groupFiles((files || []).filter((file: any) =>
-    ["client_shared", "approval"].includes(file.visibility)
-    && file.status === "ready"
+    file.status === "ready"
     && !file.archived_at
   )), [files]);
 
@@ -204,11 +207,22 @@ export default function TabDeliveries({ projectId }: { projectId: string }) {
   if (!groups.length) return (
     <div className="text-sm text-muted-foreground py-8 text-center flex flex-col items-center gap-2">
       <File className="w-6 h-6 text-muted-foreground/50" />Nenhuma entrega pendente no momento
+      <Link to="/documentos" className="text-xs text-primary hover:underline">
+        Ver todos os seus documentos
+      </Link>
     </div>
   );
 
   return (
     <div className="space-y-3">
+      {/* Uma área só: aqui é o recorte do projeto; o acervo completo, com os
+          filtros por pasta e tipo, vive em Documentos. */}
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] text-muted-foreground">Entregas deste projeto</p>
+        <Link to="/documentos" className="text-[11px] text-primary hover:underline">
+          Ver tudo em Documentos
+        </Link>
+      </div>
       {isReadOnly && (
         <div className="rounded-xl border border-sky-500/20 bg-sky-500/[0.06] px-4 py-3 text-xs text-sky-600">
           Modo somente leitura: decisões do cliente estão bloqueadas.
