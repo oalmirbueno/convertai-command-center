@@ -83,6 +83,38 @@ export function useSocialPostMetrics(clientId?: string, limit = 25) {
   });
 }
 
+// Identidade visual do Instagram (foto, @, nome, bio, site) coletada pelo robo.
+export interface SocialClientIdentity {
+  client_id: string;
+  external_account_id: string;
+  username: string | null;
+  display_name: string | null;
+  biography: string | null;
+  website: string | null;
+  profile_picture_url: string | null;
+  captured_at: string;
+}
+
+export function useSocialClientIdentity(clientId?: string) {
+  const { user } = useAuth();
+  return useQuery({
+    queryKey: ["social-client-identity", user?.id, clientId ?? "none"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("social_client_identity")
+        .select("*")
+        .eq("client_id", clientId)
+        .order("captured_at", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (error) throw error;
+      return (data || null) as SocialClientIdentity | null;
+    },
+    enabled: !!user && !!clientId,
+    staleTime: 300_000,
+  });
+}
+
 export async function collectSocialMetricsNow() {
   const { data, error } = await (supabase as any).rpc(
     "collect_social_metrics_now",

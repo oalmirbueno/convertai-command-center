@@ -20,6 +20,7 @@ import { useClients } from "@/hooks/useSupabaseData";
 import {
   collectSocialMetricsNow,
   formatMetricNumber,
+  useSocialClientIdentity,
   useSocialMetricsWeekly,
   useSocialPostMetrics,
   weekDeltaPct,
@@ -71,6 +72,7 @@ function ClientMetricsDetail({
   onBack: () => void;
 }) {
   const { data: posts } = useSocialPostMetrics(clientId, 25);
+  const { data: identity } = useSocialClientIdentity(clientId);
   const latest = rows[0];
   const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
   const rankedPosts = useMemo(
@@ -97,20 +99,46 @@ function ClientMetricsDetail({
       </button>
 
       <div className="rounded-2xl border border-border bg-card p-4 sm:p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <Link
-              to={`/clientes?client=${clientId}`}
-              className="text-base font-bold text-foreground hover:text-primary"
-            >
-              {clientName}
-            </Link>
-            {latest && (
-              <p className="text-[11px] text-muted-foreground">
-                Última semana coletada: {fmtWeek(latest)}
-              </p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            {identity?.profile_picture_url && (
+              <img
+                src={identity.profile_picture_url}
+                alt=""
+                className="h-12 w-12 shrink-0 rounded-full border border-border object-cover"
+                onError={(event) => {
+                  (event.target as HTMLImageElement).style.display = "none";
+                }}
+              />
             )}
+            <div className="min-w-0">
+              <Link
+                to={`/clientes?client=${clientId}`}
+                className="text-base font-bold text-foreground hover:text-primary"
+              >
+                {clientName}
+              </Link>
+              <p className="truncate text-[11px] text-muted-foreground">
+                {identity?.username ? `@${identity.username} · ` : ""}
+                {latest ? `Última semana coletada: ${fmtWeek(latest)}` : "Sem coleta ainda"}
+              </p>
+              {identity?.biography && (
+                <p className="mt-0.5 line-clamp-2 max-w-xl text-[11px] leading-snug text-muted-foreground">
+                  {identity.biography}
+                </p>
+              )}
+            </div>
           </div>
+          {identity?.website && (
+            <a
+              href={identity.website}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] text-primary hover:underline"
+            >
+              {identity.website.replace(/^https?:\/\//, "")}
+            </a>
+          )}
         </div>
 
         {latest && (
