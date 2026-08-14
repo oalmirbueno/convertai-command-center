@@ -42,6 +42,7 @@ import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
   findEditorialPostIdByPrimaryFile,
   loadEditorialPostForMutation,
+  useEditorialAccountMutations,
   useEditorialEditorOptions,
   useEditorialMutations,
   type EditorialFileRow,
@@ -300,6 +301,12 @@ export default function EditorialEditor({
   const [afterAccountId, setAfterAccountId] = useState("");
   const [afterWhen, setAfterWhen] = useState("");
   const [afterSaving, setAfterSaving] = useState(false);
+  // Conta do cliente ainda nao vinculada ao projeto: o passo 2 oferece e
+  // vincula sozinho na hora de programar (era o seletor vazio).
+  const { linkAccount } = useEditorialAccountMutations(
+    clientId || null,
+    projectId || null,
+  );
 
   const {
     data: options,
@@ -672,11 +679,12 @@ export default function EditorialEditor({
       // Conteúdo novo sem plano de publicação: em vez de fechar e abrir
       // outro popup, o próprio modal vira a etapa de programar.
       if (!post && !revisionOf && publicationPayload.length === 0) {
-        const availableAccounts = (options?.accounts || []).filter(
-          (account) => !cancelledAccountIds.has(account.id),
-        );
+        const selectableAccounts = [
+          ...(options?.accounts || []),
+          ...(options?.availableAccounts || []),
+        ].filter((account) => !cancelledAccountIds.has(account.id));
         setAfterAccountId(
-          availableAccounts.length === 1 ? availableAccounts[0].id : "",
+          selectableAccounts.length === 1 ? selectableAccounts[0].id : "",
         );
         setAfterWhen(defaultScheduledAt || "");
         setAfterSave({ postId: result.post_id, clientId });
@@ -762,6 +770,14 @@ export default function EditorialEditor({
     }
     setAfterSaving(true);
     try {
+      // Conta ainda nao vinculada ao projeto: vincula agora, sem cerimonia.
+      if (
+        (options?.availableAccounts || []).some(
+          (account) => account.id === afterAccountId,
+        )
+      ) {
+        await linkAccount.mutateAsync({ accountId: afterAccountId });
+      }
       const fresh = await loadEditorialPostForMutation(
         afterSave.postId,
         afterSave.clientId,
@@ -879,7 +895,10 @@ export default function EditorialEditor({
                     <SelectValue placeholder="Selecione a conta" />
                   </SelectTrigger>
                   <SelectContent>
-                    {(options?.accounts || []).map((item) => (
+                    {[
+                      ...(options?.accounts || []),
+                      ...(options?.availableAccounts || []),
+                    ].map((item) => (
                       <SelectItem key={item.id} value={item.id}>
                         {PLATFORM_LABELS[item.platform as EditorialPlatform] ||
                           item.platform}
