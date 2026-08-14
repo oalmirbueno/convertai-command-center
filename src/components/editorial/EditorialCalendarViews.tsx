@@ -561,6 +561,12 @@ function PublicationPill({
       {compact ? (
         <>
           <div className="flex min-w-0 items-center gap-1.5 text-[10px]">
+            {/* Miniatura da arte direto no calendário mensal. */}
+            <EditorialFileThumbnail
+              post={item.post}
+              publication={item.publication}
+              className="h-7 w-7 shrink-0 rounded-md"
+            />
             <span
               className={cn(
                 "h-2 w-2 shrink-0 rounded-full",
