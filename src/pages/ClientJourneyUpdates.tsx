@@ -9,8 +9,14 @@ import { Skeleton } from "@/components/ui/skeleton";
 import {
   Compass, FileCheck, CalendarDays, Inbox, ArrowUpRight,
   CheckCircle2, Clock, Sparkles, ExternalLink, AlertCircle,
+  Instagram, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
+import {
+  formatMetricNumber,
+  useSocialMetricsWeekly,
+  weekDeltaPct,
+} from "@/hooks/useSocialMetrics";
 
 /**
  * O narrador do mês: a IA escreve 3 a 5 frases contando o mês do cliente a
@@ -87,6 +93,94 @@ const SIGNAL_TONE: Record<string, string> = {
   attention: "text-amber-500",
   neutral: "text-foreground",
 };
+
+/**
+ * Instagram em números reais: a última semana fechada coletada da Meta, com a
+ * variação contra a semana anterior e o histórico de alcance. Sem dados (conta
+ * ainda não conectada ou primeira coleta pendente), o bloco não aparece.
+ */
+function InstagramRealBlock({ clientId }: { clientId: string }) {
+  const { data: rows } = useSocialMetricsWeekly(clientId, 12);
+  if (!rows || rows.length === 0) return null;
+  const latest = rows[0];
+  const weekLabel = (value: string) => {
+    const [, month, day] = value.split("-");
+    return `${day}/${month}`;
+  };
+  const cards = [
+    { label: "Seguidores", value: latest.followers, delta: weekDeltaPct(rows, "followers") },
+    { label: "Alcance na semana", value: latest.reach, delta: weekDeltaPct(rows, "reach") },
+    { label: "Interações", value: latest.total_interactions, delta: weekDeltaPct(rows, "total_interactions") },
+    { label: "Visitas ao perfil", value: latest.profile_views, delta: weekDeltaPct(rows, "profile_views") },
+  ].filter((card) => card.value != null);
+  if (cards.length === 0) return null;
+  const maxReach = Math.max(...rows.map((row) => row.reach || 0), 1);
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-card">
+      <div className="border-b border-border px-5 py-4 sm:px-7">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-widest text-primary">
+          <Instagram className="h-3 w-3" /> Instagram em números reais
+        </span>
+        <p className="mt-2 text-xs text-muted-foreground">
+          Semana de {weekLabel(latest.week_start)} a {weekLabel(latest.week_end)},
+          direto da sua conta. Atualiza sozinho toda semana.
+        </p>
+      </div>
+      <div className="grid grid-cols-2 gap-3 px-5 py-4 sm:grid-cols-4 sm:px-7">
+        {cards.map((card) => {
+          const up = card.delta != null && card.delta >= 0;
+          return (
+            <div key={card.label} className="rounded-xl border border-border bg-secondary/25 p-3">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                {card.label}
+              </p>
+              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                <p className="font-mono text-sm font-semibold text-foreground">
+                  {formatMetricNumber(card.value)}
+                </p>
+                {card.delta != null && (
+                  <span
+                    className={`inline-flex items-center gap-0.5 rounded-md px-1.5 py-0.5 text-[10px] font-semibold ${
+                      up ? "bg-success/10 text-success" : "bg-destructive/10 text-destructive"
+                    }`}
+                  >
+                    {up ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+                    {`${up ? "+" : ""}${card.delta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}%`}
+                  </span>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {rows.length > 1 && (
+        <div className="border-t border-border px-5 py-4 sm:px-7">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Alcance semana a semana
+          </p>
+          <div className="mt-2 space-y-1.5">
+            {rows.slice(0, 8).map((row) => (
+              <div key={row.id} className="flex items-center gap-2">
+                <span className="w-24 shrink-0 font-mono text-[10px] text-muted-foreground">
+                  {weekLabel(row.week_start)} a {weekLabel(row.week_end)}
+                </span>
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-secondary">
+                  <div
+                    className="h-full rounded-full bg-primary/70"
+                    style={{ width: `${Math.max(((row.reach || 0) / maxReach) * 100, 2)}%` }}
+                  />
+                </div>
+                <span className="w-16 shrink-0 text-right font-mono text-[10px] text-foreground">
+                  {formatMetricNumber(row.reach)}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
 
 export default function ClientJourneyUpdates() {
   const navigate = useNavigate();
@@ -234,6 +328,9 @@ export default function ClientJourneyUpdates() {
 
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
       {clientId && <MonthNarrative clientId={clientId} />}
+
+      {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
+      {clientId && <InstagramRealBlock clientId={clientId} />}
 
       {/* ── Retrato automático do momento ── */}
       {narrative && (

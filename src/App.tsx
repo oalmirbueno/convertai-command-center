@@ -30,6 +30,7 @@ const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
+const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
 const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = lazy(() => import("@/pages/AdminReports"));
 const ClientReports = lazy(() => import("@/pages/ClientReports"));
@@ -152,6 +153,7 @@ function AppRoutes() {
       <Route path="/projetos" element={<ProtectedRoute><AppLayout><Projects /></AppLayout></ProtectedRoute>} />
       <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/metricas" element={<ProtectedRoute><StaffRoute><AppLayout><AdminMetricas /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><StaffRoute><AppLayout><Clients /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><StaffRoute><AppLayout><Team /></AppLayout></StaffRoute></ProtectedRoute>} />
