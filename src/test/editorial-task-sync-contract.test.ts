@@ -191,10 +191,13 @@ describe("editorial design task workspace contract", () => {
     expect(page).toContain('"format",');
   });
 
-  it("does not poll tasks when the current view cannot use team data", () => {
-    expect(page).toMatch(
-      /useTasks\(undefined,\s*\{[\s\S]*?enabled: canUseTeamData/,
-    );
+  it("loads task schedule for every viewer while keeping edits team-only", () => {
+    // Intencao atualizada (decisao do dono em 2026-08-14): as pautas do
+    // Kanban fazem parte do cronograma que o CLIENTE ve; a RLS
+    // (tasks_client_schedule_read) garante que cliente le so as dele, e a
+    // criacao de conteudo a partir da pauta segue exclusiva da equipe.
+    expect(page).toMatch(/useTasks\(undefined,\s*\{[\s\S]*?enabled: true/);
+    expect(page).toContain("if (!canUseTeamData) return;");
   });
 
   it("opens the current linked content before offering a new draft", () => {

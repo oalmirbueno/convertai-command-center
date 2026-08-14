@@ -347,8 +347,10 @@ export default function EditorialCalendar() {
     editorialRealtimeGateRef,
   );
   const teamMembersQuery = useTeamMembers(canUseTeamData);
+  // Pautas do Kanban aparecem para TODOS os perfis (o cronograma e trabalho
+  // e o cliente tem que ver); a RLS garante que cliente so le as dele.
   const tasksQuery = useTasks(undefined, {
-    enabled: canUseTeamData,
+    enabled: true,
     refetchInterval: pendingMoveKeys.size > 0 ? false : 15_000,
   });
   const teamMembers = useMemo(
@@ -586,7 +588,6 @@ export default function EditorialCalendar() {
     [linkedTaskIdsQuery.data?.postIdByTaskId],
   );
   const candidateTasks = useMemo(() => {
-    if (!canUseTeamData) return [];
     const statusOrder: Record<string, number> = {
       backlog: 0,
       todo: 0,
@@ -722,12 +723,12 @@ export default function EditorialCalendar() {
     [editorialDeadlineTasks, linkedTaskIds],
   );
   const taskDataLoading =
-    canUseTeamData && (tasksQuery.isLoading || linkedTaskIdsQuery.isLoading);
+    tasksQuery.isLoading || (canUseTeamData && linkedTaskIdsQuery.isLoading);
   const taskDataError =
-    canUseTeamData && (tasksQuery.isError || linkedTaskIdsQuery.isError);
+    tasksQuery.isError || (canUseTeamData && linkedTaskIdsQuery.isError);
   const taskDataReady =
-    !canUseTeamData ||
-    (tasksQuery.data !== undefined && linkedTaskIdsQuery.data !== undefined);
+    tasksQuery.data !== undefined &&
+    (!canUseTeamData || linkedTaskIdsQuery.data !== undefined);
   // Tarefa que já virou conteúdo some de TODAS as visões, não só do quadro.
   // Era o "card duplicado que fica na data velha": o prazo roxo da tarefa
   // continuava no calendário ao lado do card de conteúdo.
@@ -736,7 +737,7 @@ export default function EditorialCalendar() {
     [editorialDeadlineTasks, linkedPostIdByTaskId],
   );
   const tasksForCurrentView =
-    !canUseTeamData || !taskDataReady
+    !taskDataReady
       ? []
       : view === "board"
         ? productionTasks
@@ -924,6 +925,8 @@ export default function EditorialCalendar() {
     targetDateKey?: string,
     targetStage?: EditableEditorialStage,
   ) => {
+    // Cliente (e Ver como Cliente) so LE a pauta: nunca abre o editor.
+    if (!canUseTeamData) return;
     // Tarefa que JÁ virou conteúdo nunca cria um segundo: abre o existente.
     // Era uma das portas da duplicação.
     const linkedPostId = linkedPostIdByTaskId[task.id];
