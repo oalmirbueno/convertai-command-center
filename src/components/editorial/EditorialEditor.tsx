@@ -704,7 +704,8 @@ export default function EditorialEditor({
         setPrimaryFileId("");
         setHasChanges(true);
         toast.error(
-          "Outra sessão acabou de usar esta mídia. A seleção foi removida, mas o restante do preenchimento foi preservado.",
+          "Esta arte já é a capa de outro conteúdo ativo. Abra esse conteúdo para editar ou escolha outra arte. A seleção foi removida; o resto do preenchimento foi preservado.",
+          { duration: 8000 },
         );
         return;
       }
