@@ -669,8 +669,10 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
           hint="Ajustada na conciliação" tone="warning" />
         <KpiCard icon={<ArrowUpRight className="w-4 h-4" />} label="Entradas (histórico)" value={fmt(allTimeReceived)}
           hint="Tudo que já foi recebido" tone="success" />
+        <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas do mês" value={fmt(cur.despesas + cur.pendDespesa)}
+          hint={`${fmt(cur.despesas)} pagas · ${fmt(cur.pendDespesa)} previstas`} tone="danger" />
         <KpiCard icon={<ArrowDownRight className="w-4 h-4" />} label="Saídas (histórico)" value={fmt(allTimePaidOut)}
-          hint="Despesas pagas registradas" tone="danger" />
+          hint="Tudo que já foi pago, todos os meses" tone="danger" />
       </div>
 
       {/* CAIXINHAS DE RESERVA */}
@@ -1095,43 +1097,95 @@ export default function CashFlow({ billing = [], projectPayments = [], clientsRe
         </TabsContent>
 
         <TabsContent value="exp" className="m-0">
-          <div className="divide-y divide-border max-h-[420px] overflow-y-auto">
+          <div className="max-h-[420px] overflow-y-auto">
             {expenses.length === 0 && (
               <div className="p-10 text-center text-[12px] text-muted-foreground">
                 Nenhuma despesa cadastrada. Use "+ Lançamento" e escolha Despesa.
               </div>
             )}
-            {expenses.map((e: any) => {
-              const cm = catMeta(e.category);
-              return (
-                <div key={e.id} className="flex items-center justify-between p-4 hover:bg-secondary/30 transition-colors">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${cm.color}22`, color: cm.color }}>
-                      {e.status === "paid" ? <TrendingDown className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
-                    </span>
-                    <div className="min-w-0">
-                      <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
-                      <p className="text-[11px] text-muted-foreground">
-                        {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
-                        {e.recurrence === "monthly" && " · Mensal"}
-                        {e.recurrence === "yearly" && " · Anual"}
-                      </p>
+            {/* Organização pedida: tudo por MÊS, e dentro do mês as FIXAS
+                (mensal/anual) separadas das PONTUAIS, cada grupo com o seu
+                subtotal. Acabou a lista única misturando tudo. */}
+            {(() => {
+              const renderExpenseRow = (e: any) => {
+                const cm = catMeta(e.category);
+                return (
+                  <div key={e.id} className="flex items-center justify-between px-4 py-3 hover:bg-secondary/30 transition-colors">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0" style={{ background: `${cm.color}22`, color: cm.color }}>
+                        {e.status === "paid" ? <TrendingDown className="w-4 h-4" /> : <Calendar className="w-4 h-4" />}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-[13px] font-medium text-foreground truncate">{e.description}</p>
+                        <p className="text-[11px] text-muted-foreground">
+                          {cm.label} · {parseDate(e.due_date)?.toLocaleDateString("pt-BR")}
+                          {e.recurrence === "monthly" && " · Fixa mensal"}
+                          {e.recurrence === "yearly" && " · Fixa anual"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === "paid" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
+                        {e.status === "paid" ? "Pago" : "Pendente"}
+                      </span>
+                      <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
+                      <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground cursor-pointer border border-border">
+                        {e.status === "paid" ? "Reabrir" : "Pagar"}
+                      </button>
+                      <button onClick={() => setExpenseModal({ mode: "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3 flex-shrink-0">
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${e.status === "paid" ? "bg-success/15 text-success" : "bg-warning/15 text-warning"}`}>
-                      {e.status === "paid" ? "Pago" : "Pendente"}
-                    </span>
-                    <span className="text-[13px] font-mono font-semibold text-foreground">{fmt(Number(e.amount))}</span>
-                    <button onClick={() => togglePaid(e)} className="text-[11px] px-2.5 py-1 rounded-md bg-secondary text-muted-foreground hover:text-foreground cursor-pointer border border-border">
-                      {e.status === "paid" ? "Reabrir" : "Pagar"}
-                    </button>
-                    <button onClick={() => setExpenseModal({ mode: "expense", data: e })} className="text-muted-foreground hover:text-foreground cursor-pointer"><Edit3 className="w-3.5 h-3.5" /></button>
-                    <button onClick={() => setConfirmDel(e.id)} className="text-muted-foreground hover:text-destructive cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                );
+              };
+
+              const byMonth = new Map<string, { fixed: any[]; oneOff: any[] }>();
+              for (const e of expenses) {
+                const due = parseDate(e.due_date);
+                const key = due ? monthKey(due) : "0000-00";
+                if (!byMonth.has(key)) byMonth.set(key, { fixed: [], oneOff: [] });
+                const bucket = byMonth.get(key)!;
+                if (e.recurrence === "monthly" || e.recurrence === "yearly") bucket.fixed.push(e);
+                else bucket.oneOff.push(e);
+              }
+              const sum = (list: any[]) => list.reduce((s, e) => s + (Number(e.amount) || 0), 0);
+              const keys = [...byMonth.keys()].sort().reverse();
+
+              return keys.map((key) => {
+                const bucket = byMonth.get(key)!;
+                const fixedTotal = sum(bucket.fixed);
+                const oneOffTotal = sum(bucket.oneOff);
+                return (
+                  <div key={key} className="border-b border-border last:border-0">
+                    <div className="sticky top-0 z-10 flex flex-wrap items-center justify-between gap-2 bg-secondary/60 px-4 py-2 backdrop-blur-sm">
+                      <p className="text-[11px] font-semibold uppercase tracking-wider text-foreground">
+                        {key === "0000-00" ? "Sem data" : monthLabel(key)}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">
+                        Fixas {fmt(fixedTotal)} · Pontuais {fmt(oneOffTotal)} ·{" "}
+                        <span className="font-semibold text-foreground">Total {fmt(fixedTotal + oneOffTotal)}</span>
+                      </p>
+                    </div>
+                    {bucket.fixed.length > 0 && (
+                      <>
+                        <p className="px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                          Fixas do mês
+                        </p>
+                        <div className="divide-y divide-border/60">{bucket.fixed.map(renderExpenseRow)}</div>
+                      </>
+                    )}
+                    {bucket.oneOff.length > 0 && (
+                      <>
+                        <p className="px-4 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+                          Pontuais do mês
+                        </p>
+                        <div className="divide-y divide-border/60">{bucket.oneOff.map(renderExpenseRow)}</div>
+                      </>
+                    )}
                   </div>
-                </div>
-              );
-            })}
+                );
+              });
+            })()}
           </div>
         </TabsContent>
 

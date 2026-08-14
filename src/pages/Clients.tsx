@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
-import { useClientFinancialSummaries } from "@/hooks/useFinanceV2";
+import { useClientFinancialSummaries, useFinancePlans } from "@/hooks/useFinanceV2";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -521,6 +521,16 @@ export default function Clients() {
   };
   const clientRows = useMemo(() => (clients || []) as ClientRecord[], [clients]);
   const financialQuery = useClientFinancialSummaries();
+  // Preço oficial dos planos: é o desempate quando o cadastro tem o plano mas
+  // nenhum valor preenchido (o caso do "Sem vínculo" com tudo zerado).
+  const { data: financePlans } = useFinancePlans();
+  const planByName = useMemo(() => {
+    const map = new Map<string, any>();
+    for (const plan of financePlans || []) {
+      if (plan?.name) map.set(plan.name.trim().toLowerCase(), plan);
+    }
+    return map;
+  }, [financePlans]);
   const financialPayload = financialQuery.data;
   const financialLoading = financialQuery.isLoading || financialQuery.isPending;
   const financialError = financialQuery.isError;
@@ -964,6 +974,13 @@ export default function Clients() {
             // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
             // operacional do plano do perfil para a linha nunca ficar sem soma.
             const profileValue = Number((c as any).plan_value) || 0;
+            // Terceiro degrau (o bug do "tudo zerado"): cadastro tem o PLANO
+            // mas nenhum valor. O preço oficial do plano no Financeiro vale.
+            const matchedPlan =
+              !financialRecord && !internal && profileValue <= 0 && c.plan_name
+                ? planByName.get(String(c.plan_name).trim().toLowerCase())
+                : null;
+            const matchedVersion = matchedPlan?.currentVersion || matchedPlan?.versions?.[0] || null;
             const financial = financialRecord
               ? financialRecord
               : profileValue > 0 && !internal
@@ -987,7 +1004,31 @@ export default function Clients() {
                     overdueAmount: null,
                     raw: {},
                   } as ClientFinancialView)
-                : undefined;
+                : matchedVersion
+                  ? ({
+                      clientId: String(c.id),
+                      planName: matchedPlan.name,
+                      pricingMode: null,
+                      operationalAmount: matchedVersion.amount ?? null,
+                      finalAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
+                      planAmount: matchedVersion.amount ?? null,
+                      finalPlanAmount: matchedVersion.finalAmount ?? matchedVersion.amount ?? null,
+                      billingPeriod: matchedVersion.billingPeriod || null,
+                      termStatus: null,
+                      reviewRequired: false,
+                      directCost: matchedVersion.directCost ?? null,
+                      directCostEstimated: !!matchedVersion.directCostEstimated,
+                      marginPercent:
+                        matchedVersion.amount && matchedVersion.directCost != null
+                          ? ((matchedVersion.amount - matchedVersion.directCost) / matchedVersion.amount) * 100
+                          : null,
+                      dueLabel: null,
+                      billingStatus: c.plan_status || null,
+                      receivableAmount: null,
+                      overdueAmount: null,
+                      raw: {},
+                    } as ClientFinancialView)
+                  : undefined;
             const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
             const statusMeta = internal
               ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
@@ -1002,9 +1043,11 @@ export default function Clients() {
                 ? "Vinculado"
                 : financial?.pricingMode === "custom"
                   ? "Personalizado"
-                  : financial
-                    ? "Sem vínculo"
-                    : "Financeiro pendente";
+                  : matchedVersion
+                    ? "Preço do plano"
+                    : financial
+                      ? "Valor do cadastro"
+                      : "Financeiro pendente";
 
             return (
               <div

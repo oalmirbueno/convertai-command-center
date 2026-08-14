@@ -15,6 +15,8 @@ import TabPayments from "./tabs/TabPayments";
 import TabDocument from "./tabs/TabDocument";
 import RequestButton from "./RequestButton";
 import { useFiles, useMilestones } from "@/hooks/useSupabaseData";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 import { useClientIdentity } from "@/hooks/useClientIdentity";
 import { daysUntil, formatDateShort } from "./dashboardHelpers";
 import { summarizeProjectText } from "@/lib/projectPresentation";
@@ -50,6 +52,22 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
   // Busca pelo cliente inteiro: entrega enviada sem vinculo de projeto tambem
   // e do cliente e precisa aparecer aqui - antes a aba Entregas ficava vazia.
   const { data: files } = useFiles(undefined, project.client_id);
+
+  // A aba Documento só existe se houver documento publicado: aba vazia com
+  // "nenhum documento ainda" só confundia o cliente.
+  const { data: studioDoc } = useQuery({
+    queryKey: ["studio-doc-published", project.id],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("studio_docs")
+        .select("published, notes")
+        .eq("project_id", project.id)
+        .maybeSingle();
+      return data as { published: boolean; notes: string | null } | null;
+    },
+    staleTime: 60_000,
+  });
+  const hasPublishedDoc = !!studioDoc?.published && !!studioDoc?.notes?.trim();
 
   const visibleFiles = (files || []).filter((file: any) =>
     (file.project_id === project.id || !file.project_id)
@@ -173,9 +191,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
                 Pagamentos
               </TabsTrigger>
             )}
-            <TabsTrigger value="document" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 pt-0 text-[13px] text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none">
-              Documento
-            </TabsTrigger>
+            {hasPublishedDoc && (
+              <TabsTrigger value="document" className="rounded-none border-b-2 border-transparent bg-transparent px-0 pb-3 pt-0 text-[13px] text-muted-foreground data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-foreground data-[state=active]:shadow-none">
+                Plano do projeto
+              </TabsTrigger>
+            )}
           </TabsList>
 
           <TabsContent value="overview" className="mt-6">
@@ -252,9 +272,11 @@ export default function ProjectView({ project, onBack }: ProjectViewProps) {
               <TabPayments projectId={project.id} clientId={project.client_id} projectName={project.name} />
             </TabsContent>
           )}
-          <TabsContent value="document" className="mt-6">
-            <TabDocument projectId={project.id} />
-          </TabsContent>
+          {hasPublishedDoc && (
+            <TabsContent value="document" className="mt-6">
+              <TabDocument projectId={project.id} />
+            </TabsContent>
+          )}
         </Tabs>
       </FadeUp>
 
