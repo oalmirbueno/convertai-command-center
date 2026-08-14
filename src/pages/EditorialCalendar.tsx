@@ -1863,6 +1863,13 @@ export default function EditorialCalendar() {
             setRevisionSource(null);
             setDraftSeed(null);
           }}
+          onOpenExisting={(postId) => {
+            // Arte já usada: abre direto o card do conteúdo existente.
+            setEditingPost(null);
+            setRevisionSource(null);
+            setDraftSeed(null);
+            openDetailById(postId);
+          }}
         />
 
         <EditorialScheduleDialog

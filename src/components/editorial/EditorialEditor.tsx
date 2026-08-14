@@ -40,6 +40,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
 import {
+  findEditorialPostIdByPrimaryFile,
   loadEditorialPostForMutation,
   useEditorialEditorOptions,
   useEditorialMutations,
@@ -105,6 +106,8 @@ interface EditorialEditorProps {
   linkedTaskIds?: readonly string[];
   onOpenChange: (open: boolean) => void;
   onSaved: (postId: string) => void;
+  /** Abre o card de um conteúdo já existente (ex.: arte já usada). */
+  onOpenExisting?: (postId: string) => void;
 }
 
 const EMPTY_ID_LIST: readonly string[] = [];
@@ -181,6 +184,7 @@ export default function EditorialEditor({
   linkedTaskIds = EMPTY_ID_LIST,
   onOpenChange,
   onSaved,
+  onOpenExisting,
 }: EditorialEditorProps) {
   const { savePost } = useEditorialMutations();
   const { navigator } = useContext(UNSAFE_NavigationContext);
@@ -703,8 +707,23 @@ export default function EditorialEditor({
       ) {
         setPrimaryFileId("");
         setHasChanges(true);
+        // Nada de caça ao tesouro: o painel ACHA o conteúdo que já usa a
+        // arte e abre o card dele na hora, pronto para programar.
+        const existingId = primaryFileId && clientId
+          ? await findEditorialPostIdByPrimaryFile(clientId, primaryFileId)
+          : null;
+        if (existingId) {
+          toast.info(
+            "Esta arte já tem conteúdo criado. Abrindo o card dele para você programar.",
+            { duration: 6000 },
+          );
+          onOpenChange(false);
+          if (onOpenExisting) onOpenExisting(existingId);
+          else onSaved(existingId);
+          return;
+        }
         toast.error(
-          "Esta arte já é a capa de um conteúdo que existe na agenda (provavelmente um que você salvou antes: fechar o popup não desfaz o salvamento). Procure o card dela na agenda em vez de criar de novo, ou escolha outra arte.",
+          "Esta arte já é a capa de um conteúdo que existe na agenda (fechar o popup não desfaz o salvamento). Procure o card dela na agenda ou escolha outra arte.",
           { duration: 10000 },
         );
         return;

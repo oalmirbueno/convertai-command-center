@@ -246,6 +246,24 @@ export function useEditorialClientScope(enabled: boolean) {
   });
 }
 
+// Acha o conteudo VIVO que ja usa uma arte como capa. E o que transforma o
+// erro "arte ja usada" em acao: o painel abre o card existente na hora.
+export async function findEditorialPostIdByPrimaryFile(
+  clientId: string,
+  fileId: string,
+): Promise<string | null> {
+  const { data, error } = await editorialDb
+    .from("editorial_posts")
+    .select("id")
+    .eq("client_id", clientId)
+    .eq("primary_file_id", fileId)
+    .is("archived_at", null)
+    .limit(1)
+    .maybeSingle();
+  if (error) return null;
+  return (data as { id: string } | null)?.id ?? null;
+}
+
 export function useEditorialLinkedTaskIds(
   enabled: boolean,
   realtimeGate?: { current: EditorialRealtimeGate },
