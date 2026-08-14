@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useClients } from "@/hooks/useSupabaseData";
-import { useClientFinancialSummaries, useFinancePlans } from "@/hooks/useFinanceV2";
+import { useClientFinancialSummaries, useFinancePlans, useFinanceSettings } from "@/hooks/useFinanceV2";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -524,6 +524,10 @@ export default function Clients() {
   // Preço oficial dos planos: é o desempate quando o cadastro tem o plano mas
   // nenhum valor preenchido (o caso do "Sem vínculo" com tudo zerado).
   const { data: financePlans } = useFinancePlans();
+  // Custo direto padrão do Financeiro: quando o cliente ainda não tem custo
+  // real cadastrado, a linha usa a estimativa oficial em vez de ficar em "-".
+  const { data: financeSettings } = useFinanceSettings();
+  const defaultDirectCost = Number(financeSettings?.defaultDirectCost) || 275;
   const normalizePlanName = (value: string) =>
     value
       .normalize("NFD")
@@ -1160,6 +1164,28 @@ export default function Clients() {
                         : financial
                           ? "Definir valor"
                           : "Financeiro pendente";
+            // Fechamento da linha: custo e margem SEMPRE somam, igual para
+            // todos. Sem custo real cadastrado, entra a estimativa (custo do
+            // plano no catálogo, senão o padrão do Financeiro).
+            const rowOperational =
+              Number(financial?.operationalAmount) || Number(financial?.finalAmount) || 0;
+            const realCost = Number(financial?.directCost) || 0;
+            const estimatedCost = Number(matchedVersion?.directCost) || defaultDirectCost;
+            const displayCost = internal
+              ? null
+              : realCost > 0
+                ? realCost
+                : rowOperational > 0
+                  ? estimatedCost
+                  : null;
+            const costIsEstimate =
+              !internal && displayCost != null && (realCost <= 0 || !!financial?.directCostEstimated);
+            const displayMargin =
+              financial?.marginPercent != null
+                ? financial.marginPercent
+                : rowOperational > 0 && displayCost != null
+                  ? ((rowOperational - displayCost) / rowOperational) * 100
+                  : null;
 
             return (
               <div
@@ -1282,26 +1308,29 @@ export default function Clients() {
                     <div>
                       <div className="flex items-center gap-1">
                         <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Custo direto</p>
-                        {financial?.directCostEstimated && (
-                          <span className="rounded bg-warning/10 px-1 py-0.5 text-[7px] font-semibold uppercase tracking-wide text-warning">
+                        {costIsEstimate && (
+                          <span
+                            title="Custo padrão do Financeiro. Defina o custo real em Cobrança e custo."
+                            className="rounded bg-warning/10 px-1 py-0.5 text-[7px] font-semibold uppercase tracking-wide text-warning"
+                          >
                             Estimativa
                           </span>
                         )}
                       </div>
                       <p className="mt-0.5 font-mono text-xs font-medium text-foreground">
-                        {formatCurrency(financial?.directCost ?? null)}
+                        {formatCurrency(displayCost)}
                       </p>
                     </div>
                     <div>
                       <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">Margem</p>
                       <p className={`mt-0.5 font-mono text-xs font-semibold ${
-                        financial?.marginPercent == null
+                        displayMargin == null
                           ? "text-muted-foreground"
-                          : financial.marginPercent < 0
+                          : displayMargin < 0
                             ? "text-destructive"
                             : "text-success"
                       }`}>
-                        {formatPercent(financial?.marginPercent ?? null)}
+                        {formatPercent(displayMargin)}
                       </p>
                     </div>
                     <div className="col-span-2 sm:col-span-1">
@@ -1313,6 +1342,36 @@ export default function Clients() {
                         </span>
                       </div>
                     </div>
+                    {!internal && (
+                      <div className="col-span-2 flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-border/40 pt-2 sm:col-span-3 xl:col-span-6">
+                        <button
+                          type="button"
+                          onClick={() => setEditClient(c)}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/40 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                        >
+                          Editar cadastro e plano
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => navigate("/financeiro")}
+                          className="inline-flex items-center gap-1 rounded-md border border-border bg-secondary/40 px-2 py-1 text-[10px] font-medium text-foreground transition-colors hover:border-primary/40 hover:text-primary"
+                        >
+                          Cobrança e custo no Financeiro
+                        </button>
+                        <span className="text-[10px] leading-relaxed text-muted-foreground">
+                          {priceSource === "official"
+                            ? "Valores vêm da cobrança oficial do Financeiro."
+                            : priceSource === "term"
+                              ? "Valores vêm do termo do cliente no Financeiro."
+                              : priceSource === "profile"
+                                ? "Valor digitado no cadastro do cliente."
+                                : priceSource === "plan"
+                                  ? "Preço de tabela do plano. Ajuste no cadastro se este cliente paga diferente."
+                                  : "Sem valor definido ainda. Defina o plano no cadastro ou crie a cobrança no Financeiro."}
+                          {costIsEstimate ? " Custo direto é estimativa padrão." : ""}
+                        </span>
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
