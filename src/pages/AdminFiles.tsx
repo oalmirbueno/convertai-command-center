@@ -1532,18 +1532,20 @@ export default function AdminFiles() {
                 </Button>
                 {canReviewAndRelease && (
                   <>
+                    {/* Disponibilizar é o caminho padrão: revisão interna já
+                        basta. Aprovação do cliente é a exceção explícita. */}
                     <Button
                       size="sm"
-                      variant="outline"
                       onClick={() => handleDirectReleaseToClient(previewFile, "client_shared")}
                     >
                       Disponibilizar ao cliente
                     </Button>
                     <Button
                       size="sm"
+                      variant="outline"
                       onClick={() => handleDirectReleaseToClient(previewFile, "approval")}
                     >
-                      Enviar para aprovação
+                      Pedir aprovação do cliente
                     </Button>
                   </>
                 )}
@@ -1563,16 +1565,16 @@ export default function AdminFiles() {
                 <>
                   <Button
                     size="sm"
-                    variant="outline"
                     onClick={() => handleReleaseToClient(previewFile, "client_shared")}
                   >
                     Disponibilizar ao cliente
                   </Button>
                   <Button
                     size="sm"
+                    variant="outline"
                     onClick={() => handleReleaseToClient(previewFile, "approval")}
                   >
-                    Enviar para aprovação
+                    Pedir aprovação do cliente
                   </Button>
                 </>
               )}

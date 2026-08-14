@@ -674,9 +674,10 @@ export default function AdminApprovals() {
               && previewFile?.visibility === "internal"
               && canReviewAndRelease && (
                 <>
+                  {/* Revisão interna já aconteceu: disponibilizar é o padrão.
+                      Aprovação do cliente só quando pedida explicitamente. */}
                   <Button
                     size="sm"
-                    variant="outline"
                     disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleRelease(previewFile, "client_shared")}
                   >
@@ -684,10 +685,11 @@ export default function AdminApprovals() {
                   </Button>
                   <Button
                     size="sm"
+                    variant="outline"
                     disabled={submitting || editorialPreview.isFetching || editorialPreview.isError}
                     onClick={() => handleRelease(previewFile, "approval")}
                   >
-                    Enviar para aprovação
+                    Pedir aprovação do cliente
                   </Button>
                 </>
               )}

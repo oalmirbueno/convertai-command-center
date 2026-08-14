@@ -680,7 +680,7 @@ export default function EditorialEditor({
       // Traduz as guardas do servidor para orientacao pratica em portugues.
       if (/already under review|create a revision|immutable/i.test(message)) {
         toast.error(
-          "Esta arte já foi enviada para aprovação e está travada. Enquanto a liberação do reuso não é aplicada no banco, use uma cópia editável do arquivo (duplicar em Arquivos) ou abra o conteúdo original e crie uma revisão.",
+          "O banco travou esta arte por revisão. Rode o SQL de atualização mais recente no Lovable Cloud e tente de novo; se a arte já foi aprovada num conteúdo, abra o original e crie uma revisão.",
           { duration: 9000 },
         );
         return;
