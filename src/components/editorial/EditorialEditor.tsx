@@ -704,8 +704,8 @@ export default function EditorialEditor({
         setPrimaryFileId("");
         setHasChanges(true);
         toast.error(
-          "Esta arte já é a capa de outro conteúdo ativo. Abra esse conteúdo para editar ou escolha outra arte. A seleção foi removida; o resto do preenchimento foi preservado.",
-          { duration: 8000 },
+          "Esta arte já é a capa de um conteúdo que existe na agenda (provavelmente um que você salvou antes: fechar o popup não desfaz o salvamento). Procure o card dela na agenda em vez de criar de novo, ou escolha outra arte.",
+          { duration: 10000 },
         );
         return;
       }
@@ -890,7 +890,14 @@ export default function EditorialEditor({
                 type="button"
                 variant="outline"
                 disabled={afterSaving}
-                onClick={() => onOpenChange(false)}
+                onClick={() => {
+                  // Deixa claro que fechar aqui NAO desfaz nada: o conteúdo
+                  // já existe na agenda (era a fonte do "arte já usada").
+                  toast.info(
+                    "O conteúdo continua salvo na agenda. Programe pelo card quando quiser.",
+                  );
+                  onOpenChange(false);
+                }}
               >
                 Agora não
               </Button>

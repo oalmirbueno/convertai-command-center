@@ -1113,6 +1113,9 @@ export function useEditorialEditorOptions(
             .select("id, primary_file_id")
             .eq("client_id", clientId)
             .eq("project_id", projectId)
+            // Conteúdo apagado libera a arte (mesma regra do banco): sem este
+            // filtro a arte sumia do seletor para sempre depois de um Apagar.
+            .is("archived_at", null)
             .not("primary_file_id", "is", null)
             .order("id", { ascending: true })
             .range(from, to),
