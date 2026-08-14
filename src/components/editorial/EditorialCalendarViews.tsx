@@ -395,10 +395,13 @@ function EditorialFileThumbnail({
   post,
   publication,
   className,
+  showArtBadge = false,
 }: {
   post: EditorialPostBundle;
   publication?: EditorialPublicationBundle | null;
   className?: string;
+  /** Selo "Com arte"/"Sem arte" para leitura instantânea no board. */
+  showArtBadge?: boolean;
 }) {
   const hasPublicationOverride = Boolean(publication?.publication.file_id);
   const file = hasPublicationOverride ? publication?.file : post.primaryFile;
@@ -457,6 +460,18 @@ function EditorialFileThumbnail({
         <span className="absolute bottom-1.5 right-1.5 inline-flex items-center gap-1 rounded-md bg-black/70 px-1.5 py-0.5 text-[9px] font-medium text-white backdrop-blur-sm">
           <Images className="h-2.5 w-2.5" />
           {fileCount}
+        </span>
+      )}
+      {showArtBadge && (
+        <span
+          className={cn(
+            "absolute left-1.5 top-1.5 rounded-md px-1.5 py-0.5 text-[9px] font-semibold backdrop-blur-sm",
+            file
+              ? "bg-emerald-600/90 text-white"
+              : "bg-amber-500/90 text-black",
+          )}
+        >
+          {file ? "Com arte" : "Sem arte"}
         </span>
       )}
     </span>
@@ -1255,7 +1270,7 @@ function BoardPostCard({
         className="mb-3 block aspect-[16/9] w-full overflow-hidden rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
         aria-label={`Ver conteúdo completo de ${post.post.title}`}
       >
-        <EditorialFileThumbnail post={post} className="h-full w-full" />
+        <EditorialFileThumbnail post={post} className="h-full w-full" showArtBadge />
       </button>
       <div className="flex items-start gap-2.5">
         <button
