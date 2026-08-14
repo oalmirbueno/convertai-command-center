@@ -39,6 +39,7 @@ const adminMainNav: NavItem[] = [
 
 const adminMoreNav: NavItem[] = [
   { title: "Central", url: "/central", icon: HeartPulse },
+  { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
   { title: "Métricas", url: "/metricas", icon: BarChart3 },
   { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
   { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
