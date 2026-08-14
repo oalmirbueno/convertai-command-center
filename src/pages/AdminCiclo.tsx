@@ -41,6 +41,16 @@ const CYCLES: Record<
   },
 };
 
+// Cliente NOVO (entrou ha menos de 45 dias) ganha o trilho de onboarding:
+// etapas 7 a 10 por cima do ciclo normal, ate a rotina rodar sozinha.
+const ONBOARDING_STEPS = [
+  "Acessos e briefing completos",
+  "Contas conectadas no painel",
+  "Estratégia e primeiro calendário aprovados",
+  "Rotina semanal rodando (vira cliente ativo)",
+];
+const NEW_CLIENT_DAYS = 45;
+
 interface CycleRow {
   id: string;
   client_id: string;
@@ -237,8 +247,21 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
+          <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Cliente novo · etapas 7 a 10 (onboarding)
+          </p>
+          <ol className="mt-1 space-y-1.5">
+            {ONBOARDING_STEPS.map((step, index) => (
+              <li key={step} className="flex items-start gap-2 text-xs leading-relaxed text-foreground">
+                <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-info/15 text-[10px] font-bold text-info">
+                  {index + 7}
+                </span>
+                {step}
+              </li>
+            ))}
+          </ol>
           <p className="mt-2 text-[10px] text-muted-foreground">
-            Cada etapa concluída vira uma estrela. {totalSteps} estrelas = semana fechada para o cliente.
+            Cada etapa concluída vira uma estrela. Cliente ativo fecha com {totalSteps}; cliente novo fecha com {totalSteps + ONBOARDING_STEPS.length}.
           </p>
         </div>
       )}
@@ -246,12 +269,15 @@ export default function AdminCiclo() {
       {/* Clientes */}
       <div className="space-y-2.5">
         {activeClients.map((client: any) => {
-          const doneCount = cycle.steps.reduce(
-            (sum, _step, index) =>
-              sum + (doneMap.has(`${client.id}:${area}:${index + 1}`) ? 1 : 0),
-            0,
-          );
-          const complete = doneCount === totalSteps;
+          const isNew =
+            client.created_at &&
+            Date.now() - new Date(client.created_at).getTime() <
+              NEW_CLIENT_DAYS * 86400000;
+          const clientTotal = totalSteps + (isNew ? ONBOARDING_STEPS.length : 0);
+          const doneCount = Array.from({ length: clientTotal }, (_, index) =>
+            doneMap.has(`${client.id}:${area}:${index + 1}`) ? 1 : 0,
+          ).reduce((sum: number, value) => sum + value, 0);
+          const complete = doneCount === clientTotal;
           return (
             <div
               key={client.id}
@@ -262,11 +288,16 @@ export default function AdminCiclo() {
               }`}
             >
               <div className="flex items-center justify-between gap-2">
-                <p className="truncate text-sm font-semibold text-foreground">
-                  {client.company_name || client.full_name}
+                <p className="flex min-w-0 items-center gap-1.5 truncate text-sm font-semibold text-foreground">
+                  <span className="truncate">{client.company_name || client.full_name}</span>
+                  {isNew && (
+                    <span className="shrink-0 rounded-md bg-info/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-info">
+                      Novo
+                    </span>
+                  )}
                 </p>
-                <span className="flex shrink-0 items-center gap-0.5" aria-label={`${doneCount} de ${totalSteps} etapas`}>
-                  {Array.from({ length: totalSteps }, (_, index) => (
+                <span className="flex shrink-0 items-center gap-0.5" aria-label={`${doneCount} de ${clientTotal} etapas`}>
+                  {Array.from({ length: clientTotal }, (_, index) => (
                     <Star
                       key={index}
                       className={`h-3.5 w-3.5 ${
@@ -301,6 +332,31 @@ export default function AdminCiclo() {
                   );
                 })}
               </div>
+              {isNew && (
+                <div className="mt-1.5 grid grid-cols-4 gap-1.5">
+                  {ONBOARDING_STEPS.map((step, index) => {
+                    const stepNumber = totalSteps + index + 1;
+                    const key = `${client.id}:${area}:${stepNumber}`;
+                    const done = doneMap.has(key);
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        title={step}
+                        disabled={!canWrite || pendingKey === key}
+                        onClick={() => void toggle(client.id, stepNumber)}
+                        className={`flex h-11 items-center justify-center rounded-lg border text-sm font-bold transition-colors ${
+                          done
+                            ? "border-info bg-info text-white"
+                            : "border-info/30 bg-info/5 text-info hover:border-info/60"
+                        } ${pendingKey === key ? "opacity-50" : ""}`}
+                      >
+                        {stepNumber}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}

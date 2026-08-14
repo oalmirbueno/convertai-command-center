@@ -184,6 +184,37 @@ export default function AdminExperience() {
   // Metricas REAIS do Instagram para os rituais falarem de numeros, nao so
   // de entregas: o que mudou, por que e a decisao.
   const { data: igAllWeeks } = useSocialMetricsWeekly();
+
+  // Estrelas do Ciclo da Semana (checklist de bolso do dono): a Prova de
+  // sexta conta quantas etapas do ciclo interno fecharam para cada cliente.
+  const cycleWeekKey = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+    return d.toISOString().slice(0, 10);
+  }, []);
+  const { data: cycleRows } = useQuery({
+    queryKey: ["weekly-cycle-ritual", cycleWeekKey],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("weekly_cycle_progress")
+        .select("client_id, area, step")
+        .eq("week_start", cycleWeekKey)
+        .eq("area", "social");
+      if (error) return [];
+      return (data || []) as Array<{ client_id: string; step: number }>;
+    },
+    staleTime: 30_000,
+  });
+  const cycleDoneByClient = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const row of cycleRows || []) {
+      if (row.step <= 6) {
+        map.set(row.client_id, (map.get(row.client_id) || 0) + 1);
+      }
+    }
+    return map;
+  }, [cycleRows]);
   const igByClient = useMemo(() => {
     const map = new Map<string, SocialMetricsWeek[]>();
     for (const row of igAllWeeks || []) {
@@ -727,6 +758,9 @@ export default function AdminExperience() {
             : `Semana de construção interna: produção e preparação das próximas entregas. Elas aparecem no painel na hora em que forem liberadas.`,
           publishedSinceMonday.length > 0
             ? `${publishedSinceMonday.length} publicação(ões) foram ao ar, no calendário aprovado por vocês.`
+            : ``,
+          (cycleDoneByClient.get(client.id) || 0) > 0
+            ? `Bastidores: nosso ciclo semanal de operação fechou ${cycleDoneByClient.get(client.id)} de 6 etapas para você (produção, painel, aprovação e agendamento).`
             : ``,
           igNumbers ? `\n${igNumbers}` : ``,
           ``,
