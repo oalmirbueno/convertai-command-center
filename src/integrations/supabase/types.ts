@@ -3307,6 +3307,180 @@ export type Database = {
         }
         Relationships: []
       }
+      social_client_identity: {
+        Row: {
+          biography: string | null
+          captured_at: string
+          client_id: string
+          display_name: string | null
+          external_account_id: string
+          id: string
+          profile_picture_url: string | null
+          username: string | null
+          website: string | null
+        }
+        Insert: {
+          biography?: string | null
+          captured_at?: string
+          client_id: string
+          display_name?: string | null
+          external_account_id: string
+          id?: string
+          profile_picture_url?: string | null
+          username?: string | null
+          website?: string | null
+        }
+        Update: {
+          biography?: string | null
+          captured_at?: string
+          client_id?: string
+          display_name?: string | null
+          external_account_id?: string
+          id?: string
+          profile_picture_url?: string | null
+          username?: string | null
+          website?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_client_identity_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: true
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_metrics_weekly: {
+        Row: {
+          accounts_engaged: number | null
+          captured_at: string
+          client_id: string
+          external_account_id: string
+          followers: number | null
+          id: string
+          media_count: number | null
+          platform: string
+          profile_views: number | null
+          raw: Json
+          reach: number | null
+          total_interactions: number | null
+          week_end: string
+          week_start: string
+        }
+        Insert: {
+          accounts_engaged?: number | null
+          captured_at?: string
+          client_id: string
+          external_account_id: string
+          followers?: number | null
+          id?: string
+          media_count?: number | null
+          platform?: string
+          profile_views?: number | null
+          raw?: Json
+          reach?: number | null
+          total_interactions?: number | null
+          week_end: string
+          week_start: string
+        }
+        Update: {
+          accounts_engaged?: number | null
+          captured_at?: string
+          client_id?: string
+          external_account_id?: string
+          followers?: number | null
+          id?: string
+          media_count?: number | null
+          platform?: string
+          profile_views?: number | null
+          raw?: Json
+          reach?: number | null
+          total_interactions?: number | null
+          week_end?: string
+          week_start?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_metrics_weekly_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      social_post_metrics: {
+        Row: {
+          caption: string | null
+          captured_at: string
+          client_id: string
+          comments_count: number | null
+          external_account_id: string
+          id: string
+          insights_captured_at: string | null
+          like_count: number | null
+          media_id: string
+          media_type: string | null
+          media_url: string | null
+          permalink: string | null
+          posted_at: string | null
+          reach: number | null
+          saved: number | null
+          shares: number | null
+          thumbnail_url: string | null
+          total_interactions: number | null
+        }
+        Insert: {
+          caption?: string | null
+          captured_at?: string
+          client_id: string
+          comments_count?: number | null
+          external_account_id: string
+          id?: string
+          insights_captured_at?: string | null
+          like_count?: number | null
+          media_id: string
+          media_type?: string | null
+          media_url?: string | null
+          permalink?: string | null
+          posted_at?: string | null
+          reach?: number | null
+          saved?: number | null
+          shares?: number | null
+          thumbnail_url?: string | null
+          total_interactions?: number | null
+        }
+        Update: {
+          caption?: string | null
+          captured_at?: string
+          client_id?: string
+          comments_count?: number | null
+          external_account_id?: string
+          id?: string
+          insights_captured_at?: string | null
+          like_count?: number | null
+          media_id?: string
+          media_type?: string | null
+          media_url?: string | null
+          permalink?: string | null
+          posted_at?: string | null
+          reach?: number | null
+          saved?: number | null
+          shares?: number | null
+          thumbnail_url?: string | null
+          total_interactions?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "social_post_metrics_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       studio_docs: {
         Row: {
           created_at: string
@@ -3789,6 +3963,36 @@ export type Database = {
         }
         Relationships: []
       }
+      weekly_cycle_progress: {
+        Row: {
+          area: string
+          client_id: string
+          done_at: string
+          done_by: string | null
+          id: string
+          step: number
+          week_start: string
+        }
+        Insert: {
+          area: string
+          client_id: string
+          done_at?: string
+          done_by?: string | null
+          id?: string
+          step: number
+          week_start: string
+        }
+        Update: {
+          area?: string
+          client_id?: string
+          done_at?: string
+          done_by?: string | null
+          id?: string
+          step?: number
+          week_start?: string
+        }
+        Relationships: []
+      }
       workspace_agent_messages: {
         Row: {
           content: string
@@ -4115,6 +4319,39 @@ export type Database = {
       }
     }
     Views: {
+      autopublish_status_secure: {
+        Row: {
+          attempts: number | null
+          client_id: string | null
+          created_at: string | null
+          last_error: string | null
+          permalink: string | null
+          publication_id: string | null
+          stage: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          attempts?: number | null
+          client_id?: string | null
+          created_at?: string | null
+          last_error?: string | null
+          permalink?: string | null
+          publication_id?: string | null
+          stage?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          attempts?: number | null
+          client_id?: string | null
+          created_at?: string | null
+          last_error?: string | null
+          permalink?: string | null
+          publication_id?: string | null
+          stage?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       financial_entries_enriched: {
         Row: {
           amount: number | null
@@ -4249,6 +4486,10 @@ export type Database = {
       }
     }
     Functions: {
+      admin_release_file_now: {
+        Args: { p_file_id: string; p_mode: string }
+        Returns: undefined
+      }
       archive_editorial_post: {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json
@@ -4300,6 +4541,7 @@ export type Database = {
         }[]
       }
       claim_notification_dispatch: { Args: never; Returns: boolean }
+      collect_social_metrics_now: { Args: never; Returns: Json }
       complete_contract_signature: {
         Args: {
           p_signature_ip: string
@@ -4418,6 +4660,7 @@ export type Database = {
         Args: { message_id: number; queue_name: string }
         Returns: boolean
       }
+      editorial_autopublish_tick: { Args: never; Returns: Json }
       editorial_can_publish_client: {
         Args: { _client_id: string }
         Returns: boolean
@@ -4741,6 +4984,15 @@ export type Database = {
           read_ct: number
         }[]
       }
+      record_offline_client_approval: {
+        Args: {
+          p_channel: string
+          p_expected_version: number
+          p_file_id: string
+          p_note?: string
+        }
+        Returns: string
+      }
       release_file_to_client: {
         Args: { p_file_id: string; p_mode: string }
         Returns: {
@@ -4876,6 +5128,7 @@ export type Database = {
         }
         Returns: Json
       }
+      retry_autopublish: { Args: { p_publication_id: string }; Returns: Json }
       review_file_agency: {
         Args: { p_decision: string; p_feedback?: string; p_file_id: string }
         Returns: {
@@ -4999,6 +5252,7 @@ export type Database = {
         }
         Returns: Json
       }
+      social_metrics_tick: { Args: never; Returns: Json }
       storage_client_from_path: { Args: { _name: string }; Returns: string }
       storage_object_read_allowed: {
         Args: { _bucket: string; _name: string }
