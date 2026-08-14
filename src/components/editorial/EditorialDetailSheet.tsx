@@ -65,6 +65,7 @@ import {
   zonedDateTimeLocalToIso,
 } from "@/lib/editorialDate";
 import { cn } from "@/lib/utils";
+import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
 import {
   AUTOPUBLISH_STAGE_LABELS,
   retryAutopublish,
@@ -397,7 +398,7 @@ export default function EditorialDetailSheet({
       setInlineWhen("");
     } catch (error: unknown) {
       toast.error(
-        error instanceof Error ? error.message : "Não foi possível programar a publicação.",
+        editorialErrorMessage(error, "Não foi possível programar a publicação."),
       );
     } finally {
       setInlineSaving(false);
@@ -457,7 +458,7 @@ export default function EditorialDetailSheet({
       await sheetQueryClient.invalidateQueries({ queryKey: ["editorial-calendar"] });
     } catch (error: unknown) {
       toast.error(
-        error instanceof Error ? error.message : "Não foi possível aprovar agora.",
+        editorialErrorMessage(error, "Não foi possível aprovar agora."),
       );
     } finally {
       setAdminActing(false);
@@ -562,7 +563,7 @@ export default function EditorialDetailSheet({
       }
       toast.success("Concluído: publicação registrada e contada no painel.");
     } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Não foi possível concluir.";
+      const message = editorialErrorMessage(error, "Não foi possível concluir.");
       toast.error(
         /approved|publishable|ready|immutable/i.test(message)
           ? "O material ainda não está aprovado. Use Aprovar tudo agora primeiro."

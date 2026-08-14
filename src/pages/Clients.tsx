@@ -555,8 +555,7 @@ export default function Clients() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("financial_client_terms")
-        .select("client_id, status, pricing_mode, operational_amount, final_amount, direct_cost_amount, direct_cost_estimated, billing_period, plan_version_id")
-        .is("ends_on", null);
+        .select("client_id, status, pricing_mode, operational_amount, final_amount, direct_cost_amount, direct_cost_estimated, billing_period, plan_version_id, ends_on");
       if (error) return [];
       return data || [];
     },
@@ -564,12 +563,15 @@ export default function Clients() {
     staleTime: 30_000,
   });
   const termByClient = useMemo(() => {
+    // Termo vigente ganha de encerrado; ativo ganha de rascunho. Antes um
+    // termo com ends_on preenchido sumia da lista e o cliente ficava zerado.
+    const termScore = (term: any) =>
+      (term.status === "active" ? 2 : 0) + (term.ends_on ? 0 : 1);
     const map = new Map<string, any>();
     for (const term of rawClientTerms || []) {
       if (!term.client_id) continue;
       const current = map.get(term.client_id);
-      // Termo ativo ganha de rascunho; senão fica o primeiro encontrado.
-      if (!current || (term.status === "active" && current.status !== "active")) {
+      if (!current || termScore(term) > termScore(current)) {
         map.set(term.client_id, term);
       }
     }
@@ -614,7 +616,13 @@ export default function Clients() {
   const filtered = clientRows.filter((c) => {
     const status = c.plan_status || "active";
     if (tab !== "all" && status !== tab) return false;
-    if (typeFilter !== "all" && (c.client_type || "recurring") !== typeFilter) return false;
+    if (typeFilter !== "all") {
+      const type = c.client_type || "recurring";
+      // Híbrido também é recorrente (mensalidade + avulsos por cima), então o
+      // filtro Recorrentes inclui os dois; o filtro Híbridos segue exclusivo.
+      const matchesType = typeFilter === "recurring" ? type !== "one_off" : type === typeFilter;
+      if (!matchesType) return false;
+    }
     if (serviceFilter !== "all" && !(c as any).services_config?.[serviceFilter]) return false;
 
     if (searching) {
@@ -1018,22 +1026,30 @@ export default function Clients() {
             // Sem vinculo no financeiro v2, o cadastro ainda vale: deriva o
             // operacional do plano do perfil para a linha nunca ficar sem soma.
             const profileValue = Number((c as any).plan_value) || 0;
+            // Regra de ouro: cada degrau só ganha se tiver VALOR de verdade.
+            // Um vínculo vazio no resumo oficial (o caso Acerbi: híbrido com
+            // linha zerada) não pode esconder o valor que existe no termo, no
+            // cadastro ou no catálogo de planos.
+            const recordValue =
+              Number(financialRecord?.operationalAmount) || Number(financialRecord?.finalAmount) || 0;
             // Degrau 1.5: o termo do cliente lido direto (o valor que a equipe
             // digitou ao escolher o plano mora aqui e não pode sumir).
-            const directTerm = !financialRecord && !internal ? termByClient.get(String(c.id)) : null;
+            const directTerm = !internal ? termByClient.get(String(c.id)) : null;
             const termVersion = directTerm?.plan_version_id
               ? planVersionById.get(directTerm.plan_version_id)
               : null;
             const termOperational =
               Number(directTerm?.operational_amount) || Number(termVersion?.amount) || 0;
-            // Terceiro degrau (o bug do "tudo zerado"): cadastro tem o PLANO
+            // Último degrau (o bug do "tudo zerado"): cadastro tem o PLANO
             // mas nenhum valor. O preço oficial do plano no Financeiro vale.
             const matchedPlan =
-              !financialRecord && !directTerm && !internal && profileValue <= 0 && c.plan_name
+              !internal && c.plan_name
                 ? planByName.get(normalizePlanName(String(c.plan_name)))
                 : null;
             const matchedVersion = matchedPlan?.currentVersion || matchedPlan?.versions?.[0] || null;
-            const financial = financialRecord
+            const matchedAmount =
+              Number(matchedVersion?.amount) || Number(matchedVersion?.finalAmount) || 0;
+            const financial = financialRecord && recordValue > 0
               ? financialRecord
               : directTerm && termOperational > 0
                 ? ({
@@ -1083,7 +1099,7 @@ export default function Clients() {
                     overdueAmount: null,
                     raw: {},
                   } as ClientFinancialView)
-                : matchedVersion
+                : matchedAmount > 0
                   ? ({
                       clientId: String(c.id),
                       planName: matchedPlan.name,
@@ -1107,7 +1123,9 @@ export default function Clients() {
                       overdueAmount: null,
                       raw: {},
                     } as ClientFinancialView)
-                  : undefined;
+                  // Vínculo existe mas está sem valor: mantém a linha oficial
+                  // (vencimento/status) em vez de fingir que não há financeiro.
+                  : financialRecord || undefined;
             const planName = internal ? "Empresa do grupo" : (financial?.planName || c.plan_name || "Sem plano");
             const statusMeta = internal
               ? { label: "Interna", className: "border-info/30 bg-info/10 text-info" }
@@ -1116,17 +1134,32 @@ export default function Clients() {
                 : financial
                   ? { label: "Valor do cadastro", className: "border-info/30 bg-info/10 text-info" }
                   : { label: "Não configurado", className: "border-border bg-secondary/60 text-muted-foreground" };
+            // O selo conta de ONDE o valor veio, na ordem real dos degraus.
+            const priceSource =
+              financialRecord && recordValue > 0
+                ? "official"
+                : directTerm && termOperational > 0
+                  ? "term"
+                  : profileValue > 0 && !internal
+                    ? "profile"
+                    : matchedAmount > 0
+                      ? "plan"
+                      : "none";
             const modeLabel = internal
               ? "Sem cobrança"
               : financial?.pricingMode === "linked"
                 ? "Vinculado"
                 : financial?.pricingMode === "custom"
                   ? "Personalizado"
-                  : matchedVersion
+                  : priceSource === "plan"
                     ? "Preço do plano"
-                    : financial
+                    : priceSource === "profile"
                       ? "Valor do cadastro"
-                      : "Financeiro pendente";
+                      : priceSource === "official" || priceSource === "term"
+                        ? "Valor do financeiro"
+                        : financial
+                          ? "Definir valor"
+                          : "Financeiro pendente";
 
             return (
               <div
