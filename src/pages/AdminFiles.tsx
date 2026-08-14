@@ -632,7 +632,11 @@ export default function AdminFiles() {
   const handleReleaseToClient = async (file: any, mode: FileReleaseMode) => {
     if (!canReviewAndRelease || !file?.id) return;
     try {
-      await releaseFileToClient(file.id, mode);
+      const { error: releaseError } = await (supabase as any).rpc(
+        "admin_release_file_now",
+        { p_file_id: file.id, p_mode: mode },
+      );
+      if (releaseError) throw releaseError;
       await Promise.all([
         invalidateFileViews(),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
@@ -664,9 +668,13 @@ export default function AdminFiles() {
       return;
     }
     try {
-      await requestFileAgencyReview(file.id);
-      await reviewFileAgency(file.id, "approved");
-      await releaseFileToClient(file.id, mode);
+      // Uma RPC atomica faz revisao interna + liberacao na mesma transacao:
+      // fim dos erros de estado entre passos separados.
+      const { error: releaseError } = await (supabase as any).rpc(
+        "admin_release_file_now",
+        { p_file_id: file.id, p_mode: mode },
+      );
+      if (releaseError) throw releaseError;
       await Promise.all([
         invalidateFileViews(),
         queryClient.invalidateQueries({ queryKey: ["notifications"] }),
@@ -693,8 +701,11 @@ export default function AdminFiles() {
       if (!canReviewAndRelease) {
         throw new Error("Somente admin ou manager pode liberar conteúdo ao cliente.");
       }
-      await reviewFileAgency(fileId, "approved");
-      await releaseFileToClient(fileId, uploadPostSaveAction);
+      const { error: releaseError } = await (supabase as any).rpc(
+        "admin_release_file_now",
+        { p_file_id: fileId, p_mode: uploadPostSaveAction },
+      );
+      if (releaseError) throw releaseError;
       return uploadPostSaveAction;
     } catch (error: any) {
       toast({
