@@ -354,46 +354,109 @@ export default function EditorialDetailSheet({
     }
     setInlineSaving(true);
     try {
-      await savePost.mutateAsync({
-        payload: {
-          id: post.post.id,
-          idempotency_key:
-            (post as any).internal?.idempotency_key || crypto.randomUUID(),
-          mutation_id: crypto.randomUUID(),
-          client_id: post.post.client_id,
-          project_id: post.post.project_id,
-          primary_file_id: post.post.primary_file_id,
-          title: post.post.title,
-          content_type: post.post.content_type,
-          objective: post.post.objective,
-          default_caption: post.post.default_caption,
-          production_status: post.post.production_status,
-          task_id: (post as any).internal?.task_id || null,
-          responsible_id: (post as any).internal?.responsible_id || null,
-          internal_notes: (post as any).internal?.internal_notes || null,
-          revision_of_post_id: null,
-          publications: [
-            {
-              id: null,
-              idempotency_key: crypto.randomUUID(),
-              external_account_id: inlineAccountId,
-              file_id: null,
-              caption: post.post.default_caption,
-              first_comment: null,
-              alt_text: null,
-              asset_file_ids: [],
-              scheduled_at: scheduledAtIso,
-              scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
-            },
-          ],
-        },
-        expectedVersion: post.post.version,
-      });
-      toast.success(
-        scheduledAtIso
-          ? "Conta e horário definidos. Se o material já estiver aprovado, a publicação sai no horário; se não, sai até 1 hora depois da aprovação."
-          : "Conta definida. Agora é só escolher o horário quando quiser.",
+      // Anti-duplicação: programar de novo NUNCA cria um segundo card. Se o
+      // conteúdo já tem publicação viva, ela é reaproveitada (mesmo card,
+      // nova conta ou data); só nasce publicação quando não existe nenhuma.
+      const fresh = await loadEditorialPostForMutation(
+        post.post.id,
+        post.post.client_id,
       );
+      const active = fresh.publications.find(({ publication }) =>
+        ["planned", "scheduled", "failed"].includes(publication.status),
+      );
+      const hasTerminal = fresh.publications.some(
+        ({ publication }) => !["planned", "cancelled"].includes(publication.status),
+      );
+
+      if (active && hasTerminal) {
+        // Já entrou no fluxo (agendada ou em falha): reagenda pela transição
+        // oficial, na mesma conta. O save completo é bloqueado pelo banco
+        // nesse estado, e era daqui que nascia o card duplicado.
+        if (!scheduledAtIso) {
+          toast.error(
+            "Este conteúdo já está no fluxo de publicação. Informe a nova data e horário para reagendar.",
+          );
+          return;
+        }
+        await transitionPublication.mutateAsync({
+          publicationId: active.publication.id,
+          action: "schedule",
+          expectedVersion: active.publication.version,
+          scheduledAt: scheduledAtIso,
+          timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+        });
+        toast.success("Publicação reagendada no mesmo card, sem duplicar.");
+      } else if (!active && hasTerminal) {
+        toast.info(
+          "Este conteúdo já foi publicado. Para publicar de novo, crie um novo conteúdo.",
+        );
+        return;
+      } else {
+        // Só publicações planejadas (ou nenhuma): salva o plano COMPLETO,
+        // atualizando a existente em vez de cancelar e criar outra - assim a
+        // arte e a legenda do plano nunca se perdem.
+        const publications: Record<string, unknown>[] = fresh.publications
+          .filter(({ publication }) => publication.status === "planned")
+          .map(({ publication, internal }) => {
+            const isTarget = active?.publication.id === publication.id;
+            return {
+              id: publication.id,
+              idempotency_key: internal?.idempotency_key || crypto.randomUUID(),
+              external_account_id: isTarget
+                ? inlineAccountId
+                : publication.external_account_id,
+              file_id: publication.file_id,
+              caption: publication.caption,
+              first_comment: publication.first_comment,
+              alt_text: publication.alt_text,
+              scheduled_at: isTarget ? scheduledAtIso : publication.scheduled_at,
+              scheduled_timezone: isTarget
+                ? EDITORIAL_DEFAULT_TIME_ZONE
+                : publication.scheduled_timezone || EDITORIAL_DEFAULT_TIME_ZONE,
+            };
+          });
+        if (!active) {
+          publications.push({
+            id: null,
+            idempotency_key: crypto.randomUUID(),
+            external_account_id: inlineAccountId,
+            file_id: null,
+            caption: fresh.post.default_caption,
+            first_comment: null,
+            alt_text: null,
+            asset_file_ids: [],
+            scheduled_at: scheduledAtIso,
+            scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+          });
+        }
+        await savePost.mutateAsync({
+          payload: {
+            id: fresh.post.id,
+            idempotency_key:
+              fresh.internal?.idempotency_key || crypto.randomUUID(),
+            mutation_id: crypto.randomUUID(),
+            client_id: fresh.post.client_id,
+            project_id: fresh.post.project_id,
+            primary_file_id: fresh.post.primary_file_id,
+            title: fresh.post.title,
+            content_type: fresh.post.content_type,
+            objective: fresh.post.objective,
+            default_caption: fresh.post.default_caption,
+            production_status: fresh.post.production_status,
+            task_id: fresh.internal?.task_id || null,
+            responsible_id: fresh.internal?.responsible_id || null,
+            internal_notes: fresh.internal?.internal_notes || null,
+            revision_of_post_id: fresh.internal?.revision_of_post_id ?? null,
+            publications,
+          },
+          expectedVersion: fresh.post.version,
+        });
+        toast.success(
+          scheduledAtIso
+            ? "Conta e horário definidos. Se o material já estiver aprovado, a publicação sai no horário; se não, sai até 1 hora depois da aprovação."
+            : "Conta definida. Agora é só escolher o horário quando quiser.",
+        );
+      }
       setInlineAccountId("");
       setInlineWhen("");
     } catch (error: unknown) {

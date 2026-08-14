@@ -116,7 +116,11 @@ describe("editorial calendar integration contract", () => {
   it("offers the guarded archive RPC through the detail view", () => {
     expect(hook).toContain('"archive_editorial_post"');
     expect(detail).toContain("archivePost.mutateAsync");
-    expect(detail).toContain("expectedVersion: post.post.version");
+    // Intent preserved: every detail-sheet mutation still carries the CAS
+    // expectedVersion. It now comes from a FRESH read (loadEditorialPostForMutation)
+    // instead of the possibly stale list bundle, which killed the
+    // "works on the second try" class of failures.
+    expect(detail).toContain("expectedVersion: fresh.post.version");
     expect(page).toContain('onArchived={() => setParam("content", "")}');
   });
 
