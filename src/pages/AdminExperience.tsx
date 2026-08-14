@@ -5,6 +5,12 @@ import { supabase } from "@/integrations/supabase/client";
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients, useProjects } from "@/hooks/useSupabaseData";
+import {
+  formatMetricNumber,
+  useSocialMetricsWeekly,
+  weekDeltaPct,
+  type SocialMetricsWeek,
+} from "@/hooks/useSocialMetrics";
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
@@ -174,6 +180,19 @@ export default function AdminExperience() {
     },
     refetchInterval: LIVE,
   });
+
+  // Metricas REAIS do Instagram para os rituais falarem de numeros, nao so
+  // de entregas: o que mudou, por que e a decisao.
+  const { data: igAllWeeks } = useSocialMetricsWeekly();
+  const igByClient = useMemo(() => {
+    const map = new Map<string, SocialMetricsWeek[]>();
+    for (const row of igAllWeeks || []) {
+      const list = map.get(row.client_id) || [];
+      list.push(row);
+      map.set(row.client_id, list);
+    }
+    return map;
+  }, [igAllWeeks]);
 
   const { data: allPublications = [] } = useQuery({
     queryKey: ["exp-publications"],
@@ -590,6 +609,33 @@ export default function AdminExperience() {
               `Avançar a produção para chegar na próxima semana com material pronto.`,
             ], seed);
 
+    // Números REAIS do Instagram na conversa: o ritual conta o que mudou,
+    // por que e a decisão - nunca só a lista de entregas.
+    const igRows = igByClient.get(client.id) || [];
+    const igLatest = igRows[0];
+    const igPct = (
+      field: "followers" | "reach" | "total_interactions",
+    ) => {
+      const delta = weekDeltaPct(igRows, field);
+      return delta == null
+        ? ""
+        : ` (${delta >= 0 ? "+" : ""}${delta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% vs semana anterior)`;
+    };
+    const igNumbers = igLatest
+      ? [
+          `NÚMEROS REAIS DA SEMANA (Instagram)`,
+          `Seguidores: ${formatMetricNumber(igLatest.followers)}${igPct("followers")}.`,
+          `Alcance: ${formatMetricNumber(igLatest.reach)}${igPct("reach")} · Interações: ${formatMetricNumber(igLatest.total_interactions)}${igPct("total_interactions")}.`,
+        ].join("\n")
+      : null;
+    const igReachDelta = weekDeltaPct(igRows, "reach");
+    const igReading =
+      igLatest && igReachDelta != null
+        ? igReachDelta >= 0
+          ? `Leitura dos números: o alcance cresceu ${igReachDelta.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% na última semana medida. O conteúdo está chegando em gente nova; a decisão é manter o ritmo e repetir o formato que puxou esse número.`
+          : `Leitura dos números: o alcance recuou ${Math.abs(igReachDelta).toLocaleString("pt-BR", { maximumFractionDigits: 1 })}% na última semana medida. Normal em semana de transição; a decisão é variar formato e horário nas próximas publicações para retomar a curva.`
+        : null;
+
     // Observação/aprendizado derivado do movimento real da semana
     const observation = publishedWeek.length > 0
       ? `Com ${publishedWeek.length} publicação(ões) no ar nesta semana, os próximos dias mostram a resposta do público. Vamos acompanhar os sinais de cada frente e trazer a leitura pronta: o que mudou, o que isso indica e a decisão que tomamos a partir disso.`
@@ -639,6 +685,8 @@ export default function AdminExperience() {
           publishedSinceMonday.length > 0
             ? `${publishedSinceMonday.length} publicação(ões) já foram ao ar nesta semana, no calendário aprovado.`
             : ``,
+          igNumbers ? `\n${igNumbers}` : ``,
+          igReading || ``,
           ``,
           `O QUE FECHA ATÉ SEXTA`,
           milestonesThisWeek.length > 0
@@ -680,6 +728,7 @@ export default function AdminExperience() {
           publishedSinceMonday.length > 0
             ? `${publishedSinceMonday.length} publicação(ões) foram ao ar, no calendário aprovado por vocês.`
             : ``,
+          igNumbers ? `\n${igNumbers}` : ``,
           ``,
           `POR QUE FIZEMOS`,
           activeProjects.length > 0
@@ -687,7 +736,7 @@ export default function AdminExperience() {
             : `Cada entrega desta fase constrói a base que sustenta o próximo ciclo de resultados.`,
           ``,
           `O QUE VAMOS OBSERVAR`,
-          observation,
+          [igReading, observation].filter(Boolean).join("\n"),
           ``,
           `PRÓXIMOS PASSOS`,
           [
@@ -797,6 +846,8 @@ export default function AdminExperience() {
           `${name}, nova semana, novo ciclo (${weekRangeLabel}). Aqui está o caminho que vamos percorrer até sexta.`,
           `Segunda-feira, ${name}: o plano da semana de ${weekRangeLabel}, na sequência em que ele vai acontecer.`,
         ], seed),
+        igNumbers ? `\n${igNumbers}` : ``,
+        igReading || ``,
         ``,
         `FOCO DESTA SEMANA`,
         focus,

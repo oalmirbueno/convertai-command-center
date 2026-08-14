@@ -735,11 +735,17 @@ async function readEditorialCalendar(
         internal: null,
         publications: bundle.publications
           .filter(({ publication, internal, file }) => {
+            if (!["scheduled", "published"].includes(publication.status)) {
+              return false;
+            }
+            // Cliente REAL nao carrega dados internos: a RLS do banco ja
+            // devolve apenas o que ele pode ver. Exigir snapshot aqui
+            // deixava o calendario do cliente SEMPRE vazio.
+            if (!actualStaff) return true;
             const effectiveFile = publication.file_id
               ? file
               : bundle.primaryFile;
             return (
-              ["scheduled", "published"].includes(publication.status) &&
               internal?.included_in_approval_snapshot === true &&
               isFilePublishable(effectiveFile)
             );
@@ -752,9 +758,13 @@ async function readEditorialCalendar(
       .filter(
         (bundle) =>
           bundle.post.production_status === "ready" &&
-          isFilePublishable(bundle.primaryFile) &&
-          postInternalById.get(bundle.post.id)?.approval_fingerprint != null &&
-          bundle.publications.length > 0,
+          bundle.publications.length > 0 &&
+          // Checagens internas so quando os dados internos existem (staff
+          // no modo Ver como Cliente); cliente real confia na RLS.
+          (!actualStaff ||
+            (isFilePublishable(bundle.primaryFile) &&
+              postInternalById.get(bundle.post.id)?.approval_fingerprint !=
+                null)),
       );
   }
 
