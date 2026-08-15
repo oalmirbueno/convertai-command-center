@@ -109,7 +109,7 @@ Deno.serve(async (req) => {
 
     const [clientsRes, rowsRes] = await Promise.all([
       db.from("profiles")
-        .select("id, company_name, full_name, created_at, plan_status, client_type, onboarding_done")
+        .select("id, company_name, full_name, plan_status, client_type, onboarding_done, services_config")
         .in("id", clientIds)
         .is("deleted_at", null),
       db.from("weekly_cycle_progress")
@@ -119,8 +119,14 @@ Deno.serve(async (req) => {
     ]);
 
     // RLS devolve vazio para quem não é da equipe: sem carteira, sem coach.
+    // O recorte é o mesmo da tela: empresa interna fora, e só quem contratou
+    // a frente que está sendo lida.
     const clients = (clientsRes.data || []).filter(
-      (c: any) => (c.plan_status || "active") === "active" && (c.client_type || "recurring") !== "one_off",
+      (c: any) =>
+        (c.plan_status || "active") === "active" &&
+        (c.client_type || "recurring") !== "one_off" &&
+        c.services_config?.internal_company !== true &&
+        c.services_config?.[area] === true,
     );
     if (clients.length === 0) return jsonResponse({ coach: null });
 
