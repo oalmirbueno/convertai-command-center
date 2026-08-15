@@ -155,7 +155,9 @@ function AppRoutes() {
       <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/metricas" element={<ProtectedRoute><StaffRoute><AppLayout><AdminMetricas /></AppLayout></StaffRoute></ProtectedRoute>} />
-      <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AppLayout><AdminCiclo /></AppLayout></StaffRoute></ProtectedRoute>} />
+      {/* Ciclo roda fora do AppLayout: é um aplicativo à parte (manifest
+          próprio), abre em tela cheia e usa toda a largura no celular. */}
+      <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><StaffRoute><AppLayout><Clients /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><StaffRoute><AppLayout><Team /></AppLayout></StaffRoute></ProtectedRoute>} />

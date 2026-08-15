@@ -44,7 +44,6 @@ const ONBOARDING_LABELS = [
   "estratégia aprovada",
   "rotina rodando",
 ];
-const NEW_CLIENT_DAYS = 45;
 
 const SYSTEM_PROMPT = `Você é o coach de operação de uma agência de growth marketing brasileira (Aceleriq). O leitor é o dono da agência, olhando o checklist semanal da carteira no celular.
 
@@ -99,10 +98,20 @@ Deno.serve(async (req) => {
       return d.toISOString().slice(0, 10);
     })();
 
+    // O papel vive em user_roles, não em profiles: sem esse passo a carteira
+    // volta vazia e o coach nunca aparece.
+    const { data: clientRoles } = await db
+      .from("user_roles")
+      .select("user_id")
+      .eq("role", "client");
+    const clientIds = (clientRoles || []).map((row: any) => row.user_id);
+    if (clientIds.length === 0) return jsonResponse({ coach: null });
+
     const [clientsRes, rowsRes] = await Promise.all([
       db.from("profiles")
-        .select("id, company_name, full_name, created_at, plan_status, client_type, role")
-        .eq("role", "client"),
+        .select("id, company_name, full_name, created_at, plan_status, client_type, onboarding_done")
+        .in("id", clientIds)
+        .is("deleted_at", null),
       db.from("weekly_cycle_progress")
         .select("client_id, week_start, step, area")
         .eq("area", area)
@@ -124,13 +133,13 @@ Deno.serve(async (req) => {
     }
 
     const labels = STEP_LABELS[area];
-    const now = Date.now();
     let closed = 0;
     const lines: string[] = [];
     for (const client of clients) {
       const name = client.company_name || client.full_name || "Cliente";
-      const isNew = client.created_at &&
-        now - new Date(client.created_at).getTime() < NEW_CLIENT_DAYS * 86400000;
+      // Onboarding é o estado do cadastro, não a idade dele: cliente que já
+      // roda em rotina não volta a ser tratado como novo.
+      const isNew = client.onboarding_done === false;
       const total = labels.length + (isNew ? ONBOARDING_LABELS.length : 0);
       const done = doneNow.get(client.id) || new Set<number>();
       const prevDone = donePrev.get(client.id) || new Set<number>();
