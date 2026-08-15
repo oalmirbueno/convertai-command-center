@@ -24,13 +24,16 @@ vi.mock("@/hooks/useSupabaseData", () => ({
   useClients: () => ({ data: CARTEIRA }),
 }));
 
+// As marcações que o banco devolveria nesta renderização.
+const banco = vi.hoisted(() => ({ rows: [] as any[] }));
+
 vi.mock("@/integrations/supabase/client", () => {
   const chain: any = {};
-  const resolved = Promise.resolve({ data: [], error: null });
   for (const method of ["select", "eq", "gte", "in", "is", "delete", "update", "insert"]) {
     chain[method] = () => chain;
   }
-  chain.then = resolved.then.bind(resolved);
+  chain.then = (onFulfilled: any, onRejected: any) =>
+    Promise.resolve({ data: banco.rows, error: null }).then(onFulfilled, onRejected);
   return {
     supabase: {
       from: () => chain,
@@ -54,6 +57,7 @@ const renderCiclo = async () => {
 describe("tela do Ciclo da Semana", () => {
   beforeEach(() => {
     localStorage.clear();
+    banco.rows = [];
     vi.clearAllMocks();
   });
 
@@ -90,9 +94,36 @@ describe("tela do Ciclo da Semana", () => {
 
     // Mirante está em onboarding: 6 do ciclo + 4 do trilho de entrada.
     expect(screen.getByText("0/10")).toBeInTheDocument();
-    expect(screen.getByText(/Onboarding/i)).toBeInTheDocument();
+    expect(screen.getByText(/Novo/i)).toBeInTheDocument();
     // Acerbi já roda em rotina: fica só com as 6 etapas do ciclo.
     expect(naTela("0/6")).toBe(true);
+  });
+
+  it("tira da frente quem já fechou a semana e guarda o dia da marcação", async () => {
+    const hoje = new Date();
+    const segunda = new Date(hoje);
+    segunda.setHours(0, 0, 0, 0);
+    segunda.setDate(segunda.getDate() - ((segunda.getDay() + 6) % 7));
+    const semana = `${segunda.getFullYear()}-${String(segunda.getMonth() + 1).padStart(2, "0")}-${String(segunda.getDate()).padStart(2, "0")}`;
+
+    // Acerbi fechou as 6 etapas do ciclo nesta semana.
+    banco.rows = Array.from({ length: 6 }, (_, index) => ({
+      id: `acerbi-${index + 1}`,
+      client_id: "acerbi",
+      area: "social",
+      week_start: semana,
+      step: index + 1,
+      done_at: new Date().toISOString(),
+      done_by: "dono",
+    }));
+
+    await renderCiclo();
+    await screen.findByText(/cliente fechado/i);
+
+    // Sai da lista de trabalho e vira uma linha recolhida.
+    expect(screen.getByText("1 cliente fechado")).toBeInTheDocument();
+    // Mirante, que não fechou nada, continua na frente.
+    expect(naTela("Mirante Luz")).toBe(true);
   });
 
   it("mantém o menu do painel e a semana no topo", async () => {

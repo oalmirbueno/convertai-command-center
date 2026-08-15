@@ -68,6 +68,72 @@ function MonthNarrative({ clientId }: { clientId: string }) {
     </section>
   );
 }
+/**
+ * Bastidores da semana: o trabalho que acontece antes de qualquer post ir ao
+ * ar. Vem do checklist que a equipe fecha toda semana, traduzido para a
+ * linguagem do cliente. Sem movimento na semana, o bloco não aparece: o
+ * cliente nunca vê uma caixa vazia dizendo que nada foi feito.
+ */
+function WeekBackstage({ clientId }: { clientId: string }) {
+  const { data } = useQuery({
+    queryKey: ["cycle-client-pulse", clientId],
+    queryFn: async () => {
+      const { data: result, error } = await supabase.functions.invoke("cycle-client-pulse", {
+        body: { client_id: clientId },
+      });
+      if (error || result?.error) return null;
+      return result as {
+        fronts: Array<{ area: string; label: string; done: number; total: number; highlights: string[]; last_at: string | null }>;
+        total: number;
+      };
+    },
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (!data?.fronts?.length) return null;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+          Bastidores desta semana
+        </p>
+        <span className="text-[10px] text-muted-foreground">
+          {data.total} {data.total === 1 ? "etapa concluída" : "etapas concluídas"}
+        </span>
+      </div>
+      <div className="mt-3 space-y-3">
+        {data.fronts.map((front) => (
+          <div key={front.area}>
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-[12.5px] font-semibold text-foreground">{front.label}</p>
+              <p className="text-[11px] tabular-nums text-muted-foreground">
+                {front.done} de {front.total}
+              </p>
+            </div>
+            <div className="mt-1.5 flex h-1.5 gap-[3px]">
+              {Array.from({ length: front.total }, (_, index) => (
+                <span
+                  key={index}
+                  className={`flex-1 rounded-full ${index < front.done ? "bg-primary" : "bg-secondary"}`}
+                />
+              ))}
+            </div>
+            <p className="mt-1.5 text-[11.5px] leading-relaxed text-muted-foreground">
+              {front.highlights.join(", ")}.
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
+        Este é o trabalho de bastidor da semana, atualizado conforme a equipe
+        avança. O que chega até você, como conteúdo e publicações, nasce daqui.
+      </p>
+    </section>
+  );
+}
+
 import ProjectJournal from "@/components/shared/ProjectJournal";
 import { buildProgressView, cycleFillPercent } from "@/lib/projectProgress";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
@@ -332,6 +398,7 @@ export default function ClientJourneyUpdates() {
 
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
       {clientId && <MonthNarrative clientId={clientId} />}
+      {clientId && <WeekBackstage clientId={clientId} />}
 
       {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
       {clientId && <InstagramRealBlock clientId={clientId} />}
