@@ -142,10 +142,11 @@ describe("tela do Ciclo da Semana", () => {
     await waitFor(() => {
       expect(screen.getByText(/Como funciona o ciclo/i)).toBeInTheDocument();
     });
-    // O caminho para instalar o Ciclo como aplicativo separado precisa estar
-    // ao alcance: é a página própria, não a rota do painel.
-    const instalar = screen.getByText(/Instalar o Ciclo no celular/i).closest("a");
-    expect(instalar).toHaveAttribute("href", "/ciclo.html");
+    // A instalação acontece pela própria rota /ciclo (o index troca o
+    // manifesto por caminho); o menu explica o gesto em vez de linkar para
+    // uma página que a hospedagem pode não servir.
+    expect(screen.getByText(/Instalar o Ciclo no celular/i)).toBeInTheDocument();
+    expect(screen.getByText(/Adicionar à tela inicial/i)).toBeInTheDocument();
     expect(screen.getByText("Kanban")).toBeInTheDocument();
   });
 });

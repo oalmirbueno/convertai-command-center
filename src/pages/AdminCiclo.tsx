@@ -892,18 +892,17 @@ export default function AdminCiclo() {
               <ListChecks className="h-4 w-4 text-primary" /> Como funciona o ciclo
             </button>
             {!standalone && (
-              <a
-                href="/ciclo.html"
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60"
-              >
-                <Smartphone className="h-4 w-4 text-primary" />
+              <div className="flex w-full items-start gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground">
+                <Smartphone className="mt-0.5 h-4 w-4 shrink-0 text-primary" />
                 <span className="min-w-0">
                   Instalar o Ciclo no celular
                   <span className="block text-[10.5px] font-normal leading-snug text-muted-foreground">
-                    abre a versão de aplicativo, com ícone próprio
+                    você já está na página certa: abra o menu do navegador e
+                    toque em "Adicionar à tela inicial". O atalho sai com o
+                    ícone e o nome do Ciclo.
                   </span>
                 </span>
-              </a>
+              </div>
             )}
             {profile?.role === "admin" && (
               <button

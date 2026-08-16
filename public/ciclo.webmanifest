@@ -1,9 +1,9 @@
 {
-  "id": "/ciclo.html",
+  "id": "/ciclo",
   "name": "Ciclo Aceleriq",
   "short_name": "Ciclo",
   "description": "O checklist semanal da carteira: uma etapa por toque, direto no bolso.",
-  "start_url": "/ciclo.html",
+  "start_url": "/ciclo",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",

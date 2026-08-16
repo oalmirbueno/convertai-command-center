@@ -14,16 +14,21 @@ import { hardRefresh, isChunkError, refreshExhausted } from "@/lib/appRefresh";
 interface State {
   failed: boolean;
   autoRecovering: boolean;
+  detail: string | null;
 }
 
 export default class AppErrorBoundary extends Component<{ children: ReactNode }, State> {
-  state: State = { failed: false, autoRecovering: false };
+  state: State = { failed: false, autoRecovering: false, detail: null };
 
-  static getDerivedStateFromError(): Partial<State> {
-    return { failed: true };
+  static getDerivedStateFromError(error: unknown): Partial<State> {
+    const message = error instanceof Error ? error.message : String(error || "");
+    return { failed: true, detail: message.slice(0, 300) || null };
   }
 
-  componentDidCatch(error: Error, _info: ErrorInfo) {
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    // A causa real precisa sobreviver à tela bonita: sem isto, todo crash
+    // vira só "deu bug" e ninguém consegue investigar depois.
+    console.error("[painel] erro fatal de render:", error, info?.componentStack);
     if (isChunkError(error) && !refreshExhausted()) {
       this.setState({ autoRecovering: true });
       hardRefresh();
@@ -52,6 +57,9 @@ export default class AppErrorBoundary extends Component<{ children: ReactNode },
         <button type="button" style={styles.button} onClick={() => hardRefresh(true)}>
           Recarregar agora
         </button>
+        {this.state.detail && (
+          <p style={styles.detail}>Detalhe técnico: {this.state.detail}</p>
+        )}
       </div>
     );
   }
@@ -82,6 +90,15 @@ const styles: Record<string, React.CSSProperties> = {
     maxWidth: 420,
     margin: 0,
     color: "rgba(245,245,245,0.75)",
+  },
+  detail: {
+    marginTop: 16,
+    maxWidth: 420,
+    fontSize: 11,
+    lineHeight: 1.5,
+    color: "rgba(245,245,245,0.45)",
+    fontFamily: "'JetBrains Mono', monospace",
+    wordBreak: "break-word",
   },
   button: {
     marginTop: 8,

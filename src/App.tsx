@@ -160,7 +160,8 @@ function AppRoutes() {
           tela: /ciclo pelo painel e /ciclo.html quando aberto pelo ícone do
           aplicativo instalado. */}
       <Route path="/ciclo" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
-      <Route path="/ciclo.html" element={<ProtectedRoute><StaffRoute><AdminCiclo /></StaffRoute></ProtectedRoute>} />
+      {/* Endereço antigo do app instalado: leva para o atual. */}
+      <Route path="/ciclo.html" element={<Navigate to="/ciclo" replace />} />
       <Route path="/calendario" element={<ProtectedRoute><AppLayout><EditorialCalendar /></AppLayout></ProtectedRoute>} />
       <Route path="/clientes" element={<ProtectedRoute><StaffRoute><AppLayout><Clients /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/equipe" element={<ProtectedRoute><StaffRoute><AppLayout><Team /></AppLayout></StaffRoute></ProtectedRoute>} />

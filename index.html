@@ -15,6 +15,28 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="Aceleriq" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+
+    <!--
+      Dois aplicativos, um código: quem abre /ciclo instala o "Ciclo" (ícone e
+      nome próprios, abre direto no checklist); qualquer outra página instala o
+      painel. A troca acontece AQUI, antes do app carregar, porque o navegador
+      lê estas tags no momento de "Adicionar à tela inicial" — e uma página
+      .html separada se mostrou frágil na hospedagem (o publish parou de servi-la).
+    -->
+    <script>
+      (function () {
+        if (window.location.pathname.replace(/\/+$/, "") !== "/ciclo") return;
+        var set = function (selector, attr, value) {
+          var el = document.querySelector(selector);
+          if (el) el.setAttribute(attr, value);
+        };
+        set('link[rel="manifest"]', "href", "/ciclo.webmanifest");
+        set('meta[name="apple-mobile-web-app-title"]', "content", "Ciclo");
+        set('link[rel="apple-touch-icon"]', "href", "/ciclo-apple-touch-icon.png");
+        set('link[rel="icon"]', "href", "/ciclo-icon-192.png");
+        document.title = "Ciclo Aceleriq";
+      })();
+    </script>
     <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
 
     <meta property="og:type" content="website" />
