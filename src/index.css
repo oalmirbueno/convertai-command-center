@@ -157,23 +157,6 @@
    * Sem isto, arrastar para baixo puxava o documento e aparecia uma faixa
    * preta embaixo do conteúdo, como se a tela tivesse descolado.
    */
-  /*
-   * O iOS 26 tem um defeito conhecido com elementos FIXOS do tamanho da
-   * tela: o rodapé ganha uma folga em branco (Apple corrige só no Safari
-   * 26.1). Por isso a tela travada NÃO usa position fixed em nada do
-   * tamanho da tela: a altura desce por herança html → body → #root, um
-   * caminho que não passa pelo código com defeito, e o overflow escondido
-   * na raiz mata a rolagem e o elástico do documento.
-   */
-  html.app-travado,
-  html.app-travado body,
-  html.app-travado #root {
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-    touch-action: pan-x pan-y;
-  }
 }
 
 @layer utilities {

@@ -97,12 +97,26 @@ export default function AdminCiclo() {
     try { localStorage.setItem(AREA_STORAGE_KEY, area); } catch { /* sem cache */ }
   }, [area]);
 
-  // Enquanto o Ciclo está aberto, a página por baixo fica travada: arrastar
-  // para baixo não descola mais a tela nem revela faixa preta. Ao sair, o
-  // painel volta a rolar normalmente.
+  // O topo tem altura variável (semana, dias, progresso). Medindo o header de
+  // verdade, a área de conteúdo começa exatamente onde ele termina, sem número
+  // chutado que descole em algum aparelho.
+  const headerRef = useRef<HTMLElement | null>(null);
+  const [headerH, setHeaderH] = useState(168);
   useEffect(() => {
-    document.documentElement.classList.add("app-travado");
-    return () => document.documentElement.classList.remove("app-travado");
+    const node = headerRef.current;
+    if (!node) return;
+    const medir = () => setHeaderH(node.getBoundingClientRect().height);
+    medir();
+
+    // Navegador sem ResizeObserver (versões antigas) continua funcionando com
+    // a medida inicial mais o reajuste ao girar a tela.
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", medir);
+      return () => window.removeEventListener("resize", medir);
+    }
+    const observer = new ResizeObserver(medir);
+    observer.observe(node);
+    return () => observer.disconnect();
   }, []);
 
   const realMonday = useMemo(() => mondayOf(today), [today]);
@@ -592,19 +606,21 @@ export default function AdminCiclo() {
     const selected = area === target;
     const totals = selected ? weekTotals : otherAreaTotals;
     return (
-      // Uma linha só: ícone, nome e placar lado a lado. Empilhado em três
-      // andares, a barra comia um terço da tela do celular.
+      // Mesma anatomia das abas do painel: ocupa toda a altura da barra,
+      // ícone em cima e texto pequeno embaixo.
       <button
         type="button"
         onClick={() => setArea(target)}
-        className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-xl transition-colors ${
-          selected ? "bg-primary/10 text-primary" : "text-muted-foreground"
+        className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+          selected ? "text-primary" : "text-muted-foreground"
         }`}
       >
-        <Icon className="h-[17px] w-[17px] shrink-0" />
-        <span className="text-[12.5px] font-semibold">{config.short}</span>
-        <span className="text-[11px] tabular-nums opacity-70">
-          {totals.total > 0 ? `${totals.done}/${totals.total}` : "—"}
+        <Icon className="h-5 w-5" />
+        <span className="flex items-center gap-1">
+          {config.short}
+          <span className="tabular-nums opacity-70">
+            {totals.total > 0 ? `${totals.done}/${totals.total}` : ""}
+          </span>
         </span>
       </button>
     );
@@ -614,13 +630,14 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    // Altura por herança (html → body → #root → aqui), de propósito SEM
-    // position fixed: o iOS 26 tem um defeito documentado com contêineres
-    // fixos do tamanho da tela que deixa uma folga no rodapé. No fluxo
-    // normal, com a raiz travada pela classe app-travado, a tela preenche
-    // o vidro inteiro em qualquer sistema.
-    <div className="relative flex h-full flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b border-border bg-background pt-[env(safe-area-inset-top)]">
+    // Mesma estrutura do painel (a referência que funciona em todo aparelho):
+    // moldura simples, topo e barra presos às bordas, e o conteúdo ancorado
+    // entre os dois. Nada de travar a raiz nem de altura herdada.
+    <div className="min-h-screen bg-background">
+      <header
+        ref={headerRef}
+        className="fixed inset-x-0 top-0 z-40 border-b border-border bg-background/95 backdrop-blur-xl pt-[env(safe-area-inset-top)]"
+      >
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
             type="button"
@@ -722,13 +739,20 @@ export default function AdminCiclo() {
 
       {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um
           flex não encolhe, o conteúdo vaza e a tela sai do lugar. */}
-      {/* A lista rola até a borda física; o respiro final garante que o
-          último card não fica escondido atrás da pílula. */}
+      {/* Conteúdo ancorado entre o topo e a barra, exatamente como no painel:
+          a rolagem acontece aqui dentro e a área termina onde a barra começa,
+          sem sobra e sem depender de altura de tela reportada pelo sistema. */}
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+        className="fixed inset-x-0 z-0 mx-auto w-full max-w-3xl overflow-y-auto overflow-x-hidden px-3 py-3"
+        style={{
+          top: headerH,
+          bottom: "calc(env(safe-area-inset-bottom) + 56px)",
+          WebkitOverflowScrolling: "touch",
+          overscrollBehavior: "contain",
+        }}
       >
-        <div className="mx-auto w-full max-w-3xl space-y-2.5">
+        <div className="w-full space-y-2.5">
           {nextUp && canWrite && (
             <button
               type="button"
@@ -810,11 +834,15 @@ export default function AdminCiclo() {
         </div>
       </div>
 
-      {/* As duas frentes numa pílula flutuante, não numa barra de borda a
-          borda: o conteúdo corre até o fim da tela como no resto do painel,
-          e não existe faixa inferior nenhuma para aparecer em aparelho algum. */}
-      <nav className="pointer-events-none absolute inset-x-0 bottom-[max(0.875rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-6">
-        <div className="pointer-events-auto flex w-full max-w-[300px] items-stretch gap-1 rounded-2xl border border-border/80 bg-card/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-md">
+      {/* Barra idêntica à do painel: colada na borda de baixo, com o recuo do
+          indicador POR DENTRO. O fundo dela pinta até o fim do vidro, então
+          não existe faixa de cor diferente em nenhum aparelho. */}
+      <nav
+        className="fixed bottom-0 inset-x-0 z-40 border-t border-border bg-background/95 backdrop-blur-xl"
+        style={{ paddingBottom: "env(safe-area-inset-bottom)" }}
+        aria-label="Frentes do ciclo"
+      >
+        <div className="flex items-stretch h-14 max-w-[560px] mx-auto">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
         </div>
