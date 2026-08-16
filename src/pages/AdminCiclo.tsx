@@ -622,7 +622,7 @@ export default function AdminCiclo() {
     // próximas versões. A página por baixo fica travada (app-travado), então
     // nada rola nem desloca por trás.
     <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
-      <header className="shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)]">
+      <header className="shrink-0 border-b border-border bg-background pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
             type="button"
@@ -724,7 +724,12 @@ export default function AdminCiclo() {
 
       {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um
           flex não encolhe, o conteúdo vaza e a tela sai do lugar. */}
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      {/* A lista rola até a borda física; o respiro final garante que o
+          último card não fica escondido atrás da pílula. */}
+      <div
+        ref={scrollRef}
+        className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 pt-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))]"
+      >
         <div className="mx-auto w-full max-w-3xl space-y-2.5">
           {nextUp && canWrite && (
             <button
@@ -807,8 +812,11 @@ export default function AdminCiclo() {
         </div>
       </div>
 
-      <nav className="shrink-0 border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex w-full max-w-md items-stretch gap-2 py-1">
+      {/* As duas frentes numa pílula flutuante, não numa barra de borda a
+          borda: o conteúdo corre até o fim da tela como no resto do painel,
+          e não existe faixa inferior nenhuma para aparecer em aparelho algum. */}
+      <nav className="pointer-events-none absolute inset-x-0 bottom-[max(0.875rem,env(safe-area-inset-bottom))] z-40 flex justify-center px-6">
+        <div className="pointer-events-auto flex w-full max-w-[300px] items-stretch gap-1 rounded-2xl border border-border/80 bg-card/95 p-1 shadow-[0_8px_28px_rgba(0,0,0,0.45)] backdrop-blur-md">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
         </div>

@@ -142,6 +142,17 @@
   }
 
   /*
+   * A tela do aparelho pode ter regiões que nenhum elemento alcança (a faixa
+   * do indicador do iOS, por exemplo, que versões novas às vezes deixam fora
+   * da área de layout). Quem pinta essas regiões é o fundo do documento: com
+   * a MESMA cor do app, qualquer fresta fica invisível por definição, em
+   * qualquer sistema, hoje e nas próximas versões.
+   */
+  html {
+    background: hsl(var(--background));
+  }
+
+  /*
    * Telas que são o aplicativo inteiro (o Ciclo) travam a página por baixo.
    * Sem isto, arrastar para baixo puxava o documento e aparecia uma faixa
    * preta embaixo do conteúdo, como se a tela tivesse descolado.
