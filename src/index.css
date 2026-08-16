@@ -154,6 +154,17 @@
     overscroll-behavior: none;
     touch-action: pan-x pan-y;
   }
+
+  /*
+   * iOS: mesmo com overflow escondido, o Safari deixa o documento "esticar"
+   * no arrasto (rubber band) e aparece uma fresta atrás do aplicativo.
+   * Fixar o body à tela elimina o movimento na raiz, em qualquer versão.
+   */
+  html.app-travado body {
+    position: fixed;
+    inset: 0;
+    width: 100%;
+  }
 }
 
 @layer utilities {

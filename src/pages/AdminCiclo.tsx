@@ -614,11 +614,14 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    // Preso ao viewport e com a altura da área realmente visível: só `inset-0`
-    // usa a medida da tela COM a barra do navegador, e quando ela recolhia
-    // sobrava uma faixa preta embaixo. Com a página travada por baixo, essa
-    // altura não muda mais durante o uso.
-    <div className="fixed inset-0 h-[100dvh] flex flex-col overflow-hidden bg-background">
+    // Ancorado em cima E embaixo (inset-0), sem altura declarada: qualquer
+    // altura em vh/dvh depende do número que o sistema reporta, e o iOS em
+    // modo aplicativo às vezes reporta errado — era isso que deixava a faixa
+    // vazia no rodapé. Ancoragem nas duas bordas não usa número nenhum:
+    // estica até a borda física da tela em qualquer aparelho, hoje e nas
+    // próximas versões. A página por baixo fica travada (app-travado), então
+    // nada rola nem desloca por trás.
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
