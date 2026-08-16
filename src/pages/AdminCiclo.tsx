@@ -614,14 +614,12 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    // Ancorado em cima E embaixo (inset-0), sem altura declarada: qualquer
-    // altura em vh/dvh depende do número que o sistema reporta, e o iOS em
-    // modo aplicativo às vezes reporta errado — era isso que deixava a faixa
-    // vazia no rodapé. Ancoragem nas duas bordas não usa número nenhum:
-    // estica até a borda física da tela em qualquer aparelho, hoje e nas
-    // próximas versões. A página por baixo fica travada (app-travado), então
-    // nada rola nem desloca por trás.
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
+    // Altura por herança (html → body → #root → aqui), de propósito SEM
+    // position fixed: o iOS 26 tem um defeito documentado com contêineres
+    // fixos do tamanho da tela que deixa uma folga no rodapé. No fluxo
+    // normal, com a raiz travada pela classe app-travado, a tela preenche
+    // o vidro inteiro em qualquer sistema.
+    <div className="relative flex h-full flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b border-border bg-background pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
