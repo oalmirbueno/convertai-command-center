@@ -67,7 +67,7 @@ export default class AppErrorBoundary extends Component<{ children: ReactNode },
 
 const styles: Record<string, React.CSSProperties> = {
   screen: {
-    minHeight: "100vh",
+    minHeight: "100svh",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",

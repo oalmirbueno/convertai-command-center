@@ -604,7 +604,9 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
+    // Preso ao viewport: fora do fluxo da página, o Ciclo não se mexe quando
+    // uma folha abre e trava a rolagem do fundo, e não sobra faixa vazia.
+    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button

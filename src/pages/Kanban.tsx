@@ -1126,7 +1126,7 @@ export default function Kanban() {
                     </button>
                   )}
                 </div>
-                <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100vh - 280px)", scrollbarWidth: "none" }}>
+                <div className="space-y-2 min-h-[200px] overflow-y-auto" style={{ maxHeight: "calc(100svh - 280px)", scrollbarWidth: "none" }}>
                   {colTasks.map((task: any, idx: number) => {
                     const showTopLine = dragOver?.id === task.id && dragOver.position === "top";
                     const showBottomLine = dragOver?.id === task.id && dragOver.position === "bottom";

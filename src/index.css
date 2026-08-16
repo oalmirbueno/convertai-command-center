@@ -101,6 +101,45 @@
   body {
     @apply bg-background text-foreground font-outfit antialiased;
   }
+
+  /*
+   * Altura de tela que não dança no celular.
+   *
+   * `100vh` conta a área que fica ATRÁS da barra de endereço do navegador.
+   * Como essa barra aparece e some conforme a pessoa rola, a tela crescia e
+   * encolhia sozinha (o "dançando"), e sobrava uma faixa vazia no fim da
+   * página. `100dvh` acompanha a área realmente visível. Corrigido aqui, no
+   * lugar de arquivo por arquivo, para valer em todas as telas do painel.
+   */
+  @supports (height: 100svh) {
+    /*
+     * `svh` é a altura da tela COM a barra do navegador visível: um valor que
+     * não muda enquanto a pessoa rola. Com `vh` (área atrás da barra) sobrava
+     * faixa vazia no fim; com `dvh` a altura mudava a cada aparecer e sumir da
+     * barra, e a página inteira balançava. `svh` fica parado nos dois casos.
+     */
+    .min-h-screen {
+      min-height: 100svh;
+    }
+
+    .h-screen {
+      height: 100svh;
+    }
+  }
+
+  /*
+   * Ao abrir uma janela sobreposta, o navegador esconde a barra de rolagem e
+   * a página inteira pulava para o lado. Reservar o espaço dela desde sempre
+   * mantém tudo parado.
+   */
+  html {
+    scrollbar-gutter: stable;
+  }
+
+  /* Sem o efeito de "puxar além do fim" arrastando a tela toda no celular. */
+  body {
+    overscroll-behavior-y: none;
+  }
 }
 
 @layer utilities {

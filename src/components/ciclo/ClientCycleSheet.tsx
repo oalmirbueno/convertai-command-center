@@ -184,8 +184,8 @@ export default function ClientCycleSheet({
         {client && (
           <>
             {/* Cabeçalho fixo, com respiro para a barra de status do aparelho */}
-            <div className="shrink-0 border-b border-border px-4 pb-3 pt-[max(1.25rem,env(safe-area-inset-top))]">
-              <SheetTitle className="pr-8 text-left text-[17px] font-bold leading-tight text-foreground">
+            <div className="shrink-0 border-b border-border px-4 pb-3 pt-[max(1.5rem,calc(env(safe-area-inset-top)+0.75rem))]">
+              <SheetTitle className="pr-12 text-left text-[17px] font-bold leading-tight text-foreground">
                 {clientName}
               </SheetTitle>
               <SheetDescription className="sr-only">
