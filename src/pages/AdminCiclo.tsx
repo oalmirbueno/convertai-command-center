@@ -4,7 +4,7 @@ import {
   ArrowDown, BarChart3, Brain, CalendarDays, Check, ChevronLeft, ChevronRight,
   ChevronRight as Caret, Columns3, DollarSign, ExternalLink, FileArchive,
   HeartPulse, LayoutDashboard, ListChecks, Megaphone, Menu, RefreshCw, Share2,
-  Sparkles, TrendingUp, X,
+  Smartphone, Sparkles, TrendingUp, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -12,7 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
-import { usePwaProfile } from "@/hooks/usePwaProfile";
+import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import {
@@ -103,7 +103,12 @@ export default function AdminCiclo() {
   const { data: clients } = useClients();
   const queryClient = useQueryClient();
 
-  usePwaProfile("/ciclo.webmanifest", "Ciclo");
+  usePwaProfile({
+    manifestHref: "/ciclo.webmanifest",
+    appleTitle: "Ciclo",
+    appleIcon: "/ciclo-apple-touch-icon.png",
+  });
+  const standalone = useStandalone();
   const today = useNow();
 
   const [area, setArea] = useState<"social" | "trafego">(() => {
@@ -633,7 +638,7 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    <div className="flex h-[100dvh] flex-col overflow-hidden bg-background">
+    <div className="flex h-[100dvh] max-h-[100dvh] flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
@@ -734,7 +739,9 @@ export default function AdminCiclo() {
         </div>
       </header>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-3">
+      {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um
+          flex não encolhe, o conteúdo vaza e a tela sai do lugar. */}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-3">
         <div className="mx-auto w-full max-w-3xl space-y-2.5">
           {nextUp && canWrite && (
             <button
@@ -826,7 +833,7 @@ export default function AdminCiclo() {
 
       {/* Detalhe do cliente: a evolução dele, etapa por etapa */}
       <Sheet open={!!detailId} onOpenChange={(open) => !open && setDetailId(null)}>
-        <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+        <SheetContent side="right" className="flex w-full flex-col overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:max-w-md">
           {detailClient && (() => {
             const clientTotal = totalFor(detailClient);
             const doneCount = doneCountFor(detailClient);
@@ -953,7 +960,7 @@ export default function AdminCiclo() {
 
       {/* O dia: o que foi feito, na ordem em que aconteceu */}
       <Sheet open={!!dayKey} onOpenChange={(open) => !open && setDayKey(null)}>
-        <SheetContent side="bottom" className="max-h-[75vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[75dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <SheetHeader>
             <SheetTitle className="text-left text-base capitalize">
               {dayKey &&
@@ -1008,7 +1015,7 @@ export default function AdminCiclo() {
 
       {/* Menu do painel */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="w-[280px] p-0">
+        <SheetContent side="left" className="flex w-[280px] flex-col overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
           <SheetHeader className="border-b border-border p-4">
             <SheetTitle className="flex items-center gap-2 text-left text-base">
               <ListChecks className="h-4 w-4 text-primary" /> Ciclo Aceleriq
@@ -1022,6 +1029,20 @@ export default function AdminCiclo() {
             >
               <ListChecks className="h-4 w-4 text-primary" /> Como funciona o ciclo
             </button>
+            {!standalone && (
+              <a
+                href="/ciclo.html"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[13px] font-medium text-foreground hover:bg-secondary/60"
+              >
+                <Smartphone className="h-4 w-4 text-primary" />
+                <span className="min-w-0">
+                  Instalar o Ciclo no celular
+                  <span className="block text-[10.5px] font-normal leading-snug text-muted-foreground">
+                    abre a versão de aplicativo, com ícone próprio
+                  </span>
+                </span>
+              </a>
+            )}
             {profile?.role === "admin" && (
               <button
                 type="button"
@@ -1053,7 +1074,7 @@ export default function AdminCiclo() {
 
       {/* Histórico da carteira */}
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <SheetHeader>
             <SheetTitle className="text-left text-base">Histórico · {cycle.label}</SheetTitle>
           </SheetHeader>
@@ -1117,7 +1138,7 @@ export default function AdminCiclo() {
 
       {/* Legenda */}
       <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
-        <SheetContent side="bottom" className="max-h-[80vh] overflow-y-auto">
+        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
           <SheetHeader>
             <SheetTitle className="flex items-center justify-between text-left text-base">
               O ciclo · {cycle.label}

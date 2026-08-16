@@ -133,4 +133,19 @@ describe("tela do Ciclo da Semana", () => {
     expect(screen.getByRole("button", { name: /Semana anterior/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Próxima semana/i })).toBeInTheDocument();
   });
+
+  it("abre o menu com os atalhos do painel e o convite de instalação", async () => {
+    await renderCiclo();
+
+    fireEvent.click(screen.getByRole("button", { name: /Abrir menu/i }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Como funciona o ciclo/i)).toBeInTheDocument();
+    });
+    // O caminho para instalar o Ciclo como aplicativo separado precisa estar
+    // ao alcance: é a página própria, não a rota do painel.
+    const instalar = screen.getByText(/Instalar o Ciclo no celular/i).closest("a");
+    expect(instalar).toHaveAttribute("href", "/ciclo.html");
+    expect(screen.getByText("Kanban")).toBeInTheDocument();
+  });
 });

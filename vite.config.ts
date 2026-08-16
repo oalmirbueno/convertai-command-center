@@ -94,6 +94,17 @@ export default defineConfig(({ command, mode }) => {
     // a sintaxe moderna e o painel volta a abrir em máquinas mais antigas.
     build: {
       target: ["es2019", "chrome66", "firefox60", "safari12", "edge79"],
+
+      // Duas portas de entrada para o MESMO aplicativo: a raiz instala o
+      // painel, /ciclo.html instala o Ciclo. Cada página declara o próprio
+      // manifesto e ícone, que é o que faz o celular tratar os dois como
+      // aplicativos separados. O código é um só; muda apenas a capa.
+      rollupOptions: {
+        input: {
+          main: path.resolve(__dirname, "index.html"),
+          ciclo: path.resolve(__dirname, "ciclo.html"),
+        },
+      },
     },
 
     server: {

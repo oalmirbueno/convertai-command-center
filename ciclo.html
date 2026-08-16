@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="pt-BR" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <title>Ciclo Aceleriq</title>
+    <meta name="description" content="O checklist semanal da carteira: uma etapa por toque, direto no bolso." />
+    <meta name="author" content="Aceleriq" />
+    <meta name="referrer" content="no-referrer" />
+
+    <!--
+      Porta de entrada do Ciclo como aplicativo separado.
+
+      O navegador decide o que instalar lendo o HTML da página aberta. Trocar o
+      manifesto por JavaScript depois que o app monta funciona de forma
+      irregular, e o iOS ignora o manifesto por completo: ele usa o
+      apple-touch-icon e o título desta página. Por isso o Ciclo tem a própria
+      página, com identidade declarada aqui, estática. Instalar por aqui gera um
+      ícone próprio, com nome próprio, que abre direto no ciclo e não se mistura
+      com o aplicativo do painel (que continua sendo instalado pela raiz).
+    -->
+    <link rel="manifest" href="/ciclo.webmanifest" />
+    <meta name="theme-color" content="#0D0D0D" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Ciclo" />
+    <link rel="apple-touch-icon" href="/ciclo-apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="192x192" href="/ciclo-icon-192.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="Ciclo Aceleriq" />
+    <meta property="og:description" content="O checklist semanal da carteira, uma etapa por toque." />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="root"></div>
+
+    <noscript>
+      <div style="font-family:system-ui,sans-serif;color:#e8e8e8;background:#0d0d0d;text-align:center;">
+        <p style="font-size:16px;padding-top:12vh;">O Ciclo precisa de JavaScript ativado no navegador para funcionar.</p>
+      </div>
+    </noscript>
+
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
