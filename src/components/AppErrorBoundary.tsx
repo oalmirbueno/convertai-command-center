@@ -1,5 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react";
-import { hardRefresh, isChunkError, refreshExhausted } from "@/lib/appRefresh";
+import {
+  BUILD_ID, hardRefresh, isChunkError, recordFatalCrash, refreshExhausted,
+} from "@/lib/appRefresh";
 
 /**
  * Última linha de defesa contra a tela branca. Qualquer erro de render (ou
@@ -32,6 +34,16 @@ export default class AppErrorBoundary extends Component<{ children: ReactNode },
     if (isChunkError(error) && !refreshExhausted()) {
       this.setState({ autoRecovering: true });
       hardRefresh();
+      return;
+    }
+
+    // Soluço passageiro (dados no meio de uma publicação, estado velho): a
+    // tela se recupera SOZINHA até duas vezes. Só o erro que insiste na mesma
+    // versão vira tela manual, com o detalhe técnico à vista — e nunca em loop.
+    const signature = `${BUILD_ID}:${error?.message || ""}`.slice(0, 200);
+    if (recordFatalCrash(signature) <= 2) {
+      this.setState({ autoRecovering: true });
+      window.setTimeout(() => hardRefresh(true), 1_200);
     }
   }
 
@@ -49,10 +61,10 @@ export default class AppErrorBoundary extends Component<{ children: ReactNode },
 
     return (
       <div style={styles.screen}>
-        <p style={styles.title}>O painel foi atualizado</p>
+        <p style={styles.title}>Algo travou nesta tela</p>
         <p style={styles.text}>
-          Saiu uma versão nova enquanto esta tela estava aberta. Toque no botão abaixo para
-          continuar de onde parou.
+          O painel tentou se recuperar sozinho e não conseguiu. Toque no botão abaixo para
+          recarregar; se esta tela voltar, mande o detalhe técnico para a Aceleriq.
         </p>
         <button type="button" style={styles.button} onClick={() => hardRefresh(true)}>
           Recarregar agora

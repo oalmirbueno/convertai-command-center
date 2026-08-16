@@ -119,6 +119,71 @@ export function hardRefresh(force = false): boolean {
   return true;
 }
 
+/**
+ * Recarga de ATUALIZAÇÃO (versão nova publicada): controlada, esperada, e por
+ * isso não consome o orçamento da recuperação de erro. Sem esta separação,
+ * cada publicação com o painel aberto gastava as tentativas de emergência, e
+ * o primeiro soluço seguinte já caía na tela manual.
+ */
+const UPDATE_KEY = "aceleriq-update-reloads";
+
+export function updateReload(): boolean {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    window.addEventListener("online", () => void updateReload(), { once: true });
+    return false;
+  }
+  const now = Date.now();
+  let recent: number[] = [];
+  try {
+    const raw = sessionStorage.getItem(UPDATE_KEY);
+    recent = (raw ? (JSON.parse(raw) as number[]) : []).filter((at) => now - at < 5 * 60_000);
+  } catch { /* sem armazenamento: segue */ }
+  // Se o servidor insistir em devolver a versão antiga, parar de recarregar:
+  // melhor rodar a versão anterior do que prender a pessoa num vai-e-volta.
+  if (recent.length >= 2) return false;
+  try {
+    sessionStorage.setItem(UPDATE_KEY, JSON.stringify([...recent, now]));
+  } catch { /* idem */ }
+
+  const go = () => {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("v", String(now));
+      window.location.replace(url.toString());
+    } catch {
+      window.location.reload();
+    }
+  };
+  Promise.race([cleanupStaleCaches(), new Promise((resolve) => setTimeout(resolve, 1_500))])
+    .then(go)
+    .catch(go);
+  return true;
+}
+
+/**
+ * Memória de quedas fatais de render, por versão e mensagem. Permite a tela
+ * de erro se recuperar sozinha uma ou duas vezes (soluço passageiro) e parar
+ * de insistir quando o erro é determinístico, sem nunca entrar em loop.
+ */
+const FATAL_KEY = "aceleriq-fatal-crashes";
+
+export function recordFatalCrash(signature: string): number {
+  const now = Date.now();
+  try {
+    const raw = localStorage.getItem(FATAL_KEY);
+    const data = raw ? (JSON.parse(raw) as { sig: string; at: number; count: number }) : null;
+    const count = data && data.sig === signature && now - data.at < 10 * 60_000 ? data.count + 1 : 1;
+    localStorage.setItem(FATAL_KEY, JSON.stringify({ sig: signature, at: now, count }));
+    return count;
+  } catch {
+    return 99; // sem armazenamento não dá para limitar: não tenta sozinho
+  }
+}
+
+export function clearFatalCrashes() {
+  try { localStorage.removeItem(FATAL_KEY); } catch { /* cosmético */ }
+}
+
 /** Remove o parâmetro técnico da URL depois que a versão nova carregou. */
 export function stripRefreshParam() {
   try {
@@ -156,14 +221,14 @@ export function startVersionWatch() {
     const latest = await fetchLatestBuildId();
     if (!latest || latest === BUILD_ID) return;
     updatePending = true;
-    if (reloadNow) hardRefresh();
+    if (reloadNow) updateReload();
   };
 
   void check(true);
 
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
-    if (updatePending) hardRefresh();
+    if (updatePending) updateReload();
     else void check(true);
   });
 
