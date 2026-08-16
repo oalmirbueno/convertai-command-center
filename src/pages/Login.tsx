@@ -80,7 +80,19 @@ export default function Login() {
   if (loading || (user && profile)) {
     return (
       <div className="dark min-h-screen flex flex-col items-center justify-center bg-background gap-3">
-        <img src={aceleriqLogo} alt="Aceleriq" className="h-36 w-auto animate-pulse" />
+        {/* Espaço reservado para o logo: sem altura e largura fixas, a marca
+            entrava do nada quando a imagem terminava de baixar e empurrava o
+            texto. O brilho suave substitui o pisca-pisca, que fazia o ícone
+            parecer instável na entrada. */}
+        <div className="flex h-36 w-[220px] items-center justify-center">
+          <img
+            src={aceleriqLogo}
+            alt="Aceleriq"
+            width={220}
+            height={144}
+            className="h-36 w-auto max-w-full object-contain opacity-90 transition-opacity duration-700"
+          />
+        </div>
         <p className="text-xs text-muted-foreground">{loading ? "Carregando..." : "Redirecionando..."}</p>
       </div>
     );

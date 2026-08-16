@@ -97,6 +97,14 @@ export default function AdminCiclo() {
     try { localStorage.setItem(AREA_STORAGE_KEY, area); } catch { /* sem cache */ }
   }, [area]);
 
+  // Enquanto o Ciclo está aberto, a página por baixo fica travada: arrastar
+  // para baixo não descola mais a tela nem revela faixa preta. Ao sair, o
+  // painel volta a rolar normalmente.
+  useEffect(() => {
+    document.documentElement.classList.add("app-travado");
+    return () => document.documentElement.classList.remove("app-travado");
+  }, []);
+
   const realMonday = useMemo(() => mondayOf(today), [today]);
   const weekStart = useMemo(() => addDays(realMonday, weekOffset * 7), [realMonday, weekOffset]);
   const weekKey = localIso(weekStart);
@@ -584,16 +592,18 @@ export default function AdminCiclo() {
     const selected = area === target;
     const totals = selected ? weekTotals : otherAreaTotals;
     return (
+      // Uma linha só: ícone, nome e placar lado a lado. Empilhado em três
+      // andares, a barra comia um terço da tela do celular.
       <button
         type="button"
         onClick={() => setArea(target)}
-        className={`flex flex-1 flex-col items-center gap-0.5 rounded-xl py-2 transition-colors ${
+        className={`flex h-11 flex-1 items-center justify-center gap-2 rounded-xl transition-colors ${
           selected ? "bg-primary/10 text-primary" : "text-muted-foreground"
         }`}
       >
-        <Icon className="h-[18px] w-[18px]" />
-        <span className="text-[11px] font-semibold">{config.short}</span>
-        <span className="text-[9.5px] tabular-nums opacity-80">
+        <Icon className="h-[17px] w-[17px] shrink-0" />
+        <span className="text-[12.5px] font-semibold">{config.short}</span>
+        <span className="text-[11px] tabular-nums opacity-70">
           {totals.total > 0 ? `${totals.done}/${totals.total}` : "—"}
         </span>
       </button>
@@ -604,9 +614,11 @@ export default function AdminCiclo() {
   const dayList = dayKey ? dayEvents.get(dayKey) || [] : [];
 
   return (
-    // Preso ao viewport: fora do fluxo da página, o Ciclo não se mexe quando
-    // uma folha abre e trava a rolagem do fundo, e não sobra faixa vazia.
-    <div className="fixed inset-0 flex flex-col overflow-hidden bg-background">
+    // Preso ao viewport e com a altura da área realmente visível: só `inset-0`
+    // usa a medida da tela COM a barra do navegador, e quando ela recolhia
+    // sobrava uma faixa preta embaixo. Com a página travada por baixo, essa
+    // altura não muda mais durante o uso.
+    <div className="fixed inset-0 h-[100dvh] flex flex-col overflow-hidden bg-background">
       <header className="shrink-0 border-b border-border bg-card pt-[env(safe-area-inset-top)]">
         <div className="flex h-12 items-center justify-between gap-2 px-2">
           <button
@@ -793,7 +805,7 @@ export default function AdminCiclo() {
       </div>
 
       <nav className="shrink-0 border-t border-border bg-card px-3 pb-[env(safe-area-inset-bottom)]">
-        <div className="mx-auto flex w-full max-w-md items-stretch gap-2 py-1.5">
+        <div className="mx-auto flex w-full max-w-md items-stretch gap-2 py-1">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
         </div>

@@ -140,6 +140,20 @@
   body {
     overscroll-behavior-y: none;
   }
+
+  /*
+   * Telas que são o aplicativo inteiro (o Ciclo) travam a página por baixo.
+   * Sem isto, arrastar para baixo puxava o documento e aparecia uma faixa
+   * preta embaixo do conteúdo, como se a tela tivesse descolado.
+   */
+  html.app-travado,
+  html.app-travado body {
+    height: 100%;
+    max-height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-x pan-y;
+  }
 }
 
 @layer utilities {
