@@ -4,7 +4,7 @@ import {
   ArrowDown, BarChart3, Brain, CalendarDays, Check, ChevronLeft, ChevronRight,
   ChevronRight as Caret, Columns3, DollarSign, ExternalLink, FileArchive,
   HeartPulse, LayoutDashboard, ListChecks, Megaphone, Menu, RefreshCw, Share2,
-  Smartphone, Sparkles, TrendingUp, X,
+  Smartphone, Sparkles, TrendingUp,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -14,7 +14,13 @@ import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import {
+  Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle,
+} from "@/components/ui/sheet";
+import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
+import {
+  CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
+} from "@/lib/cycleDefs";
 import {
   WEEKDAY_INITIALS, addDays, closedStreak, isSameDay, localIso, mondayOf,
   weekDays, weekLabel,
@@ -30,46 +36,6 @@ import {
 //  • cada linha tem altura e largura reservadas, então nada dança quando o
 //    número muda de 3/6 para 10/10.
 
-const CYCLES: Record<
-  "social" | "trafego",
-  { label: string; short: string; icon: typeof Share2; steps: string[] }
-> = {
-  social: {
-    label: "Social Media",
-    short: "Social",
-    icon: Share2,
-    steps: [
-      "Conteúdo da semana criado (artes e legendas)",
-      "Subir no painel (Arquivos, pasta certa)",
-      "Conectar e conferir a conta no painel",
-      "Painel atualizado (agenda, métricas, diário)",
-      "Aprovação no grupo + ritual enviado",
-      "Posts agendados (publicação automática armada)",
-    ],
-  },
-  trafego: {
-    label: "Tráfego Pago",
-    short: "Tráfego",
-    icon: Megaphone,
-    steps: [
-      "Campanhas ativas revisadas",
-      "Criativos da semana prontos",
-      "Anúncios subidos ou atualizados",
-      "Verba e orçamento conferidos",
-      "Métricas lidas e leitura anotada",
-      "Registro no painel para o cliente ver",
-    ],
-  },
-};
-
-const ONBOARDING_STEPS = [
-  "Acessos e briefing completos",
-  "Contas conectadas no painel",
-  "Estratégia e primeiro calendário aprovados",
-  "Rotina semanal rodando (conclui o onboarding)",
-];
-
-const HISTORY_WEEKS = 8;
 const AREA_STORAGE_KEY = "aceleriq-ciclo-area";
 
 const MENU_LINKS = [
@@ -111,7 +77,7 @@ export default function AdminCiclo() {
   const standalone = useStandalone();
   const today = useNow();
 
-  const [area, setArea] = useState<"social" | "trafego">(() => {
+  const [area, setArea] = useState<CycleArea>(() => {
     const saved = typeof localStorage !== "undefined" && localStorage.getItem(AREA_STORAGE_KEY);
     return saved === "trafego" ? "trafego" : "social";
   });
@@ -292,7 +258,7 @@ export default function AdminCiclo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClients, doneMap, area]);
 
-  const otherArea: "social" | "trafego" = area === "social" ? "trafego" : "social";
+  const otherArea: CycleArea = area === "social" ? "trafego" : "social";
   const otherAreaTotals = useMemo(() => {
     const list = ((clients || []) as any[]).filter(
       (client) =>
@@ -612,7 +578,7 @@ export default function AdminCiclo() {
     );
   };
 
-  const AreaTab = ({ target }: { target: "social" | "trafego" }) => {
+  const AreaTab = ({ target }: { target: CycleArea }) => {
     const config = CYCLES[target];
     const Icon = config.icon;
     const selected = area === target;
@@ -831,145 +797,38 @@ export default function AdminCiclo() {
         </div>
       </nav>
 
-      {/* Detalhe do cliente: a evolução dele, etapa por etapa */}
-      <Sheet open={!!detailId} onOpenChange={(open) => !open && setDetailId(null)}>
-        <SheetContent side="right" className="flex w-full flex-col overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))] pt-[max(1.5rem,env(safe-area-inset-top))] sm:max-w-md">
-          {detailClient && (() => {
-            const clientTotal = totalFor(detailClient);
-            const doneCount = doneCountFor(detailClient);
-            const prevKey = localIso(addDays(weekStart, -7));
-            const prevSet = historySets.get(`${detailClient.id}:${prevKey}`);
-            const streak = closedStreak(
-              historyWeekKeys.slice(0, HISTORY_WEEKS - 1),
-              (key) => (historySets.get(`${detailClient.id}:${key}`)?.size || 0) >= totalSteps,
-            );
-            return (
-              <>
-                <SheetHeader>
-                  <SheetTitle className="pr-8 text-left text-base">
-                    {detailClient.company_name || detailClient.full_name}
-                  </SheetTitle>
-                </SheetHeader>
-
-                <div className="mt-1 flex items-center gap-2 text-[11.5px] text-muted-foreground">
-                  <span className="font-semibold text-foreground">{doneCount}/{clientTotal} etapas</span>
-                  <span>·</span>
-                  <span>{cycle.label}</span>
-                  {streak > 0 && (
-                    <>
-                      <span>·</span>
-                      <span className="font-semibold text-success">
-                        {streak} {streak === 1 ? "semana 100%" : "semanas 100%"}
-                      </span>
-                    </>
-                  )}
-                </div>
-
-                {(prevSet?.size || 0) > 0 && (prevSet?.size || 0) < totalSteps && addDays(weekStart, -7) < realMonday && (
-                  <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
-                    Semana passada fechou {prevSet?.size}/{totalSteps}. O que ficou para trás continua valendo aqui.
-                  </p>
-                )}
-
-                <div className="mt-4 space-y-1.5">
-                  {Array.from({ length: clientTotal }, (_, index) => index + 1).map((step) => {
-                    const key = `${detailClient.id}:${area}:${step}`;
-                    const row = doneMap.get(key);
-                    const done = !!row;
-                    const onboardingTrack = step > totalSteps;
-                    const who = row?.done_by
-                      ? row.done_by === user?.id ? "você" : doneByNames?.[row.done_by] || "equipe"
-                      : null;
-                    return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={!canWrite || pendingKey === key}
-                        onClick={() => void toggle(detailClient, step)}
-                        className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
-                          done
-                            ? "border-primary/30 bg-primary/[0.06]"
-                            : "border-border bg-card hover:border-primary/40"
-                        } ${pendingKey === key ? "opacity-50" : ""}`}
-                      >
-                        <span
-                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
-                            done
-                              ? onboardingTrack ? "bg-info text-white" : "bg-primary text-primary-foreground"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
-                            {stepLabelOf(step)}
-                          </span>
-                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                            {done && row?.done_at
-                              ? `feito ${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} às ${hourOf(row.done_at)}${who ? ` por ${who}` : ""}`
-                              : onboardingTrack ? "onboarding" : "pendente"}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-5">
-                  <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                    Evolução · {HISTORY_WEEKS} semanas
-                  </p>
-                  <div className="mt-2 flex items-end gap-1.5">
-                    {historyWeekKeys.map((key, index) => {
-                      const fill = (historySets.get(`${detailClient.id}:${key}`)?.size || 0) / totalSteps;
-                      const start = addDays(realMonday, (index - (HISTORY_WEEKS - 1)) * 7);
-                      return (
-                        <div key={key} className="flex flex-1 flex-col items-center gap-1">
-                          <span className="flex h-14 w-full items-end overflow-hidden rounded bg-secondary/40">
-                            <span
-                              className={`block w-full rounded ${fill >= 1 ? "bg-success/70" : "bg-primary/50"}`}
-                              style={{ height: `${Math.max(fill * 100, fill > 0 ? 8 : 3)}%` }}
-                            />
-                          </span>
-                          <span className="text-[8.5px] tabular-nums text-muted-foreground">
-                            {start.getDate()}
-                          </span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                <Link
-                  to="/clientes"
-                  onClick={() => setDetailId(null)}
-                  className="mt-5 flex items-center justify-center gap-1.5 rounded-xl border border-border py-2.5 text-[12px] font-semibold text-muted-foreground hover:text-foreground"
-                >
-                  <ExternalLink className="h-3.5 w-3.5" /> Abrir cliente no painel
-                </Link>
-                <p className="mt-2 pb-4 text-[10px] leading-relaxed text-muted-foreground">
-                  O que você marca aqui alimenta o painel do cliente: o progresso
-                  da semana aparece para ele como bastidor do trabalho.
-                </p>
-              </>
-            );
-          })()}
-        </SheetContent>
-      </Sheet>
+      {/* Detalhe do cliente: contexto, ferramentas e evolucao */}
+      <ClientCycleSheet
+        client={detailClient}
+        area={area}
+        weekStart={weekStart}
+        realMonday={realMonday}
+        historyWeekKeys={historyWeekKeys}
+        historySets={historySets}
+        doneMap={doneMap}
+        doneByNames={doneByNames}
+        currentUserId={user?.id}
+        canWrite={canWrite}
+        pendingKey={pendingKey}
+        onToggle={toggle}
+        onClose={() => setDetailId(null)}
+      />
 
       {/* O dia: o que foi feito, na ordem em que aconteceu */}
       <Sheet open={!!dayKey} onOpenChange={(open) => !open && setDayKey(null)}>
-        <SheetContent side="bottom" className="max-h-[75dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-          <SheetHeader>
-            <SheetTitle className="text-left text-base capitalize">
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+        >
+          <SheetHeader className="px-4">
+            <SheetTitle className="pr-8 text-left text-base capitalize">
               {dayKey &&
                 new Date(`${dayKey}T12:00:00`).toLocaleDateString("pt-BR", {
                   weekday: "long", day: "2-digit", month: "long",
                 })}
             </SheetTitle>
           </SheetHeader>
-          <div className="mt-3 space-y-1.5 pb-4">
+          <div className="mt-3 space-y-1.5 px-4">
             {dayList.length === 0 && (
               <p className="py-6 text-center text-[12.5px] text-muted-foreground">
                 Nenhuma etapa marcada neste dia.
@@ -978,7 +837,7 @@ export default function AdminCiclo() {
             {dayList.map((row) => {
               const client = clientsById.get(row.client_id)
                 || ((clients || []) as any[]).find((c) => c.id === row.client_id);
-              const rowCycle = CYCLES[(row.area as "social" | "trafego") || "social"];
+              const rowCycle = CYCLES[(row.area as CycleArea) || "social"];
               const label = row.step <= rowCycle.steps.length
                 ? rowCycle.steps[row.step - 1]
                 : ONBOARDING_STEPS[row.step - rowCycle.steps.length - 1];
@@ -1015,11 +874,14 @@ export default function AdminCiclo() {
 
       {/* Menu do painel */}
       <Sheet open={menuOpen} onOpenChange={setMenuOpen}>
-        <SheetContent side="left" className="flex w-[280px] flex-col overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
-          <SheetHeader className="border-b border-border p-4">
+        <SheetContent side="left" className="flex w-[280px] flex-col gap-0 overflow-y-auto p-0 pb-[env(safe-area-inset-bottom)] pt-[env(safe-area-inset-top)]">
+          <SheetHeader className="border-b border-border px-4 pb-3 pt-5">
             <SheetTitle className="flex items-center gap-2 text-left text-base">
               <ListChecks className="h-4 w-4 text-primary" /> Ciclo Aceleriq
             </SheetTitle>
+            <SheetDescription className="sr-only">
+              Atalhos do painel e ajustes do Ciclo.
+            </SheetDescription>
           </SheetHeader>
           <div className="p-2">
             <button
@@ -1074,11 +936,17 @@ export default function AdminCiclo() {
 
       {/* Histórico da carteira */}
       <Sheet open={historyOpen} onOpenChange={setHistoryOpen}>
-        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-          <SheetHeader>
-            <SheetTitle className="text-left text-base">Histórico · {cycle.label}</SheetTitle>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+        >
+          <SheetHeader className="px-4">
+            <SheetTitle className="pr-8 text-left text-base">Histórico · {cycle.label}</SheetTitle>
+            <SheetDescription className="sr-only">
+              Evolução das últimas semanas da carteira.
+            </SheetDescription>
           </SheetHeader>
-          <div className="mt-4 space-y-4 pb-4">
+          <div className="mt-4 space-y-4 px-4">
             <div className="flex items-end gap-1.5">
               {timeline.map((week) => {
                 const selected = week.offset === weekOffset;
@@ -1138,16 +1006,17 @@ export default function AdminCiclo() {
 
       {/* Legenda */}
       <Sheet open={legendOpen} onOpenChange={setLegendOpen}>
-        <SheetContent side="bottom" className="max-h-[80dvh] overflow-y-auto pb-[max(1.5rem,env(safe-area-inset-bottom))]">
-          <SheetHeader>
-            <SheetTitle className="flex items-center justify-between text-left text-base">
-              O ciclo · {cycle.label}
-              <button type="button" onClick={() => setLegendOpen(false)} aria-label="Fechar">
-                <X className="h-4 w-4 text-muted-foreground" />
-              </button>
-            </SheetTitle>
+        <SheetContent
+          side="bottom"
+          className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-2xl p-0 pb-[max(1.25rem,env(safe-area-inset-bottom))] pt-5"
+        >
+          <SheetHeader className="px-4">
+            <SheetTitle className="pr-8 text-left text-base">O ciclo · {cycle.label}</SheetTitle>
+            <SheetDescription className="sr-only">
+              O que significa cada etapa do ciclo da semana.
+            </SheetDescription>
           </SheetHeader>
-          <ol className="mt-4 space-y-2">
+          <ol className="mt-4 space-y-2 px-4">
             {cycle.steps.map((step, index) => (
               <li key={step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold tabular-nums text-primary">
@@ -1157,10 +1026,10 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
-          <p className="mt-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+          <p className="mt-4 px-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
             Onboarding · etapas 7 a 10
           </p>
-          <ol className="mt-2 space-y-2">
+          <ol className="mt-2 space-y-2 px-4">
             {ONBOARDING_STEPS.map((step, index) => (
               <li key={step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-info/15 text-[11px] font-bold tabular-nums text-info">
@@ -1170,7 +1039,7 @@ export default function AdminCiclo() {
               </li>
             ))}
           </ol>
-          <p className="mt-3 pb-4 text-[11px] leading-relaxed text-muted-foreground">
+          <p className="mt-3 px-4 text-[11px] leading-relaxed text-muted-foreground">
             Cada frente mostra apenas os clientes com aquele serviço no
             cadastro. Toque no nome do cliente para ver a evolução dele, e num
             dia da semana para ver o que foi feito naquele dia.

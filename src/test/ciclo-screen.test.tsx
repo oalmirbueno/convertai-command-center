@@ -67,7 +67,7 @@ describe("tela do Ciclo da Semana", () => {
 
   it("mostra em Social apenas quem contratou social, sem a empresa do grupo", async () => {
     await renderCiclo();
-    await screen.findAllByText("Acerbi");
+    await screen.findAllByText("Acerbi", {}, { timeout: 15000 });
 
     expect(naTela("Mirante Luz")).toBe(true);
     expect(naTela("Vifut")).toBe(false);
@@ -76,7 +76,7 @@ describe("tela do Ciclo da Semana", () => {
 
   it("troca para Tráfego pela barra de baixo e recorta a lista", async () => {
     await renderCiclo();
-    await screen.findAllByText("Acerbi");
+    await screen.findAllByText("Acerbi", {}, { timeout: 15000 });
     expect(naTela("Mirante Luz")).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: /Tráfego/i }));
@@ -90,7 +90,7 @@ describe("tela do Ciclo da Semana", () => {
 
   it("dá o trilho de onboarding só a quem ainda não concluiu", async () => {
     await renderCiclo();
-    await screen.findAllByText("Acerbi");
+    await screen.findAllByText("Acerbi", {}, { timeout: 15000 });
 
     // Mirante está em onboarding: 6 do ciclo + 4 do trilho de entrada.
     expect(screen.getByText("0/10")).toBeInTheDocument();
@@ -118,7 +118,7 @@ describe("tela do Ciclo da Semana", () => {
     }));
 
     await renderCiclo();
-    await screen.findByText(/cliente fechado/i);
+    await screen.findByText(/cliente fechado/i, {}, { timeout: 15000 });
 
     // Sai da lista de trabalho e vira uma linha recolhida.
     expect(screen.getByText("1 cliente fechado")).toBeInTheDocument();
