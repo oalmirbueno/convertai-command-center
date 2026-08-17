@@ -1,8 +1,8 @@
 # Prompt: atualizar o contexto de um cliente
 
 Cole o texto abaixo no projeto do cliente dentro do ChatGPT (com o conector
-Aceleriq OS ligado). Ele varre o painel inteiro, consulta o segundo cérebro,
-pergunta o que faltar e grava o contexto consolidado nos dois lugares.
+Aceleriq OS ligado). Ele puxa o dossiê do cliente numa única chamada, consulta
+o Segundo Cérebro, pergunta o que faltar e grava o contexto no painel.
 
 Rode **antes** de gerar os rituais da semana na Central: o gerador lê essa
 memória, então quanto mais completo o dossiê, mais inteligente sai a mensagem.
@@ -30,34 +30,37 @@ REGRAS INVIOLÁVEIS
    descritos no passo 5. Nenhuma tarefa, projeto, arquivo ou relatório.
 
 PASSO 0 — CONFERIR PERMISSÃO ANTES DE COMEÇAR
-Chame aceleriq_capabilities e olhe grantedScopes. Você vai gravar em dois
-lugares no passo 5, e cada um exige uma permissão:
-- gravar no painel exige "projects:write" (ou "aceleriq:write")
-- propor no Segundo Cérebro exige "memory:propose"
+Chame aceleriq_capabilities e olhe grantedScopes.
 
-Anote quais das duas você tem. NÃO interrompa a tarefa por causa disso: siga
-normalmente e, no passo 5, grave só onde puder. O que faltar você reporta no
-passo 6, com o nome exato do escopo ausente. Nunca diga que salvou algo que
-não salvou, e nunca fique tentando de novo o que já foi negado.
+O painel é a fonte da verdade do contexto e a gravação obrigatória: exige
+"projects:write" (ou "aceleriq:write"). Sem isso, pare e me avise.
+
+A cópia no Segundo Cérebro é opcional e depende de "memory:propose" mais a
+permissão de escrita do próprio repositório. Se faltar qualquer uma, siga em
+frente sem ela: o contexto continua completo no painel, que é de onde a
+Central lê para escrever as mensagens. Só relate a pendência no passo 6.
+
+Nunca diga que salvou algo que não salvou, e nunca repita uma chamada já
+negada por permissão.
 
 PASSO 1 — IDENTIFICAR
 Use aceleriq_list_clients para achar o cliente pelo nome e guarde o client_id.
 Depois use aceleriq_get_client_context com esse id para o panorama inicial.
 
-PASSO 2 — VARRER O PAINEL
-Chame, sempre com o client_id:
-- aceleriq_list_projects e aceleriq_get_project (frentes ativas, status, tipo)
-- aceleriq_list_tasks (o que está em andamento e o que está parado)
-- aceleriq_get_weekly_cycle com weeks=6 (o bastidor: quais etapas do ciclo
-  semanal a equipe fechou nas últimas semanas, em social e em tráfego)
-- aceleriq_list_editorial_calendar (o que foi publicado e o que está agendado)
-- aceleriq_list_files (entregas recentes e o que está parado esperando
-  aprovação, com há quantos dias)
-- aceleriq_list_reports (as últimas mensagens enviadas e o que foi prometido)
-- aceleriq_list_briefings e aceleriq_get_briefing (o objetivo declarado por ele)
-- aceleriq_list_contracts (escopo contratado e prazos)
-- aceleriq_get_project_memory com limit=20 (a história já registrada; não
-  repita o que já está lá)
+PASSO 2 — PUXAR O DOSSIÊ
+Chame aceleriq_get_client_dossier com o client_id. Uma chamada só devolve
+tudo: cadastro, serviços contratados, frentes ativas, tarefas abertas,
+bastidor do ciclo das últimas 6 semanas (social e tráfego), publicações no ar,
+agendadas e as que perderam a data, entregas recentes, aprovações paradas com
+os dias de espera, últimos relatórios com o que foi prometido, briefings,
+contratos, carteira de anúncios e a memória já registrada.
+
+Leia o campo contracted_services: a mensagem precisa falar de TODAS as frentes
+que o cliente paga, não só da que teve movimento.
+
+Só se faltar algo específico, complemente com as ferramentas isoladas
+(aceleriq_get_weekly_cycle, aceleriq_list_editorial_calendar,
+aceleriq_get_project_memory). Não repita o que o dossiê já trouxe.
 
 PASSO 3 — CONSULTAR O SEGUNDO CÉREBRO
 Use memory_search com o nome do cliente e variações (primeiro nome, nome
@@ -117,7 +120,9 @@ a pendência entra no relatório final.
     ATENÇÃO: client_visible precisa ser false. Este texto é interno e não
     pode aparecer no portal do cliente.
 
-(b) No segundo cérebro, com memory_propose_update:
+(b) SOMENTE se você tiver "memory:propose" (passo 0), faça também a cópia no
+    Segundo Cérebro com memory_propose_update. Se a chamada voltar bloqueada,
+    NÃO tente de novo: registre a pendência e siga.
     title: "Contexto do cliente [NOME] — [DATA]"
     summary: as três primeiras frases do dossiê
     origin: "gpt-work/contexto-cliente"
@@ -158,36 +163,40 @@ começou", a mensagem afirmou que um cliente que já rodava campanhas ainda ia
 iniciar. O passo 6 existe para transformar essas lacunas em pergunta, e a sua
 resposta vira memória permanente.
 
-**Ele grava nos dois lados.** No painel, porque é de lá que o gerador de
-rituais lê o histórico antes de escrever. No segundo cérebro, porque é lá que
-o contexto sobrevive fora do sistema. Os dois se alimentam.
+**O painel é a fonte da verdade.** É de lá que a Central lê o histórico antes
+de escrever as mensagens, e é lá que o contexto fica garantido. A cópia no
+Segundo Cérebro é um espelho opcional: útil, mas o fluxo não depende dela para
+funcionar.
+
+**Uma chamada em vez de dez.** `aceleriq_get_client_dossier` monta o retrato
+inteiro do lado do servidor: cadastro, frentes, bastidor do ciclo, o que
+travou, o que foi prometido e a memória. Menos ida e volta, menos chance de o
+agente esquecer de perguntar alguma coisa.
 
 **Ele nunca escreve para o cliente.** O dossiê é interno (`client_visible:
 false`). Quem fala com o cliente é a Central, com o texto que você revisa.
 
-## Se a gravação no Segundo Cérebro for negada
+## Se a cópia no Segundo Cérebro for negada
 
-Sintoma: o dossiê é gravado no painel, mas a proposta no Segundo Cérebro falha
-por permissão.
+Isso não quebra nada: o contexto fica completo no painel, que é o que a
+Central lê. A cópia é espelho.
 
-Causa: propor arquivo no repositório de memória exige o escopo
-`memory:propose`, que é tratado como sensível e **nunca** é concedido por
-tabela: nem `aceleriq:read` nem `aceleriq:write` o incluem. A credencial
-precisa pedir esse escopo explicitamente. As credenciais antigas que o tinham
-estão revogadas, e as ativas hoje só têm leitura.
+A escrita no Segundo Cérebro depende de duas camadas, e as duas precisam
+estar certas:
 
-Correção, uma vez só:
+1. **Escopo da credencial MCP** (`memory:propose`). Resolvido pelo preset
+   **Contexto semanal** em painel > API e Integrações > credenciais MCP.
+2. **Permissão do token do GitHub no servidor** (`SECOND_BRAIN_GITHUB_TOKEN`).
+   Este token precisa de permissão de **escrita** (Contents: read and write) no
+   repositório `oalmirbueno/segundo-cerebro-almir`. Se ele for de leitura, a
+   proposta é recusada pelo GitHub mesmo com o escopo MCP correto, e a
+   mensagem de erro fala em bloqueio de acesso.
 
-1. No painel, abra **API e Integrações** (`/api-docs`) e vá até as credenciais
-   MCP.
-2. Escolha o preset **Contexto semanal**. Ele já vem com o conjunto exato:
-   `aceleriq:read`, `aceleriq:write`, `projects:write`, `memory:read`,
-   `memory:propose`.
-3. Gere a credencial e use no conector do ChatGPT.
-
-Enquanto isso não for feito, o prompt continua funcionando: ele grava no
-painel, pula o Segundo Cérebro e avisa no relatório final qual escopo falta.
-O contexto não se perde, só não é replicado.
+Para verificar a segunda camada: gere um token clássico ou fine-grained no
+GitHub com Contents: read and write nesse repositório e atualize o segredo
+`SECOND_BRAIN_GITHUB_TOKEN` no Supabase. A leitura (memory_search, memory_fetch)
+continua funcionando nos dois casos, o que faz o problema parecer de escopo
+quando na verdade é de permissão do repositório.
 
 ## Ordem de uso na semana
 

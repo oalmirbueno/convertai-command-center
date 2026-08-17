@@ -11,6 +11,7 @@ import {
   fetchEntity,
   getBriefing,
   getClientContext,
+  getClientDossier,
   getFile as getPanelFile,
   getProject,
   getReport,
@@ -216,7 +217,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.9.0',
+  version: '1.10.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1235,6 +1236,28 @@ const cancelContractTool: ToolDefinition = {
 };
 
 
+
+// ─── Dossiê do cliente: o retrato inteiro numa chamada ────────────────────
+const getClientDossierTool: ToolDefinition = {
+  name: 'aceleriq_get_client_dossier',
+  title: 'Dossiê do cliente',
+  description: 'Retrato COMPLETO de um cliente numa única chamada, pronto para virar contexto: cadastro, serviços contratados, frentes ativas, tarefas abertas, bastidor do ciclo semanal das últimas 6 semanas, publicações (no ar, agendadas e as que perderam a data), entregas recentes, aprovações paradas com dias de espera, últimos relatórios com o que foi prometido, briefings, contratos, carteira de anúncios e a história já registrada na memória. Use esta ferramenta ANTES de escrever qualquer coisa sobre o cliente: ela substitui dez chamadas separadas. Atenção: são fatos do painel. O que voltar vazio significa que não há registro, NÃO que o trabalho não existe.',
+  scopes: ['clients:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: { client_id: { type: 'string', format: 'uuid' } },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({ client_id: z.string().uuid() }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await getClientDossier(parsed.data, ctx);
+  },
+};
+
 // ─── Ciclo semanal de operação (o bastidor por cliente) ────────────────────
 const getWeeklyCycleTool: ToolDefinition = {
   name: 'aceleriq_get_weekly_cycle',
@@ -1595,6 +1618,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   updateContractTool,
   cancelContractTool,
   // Persistent per-client/project memory (Studio + external agents)
+  getClientDossierTool,
   getWeeklyCycleTool,
   getProjectMemoryTool,
   upsertProjectMemoryTool,

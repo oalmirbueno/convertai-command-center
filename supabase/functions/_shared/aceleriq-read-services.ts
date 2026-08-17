@@ -1311,3 +1311,130 @@ export async function listWeeklyCycle(opts: {
 
   return { count: items.length, items };
 }
+
+// ─── Dossiê do cliente (tudo em uma chamada) ──────────────────
+/**
+ * O retrato completo de um cliente, pronto para virar contexto de IA.
+ *
+ * Antes, montar esse retrato exigia dez chamadas seguidas do agente externo,
+ * cada uma com ida e volta de rede, e ele ainda precisava saber quais
+ * perguntas fazer. Aqui o servidor faz o trabalho pesado uma vez: junta o
+ * cadastro, as frentes, o bastidor do ciclo, o que está travado, o que já foi
+ * prometido e a história registrada.
+ *
+ * Fatos, nunca interpretação: o que não existe volta como null ou lista
+ * vazia, e quem lê decide o que fazer com isso. Ausência de registro aqui não
+ * significa ausência de trabalho no mundo real.
+ */
+export async function getClientDossier(opts: { client_id: string }, ctx: AuthContext) {
+  if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+  const id = opts.client_id;
+  assertClientAccess(ctx, id);
+
+  const agora = new Date();
+  const seteDias = new Date(agora.getTime() - 7 * 86400000).toISOString();
+  const segunda = (() => {
+    const d = new Date(Date.UTC(agora.getUTCFullYear(), agora.getUTCMonth(), agora.getUTCDate()));
+    d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+    return d;
+  })();
+  const seisSemanas = new Date(segunda);
+  seisSemanas.setUTCDate(seisSemanas.getUTCDate() - 5 * 7);
+
+  const [
+    perfil, projetos, tarefas, ciclo, publicacoes, arquivos, relatorios,
+    briefings, contratos, memoria, carteira,
+  ] = await Promise.all([
+    withTimeout(db().from('profiles').select(F.client).eq('id', id).is('deleted_at', null).maybeSingle()),
+    withTimeout(db().from('projects').select(F.project).eq('client_id', id).is('deleted_at', null)
+      .order('updated_at', { ascending: false }).limit(30)),
+    withTimeout(db().from('tasks').select('id, title, status, priority, due_date, project_id')
+      .eq('client_id', id).is('deleted_at', null)
+      .order('updated_at', { ascending: false }).limit(40)),
+    withTimeout(db().from('weekly_cycle_progress').select('area, week_start, step, done_at')
+      .eq('client_id', id).gte('week_start', seisSemanas.toISOString().slice(0, 10))
+      .order('week_start', { ascending: false }).limit(200)),
+    withTimeout(db().from('editorial_publications').select('id, status, scheduled_at, published_at')
+      .eq('client_id', id).order('scheduled_at', { ascending: false }).limit(60)),
+    withTimeout(db().from('files').select('file_name, created_at, approval_status, visibility')
+      .eq('client_id', id).is('archived_at', null).is('parent_file_id', null)
+      .order('created_at', { ascending: false }).limit(30)),
+    withTimeout(db().from('reports').select('id, title, status, summary, next_steps, created_at, metrics')
+      .eq('client_id', id).order('created_at', { ascending: false }).limit(10)),
+    withTimeout(db().from('briefings').select('responses, submitted, created_at')
+      .eq('client_id', id).eq('submitted', true)
+      .order('created_at', { ascending: false }).limit(3)),
+    withTimeout(db().from('contracts').select('title, status, created_at, updated_at')
+      .eq('client_id', id).order('updated_at', { ascending: false }).limit(5)),
+    withTimeout(db().from('project_memory').select('kind, title, content, source, created_at')
+      .eq('client_id', id).order('created_at', { ascending: false }).limit(15)),
+    withTimeout(db().from('ads_wallet').select('platform, balance, last_recharge_date')
+      .eq('client_id', id).limit(5)),
+  ]);
+
+  const linhas = <T,>(res: { data: T[] | null }) => res.data ?? [];
+  const cicloRows = linhas(ciclo) as Array<{ area: string; week_start: string; step: number }>;
+
+  // Bastidor por semana e frente: prova de que a rotina rodou.
+  const porSemana = new Map<string, { area: string; week_start: string; steps: number[] }>();
+  for (const row of cicloRows) {
+    const chave = `${row.area}:${row.week_start}`;
+    if (!porSemana.has(chave)) {
+      porSemana.set(chave, { area: row.area, week_start: row.week_start, steps: [] });
+    }
+    porSemana.get(chave)!.steps.push(row.step);
+  }
+  const cicloResumo = [...porSemana.values()].map((g) => ({
+    area: g.area,
+    week_start: g.week_start,
+    done_count: g.steps.filter((s) => s <= 6).length,
+    total: 6,
+    closed: g.steps.filter((s) => s <= 6).length >= 6,
+  }));
+
+  const arquivosRows = linhas(arquivos) as Array<{
+    file_name: string; created_at: string; approval_status: string | null; visibility: string | null;
+  }>;
+  const pubRows = linhas(publicacoes) as Array<{
+    status: string; scheduled_at: string | null; published_at: string | null;
+  }>;
+  const diasDesde = (iso: string) =>
+    Math.floor((agora.getTime() - new Date(iso).getTime()) / 86400000);
+
+  const perfilData = (perfil.data ?? null) as Record<string, unknown> | null;
+  const servicos = (perfilData?.services_config ?? {}) as Record<string, unknown>;
+
+  return {
+    client: perfilData,
+    // Serviços contratados: o que o cliente paga, para a mensagem falar de
+    // todas as frentes e não só da que teve movimento.
+    contracted_services: Object.entries(servicos)
+      .filter(([, v]) => v === true)
+      .map(([k]) => k),
+    projects: linhas(projetos),
+    tasks_open: (linhas(tarefas) as Array<{ status: string }>).filter((t) => t.status !== 'done'),
+    weekly_cycle: cicloResumo,
+    publications: {
+      published_last_7d: pubRows.filter(
+        (p) => p.status === 'published' && p.published_at && p.published_at >= seteDias,
+      ).length,
+      scheduled_ahead: pubRows.filter(
+        (p) => p.status === 'scheduled' && p.scheduled_at && new Date(p.scheduled_at) > agora,
+      ).length,
+      // Agendada cuja data passou sem publicar: janela perdida, não cobrança.
+      missed: pubRows.filter(
+        (p) => p.status === 'scheduled' && p.scheduled_at && new Date(p.scheduled_at) < agora,
+      ).length,
+    },
+    deliveries_last_7d: arquivosRows.filter((f) => f.created_at >= seteDias).map((f) => f.file_name),
+    pending_approvals: arquivosRows
+      .filter((f) => f.approval_status === 'pending')
+      .map((f) => ({ file_name: f.file_name, days_waiting: diasDesde(f.created_at) })),
+    reports: linhas(relatorios),
+    briefings: linhas(briefings),
+    contracts: linhas(contratos),
+    memory: linhas(memoria),
+    ads_wallets: linhas(carteira),
+    generated_at: agora.toISOString(),
+  };
+}
