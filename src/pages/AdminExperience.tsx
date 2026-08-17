@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ import {
 } from "@/hooks/useSocialMetrics";
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
+import { useNow } from "@/hooks/useNow";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
 import {
   buildRadarIdeas,
@@ -24,7 +25,7 @@ import {
 import { notifyUser } from "@/lib/notifyHelpers";
 import { toast } from "sonner";
 import {
-  HeartPulse, AlertTriangle, Sparkles, FileText, Send, CheckCircle2,
+  HeartPulse, AlertTriangle, Sparkles, FileText, Send, CheckCircle2, RefreshCw,
   Clock, ArrowUpRight, ShieldAlert, Radar, Star, UserCircle, Trash2, Loader2,
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -132,7 +133,16 @@ export default function AdminExperience() {
   const [draftEdits, setDraftEdits] = useState<Record<string, { summary: string; next_steps: string }>>({});
 
   // Tudo com atualização automática: a Central reflete a movimentação em tempo real.
+  // A Central e a tela que o dono deixa aberta o dia todo: alem do intervalo
+  // curto, ela revalida ao voltar para a aba e ao reconectar. O padrao global
+  // do painel desliga a revalidacao por foco, e era por isso que a tela ficava
+  // mostrando numeros de horas atras.
   const LIVE = 20000;
+  const AO_VIVO = {
+    refetchInterval: LIVE,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
+  } as const;
 
   const { data: pendingApprovalFiles = [] } = useQuery({
     queryKey: ["exp-pending-approvals"],
@@ -149,7 +159,7 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: LIVE,
+    ...AO_VIVO,
   });
 
   const { data: releasedFiles = [] } = useQuery({
@@ -165,7 +175,7 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: LIVE,
+    ...AO_VIVO,
   });
 
   const { data: allMilestones = [] } = useQuery({
@@ -178,7 +188,7 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: LIVE,
+    ...AO_VIVO,
   });
 
   // Metricas REAIS do Instagram para os rituais falarem de numeros, nao so
@@ -205,6 +215,7 @@ export default function AdminExperience() {
       return (data || []) as Array<{ client_id: string; step: number }>;
     },
     staleTime: 30_000,
+    ...AO_VIVO,
   });
   const cycleDoneByClient = useMemo(() => {
     const map = new Map<string, number>();
@@ -235,7 +246,7 @@ export default function AdminExperience() {
       if (error) return [];
       return data || [];
     },
-    refetchInterval: LIVE,
+    ...AO_VIVO,
   });
 
   const { data: reports = [] } = useQuery({
@@ -248,7 +259,7 @@ export default function AdminExperience() {
       if (error) throw error;
       return data || [];
     },
-    refetchInterval: LIVE,
+    ...AO_VIVO,
   });
 
   // Carteira recorrente completa: ativos E em onboarding entram nos rituais.
@@ -924,6 +935,113 @@ export default function AdminExperience() {
     };
   };
 
+  /**
+   * Os fatos daquele cliente naquela semana, em linhas secas. É o que a IA
+   * recebe para escrever o ritual: ela não inventa nada, só interpreta o que
+   * realmente aconteceu no painel.
+   */
+  // Quando os números foram lidos por último, em linguagem de gente.
+  const [lastSync, setLastSync] = useState(() => Date.now());
+  const [refreshing, setRefreshing] = useState(false);
+  const nowTick = useNow(30_000);
+  const lastSyncLabel = (() => {
+    const min = Math.floor((nowTick.getTime() - lastSync) / 60_000);
+    if (min < 1) return "agora";
+    if (min === 1) return "1 minuto atrás";
+    if (min < 60) return `${min} minutos atrás`;
+    const h = Math.floor(min / 60);
+    return h === 1 ? "1 hora atrás" : `${h} horas atrás`;
+  })();
+
+  const refreshCentral = async () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    try {
+      await queryClient.refetchQueries({ type: "active" });
+      setLastSync(Date.now());
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  // Cada rodada automática também conta como leitura nova.
+  useEffect(() => {
+    setLastSync(Date.now());
+  }, [pendingApprovalFiles, releasedFiles, allPublications, reports]);
+
+  const collectFacts = (client: any): string => {
+    const now = new Date();
+    const weekAgo = new Date(now.getTime() - 7 * 86400000);
+    const nome = client.company_name || client.full_name;
+    const clientProjects = (projects || []).filter(
+      (p: any) => p.client_id === client.id && !p.deleted_at,
+    );
+    const ativos = clientProjects.filter((p: any) => p.status !== "done");
+    const liberadas = (releasedFiles || []).filter(
+      (f: any) => f.client_id === client.id && new Date(f.created_at) >= weekAgo,
+    );
+    const pendentes = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
+    const maisAntiga = pendentes
+      .map((f: any) => daysSince(f.created_at))
+      .filter((d): d is number => d !== null)
+      .sort((a, b) => b - a)[0];
+    const pubs = (allPublications || []).filter((p: any) => p.client_id === client.id);
+    const noAr = pubs.filter(
+      (p: any) => p.status === "published" && p.published_at && new Date(p.published_at) >= weekAgo,
+    );
+    const agendadas = pubs.filter(
+      (p: any) => p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) > now,
+    );
+    const etapas = (allMilestones || []).filter((m: any) =>
+      clientProjects.some((p: any) => p.id === m.project_id),
+    );
+    const proximas = etapas
+      .filter((m: any) => m.status !== "completed" && m.due_date)
+      .sort((a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date)))
+      .slice(0, 3);
+    const concluidas = etapas.filter(
+      (m: any) => m.status === "completed" && m.updated_at && new Date(m.updated_at) >= weekAgo,
+    );
+    const ig = igByClient.get(client.id) || [];
+    const igUltima = ig[0];
+    const pct = (campo: "followers" | "reach" | "total_interactions") => {
+      const d = weekDeltaPct(ig, campo);
+      return d === null ? "" : ` (${d >= 0 ? "+" : ""}${Math.round(d)}% vs semana anterior)`;
+    };
+    const cicloFeito = cycleDoneByClient.get(client.id) || 0;
+
+    return [
+      `Cliente: ${nome}`,
+      `Tempo de casa: ${daysSince(client.created_at) ?? "?"} dias`,
+      client.plan_name ? `Plano: ${client.plan_name}` : "",
+      `Frentes ativas: ${ativos.map((p: any) => p.name).join("; ") || "nenhuma"}`,
+      `Entregas liberadas nos últimos 7 dias: ${liberadas.length}${
+        liberadas.length ? ` (${liberadas.slice(0, 4).map((f: any) => f.file_name).join(", ")})` : ""
+      }`,
+      `Aprovações paradas agora: ${pendentes.length}${
+        pendentes.length
+          ? ` (${pendentes.slice(0, 3).map((f: any) => f.file_name).join(", ")}${
+              maisAntiga !== undefined ? `; a mais antiga há ${maisAntiga} dias` : ""
+            })`
+          : ""
+      }`,
+      `Publicações no ar nos últimos 7 dias: ${noAr.length}`,
+      `Publicações já agendadas: ${agendadas.length}`,
+      `Etapas concluídas nos últimos 7 dias: ${concluidas.map((m: any) => m.title).join("; ") || "nenhuma"}`,
+      `Próximas etapas com data: ${
+        proximas.map((m: any) => `${m.title} (${new Date(m.due_date).toLocaleDateString("pt-BR")})`).join("; ") || "nenhuma"
+      }`,
+      igUltima
+        ? `Instagram na última semana medida: ${igUltima.followers ?? "?"} seguidores${pct("followers")}, alcance ${igUltima.reach ?? "?"}${pct("reach")}, ${igUltima.total_interactions ?? "?"} interações${pct("total_interactions")}`
+        : `Instagram: sem medição registrada`,
+      cicloFeito > 0
+        ? `Bastidor da semana: ${cicloFeito} de 6 etapas do nosso ciclo interno concluídas para este cliente`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+  };
+
   const hasRecentDraft = (clientId: string, ritual: string) =>
     (reports || []).some((r: any) => {
       if (r.client_id !== clientId) return false;
@@ -933,7 +1051,7 @@ export default function AdminExperience() {
     });
 
   // Passo 1: pré-visualizar. Nada é criado antes de você ver.
-  const previewDrafts = () => {
+  const previewDrafts = async () => {
     const targets = genClientId === "__all__"
       ? portfolioClients
       : portfolioClients.filter((c: any) => c.id === genClientId);
@@ -943,13 +1061,36 @@ export default function AdminExperience() {
       (projects || []).some((p: any) => p.client_id === c.id && !p.deleted_at)
     );
     const skippedNoProject = targets.length - withProject.length;
-    const previews: DraftPreview[] = withProject
-      .filter((c: any) => !hasRecentDraft(c.id, genRitual))
-      .map((c: any) => ({
-        clientId: c.id,
-        clientName: c.company_name || c.full_name,
-        draft: buildDraft(c, genRitual),
-      }));
+    const alvos = withProject.filter((c: any) => !hasRecentDraft(c.id, genRitual));
+    if (alvos.length === 0 && skippedNoProject === 0) {
+      toast.info("Todos os clientes selecionados já têm rascunho recente deste ritual.");
+      return;
+    }
+
+    // A IA escreve cada ritual a partir dos fatos reais do cliente. O texto de
+    // molde vai junto como reserva: se a IA não responder, o rascunho sai
+    // mesmo assim, e o dono revisa antes de qualquer coisa ser enviada.
+    setGenerating(true);
+    const previews: DraftPreview[] = await Promise.all(
+      alvos.map(async (c: any) => {
+        const draft: any = buildDraft(c, genRitual);
+        const clientName = c.company_name || c.full_name;
+        try {
+          const { data } = await supabase.functions.invoke("ritual-writer", {
+            body: { ritual: genRitual, client_name: clientName, facts: collectFacts(c) },
+          });
+          if (data?.body) {
+            draft.summary = data.body;
+            if (data.title) draft.title = String(data.title).slice(0, 80);
+            draft.metrics = { ...(draft.metrics || {}), written_by: "ai" };
+          }
+        } catch {
+          /* sem IA agora: segue com o texto de reserva */
+        }
+        return { clientId: c.id, clientName, draft };
+      }),
+    );
+    setGenerating(false);
     if (skippedNoProject > 0) {
       toast.info(`${skippedNoProject} cliente(s) sem projeto cadastrado ficaram fora. Crie um projeto para eles entrarem nos rituais.`);
     }
@@ -1107,13 +1248,23 @@ export default function AdminExperience() {
   const openClientProfile = (clientId: string) => navigate(`/clientes?client=${clientId}`);
 
   return (
-    <div className="space-y-6 animate-fade-in">
+    <div className="space-y-7">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="heading-page">Central de Experiência</h1>
-          <p className="text-xs text-muted-foreground mt-1">
+          <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
             Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente.
           </p>
+          {/* Sinal de vida: a tela mostra quando os números foram lidos por
+              último e deixa forçar a leitura, em vez de parecer parada. */}
+          <button
+            type="button"
+            onClick={() => void refreshCentral()}
+            className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary/40 px-2.5 py-1 text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+            {refreshing ? "Atualizando..." : `Dados de ${lastSyncLabel}`}
+          </button>
         </div>
         <button
           onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
@@ -1184,7 +1335,7 @@ export default function AdminExperience() {
       })()}
 
       {/* Resumo vivo: cada cartao e um atalho para a aba onde se age */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 sm:gap-3 lg:grid-cols-5 xl:gap-4">
         {[
           { label: "Saudáveis", value: healthy, color: "text-success", icon: HeartPulse, tab: "carteira" },
           { label: "Em atenção", value: attention, color: "text-warning", icon: Clock, tab: "carteira" },
@@ -1369,7 +1520,7 @@ export default function AdminExperience() {
                   </button>
                 </div>
 
-                <div className="grid lg:grid-cols-2 gap-4 auto-rows-fr">
+                <div className="lista-longa grid gap-4 auto-rows-fr lg:grid-cols-2 xl:gap-5">
                   {/* Plano de mensagens do período */}
                   <div className="bg-card border border-border rounded-xl overflow-hidden h-full flex flex-col">
                     <div className="px-5 py-3 border-b border-border">
@@ -1562,10 +1713,10 @@ export default function AdminExperience() {
 
         {/* ── Radar do mês ── */}
         <TabsContent value="radar">
-          <div className="space-y-2">
+          <div className="lista-longa space-y-3">
             {opportunities.length > 0 && (
               <div className="rounded-xl border border-border bg-card p-4">
-                <p className="text-[12px] leading-relaxed text-muted-foreground">
+                <p className="max-w-3xl text-[12.5px] leading-[1.7] text-muted-foreground">
                   O Radar é o ritual de antecipação da carteira recorrente: uma vez por mês a
                   Aceleriq chega com uma ideia de diferenciação que o cliente até já pensou em fazer
                   e nunca executou. Cada ideia carrega o momento real dele (frentes, materiais

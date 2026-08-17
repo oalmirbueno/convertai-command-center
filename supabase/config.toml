@@ -93,6 +93,8 @@ project_id = "aceleriq-os"
     verify_jwt = true
   [functions.cycle-brain-log]
     verify_jwt = true
+  [functions.ritual-writer]
+    verify_jwt = true
   [functions.radar-ideas]
     verify_jwt = true
   [functions.send-contract-email]

@@ -142,6 +142,16 @@
   }
 
   /*
+   * Listas longas (a carteira inteira na Central, por exemplo) só desenham o
+   * que está perto da tela. O navegador pula o trabalho do resto e a rolagem
+   * fica leve mesmo com dezenas de cartões pesados abertos.
+   */
+  .lista-longa > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 220px;
+  }
+
+  /*
    * A tela do aparelho pode ter regiões que nenhum elemento alcança (a faixa
    * do indicador do iOS, por exemplo, que versões novas às vezes deixam fora
    * da área de layout). Quem pinta essas regiões é o fundo do documento: com
