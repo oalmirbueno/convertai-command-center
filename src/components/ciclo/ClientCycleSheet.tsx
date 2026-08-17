@@ -38,11 +38,14 @@ export interface ClientCycleSheetProps {
   historyWeekKeys: string[];
   historySets: Map<string, Set<number>>;
   doneMap: Map<string, { id: string; step: number; done_at?: string | null; done_by?: string | null }>;
+  /** Marcações da semana anterior, para corrigir o que já foi feito lá. */
+  pastRows?: Array<{ id: string; client_id: string; area: string; step: number; done_at?: string | null; done_by?: string | null }>;
+  pastWeekKey?: string;
   doneByNames?: Record<string, string>;
   currentUserId?: string;
   canWrite: boolean;
   pendingKey: string | null;
-  onToggle: (client: any, step: number) => Promise<void> | void;
+  onToggle: (client: any, step: number, semana?: string) => Promise<void> | void;
   onClose: () => void;
 }
 
@@ -64,9 +67,13 @@ function monthsSince(iso?: string | null): string | null {
 
 export default function ClientCycleSheet({
   client, area, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
-  doneByNames, currentUserId, canWrite, pendingKey, onToggle, onClose,
+  pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
+  onToggle, onClose,
 }: ClientCycleSheetProps) {
   const [bulkRunning, setBulkRunning] = useState(false);
+  // Qual semana está sendo editada aqui dentro. A tela continua na semana
+  // atual; só esta folha volta uma semana para acertar o que ficou faltando.
+  const [editandoAnterior, setEditandoAnterior] = useState(false);
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
   const open = !!client;
@@ -75,12 +82,23 @@ export default function ClientCycleSheet({
   const clientTotal = totalSteps + (onboarding ? ONBOARDING_STEPS.length : 0);
   const clientName = client?.company_name || client?.full_name || "Cliente";
 
+  // Marcações da semana que está sendo editada nesta folha.
+  const marcacaoDe = (step: number) => {
+    if (!client) return undefined;
+    if (!editandoAnterior) return doneMap.get(`${client.id}:${area}:${step}`);
+    return pastRows.find(
+      (row) => row.client_id === client.id && row.area === area && row.step === step,
+    );
+  };
+
   const doneSteps = useMemo(() => {
     if (!client) return [] as number[];
     return Array.from({ length: clientTotal }, (_, index) => index + 1).filter((step) =>
-      doneMap.has(`${client.id}:${area}:${step}`),
+      editandoAnterior
+        ? pastRows.some((r) => r.client_id === client.id && r.area === area && r.step === step)
+        : doneMap.has(`${client.id}:${area}:${step}`),
     );
-  }, [client, clientTotal, doneMap, area]);
+  }, [client, clientTotal, doneMap, area, editandoAnterior, pastRows]);
 
   const complete = doneSteps.length >= clientTotal;
 
@@ -163,12 +181,14 @@ export default function ClientCycleSheet({
   const fecharSemana = async () => {
     if (!client || bulkRunning) return;
     const faltando = Array.from({ length: clientTotal }, (_, index) => index + 1).filter(
-      (step) => !doneMap.has(`${client.id}:${area}:${step}`),
+      (step) => !marcacaoDe(step),
     );
     if (faltando.length === 0) return;
     setBulkRunning(true);
     try {
-      for (const step of faltando) await onToggle(client, step);
+      for (const step of faltando) {
+        await onToggle(client, step, editandoAnterior ? pastWeekKey : undefined);
+      }
       toast.success(`Semana de ${clientName} fechada.`);
     } finally {
       setBulkRunning(false);
@@ -215,7 +235,7 @@ export default function ClientCycleSheet({
                   <span
                     key={index}
                     className={`flex-1 rounded-full ${
-                      doneMap.has(`${client.id}:${area}:${index + 1}`)
+                      marcacaoDe(index + 1)
                         ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
                         : "bg-secondary"
                     }`}
@@ -261,14 +281,46 @@ export default function ClientCycleSheet({
                 </p>
               )}
 
-              {/* Etapas com nome inteiro */}
-              <p className="mt-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Etapas da semana
-              </p>
+              {/* Etapas com nome inteiro, na semana escolhida aqui dentro */}
+              <div className="mt-4 flex items-center justify-between gap-2">
+                <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Etapas {editandoAnterior ? "da semana passada" : "desta semana"}
+                </p>
+                {pastWeekKey && (
+                  <div className="flex items-center gap-0.5 rounded-lg bg-secondary/60 p-0.5">
+                    {[
+                      { valor: false, texto: "Esta semana" },
+                      { valor: true, texto: "Anterior" },
+                    ].map((opcao) => (
+                      <button
+                        key={opcao.texto}
+                        type="button"
+                        onClick={() => setEditandoAnterior(opcao.valor)}
+                        className={`rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors ${
+                          editandoAnterior === opcao.valor
+                            ? "bg-card text-foreground shadow-sm"
+                            : "text-muted-foreground"
+                        }`}
+                      >
+                        {opcao.texto}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {editandoAnterior && (
+                <p className="mt-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                  Você está corrigindo a semana de{" "}
+                  {new Date(`${pastWeekKey}T12:00:00`).toLocaleDateString("pt-BR", {
+                    day: "2-digit", month: "2-digit",
+                  })}
+                  . Serve para registrar o que já tinha sido feito e ficou sem marcar.
+                </p>
+              )}
               <div className="mt-2 space-y-1.5">
                 {Array.from({ length: clientTotal }, (_, index) => index + 1).map((step) => {
-                  const key = `${client.id}:${area}:${step}`;
-                  const row = doneMap.get(key);
+                  const key = `${client.id}:${area}:${step}${editandoAnterior ? ":anterior" : ""}`;
+                  const row = marcacaoDe(step);
                   const done = !!row;
                   const onboardingTrack = step > totalSteps;
                   const who = row?.done_by
@@ -279,7 +331,7 @@ export default function ClientCycleSheet({
                       key={key}
                       type="button"
                       disabled={!canWrite || pendingKey === key || bulkRunning}
-                      onClick={() => void onToggle(client, step)}
+                      onClick={() => void onToggle(client, step, editandoAnterior ? pastWeekKey : undefined)}
                       className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
                         done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
                       } ${pendingKey === key ? "opacity-50" : ""}`}

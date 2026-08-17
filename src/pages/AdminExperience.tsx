@@ -13,6 +13,7 @@ import {
 } from "@/hooks/useSocialMetrics";
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
+import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { useNow } from "@/hooks/useNow";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
 import {
@@ -137,6 +138,31 @@ export default function AdminExperience() {
   // curto, ela revalida ao voltar para a aba e ao reconectar. O padrao global
   // do painel desliga a revalidacao por foco, e era por isso que a tela ficava
   // mostrando numeros de horas atras.
+  // Estado das campanhas e o objetivo declarado pelo cliente: sem isso o
+  // ritual só sabia falar de conteúdo, e tráfego é metade do trabalho.
+  const { data: adsWallets = [] } = useQuery({
+    queryKey: ["exp-ads-wallets"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("ads_wallet")
+        .select("client_id, balance, platform, last_recharge_date");
+      return data || [];
+    },
+    staleTime: 120_000,
+  });
+
+  const { data: briefings = [] } = useQuery({
+    queryKey: ["exp-briefings"],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from("briefings")
+        .select("client_id, responses, submitted, created_at")
+        .eq("submitted", true);
+      return data || [];
+    },
+    staleTime: 300_000,
+  });
+
   const LIVE = 20000;
   const AO_VIVO = {
     refetchInterval: LIVE,
@@ -1010,10 +1036,59 @@ export default function AdminExperience() {
     };
     const cicloFeito = cycleDoneByClient.get(client.id) || 0;
 
+    // Serviços contratados: o ritual precisa falar de TODAS as frentes que o
+    // cliente paga, não só da que teve movimento na semana.
+    const servicos = client.services_config || {};
+    const contratados = Object.entries(SERVICE_NAMES)
+      .filter(([chave]) => servicos[chave] === true)
+      .map(([, nome]) => nome);
+
+    // Tráfego: o estado real da frente paga. Contratado e sem carteira é
+    // "ainda não começou", e isso precisa aparecer na mensagem, não sumir.
+    const temTrafego = servicos.trafego === true;
+    const carteira = (adsWallets || []).find((w: any) => w.client_id === client.id);
+    const trafegoLinha = !temTrafego
+      ? ""
+      : carteira && Number(carteira.balance) > 0
+        ? `Tráfego pago: ativo, saldo de campanha R$ ${Number(carteira.balance).toLocaleString("pt-BR")}${
+            carteira.last_recharge_date
+              ? `, última recarga em ${new Date(carteira.last_recharge_date).toLocaleDateString("pt-BR")}`
+              : ""
+          }`
+        : carteira
+          ? `Tráfego pago: CONTRATADO, porém a verba de campanha está zerada. As campanhas não rodam sem recarga: isso precisa ser dito com clareza e é a pendência mais importante do cliente.`
+          : `Tráfego pago: CONTRATADO, mas AINDA NÃO INICIADO (sem carteira de anúncios configurada). Explique o que falta para começar e o que ele perde enquanto não começa.`;
+
+    // O que o cliente disse que quer, na entrada. É o objetivo que dá sentido
+    // a tudo o que a gente faz por ele.
+    const briefing = (briefings || []).find(
+      (b: any) => b.client_id === client.id && b.submitted && b.responses,
+    );
+    const objetivo = briefing
+      ? Object.entries(briefing.responses as Record<string, unknown>)
+          .filter(([chave]) => /objetivo|meta|desafio|dor|espera|resultado/i.test(chave))
+          .map(([, valor]) => String(valor))
+          .filter((v) => v && v.length > 8)
+          .slice(0, 2)
+          .join(" | ")
+      : "";
+
+    // Continuidade: o que a gente prometeu na última mensagem. Sem isso, cada
+    // ritual recomeça do zero e o cliente sente que ninguém lembra do anterior.
+    const anterior = (reports || [])
+      .filter((r: any) => r.client_id === client.id && r.status === "published")
+      .sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+
     return [
       `Cliente: ${nome}`,
       `Tempo de casa: ${daysSince(client.created_at) ?? "?"} dias`,
       client.plan_name ? `Plano: ${client.plan_name}` : "",
+      contratados.length ? `Serviços contratados (fale de todos, não só do que teve movimento): ${contratados.join(", ")}` : "",
+      objetivo ? `Objetivo declarado pelo cliente no briefing: ${objetivo}` : "",
+      trafegoLinha,
+      anterior
+        ? `Na última mensagem publicada (${new Date(anterior.created_at).toLocaleDateString("pt-BR")}) a gente disse: "${String(anterior.next_steps || anterior.summary || "").slice(0, 400)}" — retome isso: cumprimos, avançou, ou continua pendente?`
+        : `Primeira mensagem para este cliente: apresente o método e o que ele pode esperar do nosso ritmo.`,
       `Frentes ativas: ${ativos.map((p: any) => p.name).join("; ") || "nenhuma"}`,
       `Entregas liberadas nos últimos 7 dias: ${liberadas.length}${
         liberadas.length ? ` (${liberadas.slice(0, 4).map((f: any) => f.file_name).join(", ")})` : ""

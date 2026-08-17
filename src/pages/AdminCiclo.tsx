@@ -188,6 +188,23 @@ export default function AdminCiclo() {
     staleTime: 30_000,
   });
 
+  // Semana anterior com identificador de cada marcação: é o que permite
+  // corrigir o que já foi feito lá atrás sem sair da semana atual.
+  const pastWeekKey = localIso(addDays(weekStart, -7));
+  const { data: pastRows } = useQuery({
+    queryKey: ["weekly-cycle-past", user?.id, pastWeekKey],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("weekly_cycle_progress")
+        .select("id, client_id, area, week_start, step, done_at, done_by")
+        .eq("week_start", pastWeekKey);
+      if (error) throw error;
+      return (data || []) as CycleRow[];
+    },
+    enabled: !!user,
+    staleTime: 30_000,
+  });
+
   const historySets = useMemo(() => {
     const map = new Map<string, Set<number>>();
     for (const row of historyRows || []) {
@@ -432,19 +449,26 @@ export default function AdminCiclo() {
     }
   };
 
-  const toggle = async (client: any, step: number) => {
+  const toggle = async (client: any, step: number, semana?: string) => {
     if (!canWrite) return;
-    const key = `${client.id}:${area}:${step}`;
+    const alvoSemana = semana || weekKey;
+    const daSemanaAtual = alvoSemana === weekKey;
+    const key = `${client.id}:${area}:${step}${daSemanaAtual ? "" : `:${alvoSemana}`}`;
     if (pendingKey === key) return;
     setPendingKey(key);
-    const existing = doneMap.get(key);
+    const existing = daSemanaAtual
+      ? doneMap.get(key)
+      : (pastRows || []).find(
+          (row) => row.client_id === client.id && row.area === area
+            && row.step === step && row.week_start === alvoSemana,
+        );
 
-    queryClient.setQueryData<CycleRow[]>(["weekly-cycle", user?.id, weekKey], (current) => {
+    if (daSemanaAtual) queryClient.setQueryData<CycleRow[]>(["weekly-cycle", user?.id, weekKey], (current) => {
       const list = current || [];
       return existing
         ? list.filter((row) => row.id !== existing.id)
         : [...list, {
-            id: `otimista-${key}`, client_id: client.id, area, week_start: weekKey, step,
+            id: `otimista-${key}`, client_id: client.id, area, week_start: alvoSemana, step,
             done_at: new Date().toISOString(), done_by: user?.id || null,
           }];
     });
@@ -457,7 +481,7 @@ export default function AdminCiclo() {
       } else {
         const { error } = await (supabase as any)
           .from("weekly_cycle_progress")
-          .insert({ client_id: client.id, area, week_start: weekKey, step, done_by: user?.id || null });
+          .insert({ client_id: client.id, area, week_start: alvoSemana, step, done_by: user?.id || null });
         if (error) throw error;
 
         if (isOnboarding(client) && step === totalSteps + ONBOARDING_STEPS.length) {
@@ -471,6 +495,7 @@ export default function AdminCiclo() {
       }
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-history"] });
+      await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-past"] });
     } catch (error: unknown) {
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
       toast.error(
@@ -857,6 +882,8 @@ export default function AdminCiclo() {
         historyWeekKeys={historyWeekKeys}
         historySets={historySets}
         doneMap={doneMap}
+        pastRows={pastRows || []}
+        pastWeekKey={pastWeekKey}
         doneByNames={doneByNames}
         currentUserId={user?.id}
         canWrite={canWrite}
