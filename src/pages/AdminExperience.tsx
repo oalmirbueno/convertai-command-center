@@ -1450,6 +1450,7 @@ export default function AdminExperience() {
           </button>
         </div>
         <button
+          data-tour="central-gerador"
           onClick={() => { setGenClientId("__all__"); setGenRitual(ritualForToday()); setGenPreviews(null); setGeneratorOpen(true); }}
           className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-full text-[13px] font-medium bg-primary text-primary-foreground hover:opacity-90 transition-opacity cursor-pointer border-none"
         >
@@ -1703,7 +1704,7 @@ export default function AdminExperience() {
                   </button>
                 </div>
 
-                <div className="lista-longa grid gap-4 auto-rows-fr lg:grid-cols-2 xl:gap-5">
+                <div data-tour="central-carteira" className="lista-longa grid gap-4 auto-rows-fr lg:grid-cols-2 xl:gap-5">
                   {/* Plano de mensagens do período */}
                   <div className="bg-card border border-border rounded-xl overflow-hidden h-full flex flex-col">
                     <div className="px-5 py-3 border-b border-border">

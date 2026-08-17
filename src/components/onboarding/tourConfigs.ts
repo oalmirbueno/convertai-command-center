@@ -144,6 +144,64 @@ export const adminTourSteps: TourStep[] = [
     route: "/relatorios",
   },
 
+  // ── O método por trás do painel ──
+  {
+    target: "[data-tour='welcome']",
+    title: "O método A.C.E.L.E.R.A",
+    description:
+      "O painel não é um monte de telas soltas: ele executa o método da casa. Analisar, Clarear, Estruturar, Lançar, Executar, Revisar e Acelerar. Cada cliente está numa dessas fases, e o sistema usa isso para propor o passo certo para o momento dele, em vez do mesmo para todos.",
+    placement: "center",
+  },
+
+  // ── Central de Experiência ──
+  {
+    target: "[data-tour='nav-central']",
+    title: "Central de Experiência",
+    description:
+      "Onde você cuida da relação com cada cliente: gera as mensagens da semana, revisa, publica e age nos alertas. Nada desta tela aparece para o cliente.",
+    placement: "bottom",
+    route: "/central",
+  },
+  {
+    target: "[data-tour='central-gerador']",
+    title: "As mensagens escritas por IA",
+    description:
+      "A IA escreve cada ritual a partir dos fatos reais daquele cliente: entregas liberadas, aprovações paradas e há quantos dias, publicações no ar, números do Instagram, o que foi prometido na última mensagem e o histórico dele. Ela nunca inventa: o que não está registrado, ela não afirma. Você revisa antes de publicar.",
+    placement: "bottom",
+    route: "/central",
+  },
+  {
+    target: "[data-tour='central-carteira']",
+    title: "A saúde de cada cliente",
+    description:
+      "Cada cartão mostra o estado real da relação: o que está travado, há quanto tempo, e o que precisa de você hoje. Os alertas nascem dos dados, não de opinião.",
+    placement: "top",
+    route: "/central",
+  },
+
+  // ── Ciclo da Semana ──
+  {
+    target: "[data-tour='nav-ciclo']",
+    title: "Ciclo da Semana",
+    description:
+      "O checklist de bolso da operação, que também é um aplicativo separado: abra aceleriq.online/ciclo no celular e adicione à tela inicial. São seis etapas por cliente, por semana.",
+    placement: "bottom",
+  },
+  {
+    target: "[data-tour='nav-ciclo']",
+    title: "Três etapas fixas, três que giram",
+    description:
+      "Criar o conteúdo, atualizar o painel e agendar acontecem toda semana. As outras três mudam por cliente e por semana, tiradas de um acervo organizado pelas fases do método: quem entrou agora recebe tarefas de diagnóstico, quem já tem rotina fechando recebe tarefas de escala. Assim o checklist não vira burocracia.",
+    placement: "bottom",
+  },
+  {
+    target: "[data-tour='nav-ciclo']",
+    title: "Toque no cliente para ver tudo",
+    description:
+      "Dentro de cada cliente: a etapa com nome inteiro, quem marcou e quando, a semana passada para corrigir o que ficou, uma lista rápida que você descreve e o sistema monta, e a história completa da parceria. Fechar a semana registra tudo automaticamente.",
+    placement: "bottom",
+  },
+
   // ── Menu Mais ──
   {
     target: "[data-tour='nav-more']",
@@ -227,6 +285,22 @@ export const clientTourSteps: TourStep[] = [
     description:
       "Ainda em Onde Estamos, role a página: tem a linha do tempo da sua evolução, o gráfico de crescimento montado com os números reais dos relatórios e o resumo Antes e Agora, que mostra tudo o que foi construído desde o começo.",
     placement: "center",
+    route: "/onde-estamos",
+  },
+  {
+    target: "[data-tour='cliente-bastidores']",
+    title: "Os bastidores da sua semana",
+    description:
+      "Antes de qualquer post ir ao ar existe um trabalho que você não vê: conteúdo criado, material organizado, contas conferidas, aprovação enviada, publicações agendadas. Aqui você acompanha esse bastidor, atualizado conforme a equipe avança.",
+    placement: "top",
+    route: "/onde-estamos",
+  },
+  {
+    target: "[data-tour='cliente-historia']",
+    title: "A nossa história até aqui",
+    description:
+      "Cada capítulo da parceria fica guardado: o que foi combinado, o que foi feito e o porquê. Assim nada se perde entre uma conversa e outra, e você consegue ver de onde veio o que está acontecendo hoje.",
+    placement: "top",
     route: "/onde-estamos",
   },
 

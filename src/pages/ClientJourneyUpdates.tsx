@@ -95,7 +95,7 @@ function WeekBackstage({ clientId }: { clientId: string }) {
   if (!data?.fronts?.length) return null;
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+    <section data-tour="cliente-bastidores" className="rounded-xl border border-border bg-card p-5 sm:p-6">
       <div className="flex items-center justify-between gap-2">
         <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Bastidores desta semana
@@ -154,7 +154,7 @@ function ClientHistory({ clientId }: { clientId: string }) {
   if (!entries?.length) return null;
 
   return (
-    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+    <section data-tour="cliente-historia" className="rounded-xl border border-border bg-card p-5 sm:p-6">
       <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
         A nossa história até aqui
       </p>
