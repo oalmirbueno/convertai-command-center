@@ -224,13 +224,14 @@ function phasePool(phase: MethodPhase): MethodPhase[] {
     "analisar", "clarear", "estruturar", "lancar", "executar", "revisar", "acelerar",
   ];
   const indice = ordem.indexOf(phase);
-  return [
+  const candidatas: MethodPhase[] = [
     phase,
     ordem[Math.max(0, indice - 1)],
     ordem[Math.min(ordem.length - 1, indice + 1)],
     // Executar sempre entra: é o trabalho que sustenta qualquer fase.
     "executar",
-  ].filter((valor, posicao, lista) => lista.indexOf(valor) === posicao);
+  ];
+  return candidatas.filter((valor, posicao, lista) => lista.indexOf(valor) === posicao);
 }
 
 function seedFrom(text: string): number {

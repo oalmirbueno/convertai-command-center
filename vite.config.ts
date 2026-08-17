@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { readFileSync } from "fs";
+import { chunkPara, PISO_DE_TAMANHO } from "./config/chunk-strategy";
 
 const PUBLIC_ENV_KEYS = [
   "VITE_SUPABASE_URL",
@@ -95,16 +96,14 @@ export default defineConfig(({ command, mode }) => {
     build: {
       target: ["es2019", "chrome66", "firefox60", "safari12", "edge79"],
 
-      // O arquivo principal passava de 1,3 MB e, em internet lenta, o painel
-      // demorava tanto que o aviso de erro aparecia antes de ele abrir. Separar
-      // as bibliotecas grandes em pedaços próprios deixa cada um menor e
-      // permite que o navegador guarde em cache o que quase nunca muda.
+      // Como o código é fatiado em arquivos, e por quê, está em
+      // config/chunk-strategy.ts — separado para poder ser testado, já que a
+      // regra errada aqui não quebra o build: ela deixa o painel lento só na
+      // máquina do cliente.
       rollupOptions: {
         output: {
-          manualChunks: {
-            react: ["react", "react-dom", "react-router-dom"],
-            dados: ["@tanstack/react-query", "@supabase/supabase-js"],
-          },
+          experimentalMinChunkSize: PISO_DE_TAMANHO,
+          manualChunks: chunkPara,
         },
       },
     },

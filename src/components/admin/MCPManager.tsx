@@ -43,7 +43,14 @@ const EXPIRY_PRESETS: { label: string; days: number | null }[] = [
   { label: "Sem expiração", days: null },
 ];
 
-type AgentId = "chatgpt-work" | "codex" | "claude-code" | "hermes" | "openclaw" | "custom";
+type AgentId =
+  | "chatgpt-work"
+  | "contexto-semanal"
+  | "codex"
+  | "claude-code"
+  | "hermes"
+  | "openclaw"
+  | "custom";
 
 const AGENTS: {
   id: AgentId;
