@@ -22,6 +22,7 @@ import {
   listProjects,
   listReports,
   listTasks,
+  listWeeklyCycle,
   listWorkspaceNodes,
   PUBLISHABLE_DELIVERY_TYPES,
   search,
@@ -215,7 +216,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.8.1',
+  version: '1.9.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1233,13 +1234,44 @@ const cancelContractTool: ToolDefinition = {
   },
 };
 
+
+// ─── Ciclo semanal de operação (o bastidor por cliente) ────────────────────
+const getWeeklyCycleTool: ToolDefinition = {
+  name: 'aceleriq_get_weekly_cycle',
+  title: 'Ciclo da semana — ler',
+  description: 'Lê o checklist semanal de operação por cliente: quais etapas do ciclo (Social Media ou Tráfego Pago) foram concluídas em cada semana, quando e por quem. É o bastidor do trabalho, o que mostra se a rotina rodou de verdade naquela semana. Sem week_start, devolve a semana atual.',
+  scopes: ['projects:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      area: { type: 'string', enum: ['social', 'trafego'] },
+      week_start: { type: 'string', description: 'Segunda-feira da semana, no formato AAAA-MM-DD. Sem isto, usa a semana atual.' },
+      weeks: { type: 'integer', minimum: 1, maximum: 12, description: 'Quantas semanas para trás incluir a partir de week_start.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      area: z.enum(['social', 'trafego']).optional(),
+      week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+      weeks: z.number().int().min(1).max(12).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await listWeeklyCycle(parsed.data);
+  },
+};
+
 // ─── Project Memory (persistent, large context per client/project) ─────────
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
 
 const getProjectMemoryTool: ToolDefinition = {
   name: 'aceleriq_get_project_memory',
   title: 'Memória do projeto — ler',
-  description: 'Lê a memória persistente por cliente e (opcional) projeto. Retorna os N registros mais recentes, incluindo notas, resumos, decisões e fatos consolidados. Use para retomar contexto de onde parou.',
+  description: 'Lê a história persistente de um cliente: mensagens enviadas (ritual), semanas de operação fechadas (ciclo), entregas, aprovações, decisões, anotações da equipe e marcos, além do que agentes externos registraram. Ordem do mais recente para o mais antigo. Use para retomar contexto de onde parou antes de escrever ou decidir qualquer coisa sobre o cliente.',
   scopes: ['projects:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -1247,7 +1279,7 @@ const getProjectMemoryTool: ToolDefinition = {
     properties: {
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
-      kind: { type: 'string', enum: ['note','summary','decision','fact','second_brain','external'] },
+      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external'] },
       limit: { type: 'integer', minimum: 1, maximum: 200 },
     },
     required: ['client_id'],
@@ -1257,7 +1289,7 @@ const getProjectMemoryTool: ToolDefinition = {
     const schema = z.object({
       client_id: z.string().uuid(),
       project_id: z.string().uuid().optional(),
-      kind: z.enum(['note','summary','decision','fact','second_brain','external']).optional(),
+      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external']).optional(),
       limit: z.number().int().min(1).max(200).optional(),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
@@ -1278,7 +1310,7 @@ const upsertProjectMemoryTool: ToolDefinition = {
     properties: {
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
-      kind: { type: 'string', enum: ['note','summary','decision','fact','second_brain','external'] },
+      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external'] },
       source: { type: 'string', maxLength: 60 },
       title: { type: 'string', maxLength: 200 },
       content: { type: 'string', minLength: 3, maxLength: 20000 },
@@ -1292,7 +1324,7 @@ const upsertProjectMemoryTool: ToolDefinition = {
     const schema = z.object({
       client_id: z.string().uuid(),
       project_id: z.string().uuid().optional(),
-      kind: z.enum(['note','summary','decision','fact','second_brain','external']).optional(),
+      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external']).optional(),
       source: z.string().max(60).optional(),
       title: z.string().max(200).optional(),
       content: z.string().min(3).max(20000),
@@ -1563,6 +1595,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   updateContractTool,
   cancelContractTool,
   // Persistent per-client/project memory (Studio + external agents)
+  getWeeklyCycleTool,
   getProjectMemoryTool,
   upsertProjectMemoryTool,
   // Files v2 (Bloco B — v1.7.0)

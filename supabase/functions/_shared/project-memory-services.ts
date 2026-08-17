@@ -8,7 +8,19 @@ const admin = () => createClient(
   { auth: { persistSession: false } },
 );
 
-export type MemoryKind = 'note' | 'summary' | 'decision' | 'fact' | 'second_brain' | 'external';
+// Os tipos gravados pelo painel (ritual, ciclo, entrega...) convivem com os
+// tipos antigos usados por agentes externos. Ler a memória de um cliente
+// precisa enxergar as duas origens: é a mesma história.
+export type MemoryKind =
+  // origem: painel Aceleriq
+  | 'ritual' | 'ciclo' | 'entrega' | 'aprovacao' | 'decisao' | 'nota' | 'marco'
+  // origem: agentes externos e Studio
+  | 'note' | 'summary' | 'decision' | 'fact' | 'second_brain' | 'external';
+
+export const MEMORY_KINDS: readonly MemoryKind[] = [
+  'ritual', 'ciclo', 'entrega', 'aprovacao', 'decisao', 'nota', 'marco',
+  'note', 'summary', 'decision', 'fact', 'second_brain', 'external',
+] as const;
 
 export async function listMemory(opts: {
   client_id: string;

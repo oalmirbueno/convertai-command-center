@@ -17,8 +17,14 @@ describe("legacy MCP editorial contract", () => {
     expect(tools).toContain("aceleriq_create_editorial_item");
     expect(tools).toContain("'editorial:read'");
     expect(tools).toContain("'editorial:write'");
-    expect(tools).toContain("version: '1.8.1'");
-    expect(metadata).toContain("const MCP_VERSION = '1.8.1'");
+    // O contrato aqui é o ALINHAMENTO, não um número fixo: as duas pontas do
+    // MCP precisam anunciar a mesma versão, senão o cliente descobre um
+    // catálogo e conversa com outro. Pinar o número fazia o teste quebrar a
+    // cada atualização legítima do servidor, sem defeito nenhum por trás.
+    const versaoNasFerramentas = tools.match(/version: '(\d+\.\d+\.\d+)'/)?.[1];
+    const versaoNaDescoberta = metadata.match(/const MCP_VERSION = '(\d+\.\d+\.\d+)'/)?.[1];
+    expect(versaoNasFerramentas).toBeDefined();
+    expect(versaoNaDescoberta).toBe(versaoNasFerramentas);
     expect(server).toContain("listChanged: false");
   });
 

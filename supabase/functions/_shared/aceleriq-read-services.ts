@@ -1227,3 +1227,87 @@ export async function fetchEntity(opts: { type: EntityType; id: string }) {
     }
   }
 }
+
+// ─── Ciclo semanal de operação ────────────────────────────────
+/**
+ * O bastidor por cliente: quais etapas do ciclo semanal foram concluídas em
+ * cada semana, quando e por quem. É o que diferencia "a rotina rodou" de "a
+ * gente acha que rodou", e o que dá continuidade real ao contexto de um
+ * cliente entre uma conversa e outra.
+ */
+export async function listWeeklyCycle(opts: {
+  client_id?: string;
+  area?: 'social' | 'trafego';
+  week_start?: string;
+  weeks?: number;
+}) {
+  const semanas = Math.min(Math.max(opts.weeks ?? 1, 1), 12);
+
+  // A tabela guarda a segunda-feira da semana; o cálculo acompanha em UTC.
+  const base = opts.week_start
+    ? new Date(`${opts.week_start}T00:00:00Z`)
+    : (() => {
+        const hoje = new Date();
+        const d = new Date(Date.UTC(hoje.getUTCFullYear(), hoje.getUTCMonth(), hoje.getUTCDate()));
+        d.setUTCDate(d.getUTCDate() - ((d.getUTCDay() + 6) % 7));
+        return d;
+      })();
+  if (Number.isNaN(base.getTime())) throw new Error('week_start must be YYYY-MM-DD');
+  const desde = new Date(base);
+  desde.setUTCDate(desde.getUTCDate() - (semanas - 1) * 7);
+
+  let qb = db()
+    .from('weekly_cycle_progress')
+    .select('client_id, area, week_start, step, done_at, done_by')
+    .gte('week_start', desde.toISOString().slice(0, 10))
+    .lte('week_start', base.toISOString().slice(0, 10))
+    .order('week_start', { ascending: false })
+    .order('step', { ascending: true })
+    .limit(READ_LIMITS.maxPageSize);
+
+  if (opts.client_id) {
+    if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+    qb = qb.eq('client_id', opts.client_id);
+  }
+  if (opts.area) qb = qb.eq('area', opts.area);
+
+  const { data, error } = await qb;
+  if (error) throw new Error(error.message);
+
+  // Agrupado por cliente, frente e semana: é como a informação é lida.
+  const CICLO_TOTAL = 6;
+  const grupos = new Map<string, {
+    client_id: string; area: string; week_start: string;
+    steps: number[]; last_done_at: string | null;
+  }>();
+  for (const row of data || []) {
+    const chave = `${row.client_id}:${row.area}:${row.week_start}`;
+    if (!grupos.has(chave)) {
+      grupos.set(chave, {
+        client_id: row.client_id, area: row.area, week_start: row.week_start,
+        steps: [], last_done_at: null,
+      });
+    }
+    const grupo = grupos.get(chave)!;
+    grupo.steps.push(row.step);
+    if (!grupo.last_done_at || String(row.done_at) > grupo.last_done_at) {
+      grupo.last_done_at = row.done_at;
+    }
+  }
+
+  const items = [...grupos.values()].map((grupo) => {
+    const doCiclo = grupo.steps.filter((step) => step <= CICLO_TOTAL);
+    return {
+      client_id: grupo.client_id,
+      area: grupo.area,
+      week_start: grupo.week_start,
+      done_count: doCiclo.length,
+      total: CICLO_TOTAL,
+      closed: doCiclo.length >= CICLO_TOTAL,
+      onboarding_steps: grupo.steps.filter((step) => step > CICLO_TOTAL),
+      last_done_at: grupo.last_done_at,
+    };
+  });
+
+  return { count: items.length, items };
+}
