@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays, Check, CheckCheck, ClipboardCopy, Clock, ExternalLink,
-  FileArchive, FileText, MessageCircle, Sparkles,
+  FileArchive, FileText, MessageCircle, Sparkles, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,6 +19,10 @@ import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
 } from "@/lib/clientMemory";
+import {
+  checklistProgress, createChecklist, deleteChecklist, listChecklists,
+  toggleChecklistItem, type Checklist,
+} from "@/lib/clientChecklist";
 
 /**
  * O cliente por dentro, a partir do Ciclo.
@@ -80,6 +84,9 @@ export default function ClientCycleSheet({
   const [editandoAnterior, setEditandoAnterior] = useState(false);
   const [novaNota, setNovaNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
+  const [pedidoChecklist, setPedidoChecklist] = useState("");
+  const [gerandoChecklist, setGerandoChecklist] = useState(false);
+  const [listas, setListas] = useState<Checklist[]>([]);
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
   const open = !!client;
@@ -109,7 +116,7 @@ export default function ClientCycleSheet({
   const complete = doneSteps.length >= clientTotal;
 
   // Contexto vivo do cliente: o que já está armado e o que saiu esta semana.
-  const { data: contexto } = useQuery({
+  const { data: contexto0 } = useQuery({
     queryKey: ["ciclo-cliente-contexto", client?.id],
     queryFn: async () => {
       const agora = new Date().toISOString();
@@ -146,6 +153,96 @@ export default function ClientCycleSheet({
     enabled: open && !!client?.id,
     staleTime: 60_000,
   });
+
+  // Checklists do momento: o combinado que não cabe no ciclo semanal.
+  const { refetch: recarregarListas } = useQuery({
+    queryKey: ["checklists-cliente", client?.id],
+    queryFn: async () => {
+      const dados = await listChecklists(client.id);
+      setListas(dados);
+      return dados;
+    },
+    enabled: open && !!client?.id,
+    staleTime: 30_000,
+  });
+
+  const gerarChecklist = async () => {
+    const pedido = pedidoChecklist.trim();
+    if (!client || pedido.length < 3 || gerandoChecklist) return;
+    setGerandoChecklist(true);
+    try {
+      // O contexto do cliente vai junto: assim os itens saem específicos,
+      // não uma lista genérica que serviria para qualquer um.
+      const contexto = [
+        `Serviços: ${servicos.join(", ") || "não informado"}`,
+        contexto0?.agendadas?.length ? `${contexto0.agendadas.length} publicação(ões) agendada(s)` : "",
+        contexto0?.arquivos?.length
+          ? `Entregas recentes: ${contexto0.arquivos.map((f: any) => f.file_name).slice(0, 3).join(", ")}`
+          : "",
+      ].filter(Boolean).join("\n");
+
+      const { data } = await supabase.functions.invoke("client-checklist", {
+        body: { request: pedido, client_name: clientName, context: contexto },
+      });
+      const itens: string[] = Array.isArray(data?.items) ? data.items : [];
+      if (itens.length === 0) {
+        toast.error("Não consegui montar a lista. Tente descrever com outras palavras.");
+        return;
+      }
+      const criado = await createChecklist({
+        clientId: client.id,
+        title: data?.title || pedido.slice(0, 50),
+        items: itens,
+        request: pedido,
+        tags: [area],
+      });
+      if (!criado) {
+        toast.error("A lista foi montada, mas não consegui guardar.");
+        return;
+      }
+      setPedidoChecklist("");
+      setListas((atual) => [criado, ...atual]);
+      toast.success(`${itens.length} itens criados${data?.source === "fallback" ? " (sem IA agora)" : ""}.`);
+      void recarregarHistoria();
+    } finally {
+      setGerandoChecklist(false);
+    }
+  };
+
+  const marcarItem = async (lista: Checklist, itemId: string) => {
+    const atualizado = await toggleChecklistItem(lista, itemId);
+    if (!atualizado) {
+      toast.error("Não foi possível marcar agora.");
+      return;
+    }
+    setListas((atual) => atual.map((l) => (l.id === atualizado.id ? atualizado : l)));
+
+    // Lista inteira concluída vira marco na história do cliente.
+    const { done, total } = checklistProgress(atualizado);
+    if (done === total && total > 0) {
+      await recordMemory({
+        clientId: client!.id,
+        kind: "marco",
+        title: `Concluído: ${atualizado.title}`,
+        content:
+          `Todos os ${total} itens foram concluídos: ` +
+          atualizado.items.map((i) => i.text).join("; ") + ".",
+        source: "ciclo",
+        tags: [area, "checklist"],
+      });
+      toast.success("Lista concluída e registrada na história.");
+      void recarregarHistoria();
+    }
+  };
+
+  const removerLista = async (lista: Checklist) => {
+    if (!(await deleteChecklist(lista.id))) {
+      toast.error("Não foi possível remover.");
+      return;
+    }
+    setListas((atual) => atual.filter((l) => l.id !== lista.id));
+    void recarregarHistoria();
+  };
 
   const salvarNota = async () => {
     const texto = novaNota.trim();
@@ -411,13 +508,13 @@ export default function ClientCycleSheet({
               </div>
 
               {/* O que já está armado e o que saiu */}
-              {(contexto?.agendadas?.length || contexto?.arquivos?.length) ? (
+              {(contexto0?.agendadas?.length || contexto0?.arquivos?.length) ? (
                 <>
                   <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Contexto do cliente
                   </p>
                   <div className="mt-2 space-y-1.5">
-                    {(contexto?.agendadas || []).map((pub: any) => (
+                    {(contexto0?.agendadas || []).map((pub: any) => (
                       <div key={pub.id} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
                         <Clock className="h-3.5 w-3.5 shrink-0 text-primary" />
                         <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
@@ -430,7 +527,7 @@ export default function ClientCycleSheet({
                         </span>
                       </div>
                     ))}
-                    {(contexto?.arquivos || []).map((file: any, index: number) => (
+                    {(contexto0?.arquivos || []).map((file: any, index: number) => (
                       <div key={`${file.file_name}-${index}`} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-2">
                         <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
                         <span className="min-w-0 flex-1 truncate text-[11.5px] text-foreground">
@@ -446,6 +543,93 @@ export default function ClientCycleSheet({
                   </div>
                 </>
               ) : null}
+
+              {/* Checklist do momento: o que não cabe no ciclo semanal */}
+              <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Lista rápida
+              </p>
+              <div className="mt-2">
+                <textarea
+                  value={pedidoChecklist}
+                  onChange={(event) => setPedidoChecklist(event.target.value)}
+                  placeholder="Descreva o que precisa ser feito para este cliente. Ex: gravar depoimento na loja, refazer a arte do cardápio e pedir as fotos novas."
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void gerarChecklist()}
+                  disabled={pedidoChecklist.trim().length < 3 || gerandoChecklist}
+                  className="mt-1.5 flex w-full items-center justify-center gap-1.5 rounded-xl bg-primary py-2 text-[11.5px] font-bold text-primary-foreground disabled:opacity-40"
+                >
+                  <Sparkles className={`h-3.5 w-3.5 ${gerandoChecklist ? "animate-pulse" : ""}`} />
+                  {gerandoChecklist ? "Montando a lista..." : "Montar checklist"}
+                </button>
+              </div>
+
+              {listas.length > 0 && (
+                <div className="mt-3 space-y-2.5">
+                  {listas.map((lista) => {
+                    const { done, total } = checklistProgress(lista);
+                    const completa = done === total;
+                    return (
+                      <div
+                        key={lista.id}
+                        className={`rounded-xl border p-2.5 ${
+                          completa ? "border-success/40 bg-success/[0.06]" : "border-border bg-card"
+                        }`}
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="min-w-0 flex-1 text-[12.5px] font-semibold leading-snug text-foreground">
+                            {lista.title}
+                          </p>
+                          <span className="shrink-0 text-[11px] font-bold tabular-nums text-muted-foreground">
+                            {done}/{total}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => void removerLista(lista)}
+                            className="shrink-0 text-muted-foreground/60 hover:text-destructive"
+                            aria-label="Remover lista"
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+                        <div className="mt-1.5 space-y-1">
+                          {lista.items.map((item) => (
+                            <button
+                              key={item.id}
+                              type="button"
+                              disabled={!canWrite}
+                              onClick={() => void marcarItem(lista, item.id)}
+                              className="flex w-full items-start gap-2 rounded-lg px-1 py-1 text-left transition-colors hover:bg-secondary/40"
+                            >
+                              <span
+                                className={`mt-[1px] flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                                  item.done
+                                    ? "border-primary bg-primary text-primary-foreground"
+                                    : "border-border"
+                                }`}
+                              >
+                                {item.done && <Check className="h-3 w-3" strokeWidth={3} />}
+                              </span>
+                              <span
+                                className={`text-[12px] leading-snug ${
+                                  item.done
+                                    ? "text-muted-foreground line-through"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {item.text}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
 
               {/* A história do cliente: cada passo, na ordem em que aconteceu */}
               <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
