@@ -156,14 +156,19 @@
         }, true);
 
         // Rede final: passou o tempo e nada apareceu na tela.
+        //
+        // O limite era de 12 segundos e um cliente viu esta tela com o painel
+        // ainda carregando: em internet lenta o app demora mais que isso, e o
+        // aviso chegava antes da hora. O texto também culpava o navegador sem
+        // ter como saber disso, o que assustava sem ajudar.
         window.setTimeout(function () {
           if (appMounted()) return;
           show(
-            "Não foi possível abrir o painel",
-            "O painel não terminou de carregar neste aparelho. Toque em Tentar novamente. " +
-              "Se não resolver, o navegador pode estar desatualizado: atualize o Google Chrome ou abra o painel pelo celular."
+            "O painel está demorando para abrir",
+            "A conexão parece lenta neste momento. Ele continua carregando, e assim que terminar esta mensagem some sozinha. " +
+              "Se preferir, toque em Tentar novamente ou abra o painel pelo celular."
           );
-        }, 12000);
+        }, 30000);
       })();
     </script>
 

@@ -94,6 +94,19 @@ export default defineConfig(({ command, mode }) => {
     // a sintaxe moderna e o painel volta a abrir em máquinas mais antigas.
     build: {
       target: ["es2019", "chrome66", "firefox60", "safari12", "edge79"],
+
+      // O arquivo principal passava de 1,3 MB e, em internet lenta, o painel
+      // demorava tanto que o aviso de erro aparecia antes de ele abrir. Separar
+      // as bibliotecas grandes em pedaços próprios deixa cada um menor e
+      // permite que o navegador guarde em cache o que quase nunca muda.
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            react: ["react", "react-dom", "react-router-dom"],
+            dados: ["@tanstack/react-query", "@supabase/supabase-js"],
+          },
+        },
+      },
     },
 
     server: {

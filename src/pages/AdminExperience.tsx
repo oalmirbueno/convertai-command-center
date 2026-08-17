@@ -14,6 +14,7 @@ import {
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
+import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { memoryAsContext, readMemory, recordMemory } from "@/lib/clientMemory";
 import { useNow } from "@/hooks/useNow";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
@@ -1370,57 +1371,118 @@ export default function AdminExperience() {
     return options[(hash + isoWeek()) % options.length];
   };
 
-  // Mensagem pronta para o grupo, montada na hora com a movimentação real.
+  /**
+   * A mensagem que vai para o grupo do cliente.
+   *
+   * Antes era um molde com contadores: "1 entrega(s) nova(s) liberadas no
+   * painel", "Em movimento: SKC | Marketing, Presença Digital e Aquisição".
+   * Um cliente reclamou, com razão: número solto não diz o que ele ganhou, e
+   * nome interno de projeto não significa nada para quem está do outro lado.
+   *
+   * Agora a mensagem cita o que foi feito pelo nome, explica para que serve, e
+   * muda de forma conforme a semana daquele cliente: quem teve entrega recebe
+   * uma mensagem diferente de quem está em produção.
+   */
   const buildGroupMessage = (client: any, moment: "abertura" | "meio" | "fechamento" = "abertura") => {
     const name = client.company_name || client.full_name || "time";
-    const released7 = (releasedFiles || []).filter(
-      (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7
-    ).length;
-    const pending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
-    const activeProjs = (projects || []).filter(
-      (p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at
-    );
+    const primeiroNome = String(name).split(/\s+/)[0];
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
-    const openings: Record<string, string[]> = {
-      abertura: [
-        `${greeting}, time ${name}! 👋 Semana começando com o plano na mesa:`,
-        `${greeting}, ${name}! 🚀 Abrindo a semana com o foco alinhado:`,
-        `${greeting}, pessoal da ${name}! Nova semana, novo movimento:`,
-      ],
-      meio: [
-        `${greeting}, time ${name}! Passando no meio da semana para manter vocês por dentro:`,
-        `${greeting}, ${name}! 👋 Check rápido de quarta para ninguém ficar no escuro:`,
-        `${greeting}, pessoal! Meio de semana e o trabalho seguindo:`,
-      ],
-      fechamento: [
-        `${greeting}, time ${name}! Fechando a semana com o que avançou de verdade:`,
-        `${greeting}, ${name}! 👋 Sexta é dia de prova de movimento:`,
-        `${greeting}, pessoal da ${name}! Resumo do que construímos nesta semana:`,
-      ],
-    };
-    const closings = [
-      "Tudo detalhado no painel: aceleriq.online",
-      "Qualquer dúvida é só chamar. Painel sempre atualizado: aceleriq.online",
-      "Seguimos juntos! Acompanhe tudo em aceleriq.online",
-    ];
+    const entregas = (releasedFiles || []).filter(
+      (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7,
+    );
+    const pending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
+    const publicacoes = (allPublications || []).filter((p: any) => p.client_id === client.id);
+    const agendadas = publicacoes.filter(
+      (p: any) => p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) > new Date(),
+    );
+    const noAr = publicacoes.filter(
+      (p: any) =>
+        p.status === "published" && p.published_at &&
+        (daysSince(p.published_at) ?? 99) <= 7,
+    );
 
-    const lines: string[] = [];
-    lines.push(pickVariant(openings[moment], client.id + moment));
-    lines.push("");
-    if (released7 > 0) lines.push(`✅ ${released7} entrega(s) nova(s) liberadas no painel nesta semana`);
-    if (activeProjs.length > 0) lines.push(`🚀 Em movimento: ${activeProjs.map((p: any) => p.name).slice(0, 3).join(", ")}`);
-    if (pending.length > 0) {
-      lines.push("");
-      lines.push(`⏳ Dependendo de vocês: ${pending.length} material(is) aguardando aprovação (${pending.slice(0, 2).map((f: any) => f.file_name).join(", ")}${pending.length > 2 ? "…" : ""}).`);
-      lines.push("Consegue dar o ok hoje? Aprovou, a gente já agenda a publicação. 😉");
-    } else if (released7 === 0 && activeProjs.length > 0) {
-      lines.push(moment === "fechamento" ? "Semana de bastidores: preparação rodando para as próximas entregas." : "Produção seguindo no ritmo planejado, sem pendências do lado de vocês.");
+    const frentes = (projects || [])
+      .filter((p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at)
+      .map((p: any) => readableProjectName(p.name, name))
+      .filter(Boolean);
+
+    const linhas: string[] = [];
+
+    // A abertura muda com o momento e com o que realmente aconteceu, em vez
+    // de sortear entre três frases fixas.
+    if (moment === "abertura") {
+      linhas.push(`${greeting}, ${name}! Começando a semana por aqui.`);
+    } else if (moment === "meio") {
+      linhas.push(`${greeting}, ${name}! Passando para contar como está a semana.`);
+    } else {
+      linhas.push(`${greeting}, ${name}! Fechando a semana com você.`);
     }
-    lines.push("");
-    lines.push(pickVariant(closings, client.id + moment + "x"));
-    return lines.join("\n");
+    linhas.push("");
+
+    // O que foi feito, pelo nome. Número solto não diz nada ao cliente.
+    if (entregas.length > 0) {
+      const nomes = listInWords(entregas.map((f: any) => readableFileName(f.file_name)));
+      linhas.push(
+        entregas.length === 1
+          ? `Ficou pronto: ${nomes}. Já está no painel para você ver.`
+          : `Ficaram prontos ${entregas.length} materiais, entre eles ${nomes}. Todos no painel.`,
+      );
+    }
+
+    if (noAr.length > 0) {
+      linhas.push(
+        noAr.length === 1
+          ? `Uma publicação foi ao ar nesta semana, na data combinada.`
+          : `${noAr.length} publicações foram ao ar nesta semana, no calendário que definimos.`,
+      );
+    }
+
+    if (agendadas.length > 0) {
+      const proxima = agendadas
+        .map((p: any) => new Date(p.scheduled_at))
+        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0];
+      linhas.push(
+        `Os próximos dias já estão garantidos: ${agendadas.length} ${
+          agendadas.length === 1 ? "publicação agendada" : "publicações agendadas"
+        }, a próxima em ${proxima.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}.`,
+      );
+    }
+
+    // Sem entrega nem publicação, a semana foi de construção. Isso é trabalho
+    // e é assim que se conta, nunca como semana parada.
+    if (entregas.length === 0 && noAr.length === 0) {
+      linhas.push(
+        frentes.length > 0
+          ? `A semana foi de construção em ${listInWords(frentes)}: material sendo produzido para as próximas publicações.`
+          : `A semana foi de construção por aqui, preparando o material das próximas publicações.`,
+      );
+    } else if (frentes.length > 0 && moment !== "fechamento") {
+      linhas.push(`Seguimos trabalhando em ${listInWords(frentes)}.`);
+    }
+
+    // O que depende do cliente, sempre pelo que destrava.
+    if (pending.length > 0) {
+      linhas.push("");
+      const nomes = listInWords(pending.map((f: any) => readableFileName(f.file_name)));
+      linhas.push(
+        pending.length === 1
+          ? `Tem uma coisa pronta esperando seu ok: ${nomes}. Com o seu sim, já entra no calendário.`
+          : `Tem ${pending.length} materiais prontos esperando seu ok, entre eles ${nomes}. Com o seu sim, já entram no calendário.`,
+      );
+    }
+
+    linhas.push("");
+    linhas.push(
+      moment === "fechamento"
+        ? "Bom fim de semana! O detalhe de tudo está no painel: aceleriq.online"
+        : "Qualquer coisa é só chamar. Tudo detalhado no painel: aceleriq.online",
+    );
+    return linhas
+      // Nunca duas linhas em branco seguidas.
+      .filter((linha, indice, lista) => !(linha === "" && lista[indice - 1] === ""))
+      .join("\n");
   };
 
   const copyText = async (text: string, okMessage: string) => {
