@@ -12,6 +12,7 @@ import {
   Instagram, TrendingDown, TrendingUp,
 } from "lucide-react";
 import { buildJourneyNarrative } from "@/lib/clientJourneyNarrative";
+import { readMemory } from "@/lib/clientMemory";
 import {
   formatMetricNumber,
   useSocialMetricsWeekly,
@@ -129,6 +130,57 @@ function WeekBackstage({ clientId }: { clientId: string }) {
       <p className="mt-3 text-[10.5px] leading-relaxed text-muted-foreground">
         Este é o trabalho de bastidor da semana, atualizado conforme a equipe
         avança. O que chega até você, como conteúdo e publicações, nasce daqui.
+      </p>
+    </section>
+  );
+}
+
+/**
+ * A história da parceria, contada em ordem.
+ *
+ * O cliente via o estado de agora (entregas, publicações) mas não a linha do
+ * tempo do que foi construído. Aqui aparecem os capítulos que já foram
+ * escritos para ele, então a relação tem memória e ele consegue ver de onde
+ * veio o que está acontecendo hoje.
+ */
+function ClientHistory({ clientId }: { clientId: string }) {
+  const { data: entries } = useQuery({
+    queryKey: ["client-memory-timeline", clientId],
+    queryFn: () => readMemory(clientId, { limit: 8, onlyClientVisible: true }),
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+
+  if (!entries?.length) return null;
+
+  return (
+    <section className="rounded-xl border border-border bg-card p-5 sm:p-6">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+        A nossa história até aqui
+      </p>
+      <div className="mt-4 space-y-4 border-l border-border pl-4">
+        {entries.map((entry) => (
+          <div key={entry.id} className="relative">
+            <span className="absolute -left-[21px] top-1.5 h-2.5 w-2.5 rounded-full border-2 border-background bg-primary" />
+            <p className="text-[10.5px] uppercase tracking-wide text-muted-foreground">
+              {new Date(entry.created_at).toLocaleDateString("pt-BR", {
+                day: "2-digit", month: "long", year: "numeric",
+              })}
+            </p>
+            {entry.title && (
+              <p className="mt-0.5 text-[13.5px] font-semibold leading-snug text-foreground">
+                {entry.title}
+              </p>
+            )}
+            <p className="mt-1 whitespace-pre-line text-[12.5px] leading-relaxed text-muted-foreground">
+              {entry.content.length > 320 ? `${entry.content.slice(0, 320)}...` : entry.content}
+            </p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-4 text-[10.5px] leading-relaxed text-muted-foreground">
+        Cada capítulo fica guardado aqui: o que foi combinado, o que foi feito e
+        o porquê. Assim nada se perde entre uma conversa e outra.
       </p>
     </section>
   );
@@ -399,6 +451,7 @@ export default function ClientJourneyUpdates() {
       {/* ── O narrador do mês: a IA conta o mês com os fatos reais ── */}
       {clientId && <MonthNarrative clientId={clientId} />}
       {clientId && <WeekBackstage clientId={clientId} />}
+      {clientId && <ClientHistory clientId={clientId} />}
 
       {/* ── Instagram em números REAIS, coletados da Meta toda semana ── */}
       {clientId && <InstagramRealBlock clientId={clientId} />}

@@ -15,6 +15,9 @@ import {
   stepLabel, weekSummaryText,
 } from "@/lib/cycleDefs";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
+import {
+  MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
+} from "@/lib/clientMemory";
 
 /**
  * O cliente por dentro, a partir do Ciclo.
@@ -74,6 +77,8 @@ export default function ClientCycleSheet({
   // Qual semana está sendo editada aqui dentro. A tela continua na semana
   // atual; só esta folha volta uma semana para acertar o que ficou faltando.
   const [editandoAnterior, setEditandoAnterior] = useState(false);
+  const [novaNota, setNovaNota] = useState("");
+  const [salvandoNota, setSalvandoNota] = useState(false);
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
   const open = !!client;
@@ -133,6 +138,35 @@ export default function ClientCycleSheet({
     enabled: open && !!client?.id,
     staleTime: 60_000,
   });
+
+  const { data: historia = [], refetch: recarregarHistoria } = useQuery({
+    queryKey: ["memoria-cliente", client?.id],
+    queryFn: () => readMemory(client.id, { limit: 12 }),
+    enabled: open && !!client?.id,
+    staleTime: 60_000,
+  });
+
+  const salvarNota = async () => {
+    const texto = novaNota.trim();
+    if (!client || !texto || salvandoNota) return;
+    setSalvandoNota(true);
+    const ok = await recordMemory({
+      clientId: client.id,
+      kind: "nota",
+      title: "Anotação da equipe",
+      content: texto,
+      source: "ciclo",
+      tags: [area],
+    });
+    setSalvandoNota(false);
+    if (ok) {
+      setNovaNota("");
+      toast.success("Anotação guardada na história do cliente.");
+      void recarregarHistoria();
+    } else {
+      toast.error("Não foi possível guardar a anotação.");
+    }
+  };
 
   const streak = useMemo(() => {
     if (!client) return 0;
@@ -396,6 +430,59 @@ export default function ClientCycleSheet({
                   </div>
                 </>
               ) : null}
+
+              {/* A história do cliente: cada passo, na ordem em que aconteceu */}
+              <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                História deste cliente
+              </p>
+              <div className="mt-2">
+                <textarea
+                  value={novaNota}
+                  onChange={(event) => setNovaNota(event.target.value)}
+                  placeholder="Anote uma decisão, um combinado, algo que mudou de rumo..."
+                  rows={2}
+                  className="w-full resize-none rounded-xl border border-border bg-card px-3 py-2 text-[12.5px] leading-relaxed text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void salvarNota()}
+                  disabled={!novaNota.trim() || salvandoNota}
+                  className="mt-1.5 w-full rounded-xl bg-primary/10 py-2 text-[11.5px] font-semibold text-primary disabled:opacity-40"
+                >
+                  {salvandoNota ? "Guardando..." : "Guardar na história"}
+                </button>
+              </div>
+
+              {historia.length > 0 ? (
+                <div className="mt-3 space-y-2 border-l border-border pl-3">
+                  {historia.map((entrada: MemoryEntry) => (
+                    <div key={entrada.id} className="relative">
+                      <span className="absolute -left-[17px] top-1.5 h-2 w-2 rounded-full bg-primary/60" />
+                      <p className="text-[10px] uppercase tracking-wide text-muted-foreground">
+                        {new Date(entrada.created_at).toLocaleDateString("pt-BR", {
+                          day: "2-digit", month: "2-digit", year: "2-digit",
+                        })}{" "}
+                        · {MEMORY_LABELS[entrada.kind] || entrada.kind}
+                      </p>
+                      {entrada.title && (
+                        <p className="text-[12.5px] font-semibold leading-snug text-foreground">
+                          {entrada.title}
+                        </p>
+                      )}
+                      <p className="text-[11.5px] leading-relaxed text-muted-foreground">
+                        {entrada.content.length > 220
+                          ? `${entrada.content.slice(0, 220)}...`
+                          : entrada.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="mt-2 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Ainda não há história registrada. Cada mensagem publicada, semana
+                  fechada e anotação passa a aparecer aqui, em ordem.
+                </p>
+              )}
 
               {/* Evolução */}
               <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

@@ -14,6 +14,7 @@ import {
 import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
+import { memoryAsContext, readMemory, recordMemory } from "@/lib/clientMemory";
 import { useNow } from "@/hooks/useNow";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
 import {
@@ -1151,8 +1152,14 @@ export default function AdminExperience() {
         const draft: any = buildDraft(c, genRitual);
         const clientName = c.company_name || c.full_name;
         try {
+          // A história do cliente entra junto com os números da semana: é o
+          // que permite a mensagem retomar decisões e promessas anteriores.
+          const historia = memoryAsContext(await readMemory(c.id, { limit: 8 }));
+          const fatos = historia
+            ? `${collectFacts(c)}\n\nHISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}`
+            : collectFacts(c);
           const { data } = await supabase.functions.invoke("ritual-writer", {
-            body: { ritual: genRitual, client_name: clientName, facts: collectFacts(c) },
+            body: { ritual: genRitual, client_name: clientName, facts: fatos },
           });
           if (data?.body) {
             draft.summary = data.body;
@@ -1222,6 +1229,29 @@ export default function AdminExperience() {
       const { error } = await supabase.from("reports").update(payload).eq("id", report.id);
       if (error) throw error;
       await notifyUser(report.client_id, `Nova atualização disponível: ${report.title}`, "report", "/onde-estamos");
+
+      // A mensagem enviada entra na história do cliente: é o que a próxima
+      // vai retomar, em vez de recomeçar do zero.
+      const textoFinal = edits?.summary || report.summary || "";
+      const proximoPasso = edits?.next_steps || report.next_steps || "";
+      await recordMemory({
+        clientId: report.client_id,
+        projectId: report.project_id || null,
+        kind: "ritual",
+        title: report.title,
+        content: [textoFinal, proximoPasso ? `Próximo passo combinado: ${proximoPasso}` : ""]
+          .filter(Boolean)
+          .join("\n\n"),
+        source: "central",
+        tags: [(report.metrics as any)?.ritual_type || "ritual"],
+        metadata: {
+          report_id: report.id,
+          ritual_type: (report.metrics as any)?.ritual_type || null,
+          written_by: (report.metrics as any)?.written_by || "modelo",
+        },
+        clientVisible: true,
+      });
+
       toast.success("Publicado no portal do cliente e notificado.");
       queryClient.invalidateQueries({ queryKey: ["exp-reports"] });
       queryClient.invalidateQueries({ queryKey: ["reports"] });

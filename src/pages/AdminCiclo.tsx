@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
+import { recordMemory } from "@/lib/clientMemory";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
 import {
@@ -496,6 +497,28 @@ export default function AdminCiclo() {
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-history"] });
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-past"] });
+
+      // Semana fechada vira registro na história do cliente: o trabalho de
+      // bastidor deixa de existir só como seis quadradinhos marcados.
+      if (daSemanaAtual && !existing) {
+        const total = totalFor(client);
+        const feitas = Array.from({ length: total }, (_, i) => i + 1).filter(
+          (s) => s === step || doneMap.has(`${client.id}:${area}:${s}`),
+        ).length;
+        if (feitas >= total) {
+          void recordMemory({
+            clientId: client.id,
+            kind: "ciclo",
+            title: `Semana de ${cycle.label} fechada`,
+            content:
+              `A operação de ${cycle.label.toLowerCase()} completou as ${total} etapas do ciclo ` +
+              `na semana de ${weekLabel(weekStart)}: ${cycle.steps.join("; ")}.`,
+            source: "ciclo",
+            tags: [area, "semana-fechada"],
+            metadata: { week_start: alvoSemana, area, etapas: total },
+          });
+        }
+      }
     } catch (error: unknown) {
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
       toast.error(
