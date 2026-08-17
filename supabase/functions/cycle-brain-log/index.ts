@@ -57,10 +57,11 @@ Deno.serve(async (req) => {
     });
     if (!isAdmin) return jsonResponse({ error: "Somente administrador." }, 403);
 
-    // Sem bridge configurado não há para onde escrever: avisa sem quebrar.
-    if (!bridgeStatusPublic().configured) {
-      return jsonResponse({ configured: false });
-    }
+    // O registro da semana NÃO depende do Segundo Cérebro. Ele é gravado
+    // primeiro na memória do painel (que sempre funciona e é de onde a Central
+    // lê) e só então espelhado no repositório, se der. Antes, bridge fora do
+    // ar significava semana não registrada em lugar nenhum.
+    const espelhoDisponivel = bridgeStatusPublic().configured;
 
     const body = await req.json().catch(() => ({}));
     const weekStart = /^\d{4}-\d{2}-\d{2}$/.test(String(body?.week_start || ""))
@@ -119,24 +120,75 @@ Deno.serve(async (req) => {
       }
     }
 
-    const result = await proposeUpdate({
-      title: `Ciclo semanal da carteira — semana de ${weekStart}`,
-      summary:
-        `Fechamento operacional da semana de ${weekStart}: ${totalDone} etapas do ciclo ` +
-        `concluídas na carteira, distribuídas entre Social Media e Tráfego Pago.`,
-      origin: "aceleriq-os/ciclo-semanal",
-      suggested_destination: "memory/operacao/ciclo-semanal.md",
-      correlation_id: `ciclo-${weekStart}-${crypto.randomUUID()}`,
-      context:
-        "Registro automático do checklist semanal do painel (weekly_cycle_progress). " +
-        "Serve como memória do que a operação entregou em cada semana, por cliente e por frente.",
-      body_markdown: linhas.join("\n"),
-    });
+    const resumo =
+      `Fechamento operacional da semana de ${weekStart}: ${totalDone} etapas do ciclo ` +
+      `concluídas na carteira, distribuídas entre Social Media e Tráfego Pago.`;
+    const corpo = linhas.join("\n");
+
+    // 1) Painel: a gravação que sempre acontece. Uma entrada por cliente, para
+    // a história de cada um receber a sua própria semana.
+    let gravadosNoPainel = 0;
+    for (const area of ["social", "trafego"]) {
+      for (const client of carteira[area]) {
+        const total = 6 + ((client as any).onboarding_done === false ? 4 : 0);
+        const done = marks.filter(
+          (row: any) => row.client_id === client.id && row.area === area,
+        ).length;
+        if (done === 0) continue;
+        const { error } = await admin.from("project_memory").insert({
+          client_id: client.id,
+          kind: "ciclo",
+          title: `Semana de ${weekStart} · ${AREA_LABEL[area]}`,
+          content:
+            `A operação de ${AREA_LABEL[area].toLowerCase()} concluiu ${done} de ${total} ` +
+            `etapas do ciclo semanal para este cliente na semana de ${weekStart}.`,
+          source: "ciclo-semanal",
+          tags: [area, "semana", weekStart],
+          metadata: { week_start: weekStart, area, done, total, client_visible: false },
+          created_by: userData.user.id,
+        } as any);
+        if (!error) gravadosNoPainel += 1;
+      }
+    }
+
+    // 2) Segundo Cérebro: espelho. Falhar aqui não invalida o registro acima.
+    let espelho: { ok: boolean; path?: string; reason?: string } = {
+      ok: false,
+      reason: espelhoDisponivel ? undefined : "bridge não configurado",
+    };
+    if (espelhoDisponivel) {
+      try {
+        const result = await proposeUpdate({
+          title: `Ciclo semanal da carteira — semana de ${weekStart}`,
+          summary: resumo,
+          origin: "aceleriq-os/ciclo-semanal",
+          suggested_destination: "memory/operacao/ciclo-semanal.md",
+          correlation_id: `ciclo-${weekStart}-${crypto.randomUUID()}`,
+          context:
+            "Registro automático do checklist semanal do painel (weekly_cycle_progress). " +
+            "Serve como memória do que a operação entregou em cada semana, por cliente e por frente.",
+          body_markdown: corpo,
+        });
+        espelho = { ok: true, path: result.path };
+      } catch (error) {
+        // Causa real no log, mensagem honesta na resposta.
+        const detalhe = error instanceof SecondBrainError
+          ? String(error.message)
+          : error instanceof Error ? error.message : String(error);
+        console.warn(`[ciclo] espelho no segundo cérebro falhou: ${detalhe}`);
+        espelho = {
+          ok: false,
+          reason: /403|forbidden|permission/i.test(detalhe)
+            ? "o token do GitHub não tem permissão de escrita no repositório de memória"
+            : detalhe.slice(0, 200),
+        };
+      }
+    }
 
     return jsonResponse({
-      configured: true,
-      written: true,
-      path: result.path,
+      written: gravadosNoPainel > 0,
+      saved_to_panel: gravadosNoPainel,
+      mirror: espelho,
       total_done: totalDone,
       week_start: weekStart,
     });

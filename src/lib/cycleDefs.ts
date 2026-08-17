@@ -89,11 +89,17 @@ export function weekSummaryText(input: {
   area: CycleArea;
   doneSteps: number[];
   totalSteps: number;
+  /**
+   * As etapas daquele cliente naquela semana. Três delas giram, então o
+   * resumo precisa citar o que a semana realmente pediu, não uma lista fixa.
+   */
+  stepNames?: string[];
 }): string {
-  const { clientName, area, doneSteps, totalSteps } = input;
+  const { clientName, area, doneSteps, totalSteps, stepNames } = input;
+  const nomes = stepNames?.length ? stepNames : CYCLES[area].steps;
   const feitas = doneSteps
-    .filter((step) => step <= CYCLES[area].steps.length)
-    .map((step) => CYCLES[area].steps[step - 1].replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
+    .filter((step) => step <= nomes.length)
+    .map((step) => nomes[step - 1].replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
 
   if (feitas.length === 0) {
     return `${clientName} · ${CYCLES[area].label}: a semana ainda não teve etapas concluídas.`;

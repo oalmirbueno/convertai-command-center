@@ -20,6 +20,22 @@ import {
 
 const PRIMARY_MODEL_CHAIN = ["gpt-4o-mini"];
 
+// As três etapas fixas do ciclo. As outras três giram por cliente e semana,
+// então o coach fala do NÚMERO delas em vez de inventar um nome que pode não
+// ser o daquele cliente. A tela mostra o nome certo.
+const CORE_LABELS: Record<string, Record<number, string>> = {
+  social: {
+    1: "conteúdo da semana criado",
+    4: "painel atualizado",
+    6: "posts agendados",
+  },
+  trafego: {
+    1: "criativos prontos",
+    4: "painel atualizado",
+    6: "anúncios no ar",
+  },
+};
+
 const STEP_LABELS: Record<string, string[]> = {
   social: [
     "conteúdo criado",
@@ -155,7 +171,7 @@ Deno.serve(async (req) => {
       const firstMissing = Array.from({ length: total }, (_, i) => i + 1)
         .find((step) => !done.has(step))!;
       const missingLabel = firstMissing <= labels.length
-        ? labels[firstMissing - 1]
+        ? (CORE_LABELS[area][firstMissing] || `etapa ${firstMissing} da semana`)
         : ONBOARDING_LABELS[firstMissing - labels.length - 1];
       const inherited = prevDone.size > 0 && prevDone.size < labels.length;
       lines.push(

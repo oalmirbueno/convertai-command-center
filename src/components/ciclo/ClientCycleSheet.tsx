@@ -12,8 +12,9 @@ import {
 } from "@/components/ui/sheet";
 import {
   CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS, type CycleArea,
-  stepLabel, weekSummaryText,
+  weekSummaryText,
 } from "@/lib/cycleDefs";
+import { stepLabelForWeek } from "@/lib/cycleTasks";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
@@ -188,7 +189,15 @@ export default function ClientCycleSheet({
     .map(([key]) => SERVICE_LABELS[key]);
 
   const resumo = weekSummaryText({
-    clientName, area, doneSteps, totalSteps: clientTotal,
+    clientName,
+    area,
+    doneSteps,
+    totalSteps: clientTotal,
+    stepNames: client
+      ? Array.from({ length: totalSteps }, (_, i) =>
+          stepLabelForWeek(area, client.id, localIso(weekStart), i + 1),
+        )
+      : undefined,
   });
 
   const copiarResumo = async () => {
@@ -381,7 +390,14 @@ export default function ClientCycleSheet({
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
-                          {stepLabel(area, step)}
+                          {step <= totalSteps
+                            ? stepLabelForWeek(
+                                area,
+                                client.id,
+                                editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
+                                step,
+                              )
+                            : ONBOARDING_STEPS[step - totalSteps - 1]}
                         </span>
                         <span className="mt-0.5 block text-[10px] text-muted-foreground">
                           {done && row?.done_at

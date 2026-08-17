@@ -13,6 +13,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
 import { recordMemory } from "@/lib/clientMemory";
+import { stepLabelForWeek, stepLabelsForWeek, stepsForWeek } from "@/lib/cycleTasks";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
 import {
@@ -372,7 +373,9 @@ export default function AdminCiclo() {
     if (!step) return null;
     return {
       client, step,
-      label: step <= totalSteps ? cycle.steps[step - 1] : ONBOARDING_STEPS[step - totalSteps - 1],
+      label: step <= totalSteps
+        ? stepLabelForWeek(area, client.id, weekKey, step)
+        : ONBOARDING_STEPS[step - totalSteps - 1],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openClients, doneMap, area]);
@@ -435,13 +438,21 @@ export default function AdminCiclo() {
         body: { week_start: weekKey },
       });
       if (error || data?.error) throw new Error(data?.error || "falha ao registrar");
-      if (data?.configured === false) {
-        toast.info("O segundo cérebro ainda não está conectado neste ambiente.");
-      } else if (data?.written) {
-        toast.success(`Semana guardada no segundo cérebro (${data.total_done} etapas).`);
+      if (data?.written) {
+        // O painel é o registro que vale; o cérebro é espelho. A mensagem
+        // conta a verdade dos dois, sem dizer que salvou onde não salvou.
+        toast.success(
+          `Semana guardada na história de ${data.saved_to_panel} cliente(s).` +
+            (data.mirror?.ok
+              ? " Também espelhada no segundo cérebro."
+              : data.mirror?.reason
+                ? ` No segundo cérebro não deu: ${data.mirror.reason}.`
+                : ""),
+        );
         setMenuOpen(false);
+        await queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
       } else {
-        toast.info(data?.reason || "Nada para guardar nesta semana ainda.");
+        toast.info("Nenhuma etapa marcada nesta semana ainda.");
       }
     } catch (error: unknown) {
       toast.error((error as { message?: string })?.message || "Não foi possível registrar.");
@@ -512,7 +523,7 @@ export default function AdminCiclo() {
             title: `Semana de ${cycle.label} fechada`,
             content:
               `A operação de ${cycle.label.toLowerCase()} completou as ${total} etapas do ciclo ` +
-              `na semana de ${weekLabel(weekStart)}: ${cycle.steps.join("; ")}.`,
+              `na semana de ${weekLabel(weekStart)}: ${stepLabelsForWeek(area, client.id, weekKey).join("; ")}.`,
             source: "ciclo",
             tags: [area, "semana-fechada"],
             metadata: { week_start: alvoSemana, area, etapas: total },
@@ -533,8 +544,11 @@ export default function AdminCiclo() {
     return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
   }
 
-  const stepLabelOf = (step: number) =>
-    step <= totalSteps ? cycle.steps[step - 1] : ONBOARDING_STEPS[step - totalSteps - 1];
+  // Cada cliente tem a sua semana: três etapas fixas e três que giram.
+  const stepLabelOf = (clientId: string, step: number) =>
+    step <= totalSteps
+      ? stepLabelForWeek(area, clientId, weekKey, step)
+      : ONBOARDING_STEPS[step - totalSteps - 1];
 
   const nextStepOf = (client: any) =>
     Array.from({ length: totalFor(client) }, (_, i) => i + 1).find(
@@ -556,7 +570,7 @@ export default function AdminCiclo() {
         <button
           key={key}
           type="button"
-          title={stepLabelOf(step)}
+          title={stepLabelOf(client.id, step)}
           disabled={!canWrite || pendingKey === key}
           onClick={() => void toggle(client, step)}
           className={`flex h-11 items-center justify-center rounded-lg border text-[13px] font-bold tabular-nums transition-colors active:scale-95 ${
@@ -639,7 +653,7 @@ export default function AdminCiclo() {
             <>
               <span className="font-semibold text-foreground">Agora:</span>
               <span className="ml-1 truncate text-muted-foreground">
-                {nextStep}. {stepLabelOf(nextStep)}
+                {nextStep}. {stepLabelOf(client.id, nextStep)}
               </span>
             </>
           ) : null}
@@ -1113,16 +1127,33 @@ export default function AdminCiclo() {
           <SheetHeader className="px-4">
             <SheetTitle className="pr-8 text-left text-base">O ciclo · {cycle.label}</SheetTitle>
             <SheetDescription className="sr-only">
-              O que significa cada etapa do ciclo da semana.
+              Como o ciclo da semana é montado.
             </SheetDescription>
           </SheetHeader>
+          <p className="mt-2 px-4 text-[12px] leading-relaxed text-muted-foreground">
+            Três etapas são fixas, porque acontecem toda semana: criar o
+            conteúdo, atualizar o painel e agendar. As outras três mudam a cada
+            semana e são diferentes para cada cliente, para o checklist não
+            virar rotina automática. Abra um cliente para ver as etapas dele.
+          </p>
           <ol className="mt-4 space-y-2 px-4">
-            {cycle.steps.map((step, index) => (
-              <li key={step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
-                <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-primary/15 text-[11px] font-bold tabular-nums text-primary">
-                  {index + 1}
+            {stepsForWeek(area, activeClients[0]?.id || "exemplo", weekKey).map((slot) => (
+              <li key={slot.step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
+                <span
+                  className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${
+                    slot.fixed ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+                  }`}
+                >
+                  {slot.step}
                 </span>
-                {step}
+                <span className="min-w-0">
+                  {slot.label}
+                  {!slot.fixed && (
+                    <span className="ml-1.5 text-[10px] uppercase tracking-wide text-muted-foreground">
+                      · muda toda semana
+                    </span>
+                  )}
+                </span>
               </li>
             ))}
           </ol>
