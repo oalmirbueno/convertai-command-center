@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { checklistProgress, type Checklist } from "@/lib/clientChecklist";
+import {
+  checklistProgress, splitRequestIntoItems, type Checklist,
+} from "@/lib/clientChecklist";
 
 /**
  * O checklist rápido cobre o combinado do momento, aquilo que aparece numa
@@ -89,5 +91,42 @@ describe("checklist na história do cliente", () => {
 
   it("é interno: checklist não aparece no portal do cliente", () => {
     expect(lib).toContain("client_visible: false");
+  });
+});
+
+describe("divisão local do pedido (sem IA)", () => {
+  it("quebra uma tarefa por linha", () => {
+    const itens = splitRequestIntoItems(
+      "Gravar depoimento na loja\nRefazer a arte do cardápio\nPedir as fotos novas",
+    );
+    expect(itens).toHaveLength(3);
+    expect(itens[0]).toBe("Gravar depoimento na loja");
+  });
+
+  it("entende a enumeração falada, com vírgula e 'e'", () => {
+    const itens = splitRequestIntoItems(
+      "gravar o depoimento, refazer a arte e pedir as fotos novas",
+    );
+    expect(itens.length).toBeGreaterThanOrEqual(3);
+    expect(itens[0]).toMatch(/^Gravar/);
+  });
+
+  it("limpa marcadores de lista digitados à mão", () => {
+    const itens = splitRequestIntoItems("- primeiro item\n- segundo item\n3) terceiro item");
+    expect(itens[0]).toBe("Primeiro item");
+    expect(itens[2]).toBe("Terceiro item");
+  });
+
+  it("nunca passa de seis itens", () => {
+    const itens = splitRequestIntoItems(
+      Array.from({ length: 12 }, (_, i) => `tarefa numero ${i}`).join("\n"),
+    );
+    expect(itens).toHaveLength(6);
+  });
+
+  it("ignora pedaços vazios ou curtos demais", () => {
+    expect(splitRequestIntoItems("a\n\n  \nfazer a arte do cardápio")).toEqual([
+      "Fazer a arte do cardápio",
+    ]);
   });
 });

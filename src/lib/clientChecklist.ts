@@ -32,6 +32,28 @@ export interface Checklist {
 const novoId = () =>
   `i${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 
+/**
+ * Quebra o pedido em itens sem depender de IA.
+ *
+ * O motor com IA deixa a lista melhor, mas não pode ser condição para
+ * existir: se ele estiver fora do ar, o combinado do momento não pode se
+ * perder. Aqui o texto vira lista pela pontuação e pelas conjunções que as
+ * pessoas usam naturalmente ao enumerar tarefas.
+ */
+export function splitRequestIntoItems(pedido: string): string[] {
+  return pedido
+    .split(/\n|;|(?:,|\.)\s*(?=[a-zà-ú])|\s+e\s+(?=[a-zà-ú]{3,})|\s+depois\s+/i)
+    .map((parte) =>
+      parte
+        .replace(/^[-•*\d.)\s]+/, "")
+        .replace(/\s+/g, " ")
+        .trim(),
+    )
+    .filter((parte) => parte.length > 2)
+    .slice(0, 6)
+    .map((parte) => parte.charAt(0).toUpperCase() + parte.slice(1, 120));
+}
+
 /** O texto que fica no corpo do registro: é o que a IA e o histórico leem. */
 function corpoDe(items: ChecklistItem[], request?: string): string {
   const feitos = items.filter((i) => i.done).length;

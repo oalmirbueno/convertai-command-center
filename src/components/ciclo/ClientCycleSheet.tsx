@@ -21,7 +21,7 @@ import {
 } from "@/lib/clientMemory";
 import {
   checklistProgress, createChecklist, deleteChecklist, listChecklists,
-  toggleChecklistItem, type Checklist,
+  splitRequestIntoItems, toggleChecklistItem, type Checklist,
 } from "@/lib/clientChecklist";
 
 /**
@@ -181,17 +181,30 @@ export default function ClientCycleSheet({
           : "",
       ].filter(Boolean).join("\n");
 
-      const { data } = await supabase.functions.invoke("client-checklist", {
-        body: { request: pedido, client_name: clientName, context: contexto },
-      });
-      const itens: string[] = Array.isArray(data?.items) ? data.items : [];
+      // O motor com IA deixa a lista melhor, mas não é condição para ela
+      // existir: fora do ar, o próprio texto do pedido vira a lista.
+      let itens: string[] = [];
+      let comIa = false;
+      try {
+        const { data } = await supabase.functions.invoke("client-checklist", {
+          body: { request: pedido, client_name: clientName, context: contexto },
+        });
+        if (Array.isArray(data?.items) && data.items.length > 0) {
+          itens = data.items;
+          comIa = data.source === "ai";
+        }
+      } catch {
+        /* sem motor agora: segue com a divisão local */
+      }
+      if (itens.length === 0) itens = splitRequestIntoItems(pedido);
       if (itens.length === 0) {
-        toast.error("Não consegui montar a lista. Tente descrever com outras palavras.");
+        toast.error("Não consegui entender o pedido. Escreva uma tarefa por linha.");
         return;
       }
+      const tituloSugerido = comIa ? undefined : pedido.slice(0, 50);
       const criado = await createChecklist({
         clientId: client.id,
-        title: data?.title || pedido.slice(0, 50),
+        title: tituloSugerido || pedido.slice(0, 50),
         items: itens,
         request: pedido,
         tags: [area],
@@ -202,7 +215,7 @@ export default function ClientCycleSheet({
       }
       setPedidoChecklist("");
       setListas((atual) => [criado, ...atual]);
-      toast.success(`${itens.length} itens criados${data?.source === "fallback" ? " (sem IA agora)" : ""}.`);
+      toast.success(`${itens.length} itens criados${comIa ? "" : " (sem IA agora)"}.`);
       void recarregarHistoria();
     } finally {
       setGerandoChecklist(false);
