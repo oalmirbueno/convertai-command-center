@@ -191,6 +191,10 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_update_task: 'tasks:write',
   aceleriq_complete_task: 'tasks:write',
   aceleriq_list_reports: 'reports:read',
+  aceleriq_get_social_metrics: 'reports:read',
+  aceleriq_list_social_posts: 'reports:read',
+  aceleriq_get_ads_campaigns: 'reports:read',
+  aceleriq_get_ads_performance: 'reports:read',
   aceleriq_get_report: 'reports:read',
   aceleriq_create_report_draft: 'reports:write',
   aceleriq_list_briefings: 'briefings:read',
@@ -217,7 +221,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.11.0',
+  version: '1.12.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1288,6 +1292,114 @@ const getWeeklyCycleTool: ToolDefinition = {
   },
 };
 
+// ─── Resultado real: Instagram e Meta Ads ──────────────────────────────────
+import {
+  listAdsCampaigns as _listAdsCampaigns,
+  listAdsPerformance as _listAdsPerformance,
+  listSocialMetrics as _listSocialMetrics,
+  listSocialPosts as _listSocialPosts,
+} from './aceleriq-metrics-services.ts';
+
+const getSocialMetricsTool: ToolDefinition = {
+  name: 'aceleriq_get_social_metrics',
+  title: 'Instagram — números por semana',
+  description: 'Lê os números REAIS do Instagram do cliente, semana fechada a semana fechada: seguidores, alcance, visitas ao perfil, contas engajadas e interações. Já devolve a variação percentual contra a semana anterior, calculada aqui para não depender da ordem da lista. Use antes de afirmar qualquer coisa sobre desempenho de conteúdo: sem isto, a leitura é chute.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      weeks: { type: 'integer', minimum: 1, maximum: 52, description: 'Quantas semanas para trás. Padrão 12.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      weeks: z.number().int().min(1).max(52).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _listSocialMetrics(parsed.data);
+  },
+};
+
+const listSocialPostsTool: ToolDefinition = {
+  name: 'aceleriq_list_social_posts',
+  title: 'Instagram — histórico de publicações',
+  description: 'Histórico das publicações do cliente com o desempenho real de cada uma: curtidas, comentários, alcance, salvamentos, compartilhamentos e interações totais, com a legenda e o link do post. Vem com o ranking das cinco que mais performaram. Use para dizer O QUE funcionou, com o post na mão, em vez de falar de conteúdo em geral.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      limit: { type: 'integer', minimum: 1, maximum: 100, description: 'Quantas publicações. Padrão 25.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      limit: z.number().int().min(1).max(100).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _listSocialPosts(parsed.data);
+  },
+};
+
+const getAdsCampaignsTool: ToolDefinition = {
+  name: 'aceleriq_get_ads_campaigns',
+  title: 'Meta Ads — campanhas e situação',
+  description: 'As campanhas de Meta Ads do cliente com nome, objetivo, verba diária ou total configurada, datas e situação. Traz status (o que a equipe configurou) e effective_status (o que a Meta está realmente fazendo) — os dois discordam com frequência, e quem vale é o segundo: campanha marcada como ativa pode estar parada por verba, conta ou reprovação.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      only_active: { type: 'boolean', description: 'Só o que a Meta está realmente rodando agora.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      only_active: z.boolean().optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _listAdsCampaigns(parsed.data);
+  },
+};
+
+const getAdsPerformanceTool: ToolDefinition = {
+  name: 'aceleriq_get_ads_performance',
+  title: 'Meta Ads — desempenho por dia e por campanha',
+  description: 'O desempenho REAL das campanhas: investimento, alcance, exibições, cliques no link e os resultados por tipo (conversas iniciadas, cadastros, compras). Devolve o dia a dia (para ver tendência) E o total já agregado por campanha (para responder quanto rendeu). ATENÇÃO ao ler: alcance NÃO se soma entre dias — a mesma pessoa alcançada em dois dias não são duas pessoas; o campo reach do agregado já é o maior dia, que é o piso honesto. Em results_by_type, qual tipo É o resultado depende do objetivo da campanha.',
+  scopes: ['reports:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      days: { type: 'integer', minimum: 1, maximum: 30, description: 'Janela em dias. Padrão e máximo 30, que é o que a coleta guarda.' },
+    },
+    additionalProperties: false,
+  },
+  handler: async (input) => {
+    const schema = z.object({
+      client_id: z.string().uuid().optional(),
+      days: z.number().int().min(1).max(30).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await _listAdsPerformance(parsed.data);
+  },
+};
+
 // ─── Project Memory (persistent, large context per client/project) ─────────
 import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory } from './project-memory-services.ts';
 
@@ -1622,6 +1734,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getWeeklyCycleTool,
   getProjectMemoryTool,
   upsertProjectMemoryTool,
+  // Resultado real (v1.12.0): sem estas, o agente sabia o que a equipe fez e
+  // não sabia se funcionou — e toda análise virava chute bem escrito.
+  getSocialMetricsTool,
+  listSocialPostsTool,
+  getAdsCampaignsTool,
+  getAdsPerformanceTool,
   // Files v2 (Bloco B — v1.7.0)
   ...(FILE_WRITE_ENABLED ? [
     prepareUploadTool, finalizeUploadTool, inlineUploadTool, uploadFileTool,

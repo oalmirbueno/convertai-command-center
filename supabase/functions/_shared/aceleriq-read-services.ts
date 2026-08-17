@@ -75,7 +75,9 @@ export type EntityType = (typeof ALLOWED_ENTITY_TYPES)[number];
 
 // ─── Supabase (service role, read-only usage) ─────────────────
 let cached: SupabaseClient | null = null;
-function db(): SupabaseClient {
+// Exportado para as leituras de métricas, que moram em arquivo próprio: uma
+// conexão só, com o mesmo cabeçalho de auditoria, em vez de duas.
+export function db(): SupabaseClient {
   if (cached) return cached;
   const url = Deno.env.get('SUPABASE_URL');
   const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -113,7 +115,7 @@ function esc(term: string): string {
   return term.replace(/[%_,()]/g, ' ').trim();
 }
 
-function isUuid(s: unknown): s is string {
+export function isUuid(s: unknown): s is string {
   return typeof s === 'string' &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s);
 }
