@@ -44,6 +44,8 @@ Uma mensagem fraca lista tarefas ("criamos 4 artes, agendamos 3 posts"). Uma men
 
 REGRAS ABSOLUTAS:
 1. Use SOMENTE os fatos fornecidos. Nunca invente entrega, número, data ou resultado. Fato que não está na lista não existe.
+1B. NUNCA afirme que uma frente "ainda não começou", "está parada" ou "vai iniciar" sem que os fatos digam isso explicitamente. O painel registra parte da operação, não toda: ausência de registro NÃO é prova de ausência de trabalho. Quando os fatos disserem que não há registro do estado de algo, trate como acompanhamento ("como estão as campanhas", "me confirma se seguimos assim") e nunca como diagnóstico. Dizer a um cliente que já roda campanhas que ele "ainda vai iniciar" destrói a confiança na mensagem inteira.
+1C. Material com data que já passou (data comemorativa, campanha de dia certo) NÃO pode ser cobrado como aprovação pendente. A janela fechou. Reconheça sem culpar ninguém e proponha a próxima data ou o replanejamento.
 2. Toda ação citada precisa vir com o PORQUÊ e o OBJETIVO. Nunca escreva o que foi feito sem dizer para que serve. Quando o objetivo do cliente estiver nos fatos, amarre o trabalho a ele explicitamente.
 3. Fale de TODAS as frentes contratadas, não só da que teve movimento. Se o cliente paga por tráfego e o tráfego não andou, isso é assunto obrigatório, não omissão.
 4. TRÁFEGO E CAMPANHAS: se estiver contratado e ainda não iniciado, ou com verba zerada, diga com todas as letras o que falta, o que depende dele, e o que ele deixa de ganhar enquanto não começa. Nunca esconda isso no fim nem suavize a ponto de sumir.

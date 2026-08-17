@@ -236,10 +236,9 @@ export default function AdminExperience() {
       const { data, error } = await (supabase as any)
         .from("weekly_cycle_progress")
         .select("client_id, area, step")
-        .eq("week_start", cycleWeekKey)
-        .eq("area", "social");
+        .eq("week_start", cycleWeekKey);
       if (error) return [];
-      return (data || []) as Array<{ client_id: string; step: number }>;
+      return (data || []) as Array<{ client_id: string; area: string; step: number }>;
     },
     staleTime: 30_000,
     ...AO_VIVO,
@@ -247,11 +246,21 @@ export default function AdminExperience() {
   const cycleDoneByClient = useMemo(() => {
     const map = new Map<string, number>();
     for (const row of cycleRows || []) {
-      if (row.step <= 6) {
+      if (row.step <= 6 && row.area === "social") {
         map.set(row.client_id, (map.get(row.client_id) || 0) + 1);
       }
     }
     return map;
+  }, [cycleRows]);
+
+  // Quem tem o checklist de TRÁFEGO sendo marcado: prova de que a frente de
+  // campanhas está em operação de verdade, independente de carteira.
+  const trafegoEmOperacao = useMemo(() => {
+    const set = new Set<string>();
+    for (const row of cycleRows || []) {
+      if (row.area === "trafego") set.add(row.client_id);
+    }
+    return set;
   }, [cycleRows]);
   const igByClient = useMemo(() => {
     const map = new Map<string, SocialMetricsWeek[]>();
@@ -1029,6 +1038,26 @@ export default function AdminExperience() {
     const concluidas = etapas.filter(
       (m: any) => m.status === "completed" && m.updated_at && new Date(m.updated_at) >= weekAgo,
     );
+    // Material parado cuja data já passou. Detecta pelo nome (datas
+    // comemorativas costumam vir batizadas) e pela publicação vinculada que
+    // ficou para trás sem ir ao ar.
+    const DATAS_MARCADAS =
+      /(natal|ano novo|réveillon|reveillon|páscoa|pascoa|carnaval|dia das m|dia dos p|dia da|dia do|black friday|cyber|namorados|consumidor|criança|crianca|professor|cliente|mulher|trabalh|independência|independencia|finados|halloween|primavera|verão|verao|inverno|outono|aniversário|aniversario|lançamento|lancamento)/i;
+    const vencidosPorData = pendentes
+      .filter((f: any) => {
+        if (!DATAS_MARCADAS.test(f.file_name || "")) return false;
+        const idade = daysSince(f.created_at);
+        // Material de data marcada parado há mais de duas semanas quase
+        // sempre perdeu a janela; é o caso que o dono descreveu.
+        return idade !== null && idade > 14;
+      })
+      .map((f: any) => f.file_name);
+
+    const publicacoesPerdidas = pubs.filter(
+      (p: any) =>
+        p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) < now,
+    ).length;
+
     const ig = igByClient.get(client.id) || [];
     const igUltima = ig[0];
     const pct = (campo: "followers" | "reach" | "total_interactions") => {
@@ -1044,21 +1073,37 @@ export default function AdminExperience() {
       .filter(([chave]) => servicos[chave] === true)
       .map(([, nome]) => nome);
 
-    // Tráfego: o estado real da frente paga. Contratado e sem carteira é
-    // "ainda não começou", e isso precisa aparecer na mensagem, não sumir.
+    // Tráfego: o painel só sabe o que foi registrado nele. A carteira de
+    // anúncios é controle financeiro e nem todo cliente usa, então ausência
+    // de carteira NÃO prova que a campanha não começou. Sem evidência, o
+    // ritual não afirma nada: dizer a um cliente que roda anúncios que ele
+    // "ainda vai iniciar" é pior do que não tocar no assunto.
     const temTrafego = servicos.trafego === true;
     const carteira = (adsWallets || []).find((w: any) => w.client_id === client.id);
+    const termosDeAds = /(ads|tráfego|trafego|campanha|meta|google|anúncio|anuncio)/i;
+    const sinaisDeOperacao = [
+      carteira && Number(carteira.balance) > 0 ? "carteira de anúncios com saldo" : "",
+      trafegoEmOperacao.has(client.id)
+        ? "checklist semanal de tráfego sendo marcado pela equipe"
+        : "",
+      clientProjects.some((p: any) => termosDeAds.test(p.name || ""))
+        ? `frente contratada de campanhas ("${clientProjects.find((p: any) => termosDeAds.test(p.name || ""))?.name}")`
+        : "",
+      etapas.some((m: any) => m.status === "completed" && termosDeAds.test(m.title || ""))
+        ? "etapas de campanha já concluídas"
+        : "",
+    ].filter(Boolean);
+
     const trafegoLinha = !temTrafego
       ? ""
-      : carteira && Number(carteira.balance) > 0
-        ? `Tráfego pago: ativo, saldo de campanha R$ ${Number(carteira.balance).toLocaleString("pt-BR")}${
-            carteira.last_recharge_date
-              ? `, última recarga em ${new Date(carteira.last_recharge_date).toLocaleDateString("pt-BR")}`
-              : ""
-          }`
-        : carteira
-          ? `Tráfego pago: CONTRATADO, porém a verba de campanha está zerada. As campanhas não rodam sem recarga: isso precisa ser dito com clareza e é a pendência mais importante do cliente.`
-          : `Tráfego pago: CONTRATADO, mas AINDA NÃO INICIADO (sem carteira de anúncios configurada). Explique o que falta para começar e o que ele perde enquanto não começa.`;
+      : sinaisDeOperacao.length > 0
+        ? `Tráfego pago: EM OPERAÇÃO (sinais no painel: ${sinaisDeOperacao.join("; ")}).` +
+          (carteira && Number(carteira.balance) <= 0
+            ? " Atenção: a verba de campanha registrada está zerada, então vale confirmar a recarga."
+            : "")
+        : `Tráfego pago: contratado, e o painel NÃO TEM REGISTRO do estado atual das campanhas. ` +
+          `NÃO afirme que o tráfego começou nem que não começou. Se for falar do assunto, ` +
+          `pergunte ou trate como acompanhamento, nunca como fato.`;
 
     // O que o cliente disse que quer, na entrada. É o objetivo que dá sentido
     // a tudo o que a gente faz por ele.
@@ -1101,6 +1146,20 @@ export default function AdminExperience() {
             })`
           : ""
       }`,
+      // Material de data marcada que não foi aprovado a tempo: cobrar
+      // aprovação disso constrange o cliente e não resolve nada, porque a
+      // data já passou. O caminho é reconhecer a perda e replanejar.
+      vencidosPorData.length > 0
+        ? `ATENÇÃO, MATERIAL COM DATA VENCIDA: ${vencidosPorData.length} ` +
+          `(${vencidosPorData.slice(0, 3).join(", ")}). São conteúdos de data comemorativa ou ` +
+          `campanha com dia certo que não foram aprovados a tempo. NÃO peça aprovação deles: ` +
+          `a data passou e a publicação perdeu o sentido. Reconheça com naturalidade que a ` +
+          `janela fechou, sem culpar ninguém, e proponha o replanejamento ou a próxima data.`
+        : "",
+      publicacoesPerdidas > 0
+        ? `Publicações que estavam agendadas e não foram ao ar na data: ${publicacoesPerdidas}. ` +
+          `Trate como fato a resolver, não como cobrança.`
+        : "",
       `Publicações no ar nos últimos 7 dias: ${noAr.length}`,
       `Publicações já agendadas: ${agendadas.length}`,
       `Etapas concluídas nos últimos 7 dias: ${concluidas.map((m: any) => m.title).join("; ") || "nenhuma"}`,
@@ -1128,9 +1187,13 @@ export default function AdminExperience() {
 
   // Passo 1: pré-visualizar. Nada é criado antes de você ver.
   const previewDrafts = async () => {
+    // O avulso também merece acompanhamento: enquanto o projeto dele está em
+    // andamento, a experiência é a mesma da carteira. "Todos" continua
+    // significando a carteira recorrente; o avulso entra quando escolhido.
+    const universo = [...portfolioClients, ...oneOffClients];
     const targets = genClientId === "__all__"
       ? portfolioClients
-      : portfolioClients.filter((c: any) => c.id === genClientId);
+      : universo.filter((c: any) => c.id === genClientId);
     if (targets.length === 0) { toast.error("Selecione um cliente"); return; }
     // O banco exige projeto no registro: cliente sem projeto não entra no lote.
     const withProject = targets.filter((c: any) =>
@@ -1152,12 +1215,27 @@ export default function AdminExperience() {
         const draft: any = buildDraft(c, genRitual);
         const clientName = c.company_name || c.full_name;
         try {
-          // A história do cliente entra junto com os números da semana: é o
-          // que permite a mensagem retomar decisões e promessas anteriores.
-          const historia = memoryAsContext(await readMemory(c.id, { limit: 8 }));
-          const fatos = historia
-            ? `${collectFacts(c)}\n\nHISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}`
-            : collectFacts(c);
+          // Três camadas de contexto: os números da semana, a história dentro
+          // do painel e o que o segundo cérebro sabe daquele cliente fora
+          // dele. Sem a terceira, a mensagem escreve com meio contexto.
+          const [historia, cerebro] = await Promise.all([
+            readMemory(c.id, { limit: 8 }).then(memoryAsContext),
+            supabase.functions
+              .invoke("brain-client-context", { body: { client_name: clientName } })
+              .then((r) => String(r.data?.context || ""))
+              .catch(() => ""),
+          ]);
+          const fatos = [
+            collectFacts(c),
+            historia
+              ? `HISTÓRICO RECENTE DESTE CLIENTE (o que já foi dito e decidido, use para dar continuidade):\n${historia}`
+              : "",
+            cerebro
+              ? `CONTEXTO DO SEGUNDO CÉREBRO (anotações fora do painel; trate como verdade sobre o cliente, mas nunca cite a fonte para ele):\n${cerebro}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join("\n\n");
           const { data } = await supabase.functions.invoke("ritual-writer", {
             body: { ritual: genRitual, client_name: clientName, facts: fatos },
           });
@@ -2205,6 +2283,15 @@ export default function AdminExperience() {
                   {portfolioClients.map((c: any) => (
                     <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
                   ))}
+                  {/* Avulso em projeto aberto também merece acompanhamento:
+                      é o mesmo cuidado, só que com começo e fim. */}
+                  {oneOffClients.length > 0 && (
+                    <optgroup label="Projetos avulsos">
+                      {oneOffClients.map((c: any) => (
+                        <option key={c.id} value={c.id}>{c.company_name || c.full_name}</option>
+                      ))}
+                    </optgroup>
+                  )}
                 </select>
               </div>
               <div>
