@@ -31,6 +31,7 @@ const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
 const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
+const AdminAds = lazy(() => import("@/pages/AdminAds"));
 const AdminCiclo = lazy(() => import("@/pages/AdminCiclo"));
 const ClientFinanceiro = lazy(() => import("@/pages/ClientFinanceiro"));
 const AdminReports = lazy(() => import("@/pages/AdminReports"));
@@ -155,6 +156,7 @@ function AppRoutes() {
       <Route path="/briefings" element={<ProtectedRoute><StaffRoute><AppLayout><AdminBriefings /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/kanban" element={<ProtectedRoute><StaffRoute><AppLayout><Kanban /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/metricas" element={<ProtectedRoute><StaffRoute><AppLayout><AdminMetricas /></AppLayout></StaffRoute></ProtectedRoute>} />
+      <Route path="/anuncios" element={<ProtectedRoute><StaffRoute><AppLayout><AdminAds /></AppLayout></StaffRoute></ProtectedRoute>} />
       {/* Ciclo roda fora do AppLayout: é um aplicativo à parte, abre em tela
           cheia e usa toda a largura no celular. Duas URLs servem a mesma
           tela: /ciclo pelo painel e /ciclo.html quando aberto pelo ícone do

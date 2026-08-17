@@ -8,6 +8,7 @@ import {
   Folder, ChevronRight,
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import ClientLiveCampaigns from "@/components/reports/ClientLiveCampaigns";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { getPeriodModel, PERIOD_ORDER } from "@/lib/reportGrouping";
@@ -73,6 +74,12 @@ export default function ClientReports() {
         </h1>
         <p className="text-sm text-muted-foreground mt-1.5">Acompanhe os resultados dos seus projetos com dados detalhados.</p>
       </div>
+
+      {/* As campanhas ao vivo entram ANTES dos relatórios publicados, e não no
+          lugar deles: o relatório fecha o período com a leitura da equipe, e
+          este bloco responde o que o cliente pergunta no meio do mês. Some
+          sozinho quando não há campanha rodando. */}
+      <ClientLiveCampaigns clientId={clientId || undefined} />
 
       {(!reports || reports.length === 0) ? (
         <div className="text-center py-20 bg-card border border-border rounded-xl">
