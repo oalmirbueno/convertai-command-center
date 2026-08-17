@@ -64,6 +64,26 @@ const AGENTS: {
     defaultName: "ChatGPT Work OAuth",
   },
   {
+    // O fluxo de atualizar o contexto de cada cliente precisa das três coisas
+    // ao mesmo tempo: ler o painel, gravar a memória do cliente no painel e
+    // propor o dossiê no Segundo Cérebro. Faltando uma, a rotina falha no
+    // meio e o registro fica pela metade.
+    id: "contexto-semanal",
+    name: "Contexto semanal",
+    auth: "hybrid",
+    title: "Dossiê de cliente pelo GPT",
+    description:
+      "Lê o painel inteiro, grava o contexto do cliente na memória e propõe o dossiê no Segundo Cérebro. É o conjunto usado pelo prompt de contexto semanal.",
+    defaultScopes: [
+      "aceleriq:read",
+      "aceleriq:write",
+      "projects:write",
+      "memory:read",
+      "memory:propose",
+    ],
+    defaultName: "Contexto semanal (GPT)",
+  },
+  {
     id: "codex",
     name: "Codex",
     auth: "bearer",

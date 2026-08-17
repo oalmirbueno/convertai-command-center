@@ -29,6 +29,17 @@ REGRAS INVIOLÁVEIS
 5. Não crie, não altere e não apague nada além dos dois registros de memória
    descritos no passo 5. Nenhuma tarefa, projeto, arquivo ou relatório.
 
+PASSO 0 — CONFERIR PERMISSÃO ANTES DE COMEÇAR
+Chame aceleriq_capabilities e olhe grantedScopes. Você vai gravar em dois
+lugares no passo 5, e cada um exige uma permissão:
+- gravar no painel exige "projects:write" (ou "aceleriq:write")
+- propor no Segundo Cérebro exige "memory:propose"
+
+Anote quais das duas você tem. NÃO interrompa a tarefa por causa disso: siga
+normalmente e, no passo 5, grave só onde puder. O que faltar você reporta no
+passo 6, com o nome exato do escopo ausente. Nunca diga que salvou algo que
+não salvou, e nunca fique tentando de novo o que já foi negado.
+
 PASSO 1 — IDENTIFICAR
 Use aceleriq_list_clients para achar o cliente pelo nome e guarde o client_id.
 Depois use aceleriq_get_client_context com esse id para o panorama inicial.
@@ -90,7 +101,9 @@ PRÓXIMO MOVIMENTO RECOMENDADO
 Uma recomendação concreta para a semana que começa, amarrada ao objetivo dele.
 
 PASSO 5 — GRAVAR
-Grave o dossiê nos dois lugares:
+Grave o dossiê nos lugares para os quais você tem permissão (passo 0). Se
+faltar permissão para algum, PULE aquele e siga: o dossiê continua valendo, e
+a pendência entra no relatório final.
 
 (a) No painel, com aceleriq_upsert_project_memory:
     client_id: o id encontrado
@@ -118,8 +131,18 @@ Responda com:
 2. A lista de LACUNAS: tudo que ficou DESCONHECIDO, em forma de pergunta
    direta para mim. Seja específico. Exemplo: "As campanhas de tráfego deste
    cliente estão rodando hoje? Desde quando? Em qual plataforma?"
-3. Confirmação de que os dois registros foram gravados (painel e segundo
-   cérebro), com o caminho do arquivo proposto.
+3. O status REAL de cada gravação, nesta forma:
+   - Painel: gravado (id do registro) OU não gravado, porque falta o escopo X
+   - Segundo Cérebro: proposto (caminho do arquivo) OU não gravado, porque
+     falta o escopo X
+
+   Se algum ficou de fora por permissão, diga exatamente assim:
+   "Faltou o escopo [nome]. Para liberar: painel > API e Integrações >
+   credenciais MCP > preset 'Contexto semanal' > gerar credencial nova e usar
+   no conector."
+
+   Nunca escreva que salvou onde não salvou, e não tente de novo o que já foi
+   negado: o escopo não muda no meio da conversa.
 
 Depois que eu responder as lacunas, atualize o dossiê e grave de novo, para
 o registro ficar completo.
@@ -141,6 +164,30 @@ o contexto sobrevive fora do sistema. Os dois se alimentam.
 
 **Ele nunca escreve para o cliente.** O dossiê é interno (`client_visible:
 false`). Quem fala com o cliente é a Central, com o texto que você revisa.
+
+## Se a gravação no Segundo Cérebro for negada
+
+Sintoma: o dossiê é gravado no painel, mas a proposta no Segundo Cérebro falha
+por permissão.
+
+Causa: propor arquivo no repositório de memória exige o escopo
+`memory:propose`, que é tratado como sensível e **nunca** é concedido por
+tabela: nem `aceleriq:read` nem `aceleriq:write` o incluem. A credencial
+precisa pedir esse escopo explicitamente. As credenciais antigas que o tinham
+estão revogadas, e as ativas hoje só têm leitura.
+
+Correção, uma vez só:
+
+1. No painel, abra **API e Integrações** (`/api-docs`) e vá até as credenciais
+   MCP.
+2. Escolha o preset **Contexto semanal**. Ele já vem com o conjunto exato:
+   `aceleriq:read`, `aceleriq:write`, `projects:write`, `memory:read`,
+   `memory:propose`.
+3. Gere a credencial e use no conector do ChatGPT.
+
+Enquanto isso não for feito, o prompt continua funcionando: ele grava no
+painel, pula o Segundo Cérebro e avisa no relatório final qual escopo falta.
+O contexto não se perde, só não é replicado.
 
 ## Ordem de uso na semana
 
