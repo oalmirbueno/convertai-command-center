@@ -1435,6 +1435,22 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
     contracts: linhas(contratos),
     memory: linhas(memoria),
     ads_wallets: linhas(carteira),
+    // Onde este cliente está no método A.C.E.L.E.R.A. A leitura é da evolução
+    // real: quem entrou agora precisa de diagnóstico, quem já tem rotina
+    // fechando precisa de escala. Serve para o agente propor o passo certo
+    // para o estágio, em vez de sugerir o mesmo para todo mundo.
+    method_phase: (() => {
+      const dias = perfilData?.created_at
+        ? Math.floor((agora.getTime() - new Date(String(perfilData.created_at)).getTime()) / 86400000)
+        : 0;
+      const semanasFechadas = cicloResumo.filter((c) => c.closed).length;
+      if (perfilData?.onboarding_done === false) return dias < 15 ? 'analisar' : 'clarear';
+      if (dias < 30) return 'estruturar';
+      if (dias < 60) return 'lancar';
+      if (semanasFechadas >= 4 && dias > 120) return 'acelerar';
+      if (dias > 90) return 'revisar';
+      return 'executar';
+    })(),
     generated_at: agora.toISOString(),
   };
 }

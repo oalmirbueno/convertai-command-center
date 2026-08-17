@@ -13,7 +13,10 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
 import { recordMemory } from "@/lib/clientMemory";
-import { stepLabelForWeek, stepLabelsForWeek, stepsForWeek } from "@/lib/cycleTasks";
+import {
+  PHASE_LABELS, phaseForClient, stepLabelForWeek, stepLabelsForWeek, stepsForWeek,
+  type StepsOptions,
+} from "@/lib/cycleTasks";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
 import {
@@ -246,6 +249,26 @@ export default function AdminCiclo() {
   });
 
   const isOnboarding = (client: any) => client.onboarding_done === false;
+
+  // O motor precisa saber onde o cliente está na jornada: quem entrou agora
+  // recebe tarefas de diagnóstico, quem já tem rotina fechando recebe as de
+  // escala. A sequência de semanas 100% é a prova de rotina madura.
+  const stepOptionsFor = (client: any): StepsOptions => ({
+    services: client.services_config || {},
+    phaseInput: {
+      onboardingDone: client.onboarding_done !== false,
+      daysAsClient: client.created_at
+        ? Math.floor((today.getTime() - new Date(client.created_at).getTime()) / 86400000)
+        : 0,
+      closedStreak: closedStreak(
+        historyWeekKeys.slice(0, HISTORY_WEEKS - 1),
+        (key) => (historySets.get(`${client.id}:${key}`)?.size || 0) >= totalSteps,
+      ),
+    },
+  });
+
+  const phaseOf = (client: any) =>
+    phaseForClient(stepOptionsFor(client).phaseInput!);
   const totalFor = (client: any) =>
     totalSteps + (isOnboarding(client) ? ONBOARDING_STEPS.length : 0);
   const doneCountFor = (client: any) => {
@@ -374,7 +397,7 @@ export default function AdminCiclo() {
     return {
       client, step,
       label: step <= totalSteps
-        ? stepLabelForWeek(area, client.id, weekKey, step)
+        ? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client))
         : ONBOARDING_STEPS[step - totalSteps - 1],
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -523,7 +546,7 @@ export default function AdminCiclo() {
             title: `Semana de ${cycle.label} fechada`,
             content:
               `A operação de ${cycle.label.toLowerCase()} completou as ${total} etapas do ciclo ` +
-              `na semana de ${weekLabel(weekStart)}: ${stepLabelsForWeek(area, client.id, weekKey).join("; ")}.`,
+              `na semana de ${weekLabel(weekStart)}: ${stepLabelsForWeek(area, client.id, weekKey, stepOptionsFor(client)).join("; ")}.`,
             source: "ciclo",
             tags: [area, "semana-fechada"],
             metadata: { week_start: alvoSemana, area, etapas: total },
@@ -545,9 +568,9 @@ export default function AdminCiclo() {
   }
 
   // Cada cliente tem a sua semana: três etapas fixas e três que giram.
-  const stepLabelOf = (clientId: string, step: number) =>
+  const stepLabelOf = (client: any, step: number) =>
     step <= totalSteps
-      ? stepLabelForWeek(area, clientId, weekKey, step)
+      ? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client))
       : ONBOARDING_STEPS[step - totalSteps - 1];
 
   const nextStepOf = (client: any) =>
@@ -570,7 +593,7 @@ export default function AdminCiclo() {
         <button
           key={key}
           type="button"
-          title={stepLabelOf(client.id, step)}
+          title={stepLabelOf(client, step)}
           disabled={!canWrite || pendingKey === key}
           onClick={() => void toggle(client, step)}
           className={`flex h-11 items-center justify-center rounded-lg border text-[13px] font-bold tabular-nums transition-colors active:scale-95 ${
@@ -607,12 +630,19 @@ export default function AdminCiclo() {
           <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">
             {client.company_name || client.full_name}
           </span>
-          {onboarding && (
+          {onboarding ? (
             <span
               title="Em onboarding: 6 etapas do ciclo + 4 de entrada"
               className="shrink-0 rounded bg-info/15 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-info"
             >
               Novo
+            </span>
+          ) : (
+            <span
+              title={`Fase do método A.C.E.L.E.R.A: ${PHASE_LABELS[phaseOf(client)]}`}
+              className="shrink-0 rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground"
+            >
+              {PHASE_LABELS[phaseOf(client)]}
             </span>
           )}
           <span className="w-11 shrink-0 text-right text-[12px] font-bold tabular-nums text-muted-foreground">
@@ -653,7 +683,7 @@ export default function AdminCiclo() {
             <>
               <span className="font-semibold text-foreground">Agora:</span>
               <span className="ml-1 truncate text-muted-foreground">
-                {nextStep}. {stepLabelOf(client.id, nextStep)}
+                {nextStep}. {stepLabelOf(client, nextStep)}
               </span>
             </>
           ) : null}
@@ -1137,7 +1167,12 @@ export default function AdminCiclo() {
             virar rotina automática. Abra um cliente para ver as etapas dele.
           </p>
           <ol className="mt-4 space-y-2 px-4">
-            {stepsForWeek(area, activeClients[0]?.id || "exemplo", weekKey).map((slot) => (
+            {stepsForWeek(
+              area,
+              activeClients[0]?.id || "exemplo",
+              weekKey,
+              activeClients[0] ? stepOptionsFor(activeClients[0]) : undefined,
+            ).map((slot) => (
               <li key={slot.step} className="flex items-start gap-2.5 text-[12.5px] leading-relaxed text-foreground">
                 <span
                   className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold tabular-nums ${

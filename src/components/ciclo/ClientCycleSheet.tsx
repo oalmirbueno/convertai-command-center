@@ -14,7 +14,10 @@ import {
   CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS, type CycleArea,
   weekSummaryText,
 } from "@/lib/cycleDefs";
-import { stepLabelForWeek } from "@/lib/cycleTasks";
+import {
+  PHASE_LABELS, PHASE_PURPOSE, phaseForClient, stepLabelForWeek,
+  type StepsOptions,
+} from "@/lib/cycleTasks";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
@@ -279,6 +282,27 @@ export default function ClientCycleSheet({
     }
   };
 
+  const opcoesEtapa: StepsOptions = useMemo(() => ({
+    services: client?.services_config || {},
+    phaseInput: {
+      onboardingDone: client?.onboarding_done !== false,
+      daysAsClient: client?.created_at
+        ? Math.floor((Date.now() - new Date(client.created_at).getTime()) / 86400000)
+        : 0,
+      closedStreak: client
+        ? closedStreak(
+            historyWeekKeys.slice(0, HISTORY_WEEKS - 1),
+            (key) => (historySets.get(`${client.id}:${key}`)?.size || 0) >= totalSteps,
+          )
+        : 0,
+    },
+  }), [client, historyWeekKeys, historySets, totalSteps]);
+
+  const fase = useMemo(
+    () => phaseForClient(opcoesEtapa.phaseInput!),
+    [opcoesEtapa],
+  );
+
   const streak = useMemo(() => {
     if (!client) return 0;
     return closedStreak(
@@ -305,7 +329,7 @@ export default function ClientCycleSheet({
     totalSteps: clientTotal,
     stepNames: client
       ? Array.from({ length: totalSteps }, (_, i) =>
-          stepLabelForWeek(area, client.id, localIso(weekStart), i + 1),
+          stepLabelForWeek(area, client.id, localIso(weekStart), i + 1, opcoesEtapa),
         )
       : undefined,
   });
@@ -376,6 +400,10 @@ export default function ClientCycleSheet({
                     <span>{monthsSince(client.created_at)}</span>
                   </>
                 )}
+                <span>·</span>
+                <span title={PHASE_PURPOSE[fase]} className="font-semibold text-primary">
+                  {PHASE_LABELS[fase]}
+                </span>
                 {client.plan_name && (
                   <>
                     <span>·</span>
@@ -506,6 +534,7 @@ export default function ClientCycleSheet({
                                 client.id,
                                 editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
                                 step,
+                                opcoesEtapa,
                               )
                             : ONBOARDING_STEPS[step - totalSteps - 1]}
                         </span>
