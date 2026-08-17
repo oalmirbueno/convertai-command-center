@@ -58,7 +58,7 @@ describe("contexto do ritual: data que já passou", () => {
   it("manda reconhecer a perda em vez de cobrar aprovação vencida", () => {
     expect(central).toContain("NÃO peça aprovação deles");
     expect(escritor).toContain("NÃO pode ser cobrado como aprovação pendente");
-    expect(escritor).toMatch(/sem culpar ninguém/i);
+    expect(escritor).toMatch(/não culpe ninguém/i);
   });
 
   it("conta publicação agendada que passou da data sem ir ao ar", () => {
@@ -75,5 +75,37 @@ describe("contexto do ritual: segundo cérebro", () => {
   it("nunca deixa a falta do segundo cérebro derrubar a geração", () => {
     // A busca é enriquecimento: se falhar, o ritual sai com o resto.
     expect(central).toContain('.catch(() => "")');
+  });
+});
+
+describe("tom das mensagens: construção, nunca ausência", () => {
+  it("proíbe explicitamente frases de ausência", () => {
+    // O texto saía como inventário de faltas ("não há publicações
+    // agendadas"), e o cliente lia isso como semana perdida.
+    expect(escritor).toMatch(/É PROIBIDO escrever frases de ausência/);
+    expect(escritor).toContain("Fato ausente não é notícia");
+  });
+
+  it("manda contar a construção quando não houve publicação", () => {
+    expect(escritor).toMatch(/Toda semana tem trabalho para contar/);
+    expect(escritor).toMatch(/houve construção/);
+  });
+
+  it("enquadra o que depende do cliente pelo ganho, não pela falta", () => {
+    expect(escritor).toMatch(/escreva pelo GANHO/);
+    expect(escritor).toMatch(/Sem cobrança/);
+    // As palavras que geram sensação de dívida ficam banidas.
+    expect(escritor).toMatch(/nunca use "pendente", "parado", "atrasado"/);
+  });
+
+  it("pede uma releitura final removendo o que não aconteceu", () => {
+    expect(escritor).toMatch(/ANTES DE RESPONDER, releia/);
+  });
+
+  it("os fatos param de mandar zeros e ausências", () => {
+    // Zero publicação não é fato para relatar: é ausência de dado.
+    expect(central).toContain("SEMANA DE CONSTRUÇÃO");
+    expect(central).toContain("Materiais prontos esperando o aval dele");
+    expect(central).not.toContain('|| "nenhuma"');
   });
 });

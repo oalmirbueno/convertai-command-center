@@ -102,7 +102,9 @@ export function weekSummaryText(input: {
     .map((step) => nomes[step - 1].replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
 
   if (feitas.length === 0) {
-    return `${clientName} · ${CYCLES[area].label}: a semana ainda não teve etapas concluídas.`;
+    // Semana recém-começada não é semana vazia: o texto que vai para o
+    // cliente fala do que está em produção, nunca do que falta.
+    return `${clientName} · ${CYCLES[area].label}: a semana está em produção por aqui. Assim que as primeiras entregas saírem, você recebe.`;
   }
 
   const faltam = totalSteps - doneSteps.length;
@@ -110,7 +112,7 @@ export function weekSummaryText(input: {
     `${clientName} · ${CYCLES[area].label} desta semana: ` +
     `${feitas.join(", ")}.` +
     (faltam > 0
-      ? ` Faltam ${faltam} ${faltam === 1 ? "etapa" : "etapas"} para fechar a semana.`
-      : " Semana fechada.")
+      ? ` O restante da semana segue em andamento.`
+      : " Semana completa.")
   );
 }

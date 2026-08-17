@@ -1125,27 +1125,31 @@ export default function AdminExperience() {
       .filter((r: any) => r.client_id === client.id && r.status === "published")
       .sort((a: any, b: any) => String(b.created_at).localeCompare(String(a.created_at)))[0];
 
+    // Os fatos são separados em dois blocos de propósito. O primeiro é o que
+    // ACONTECEU e pode ser contado ao cliente. O segundo é sinal interno, para
+    // a IA saber onde focar, e nunca vira frase de ausência na mensagem.
+    // Antes tudo ia junto, com "nenhuma" e zeros, e o texto saía como
+    // inventário de faltas em vez de relato do trabalho.
     return [
       `Cliente: ${nome}`,
       `Tempo de casa: ${daysSince(client.created_at) ?? "?"} dias`,
       client.plan_name ? `Plano: ${client.plan_name}` : "",
-      contratados.length ? `Serviços contratados (fale de todos, não só do que teve movimento): ${contratados.join(", ")}` : "",
+      contratados.length ? `Serviços contratados (fale do trabalho em todas as frentes): ${contratados.join(", ")}` : "",
       objetivo ? `Objetivo declarado pelo cliente no briefing: ${objetivo}` : "",
       trafegoLinha,
       anterior
-        ? `Na última mensagem publicada (${new Date(anterior.created_at).toLocaleDateString("pt-BR")}) a gente disse: "${String(anterior.next_steps || anterior.summary || "").slice(0, 400)}" — retome isso: cumprimos, avançou, ou continua pendente?`
+        ? `Na última mensagem publicada (${new Date(anterior.created_at).toLocaleDateString("pt-BR")}) a gente disse: "${String(anterior.next_steps || anterior.summary || "").slice(0, 400)}" — retome isso mostrando o avanço.`
         : `Primeira mensagem para este cliente: apresente o método e o que ele pode esperar do nosso ritmo.`,
-      `Frentes ativas: ${ativos.map((p: any) => p.name).join("; ") || "nenhuma"}`,
-      `Entregas liberadas nos últimos 7 dias: ${liberadas.length}${
-        liberadas.length ? ` (${liberadas.slice(0, 4).map((f: any) => f.file_name).join(", ")})` : ""
-      }`,
-      `Aprovações paradas agora: ${pendentes.length}${
-        pendentes.length
-          ? ` (${pendentes.slice(0, 3).map((f: any) => f.file_name).join(", ")}${
-              maisAntiga !== undefined ? `; a mais antiga há ${maisAntiga} dias` : ""
-            })`
-          : ""
-      }`,
+      ativos.length ? `Frentes ativas: ${ativos.map((p: any) => p.name).join("; ")}` : "",
+      liberadas.length
+        ? `Entregas liberadas nos últimos 7 dias: ${liberadas.length} (${liberadas.slice(0, 4).map((f: any) => f.file_name).join(", ")})`
+        : "",
+      pendentes.length
+        ? `Materiais prontos esperando o aval dele: ${pendentes.length} ` +
+          `(${pendentes.slice(0, 3).map((f: any) => f.file_name).join(", ")}` +
+          `${maisAntiga !== undefined ? `; o primeiro há ${maisAntiga} dias` : ""}). ` +
+          `Já estão prontos: fale do que entra no ar assim que ele aprovar, sem tom de cobrança.`
+        : "",
       // Material de data marcada que não foi aprovado a tempo: cobrar
       // aprovação disso constrange o cliente e não resolve nada, porque a
       // data já passou. O caminho é reconhecer a perda e replanejar.
@@ -1160,12 +1164,18 @@ export default function AdminExperience() {
         ? `Publicações que estavam agendadas e não foram ao ar na data: ${publicacoesPerdidas}. ` +
           `Trate como fato a resolver, não como cobrança.`
         : "",
-      `Publicações no ar nos últimos 7 dias: ${noAr.length}`,
-      `Publicações já agendadas: ${agendadas.length}`,
-      `Etapas concluídas nos últimos 7 dias: ${concluidas.map((m: any) => m.title).join("; ") || "nenhuma"}`,
-      `Próximas etapas com data: ${
-        proximas.map((m: any) => `${m.title} (${new Date(m.due_date).toLocaleDateString("pt-BR")})`).join("; ") || "nenhuma"
-      }`,
+      noAr.length ? `Publicações no ar nos últimos 7 dias: ${noAr.length}` : "",
+      agendadas.length ? `Publicações já agendadas: ${agendadas.length}` : "",
+      concluidas.length ? `Etapas concluídas nos últimos 7 dias: ${concluidas.map((m: any) => m.title).join("; ")}` : "",
+      proximas.length
+        ? `Próximas etapas com data: ${proximas.map((m: any) => `${m.title} (${new Date(m.due_date).toLocaleDateString("pt-BR")})`).join("; ")}`
+        : "",
+      // Semana de bastidor: quando não houve publicação, o trabalho existiu
+      // do mesmo jeito. É isto que a mensagem conta, em vez de dizer que nada
+      // aconteceu.
+      !noAr.length && !liberadas.length && cicloFeito > 0
+        ? `SEMANA DE CONSTRUÇÃO: nada foi publicado, mas a operação avançou ${cicloFeito} etapas de bastidor. Conte o que foi construído e o que isso prepara, nunca diga que a semana foi parada.`
+        : "",
       igUltima
         ? `Instagram na última semana medida: ${igUltima.followers ?? "?"} seguidores${pct("followers")}, alcance ${igUltima.reach ?? "?"}${pct("reach")}, ${igUltima.total_interactions ?? "?"} interações${pct("total_interactions")}`
         : `Instagram: sem medição registrada`,

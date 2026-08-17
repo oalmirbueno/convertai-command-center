@@ -17,7 +17,9 @@ describe("resumo da semana do cliente", () => {
 
     expect(texto).toContain("Acerbi");
     expect(texto).toContain("conteúdo da semana criado");
-    expect(texto).toContain("Faltam 4 etapas");
+    // O que falta é dito como trabalho em andamento, nunca como pendência.
+    expect(texto).toContain("em andamento");
+    expect(texto).not.toMatch(/faltam|pendente|parado|atrasad/i);
     // O parêntese técnico da etapa não vaza para o cliente.
     expect(texto).not.toContain("(artes e legendas)");
   });
@@ -30,11 +32,11 @@ describe("resumo da semana do cliente", () => {
       totalSteps: 6,
     });
 
-    expect(texto).toContain("Semana fechada");
-    expect(texto).not.toContain("Faltam");
+    expect(texto).toContain("Semana completa");
+    expect(texto).not.toMatch(/faltam|pendente/i);
   });
 
-  it("não inventa trabalho quando a semana ainda não começou", () => {
+  it("semana recém-começada fala de produção, nunca de vazio", () => {
     const texto = weekSummaryText({
       clientName: "Mirante",
       area: "social",
@@ -42,7 +44,9 @@ describe("resumo da semana do cliente", () => {
       totalSteps: 6,
     });
 
-    expect(texto).toContain("ainda não teve etapas concluídas");
+    // O cliente nunca deve ler que nada foi feito por ele nesta semana.
+    expect(texto).toContain("em produção");
+    expect(texto).not.toMatch(/não teve|nenhuma|nada foi/i);
   });
 
   it("mantém as etapas de onboarding fora da mensagem do cliente", () => {
