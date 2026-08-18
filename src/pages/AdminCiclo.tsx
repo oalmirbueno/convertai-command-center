@@ -161,20 +161,32 @@ export default function AdminCiclo() {
   );
 
   /**
-   * Quem existe, está ativo e ainda não aparece nesta frente.
+   * Quem está cadastrado e ainda não aparece nesta frente.
    *
-   * Avulso fica fora desta lista de propósito: ele tem aba própria, e oferecê-lo
-   * aqui convidaria a colocá-lo numa rotina semanal que não é a dele.
+   * A regra aqui era restritiva demais e escondia justamente quem o dono mais
+   * queria incluir. A flag de empresa interna (AcelerIQ, Stop Informática,
+   * Jalimpo, PlayBet) existe para tirar da COBRANÇA — MRR, alerta de atraso,
+   * pendência de plano —, e estava bloqueando também a OPERAÇÃO: trabalho
+   * acontece para essas empresas do mesmo jeito. Plano em standby idem.
+   *
+   * Então a lista passa a oferecer todo mundo que está cadastrado e fora da
+   * frente, com o motivo escrito ao lado para a escolha ser consciente. Só o
+   * avulso continua de fora, porque tem aba própria e régua diferente.
    */
   const clientesDeFora = useMemo(
     () =>
-      ((clients || []) as any[]).filter(
-        (client) =>
-          !isInternalClient(client) &&
-          (client.plan_status || "active") === "active" &&
-          !ehAvulso(client) &&
-          !inCycle(client, area, hasService),
-      ),
+      ((clients || []) as any[])
+        .filter((client) => !ehAvulso(client) && !inCycle(client, area, hasService))
+        .map((client) => ({
+          client,
+          nota: isInternalClient(client)
+            ? "empresa do grupo"
+            : (client.plan_status || "active") !== "active"
+              ? `plano ${client.plan_status}`
+              : "sem serviço marcado",
+        }))
+        // Quem só não tem serviço marcado vem primeiro: é o caso mais comum.
+        .sort((a, b) => a.nota.localeCompare(b.nota)),
     [clients, area],
   );
 
@@ -1031,7 +1043,7 @@ export default function AdminCiclo() {
                 cobrança nem no plano.
               </p>
               <div className="mt-2 space-y-1">
-                {clientesDeFora.map((client) => (
+                {clientesDeFora.map(({ client, nota }) => (
                   <button
                     key={client.id}
                     type="button"
@@ -1044,8 +1056,13 @@ export default function AdminCiclo() {
                     }
                     className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/40 px-2.5 py-1.5 text-left disabled:opacity-40"
                   >
-                    <span className="min-w-0 truncate text-[12px] text-foreground">
-                      {client.company_name || client.full_name}
+                    <span className="flex min-w-0 flex-col">
+                      <span className="truncate text-[12px] text-foreground">
+                        {client.company_name || client.full_name}
+                      </span>
+                      {/* O motivo de estar fora fica visível: incluir uma
+                          empresa do grupo é escolha legítima, mas consciente. */}
+                      <span className="truncate text-[10px] text-muted-foreground">{nota}</span>
                     </span>
                     <span className="shrink-0 text-[10px] font-semibold text-primary">incluir</span>
                   </button>

@@ -299,6 +299,24 @@ export default function AdminExperience() {
   const { data: adsWeekRows = [] } = useAdsDaily(undefined, 7);
   const { data: adsCampaignList = [] } = useAdsCampaigns();
 
+  // O calendário editorial de todos os clientes: peça pronta com nome. Sem
+  // isto a mensagem dependia só de arquivo liberado nos últimos 7 dias, e
+  // caía no genérico quando o material tinha sido aprovado antes disso.
+  const { data: expPautas = [] } = useQuery({
+    queryKey: ["exp-pautas"],
+    queryFn: async () => {
+      const { data, error } = await supabase.from("editorial_posts")
+        .select("client_id, title, production_status")
+        .is("archived_at", null)
+        .in("production_status", ["ready", "production"])
+        .order("updated_at", { ascending: false })
+        .limit(300);
+      if (error) return [];
+      return data || [];
+    },
+    ...AO_VIVO,
+  });
+
   const { data: allPublications = [] } = useQuery({
     queryKey: ["exp-publications"],
     queryFn: async () => {
@@ -1417,6 +1435,30 @@ export default function AdminExperience() {
    * Tudo vem de consultas ao vivo — quando o dossiê muda, um avulso é marcado
    * ou uma campanha gasta, a mensagem seguinte já sai diferente.
    */
+  /**
+   * Recarrega as fontes que a mensagem lê e mostra o resultado na hora.
+   *
+   * Sem isto, quem liberava um material e vinha copiar o recado pegava o texto
+   * anterior — a consulta ao vivo tem intervalo, e o intervalo aparecia como
+   * "a mensagem não atualiza".
+   */
+  const [atualizandoMensagens, setAtualizandoMensagens] = useState(false);
+  const atualizarMensagens = async () => {
+    setAtualizandoMensagens(true);
+    try {
+      await Promise.all(
+        [
+          "exp-released-files", "exp-pending-approvals", "exp-publications",
+          "exp-memory", "exp-pautas", "exp-reports", "weekly-cycle-ritual",
+          "ads-daily", "ads-campaigns",
+        ].map((chave) => queryClient.invalidateQueries({ queryKey: [chave] })),
+      );
+      toast.success("Mensagens atualizadas com o que há de mais recente.");
+    } finally {
+      setAtualizandoMensagens(false);
+    }
+  };
+
   const buildGroupMessage = (client: any, moment: "abertura" | "meio" | "fechamento" = "abertura") => {
     const name = client.company_name || client.full_name || "time";
     const hour = new Date().getHours();
@@ -1541,6 +1583,10 @@ export default function AdminExperience() {
       cicloFeito,
       avulsosFeitos,
       frentes,
+      pautasProntas: (expPautas || [])
+        .filter((linha: any) => linha.client_id === client.id && linha.production_status === "ready")
+        .map((linha: any) => readableFileName(String(linha.title || "")))
+        .filter(Boolean),
       contextoRecente,
       proximoPasso,
       anuncios,
@@ -1873,7 +1919,22 @@ export default function AdminExperience() {
                   {/* Mensagens do grupo por momento + contexto */}
                   <div className="space-y-4">
                     <div className="bg-card border border-border rounded-xl p-5 space-y-2.5">
-                      <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Mensagem do grupo · escolha o momento</span>
+                      {/* A mensagem é montada da leitura ao vivo do painel. Se
+                          alguém acabou de liberar material, marcar etapa ou
+                          registrar decisão, o botão traz o texto já com isso —
+                          sem precisar recarregar a página inteira. */}
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[11px] uppercase tracking-wider text-muted-foreground font-medium">Mensagem do grupo · escolha o momento</span>
+                        <button
+                          type="button"
+                          onClick={() => void atualizarMensagens()}
+                          disabled={atualizandoMensagens}
+                          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-2.5 py-1 text-[11px] font-medium text-foreground transition-colors hover:border-primary/40 disabled:opacity-40"
+                        >
+                          <RefreshCw className={`h-3 w-3 ${atualizandoMensagens ? "animate-spin" : ""}`} />
+                          {atualizandoMensagens ? "Atualizando..." : "Atualizar"}
+                        </button>
+                      </div>
                       {[
                         { moment: "abertura" as const, label: "Abertura da semana (segunda)" },
                         { moment: "meio" as const, label: "Meio da semana (quarta)" },

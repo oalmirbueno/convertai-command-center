@@ -46,7 +46,7 @@ export function useClientGroupMessage(client: any | null) {
       const seteDiasAtras = new Date(Date.now() - 7 * 86400000).toISOString();
 
       // Uma ida só ao banco para tudo que a mensagem precisa daquele cliente.
-      const [entregas, aprovacoes, publicacoes, projetos, ciclo, memoria, relatorios, adsDias, adsCampanhas] =
+      const [entregas, aprovacoes, publicacoes, projetos, ciclo, memoria, relatorios, adsDias, adsCampanhas, pautas] =
         await Promise.all([
           supabase.from("files")
             .select("file_name, created_at")
@@ -80,6 +80,15 @@ export function useClientGroupMessage(client: any | null) {
           (supabase as any).from("ads_campaigns")
             .select("status, effective_status")
             .eq("client_id", clientId!),
+          // O calendário editorial: peça pronta, com nome, que não depende da
+          // janela de 7 dias dos arquivos. É a fonte que faltava — medindo a
+          // carteira real, nenhum cliente tinha entrega nessa janela, e vários
+          // tinham carrossel pronto esperando data.
+          supabase.from("editorial_posts")
+            .select("title, production_status")
+            .eq("client_id", clientId!).is("archived_at", null)
+            .in("production_status", ["ready", "production"])
+            .order("updated_at", { ascending: false }).limit(8),
         ]);
 
       const nome = client.company_name || client.full_name || "time";
@@ -182,6 +191,12 @@ export function useClientGroupMessage(client: any | null) {
         avulsosFeitos,
         frentes: ((projetos.data || []) as any[])
           .map((p) => readableProjectName(p.name, nome))
+          .filter(Boolean),
+        // Só o que está "ready" entra na mensagem: peça em produção ainda não
+        // é promessa que se possa fazer ao cliente.
+        pautasProntas: ((pautas as any).data || [])
+          .filter((linha: any) => linha.production_status === "ready")
+          .map((linha: any) => readableFileName(String(linha.title || "")))
           .filter(Boolean),
         contextoRecente,
         proximoPasso,

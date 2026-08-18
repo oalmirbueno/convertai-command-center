@@ -55,6 +55,17 @@ export interface GroupMessageContext {
    */
   contextoRecente?: string | null;
 
+  /**
+   * Conteúdo do calendário editorial pronto para sair, PELO NOME.
+   *
+   * Esta é a fonte que faltava. As entregas vinham só de arquivo liberado nos
+   * últimos 7 dias — material aprovado há dez dias sumia da mensagem e o texto
+   * caía no genérico "semana de construção", mesmo com carrossel pronto
+   * esperando data. Medindo a carteira real: nenhum cliente tinha entrega na
+   * janela de 7 dias, mas vários tinham pauta pronta com nome.
+   */
+  pautasProntas?: string[];
+
   /** Próximo passo combinado no último relatório publicado, se recente. */
   proximoPasso?: string | null;
 
@@ -109,11 +120,22 @@ function abertura(ctx: GroupMessageContext): string {
     );
   }
 
+  // O que está pronto para sair, pelo nome. Vem antes do contexto porque é o
+  // mais concreto que existe: o cliente reconhece a peça de que se falou.
+  const prontas = ctx.pautasProntas || [];
+  if (prontas.length > 0) {
+    linhas.push(
+      prontas.length === 1
+        ? `Já está pronto para entrar no ar: ${prontas[0]}.`
+        : `Já estão prontos para entrar no ar: ${listInWords(prontas, 3)}.`,
+    );
+  }
+
   // O contexto vivo entra no lugar do antigo "seguimos trabalhando em X":
   // a última decisão ou registro real conta mais que o nome do projeto.
   if (ctx.contextoRecente) {
     linhas.push(`Por dentro: ${ctx.contextoRecente}`);
-  } else if (ctx.frentes.length > 0) {
+  } else if (prontas.length === 0 && ctx.frentes.length > 0) {
     linhas.push(`Em produção nesta semana: ${listInWords(ctx.frentes)}.`);
   }
 
@@ -166,6 +188,14 @@ function meio(ctx: GroupMessageContext): string {
 
   if (movimento.length > 0) {
     linhas.push(movimento.map((frase) => `${maiuscula(frase)}.`).join("\n"));
+  } else if ((ctx.pautasProntas || []).length > 0) {
+    // Sem movimento novo desde segunda, mas com peça pronta: o cliente
+    // reconhece o nome e sabe exatamente o que está esperando data.
+    linhas.push(
+      `Da produção da semana, ${listInWords(ctx.pautasProntas!, 3)} ${
+        ctx.pautasProntas!.length === 1 ? "já está pronto" : "já estão prontos"
+      } e aguardando a data no calendário.`,
+    );
   } else {
     linhas.push(
       "O começo da semana foi de produção interna: o material está tomando forma e chega até sexta.",
@@ -227,6 +257,14 @@ function fechamento(ctx: GroupMessageContext): string {
   }
   if (ctx.avulsosFeitos.length > 0) {
     saiu.push(`e ainda saiu ${listInWords(ctx.avulsosFeitos, 2)}`);
+  }
+
+  if ((ctx.pautasProntas || []).length > 0) {
+    saiu.push(
+      `${listInWords(ctx.pautasProntas!, 3)} ${
+        ctx.pautasProntas!.length === 1 ? "ficou pronto" : "ficaram prontos"
+      } para entrar no calendário`,
+    );
   }
 
   if (saiu.length > 0) {
