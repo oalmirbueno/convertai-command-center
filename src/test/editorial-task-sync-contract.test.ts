@@ -73,7 +73,10 @@ describe("editorial design task workspace contract", () => {
     );
     expect(page).not.toContain("<EditorialTaskInbox");
     expect(views).toContain(
-      'className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4"',
+      // Cinco colunas desde que "Programado" entrou no kanban editorial
+      // (b85a042). O que este teste guarda é o calendário ocupando a largura
+      // toda, sem barra lateral fixa — não o número de colunas em si.
+      'className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5"',
     );
     expect(views).not.toContain("min-w-[1120px]");
     expect(views).not.toContain("w-[286px]");
