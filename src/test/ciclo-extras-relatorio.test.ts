@@ -158,8 +158,21 @@ describe("o MCP enxerga o que foi criado", () => {
     expect(mcp).toContain("'avulso','checklist'");
   });
 
-  it("a versão subiu nos dois lugares", () => {
-    expect(mcp).toMatch(/version: '1\.13\.\d+'/);
-    expect(ler("supabase/functions/mcp-oauth-metadata/index.ts")).toMatch(/1\.13\.\d+/);
+  it("a versão não regride abaixo da que trouxe os avulsos, e os dois lugares batem", () => {
+    // Fixar o número exato faz este teste quebrar em toda entrega seguinte sem
+    // apontar defeito. O que importa: não voltar atrás de 1.13.0 e as duas
+    // declarações da versão andarem juntas.
+    const naFerramenta = mcp.match(/version: '(\d+)\.(\d+)\.(\d+)'/);
+    const noMetadata = ler("supabase/functions/mcp-oauth-metadata/index.ts")
+      .match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/);
+    expect(naFerramenta).toBeTruthy();
+    expect(noMetadata).toBeTruthy();
+    // As duas declarações da versão precisam andar juntas: quando divergiram,
+    // o conector continuou anunciando ferramenta que já tinha mudado de forma.
+    expect(noMetadata![1]).toBe(
+      `${naFerramenta![1]}.${naFerramenta![2]}.${naFerramenta![3]}`,
+    );
+    const [maior, menor] = [Number(naFerramenta![1]), Number(naFerramenta![2])];
+    expect(maior > 1 || (maior === 1 && menor >= 13)).toBe(true);
   });
 });
