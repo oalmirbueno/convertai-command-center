@@ -4,13 +4,18 @@ import type { CycleArea } from "@/lib/cycleDefs";
 /**
  * Duas folgas no ciclo, para o que a regra fixa não cobre.
  *
- * 1) CLIENTE EXTRA — a lista do ciclo vem do serviço marcado no cadastro, e
- *    isso é certo como padrão. Mas existe o caso real: o cliente que ainda não
- *    tem tráfego contratado e já está em preparação, o que entrou no meio da
- *    semana, o que pediu uma frente por fora. Sem uma porta, a saída era
- *    marcar o serviço no cadastro — e isso mexe em cobrança, ritual e MRR.
- *    Por isso o extra mora em `services_config.ciclo_extra`, SEPARADO do
- *    serviço contratado: entra no ciclo sem virar cliente daquela frente.
+ * 1) CLIENTE EXTRA — a lista do ciclo vem do serviço marcado no cadastro.
+ *    A inclusão manual já morou em `services_config.ciclo_extra`, separada do
+ *    serviço contratado, por medo de mexer em cobrança. O medo não se
+ *    confirmou: cobrança sai de `plan_value`/`plan_status` e do serviço
+ *    `cobranca`, que são outras chaves — marcar social ou tráfego não move
+ *    dinheiro nenhum.
+ *
+ *    O que a separação causava era pior: incluir o cliente no ciclo não
+ *    aparecia no cadastro dele, então a mesma informação vivia em dois lugares
+ *    e o cadastro mentia. Agora incluir GRAVA o serviço no cadastro — um lugar
+ *    só, e quem abrir a ficha vê o que a operação já sabe. `ciclo_extra`
+ *    continua sendo LIDO para não derrubar quem foi incluído antes.
  *
  * 2) AVULSOS — as 6 etapas contam a rotina, e a rotina é só parte do trabalho.
  *    Gravação na loja, reunião de alinhamento, ajuste que o cliente pediu no
@@ -41,11 +46,14 @@ export function inCycle(
 }
 
 /**
- * Inclui ou remove o cliente da frente, sem tocar no serviço contratado.
+ * Inclui ou remove o cliente da frente, gravando no cadastro dele.
  *
  * Lê a configuração atual antes de gravar porque `services_config` guarda
  * outras coisas (caixas do financeiro, histórico de pulso): sobrescrever o
  * objeto inteiro apagaria o que não é nosso.
+ *
+ * Ao remover, limpa as DUAS origens — o serviço e a lista antiga —, senão o
+ * cliente sairia da tela e voltaria no refresh pela origem que sobrou.
  */
 export async function setCycleExtra(
   clientId: string,
@@ -62,14 +70,13 @@ export async function setCycleExtra(
 
     const config = ((atual as { services_config?: Record<string, unknown> })?.services_config ||
       {}) as Record<string, unknown>;
-    const antes = extraAreas(atual);
-    const depois = incluir
-      ? [...new Set([...antes, area])]
-      : antes.filter((valor) => valor !== area);
+    const legado = extraAreas(atual).filter((valor) => valor !== area);
 
     const { error } = await supabase
       .from("profiles")
-      .update({ services_config: { ...config, ciclo_extra: depois } } as never)
+      .update({
+        services_config: { ...config, [area]: incluir, ciclo_extra: legado },
+      } as never)
       .eq("id", clientId);
     return !error;
   } catch {

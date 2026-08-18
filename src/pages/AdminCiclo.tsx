@@ -12,6 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
+import { servicosDoCliente } from "@/lib/servicosCliente";
+import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { extraAreas, inCycle, setCycleExtra } from "@/lib/cycleExtras";
 import { recordMemory } from "@/lib/clientMemory";
 import {
@@ -90,6 +92,8 @@ export default function AdminCiclo() {
   // A aba de avulsos convive com a frente escolhida em vez de substituí-la:
   // ao voltar para Social ou Tráfego, a frente anterior continua valendo.
   const [avulsosAbertos, setAvulsosAbertos] = useState(false);
+  // Qual serviço está sendo olhado na aba de avulsos. Nulo = todos.
+  const [servicoAvulso, setServicoAvulso] = useState<string | null>(null);
   const [weekOffset, setWeekOffset] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -149,16 +153,52 @@ export default function AdminCiclo() {
    */
   const ehAvulso = (client: any) => (client.client_type || "recurring") === "one_off";
 
+  /**
+   * A empresa do grupo TRABALHA, então aparece na operação.
+   *
+   * A flag de empresa interna existe para tirar de COBRANÇA — MRR, alerta de
+   * atraso, pendência de plano. Ela estava também escondendo essas empresas
+   * do ciclo, e o efeito era concreto: Jalimpo, Stop Informática e AcelerIQ
+   * tinham social e tráfego marcados no cadastro e não apareciam em frente
+   * nenhuma. As duas abas mostravam os mesmos cinco clientes, e o dono via
+   * uma tela que não continha o trabalho que ele estava fazendo.
+   *
+   * Quem esconde de cobrança é o financeiro; aqui a régua é só se há trabalho.
+   */
   const activeClients = useMemo(
     () =>
       ((clients || []) as any[]).filter((client) => {
-        if (isInternalClient(client)) return false;
         if ((client.plan_status || "active") !== "active") return false;
-        if (avulsosAbertos) return ehAvulso(client);
+        if (avulsosAbertos) {
+          if (!ehAvulso(client)) return false;
+          // Cliente avulso costuma ter mais de um serviço (site e design, por
+          // exemplo), então ele aparece em cada um deles — não é uma gaveta só.
+          return !servicoAvulso || servicosDoCliente(client).includes(servicoAvulso);
+        }
         return !ehAvulso(client) && inCycle(client, area, hasService);
       }),
-    [clients, area, avulsosAbertos],
+    [clients, area, avulsosAbertos, servicoAvulso],
   );
+
+  /**
+   * Os serviços que existem entre os avulsos ativos, com quantos clientes cada
+   * um tem.
+   *
+   * Sai dos clientes de verdade em vez de listar o catálogo inteiro: uma fila
+   * de onze serviços em que oito estão vazios não organiza nada.
+   */
+  const servicosDosAvulsos = useMemo(() => {
+    const conta = new Map<string, number>();
+    for (const client of (clients || []) as any[]) {
+      if (!ehAvulso(client) || (client.plan_status || "active") !== "active") continue;
+      for (const servico of servicosDoCliente(client)) {
+        conta.set(servico, (conta.get(servico) || 0) + 1);
+      }
+    }
+    return [...conta.entries()]
+      .map(([servico, total]) => ({ servico, total }))
+      .sort((a, b) => b.total - a.total || a.servico.localeCompare(b.servico));
+  }, [clients]);
 
   /**
    * Quem está cadastrado e ainda não aparece nesta frente.
@@ -220,7 +260,6 @@ export default function AdminCiclo() {
     () =>
       ((clients || []) as any[]).filter(
         (client) =>
-          !isInternalClient(client) &&
           (client.plan_status || "active") === "active" &&
           (client.client_type || "recurring") !== "one_off" &&
           !hasService(client, "social") &&
@@ -398,7 +437,6 @@ export default function AdminCiclo() {
   const otherAreaTotals = useMemo(() => {
     const list = ((clients || []) as any[]).filter(
       (client) =>
-        !isInternalClient(client) &&
         (client.plan_status || "active") === "active" &&
         (client.client_type || "recurring") !== "one_off" &&
         hasService(client, otherArea),
@@ -769,9 +807,7 @@ export default function AdminCiclo() {
     () =>
       ((clients || []) as any[]).filter(
         (client) =>
-          !isInternalClient(client) &&
-          (client.plan_status || "active") === "active" &&
-          ehAvulso(client),
+          (client.plan_status || "active") === "active" && ehAvulso(client),
       ).length,
     [clients],
   );
@@ -802,7 +838,7 @@ export default function AdminCiclo() {
       // ícone em cima e texto pequeno embaixo.
       <button
         type="button"
-        onClick={() => { setArea(target); setAvulsosAbertos(false); }}
+        onClick={() => { setArea(target); setAvulsosAbertos(false); setServicoAvulso(null); }}
         className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
           selected ? "text-primary" : "text-muted-foreground"
         }`}
@@ -985,16 +1021,60 @@ export default function AdminCiclo() {
             </div>
           )}
 
+          {/* A fila de serviços dos avulsos.
+
+              Cliente avulso não tem frente semanal — ele tem o serviço que
+              contratou. Sem esta fila, os seis avulsos vinham num monte só e
+              abrir qualquer um levava ao checklist de social media, que não
+              é o trabalho dele. */}
+          {avulsosAbertos && servicosDosAvulsos.length > 0 && (
+            <div className="-mx-0.5 flex snap-x gap-1.5 overflow-x-auto px-0.5 pb-0.5">
+              <button
+                type="button"
+                onClick={() => setServicoAvulso(null)}
+                className={`shrink-0 snap-start cursor-pointer rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
+                  servicoAvulso === null
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "border-border bg-card text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                Todos
+                <span className="ml-1 tabular-nums opacity-70">{totalAvulsos}</span>
+              </button>
+              {servicosDosAvulsos.map(({ servico, total }) => (
+                <button
+                  key={servico}
+                  type="button"
+                  onClick={() => setServicoAvulso(servico)}
+                  className={`shrink-0 snap-start cursor-pointer rounded-full border px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
+                    servicoAvulso === servico
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : "border-border bg-card text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {SERVICE_LABELS[servico] || servico}
+                  <span className="ml-1 tabular-nums opacity-70">{total}</span>
+                </button>
+              ))}
+            </div>
+          )}
+
           {openClients.map(renderClientCard)}
 
           {activeClients.length === 0 && (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center">
               <p className="text-sm font-medium text-foreground">
-                {avulsosAbertos ? "Nenhum cliente avulso ativo" : `Nenhum cliente de ${cycle.label.toLowerCase()}`}
+                {avulsosAbertos
+                  ? servicoAvulso
+                    ? `Nenhum avulso de ${SERVICE_LABELS[servicoAvulso] || servicoAvulso}`
+                    : "Nenhum cliente avulso ativo"
+                  : `Nenhum cliente de ${cycle.label.toLowerCase()}`}
               </p>
               <p className="mt-1 text-[11.5px] text-muted-foreground">
                 {avulsosAbertos
-                  ? "Cliente avulso é o cadastrado como entrega pontual, sem contrato correndo. Nenhum está ativo agora."
+                  ? servicoAvulso
+                    ? `Nenhum cliente avulso de ${SERVICE_LABELS[servicoAvulso] || servicoAvulso} agora. Toque em "Todos" para ver os outros.`
+                    : "Cliente avulso é o cadastrado como entrega pontual, sem contrato correndo. Nenhum está ativo agora."
                   : `A lista usa o serviço marcado no cadastro. Marque "${area === "social" ? "Social" : "Tráfego"}" em Clientes, ou use "Incluir cliente nesta frente" aqui embaixo.`}
               </p>
             </div>
@@ -1039,8 +1119,8 @@ export default function AdminCiclo() {
               {abrirInclusao && (
                 <>
               <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
-                Entra só no ciclo, sem virar serviço contratado — nada muda em
-                cobrança nem no plano.
+                Marca o serviço no cadastro do cliente, então ele passa a
+                aparecer aqui e na ficha dele. Não mexe em cobrança nem no plano.
               </p>
               <div className="mt-2 space-y-1">
                 {clientesDeFora.map(({ client, nota }) => (
@@ -1118,6 +1198,16 @@ export default function AdminCiclo() {
       <ClientCycleSheet
         client={detailClient}
         area={area}
+        /* Abrir um avulso mostra a entrega do serviço dele.
+
+           Sem serviço escolhido na fila, vale o primeiro que ele tem — abrir
+           um cliente de site e cair no checklist de social media era
+           exatamente o "genérico" que não descrevia o trabalho. */
+        servicoAvulso={
+          avulsosAbertos && detailClient
+            ? servicoAvulso || servicosDoCliente(detailClient)[0] || null
+            : null
+        }
         weekStart={weekStart}
         realMonday={realMonday}
         historyWeekKeys={historyWeekKeys}

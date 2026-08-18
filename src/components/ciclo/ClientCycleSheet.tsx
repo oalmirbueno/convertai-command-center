@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Sheet, SheetContent, SheetDescription, SheetTitle,
 } from "@/components/ui/sheet";
+import EtapasDaEntrega from "@/components/ciclo/EtapasDaEntrega";
 import {
   CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS, type CycleArea,
   weekSummaryText,
@@ -50,6 +51,15 @@ import type { GroupMoment } from "@/lib/groupMessage";
 export interface ClientCycleSheetProps {
   client: any | null;
   area: CycleArea;
+  /**
+   * O serviço, quando a folha é de um cliente avulso.
+   *
+   * Presente, troca o checklist semanal pela entrega daquele serviço. Ausente,
+   * a folha é a do ciclo de sempre. Cliente avulso não tem semana que se
+   * repete — mostrar a ele as seis etapas de social media descrevia um
+   * trabalho que não é o dele.
+   */
+  servicoAvulso?: string | null;
   weekStart: Date;
   realMonday: Date;
   historyWeekKeys: string[];
@@ -83,7 +93,7 @@ function monthsSince(iso?: string | null): string | null {
 }
 
 export default function ClientCycleSheet({
-  client, area, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
+  client, area, servicoAvulso, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
   pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
   onToggle, onClose,
 }: ClientCycleSheetProps) {
@@ -579,98 +589,106 @@ export default function ClientCycleSheet({
                 cliente. Cada momento conta uma coisa diferente.
               </p>
 
-              {heranca !== null && (
-                <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
-                  Semana passada fechou {heranca}/{totalSteps}. O que ficou para trás continua valendo aqui.
-                </p>
-              )}
-
-              {/* Etapas com nome inteiro, na semana escolhida aqui dentro */}
-              <div className="mt-4 flex items-center justify-between gap-2">
-                <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                  Etapas {editandoAnterior ? "da semana passada" : "desta semana"}
-                </p>
-                {pastWeekKey && (
-                  <div className="flex items-center gap-0.5 rounded-lg bg-secondary/60 p-0.5">
-                    {[
-                      { valor: false, texto: "Esta semana" },
-                      { valor: true, texto: "Anterior" },
-                    ].map((opcao) => (
-                      <button
-                        key={opcao.texto}
-                        type="button"
-                        onClick={() => setEditandoAnterior(opcao.valor)}
-                        className={`rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors ${
-                          editandoAnterior === opcao.valor
-                            ? "bg-card text-foreground shadow-sm"
-                            : "text-muted-foreground"
-                        }`}
-                      >
-                        {opcao.texto}
-                      </button>
-                    ))}
-                  </div>
+              {/* Avulso troca o checklist semanal pela entrega do serviço dele. */}
+              {servicoAvulso ? (
+                <EtapasDaEntrega client={client} servico={servicoAvulso} canWrite={canWrite} />
+              ) : (
+                <>
+                {heranca !== null && (
+                  <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400">
+                    Semana passada fechou {heranca}/{totalSteps}. O que ficou para trás continua valendo aqui.
+                  </p>
                 )}
-              </div>
-              {editandoAnterior && (
-                <p className="mt-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
-                  Você está corrigindo a semana de{" "}
-                  {new Date(`${pastWeekKey}T12:00:00`).toLocaleDateString("pt-BR", {
-                    day: "2-digit", month: "2-digit",
-                  })}
-                  . Serve para registrar o que já tinha sido feito e ficou sem marcar.
-                </p>
-              )}
-              <div className="mt-2 space-y-1.5">
-                {Array.from({ length: clientTotal }, (_, index) => index + 1).map((step) => {
-                  const key = `${client.id}:${area}:${step}${editandoAnterior ? ":anterior" : ""}`;
-                  const row = marcacaoDe(step);
-                  const done = !!row;
-                  const onboardingTrack = step > totalSteps;
-                  const who = row?.done_by
-                    ? row.done_by === currentUserId ? "você" : doneByNames?.[row.done_by] || "equipe"
-                    : null;
-                  return (
-                    <button
-                      key={key}
-                      type="button"
-                      disabled={!canWrite || pendingKey === key || bulkRunning}
-                      onClick={() => void onToggle(client, step, editandoAnterior ? pastWeekKey : undefined)}
-                      className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
-                        done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
-                      } ${pendingKey === key ? "opacity-50" : ""}`}
-                    >
-                      <span
-                        className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
-                          done
-                            ? onboardingTrack ? "bg-info text-white" : "bg-primary text-primary-foreground"
-                            : "bg-secondary text-muted-foreground"
-                        }`}
+
+                {/* Etapas com nome inteiro, na semana escolhida aqui dentro */}
+                <div className="mt-4 flex items-center justify-between gap-2">
+                  <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                    Etapas {editandoAnterior ? "da semana passada" : "desta semana"}
+                  </p>
+                  {pastWeekKey && (
+                    <div className="flex items-center gap-0.5 rounded-lg bg-secondary/60 p-0.5">
+                      {[
+                        { valor: false, texto: "Esta semana" },
+                        { valor: true, texto: "Anterior" },
+                      ].map((opcao) => (
+                        <button
+                          key={opcao.texto}
+                          type="button"
+                          onClick={() => setEditandoAnterior(opcao.valor)}
+                          className={`rounded-md px-2 py-1 text-[10.5px] font-semibold transition-colors ${
+                            editandoAnterior === opcao.valor
+                              ? "bg-card text-foreground shadow-sm"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {opcao.texto}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                {editandoAnterior && (
+                  <p className="mt-1.5 rounded-lg bg-secondary/50 px-2.5 py-1.5 text-[11px] leading-relaxed text-muted-foreground">
+                    Você está corrigindo a semana de{" "}
+                    {new Date(`${pastWeekKey}T12:00:00`).toLocaleDateString("pt-BR", {
+                      day: "2-digit", month: "2-digit",
+                    })}
+                    . Serve para registrar o que já tinha sido feito e ficou sem marcar.
+                  </p>
+                )}
+                <div className="mt-2 space-y-1.5">
+                  {Array.from({ length: clientTotal }, (_, index) => index + 1).map((step) => {
+                    const key = `${client.id}:${area}:${step}${editandoAnterior ? ":anterior" : ""}`;
+                    const row = marcacaoDe(step);
+                    const done = !!row;
+                    const onboardingTrack = step > totalSteps;
+                    const who = row?.done_by
+                      ? row.done_by === currentUserId ? "você" : doneByNames?.[row.done_by] || "equipe"
+                      : null;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        disabled={!canWrite || pendingKey === key || bulkRunning}
+                        onClick={() => void onToggle(client, step, editandoAnterior ? pastWeekKey : undefined)}
+                        className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                          done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
+                        } ${pendingKey === key ? "opacity-50" : ""}`}
                       >
-                        {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
-                          {step <= totalSteps
-                            ? stepLabelForWeek(
-                                area,
-                                client.id,
-                                editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
-                                step,
-                                opcoesEtapa,
-                              )
-                            : ONBOARDING_STEPS[step - totalSteps - 1]}
+                        <span
+                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
+                            done
+                              ? onboardingTrack ? "bg-info text-white" : "bg-primary text-primary-foreground"
+                              : "bg-secondary text-muted-foreground"
+                          }`}
+                        >
+                          {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
                         </span>
-                        <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                          {done && row?.done_at
-                            ? `feito ${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} às ${hourOf(row.done_at)}${who ? ` por ${who}` : ""}`
-                            : onboardingTrack ? "onboarding" : "pendente"}
+                        <span className="min-w-0 flex-1">
+                          <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
+                            {step <= totalSteps
+                              ? stepLabelForWeek(
+                                  area,
+                                  client.id,
+                                  editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
+                                  step,
+                                  opcoesEtapa,
+                                )
+                              : ONBOARDING_STEPS[step - totalSteps - 1]}
+                          </span>
+                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                            {done && row?.done_at
+                              ? `feito ${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} às ${hourOf(row.done_at)}${who ? ` por ${who}` : ""}`
+                              : onboardingTrack ? "onboarding" : "pendente"}
+                          </span>
                         </span>
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                </>
+              )}
 
               {/* O que já está armado e o que saiu */}
               {(contexto0?.agendadas?.length || contexto0?.arquivos?.length) ? (

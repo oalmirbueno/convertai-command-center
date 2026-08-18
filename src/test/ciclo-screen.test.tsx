@@ -68,13 +68,18 @@ describe("tela do Ciclo da Semana", () => {
   // parou": o que importa é estar na tela, não quantas vezes.
   const naTela = (texto: string) => screen.queryAllByText(texto).length > 0;
 
-  it("mostra em Social apenas quem contratou social, sem a empresa do grupo", async () => {
+  it("mostra em Social quem contratou social, incluindo a empresa do grupo", async () => {
     await renderCiclo();
     await screen.findAllByText("Acerbi", {}, { timeout: 15000 });
 
     expect(naTela("Mirante Luz")).toBe(true);
+    // Sem social contratado, continua fora: a régua da frente não mudou.
     expect(naTela("Vifut")).toBe(false);
-    expect(naTela("Empresa do Grupo")).toBe(false);
+    // A empresa do grupo TRABALHA, então aparece na operação. A flag interna
+    // existe para tirar de COBRANÇA — MRR, atraso, pendência de plano — e
+    // estava escondendo o trabalho: Jalimpo, Stop Informática e AcelerIQ
+    // tinham social e tráfego marcados e não apareciam em frente nenhuma.
+    expect(naTela("Empresa do Grupo")).toBe(true);
   }, 20000);
 
   it("troca para Tráfego pela barra de baixo e recorta a lista", async () => {

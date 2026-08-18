@@ -35,11 +35,19 @@ describe("incluir cliente no ciclo sem mexer no contrato", () => {
     expect(inCycle(cliente, "social", contratou)).toBe(false);
   });
 
-  it("a inclusão é separada do serviço contratado", () => {
-    // Marcar o serviço no cadastro para ver o cliente no ciclo mexeria em
-    // cobrança, ritual e MRR. Por isso a chave é outra.
+  it("a inclusão grava o serviço no cadastro do cliente", () => {
+    // Já foi separada, por medo de mexer em cobrança. O medo não se
+    // confirmou: cobrança sai de plan_value/plan_status e do serviço
+    // "cobranca", que são outras chaves. O que a separação causava era pior —
+    // incluir no ciclo não aparecia no cadastro, então a mesma informação
+    // vivia em dois lugares e a ficha do cliente mentia.
+    expect(extras).toContain("[area]: incluir");
+    expect(extras).toMatch(/gravando no cadastro dele/i);
+  });
+
+  it("continua lendo a lista antiga, para não derrubar quem já foi incluído", () => {
     expect(extras).toContain("ciclo_extra");
-    expect(extras).toMatch(/sem tocar no serviço contratado/i);
+    expect(extras).toContain("ciclo_extra: legado");
   });
 
   it("gravar preserva o resto da configuração do cliente", () => {

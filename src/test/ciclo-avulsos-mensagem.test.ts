@@ -23,8 +23,11 @@ describe("clientes avulsos ganharam aba própria", () => {
 
   it("a lista troca de recorte conforme a aba", () => {
     // Sem isso, avulso continuava invisível na tela inteira.
-    expect(ciclo).toContain("if (avulsosAbertos) return ehAvulso(client);");
+    expect(ciclo).toContain("if (!ehAvulso(client)) return false;");
     expect(ciclo).toContain("return !ehAvulso(client) && inCycle(client, area, hasService);");
+    // E, dentro da aba, o recorte é o serviço: avulso não tem frente semanal,
+    // tem o serviço que contratou.
+    expect(ciclo).toContain("servicosDoCliente(client).includes(servicoAvulso)");
   });
 
   it("voltar para uma frente sai da aba de avulsos", () => {
@@ -40,7 +43,10 @@ describe("clientes avulsos ganharam aba própria", () => {
 
   it("o cabeçalho e o vazio dizem em qual recorte a pessoa está", () => {
     expect(ciclo).toContain('avulsosAbertos ? "Clientes avulsos" : cycle.label');
-    expect(ciclo).toContain('avulsosAbertos ? "Nenhum cliente avulso ativo"');
+    // O vazio precisa dizer QUAL filtro está escondendo os clientes, senão
+    // parece que não há avulso nenhum quando é só o serviço escolhido.
+    expect(ciclo).toContain('"Nenhum cliente avulso ativo"');
+    expect(ciclo).toContain("Nenhum avulso de ");
   });
 
   it("a contagem da aba não depende de ela estar aberta", () => {
