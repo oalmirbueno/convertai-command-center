@@ -54,6 +54,9 @@ const renderCiclo = async () => {
   );
 };
 
+// A primeira renderização desta tela monta carteira, ciclo e histórico de
+// seis semanas — leva alguns segundos em máquina de esteira. O limite padrão
+// de 5s cortava o teste ANTES da espera de 15s que ele mesmo declara.
 describe("tela do Ciclo da Semana", () => {
   beforeEach(() => {
     localStorage.clear();
@@ -72,7 +75,7 @@ describe("tela do Ciclo da Semana", () => {
     expect(naTela("Mirante Luz")).toBe(true);
     expect(naTela("Vifut")).toBe(false);
     expect(naTela("Empresa do Grupo")).toBe(false);
-  });
+  }, 20000);
 
   it("troca para Tráfego pela barra de baixo e recorta a lista", async () => {
     await renderCiclo();
@@ -86,7 +89,7 @@ describe("tela do Ciclo da Semana", () => {
       expect(naTela("Mirante Luz")).toBe(false);
     });
     expect(naTela("Acerbi")).toBe(true);
-  });
+  }, 20000);
 
   it("dá o trilho de onboarding só a quem ainda não concluiu", async () => {
     await renderCiclo();
@@ -97,7 +100,7 @@ describe("tela do Ciclo da Semana", () => {
     expect(screen.getByText(/Novo/i)).toBeInTheDocument();
     // Acerbi já roda em rotina: fica só com as 6 etapas do ciclo.
     expect(naTela("0/6")).toBe(true);
-  });
+  }, 20000);
 
   it("tira da frente quem já fechou a semana e guarda o dia da marcação", async () => {
     const hoje = new Date();
@@ -124,7 +127,7 @@ describe("tela do Ciclo da Semana", () => {
     expect(screen.getByText("1 cliente fechado")).toBeInTheDocument();
     // Mirante, que não fechou nada, continua na frente.
     expect(naTela("Mirante Luz")).toBe(true);
-  });
+  }, 20000);
 
   it("mantém o menu do painel e a semana no topo", async () => {
     await renderCiclo();
@@ -132,7 +135,7 @@ describe("tela do Ciclo da Semana", () => {
     expect(screen.getByRole("button", { name: /Abrir menu/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Semana anterior/i })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Próxima semana/i })).toBeInTheDocument();
-  });
+  }, 20000);
 
   it("abre o menu com os atalhos do painel e o convite de instalação", async () => {
     await renderCiclo();
@@ -148,5 +151,5 @@ describe("tela do Ciclo da Semana", () => {
     expect(screen.getByText(/Instalar o Ciclo no celular/i)).toBeInTheDocument();
     expect(screen.getByText(/Adicionar à tela inicial/i)).toBeInTheDocument();
     expect(screen.getByText("Kanban")).toBeInTheDocument();
-  });
+  }, 20000);
 });
