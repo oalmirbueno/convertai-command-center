@@ -16,6 +16,7 @@ import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
+import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
 import { goalForCampaign, resultFromActions, statusLabel as adsStatusLabel } from "@/lib/adsLanguage";
@@ -48,10 +49,13 @@ const daysSince = (value?: string | null): number | null => {
   return Math.floor((Date.now() - d.getTime()) / 86400000);
 };
 
+// O dia da semana de cada ritual (1 = segunda) é dado, não enfeite: a tela se
+// chama "o que enviar e quando" e não dizia o que era HOJE. Quem abre precisa
+// saber, em um olhar, o que já devia ter saído e o que é a próxima coisa.
 const RITUALS = [
-  { value: "rota_semana", label: "Rota da Semana (abertura)", cadence: "Semanal · segunda", why: "Abre a semana com foco e a única ação necessária do cliente" },
-  { value: "meio_semana", label: "Check do Meio da Semana", cadence: "Semanal · quarta", why: "Mantém o cliente por dentro do andamento no meio do ciclo" },
-  { value: "prova_movimento", label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta", why: "Fecha a semana provando o que avançou e o próximo passo" },
+  { value: "rota_semana", dia: 1, label: "Rota da Semana (abertura)", cadence: "Semanal · segunda", why: "Abre a semana com foco e a única ação necessária do cliente" },
+  { value: "meio_semana", dia: 3, label: "Check do Meio da Semana", cadence: "Semanal · quarta", why: "Mantém o cliente por dentro do andamento no meio do ciclo" },
+  { value: "prova_movimento", dia: 5, label: "Prova de Movimento (fechamento)", cadence: "Semanal · sexta", why: "Fecha a semana provando o que avançou e o próximo passo" },
   { value: "radar_aceleriq", label: "Radar Aceleriq", cadence: "Mensal", why: "Leva uma ideia de diferenciação antes de o cliente pedir" },
   { value: "marco_90", label: "Marco 90", cadence: "Trimestral", why: "Mostra o antes e depois do trimestre com evidências" },
 ] as const;
@@ -1848,6 +1852,10 @@ export default function AdminExperience() {
             const client = selected.client;
             const clientProjs = (projects || []).filter((p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at);
             const meta = levelMeta[selected.level];
+            // nowTick avança sozinho: virou o dia, a etiqueta "hoje" muda de linha
+            // sem ninguém recarregar a tela.
+            const ritualQuando = (r: { value: string; dia?: number }) => ritualTiming(r, nowTick);
+
             const ritualStatus = (ritual: string) => {
               const rows = (reports || []).filter((r: any) => r.client_id === client.id && (r.metrics as any)?.ritual_type === ritual);
               const latest = rows[0];
@@ -1894,16 +1902,45 @@ export default function AdminExperience() {
                     <div className="divide-y divide-border">
                       {RITUALS.map((r) => {
                         const status = ritualStatus(r.value);
+                        const quando = ritualQuando(r);
                         return (
-                          <div key={r.value} className="flex items-center gap-3 px-5 py-3 flex-wrap">
+                          <div
+                            key={r.value}
+                            className={`flex flex-wrap items-center gap-3 px-5 py-3.5 transition-colors ${
+                              quando.destaque ? "bg-primary/[0.04]" : ""
+                            }`}
+                          >
+                            {/* Faixa lateral só no que é de hoje: dá para achar
+                                a linha certa sem ler as cinco. */}
+                            <span
+                              aria-hidden
+                              className={`-ml-5 h-9 w-[3px] shrink-0 rounded-r ${
+                                quando.destaque ? "bg-primary" : "bg-transparent"
+                              }`}
+                            />
                             <div className="min-w-0 flex-1">
-                              <p className="text-[13px] text-foreground">{r.label}</p>
-                              <p className="text-[10px] text-muted-foreground">{r.cadence} · {r.why}</p>
+                              <div className="flex flex-wrap items-center gap-2">
+                                <p className="text-[13.5px] font-medium leading-tight text-foreground">{r.label}</p>
+                                {quando.etiqueta && (
+                                  <span className={`rounded px-1.5 py-px text-[9.5px] font-semibold uppercase tracking-wide ${quando.cls}`}>
+                                    {quando.etiqueta}
+                                  </span>
+                                )}
+                              </div>
+                              <p className="mt-0.5 text-[10.5px] leading-snug text-muted-foreground">
+                                {r.cadence} · {r.why}
+                              </p>
                             </div>
-                            <span className={`text-[9px] px-2 py-0.5 rounded-full ${status.cls}`}>{status.label}</span>
+                            <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${status.cls}`}>
+                              {status.label}
+                            </span>
                             <button
                               onClick={() => { setGenClientId(client.id); setGenRitual(r.value); setGenPreviews(null); setGeneratorOpen(true); }}
-                              className="text-[11px] px-3 py-1.5 rounded-lg bg-primary/10 text-primary hover:bg-primary/20 transition-colors cursor-pointer border-none"
+                              className={`cursor-pointer rounded-lg border-none px-3 py-1.5 text-[11.5px] font-medium transition-colors ${
+                                quando.destaque
+                                  ? "bg-primary text-primary-foreground hover:opacity-90"
+                                  : "bg-primary/10 text-primary hover:bg-primary/20"
+                              }`}
                             >
                               Gerar agora
                             </button>
