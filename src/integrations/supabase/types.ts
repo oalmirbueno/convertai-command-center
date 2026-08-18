@@ -14,6 +14,139 @@ export type Database = {
   }
   public: {
     Tables: {
+      ads_campaign_daily: {
+        Row: {
+          actions: Json
+          campaign_id: string
+          campaign_name: string | null
+          captured_at: string
+          clicks: number | null
+          client_id: string
+          cost_per_action: Json
+          cpc: number | null
+          cpm: number | null
+          ctr: number | null
+          day: string
+          external_account_id: string
+          frequency: number | null
+          id: string
+          impressions: number | null
+          link_clicks: number | null
+          objective: string | null
+          reach: number | null
+          spend: number | null
+        }
+        Insert: {
+          actions?: Json
+          campaign_id: string
+          campaign_name?: string | null
+          captured_at?: string
+          clicks?: number | null
+          client_id: string
+          cost_per_action?: Json
+          cpc?: number | null
+          cpm?: number | null
+          ctr?: number | null
+          day: string
+          external_account_id: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          link_clicks?: number | null
+          objective?: string | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Update: {
+          actions?: Json
+          campaign_id?: string
+          campaign_name?: string | null
+          captured_at?: string
+          clicks?: number | null
+          client_id?: string
+          cost_per_action?: Json
+          cpc?: number | null
+          cpm?: number | null
+          ctr?: number | null
+          day?: string
+          external_account_id?: string
+          frequency?: number | null
+          id?: string
+          impressions?: number | null
+          link_clicks?: number | null
+          objective?: string | null
+          reach?: number | null
+          spend?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_campaign_daily_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      ads_campaigns: {
+        Row: {
+          campaign_id: string
+          client_id: string
+          daily_budget: number | null
+          effective_status: string | null
+          external_account_id: string
+          id: string
+          lifetime_budget: number | null
+          name: string | null
+          objective: string | null
+          raw: Json
+          start_time: string | null
+          status: string | null
+          stop_time: string | null
+          updated_at: string
+        }
+        Insert: {
+          campaign_id: string
+          client_id: string
+          daily_budget?: number | null
+          effective_status?: string | null
+          external_account_id: string
+          id?: string
+          lifetime_budget?: number | null
+          name?: string | null
+          objective?: string | null
+          raw?: Json
+          start_time?: string | null
+          status?: string | null
+          stop_time?: string | null
+          updated_at?: string
+        }
+        Update: {
+          campaign_id?: string
+          client_id?: string
+          daily_budget?: number | null
+          effective_status?: string | null
+          external_account_id?: string
+          id?: string
+          lifetime_budget?: number | null
+          name?: string | null
+          objective?: string | null
+          raw?: Json
+          start_time?: string | null
+          status?: string | null
+          stop_time?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ads_campaigns_external_account_id_fkey"
+            columns: ["external_account_id"]
+            isOneToOne: false
+            referencedRelation: "external_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       ads_wallet: {
         Row: {
           balance: number | null
@@ -4490,6 +4623,7 @@ export type Database = {
         Args: { p_file_id: string; p_mode: string }
         Returns: undefined
       }
+      ads_metrics_tick: { Args: never; Returns: Json }
       archive_editorial_post: {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json
@@ -4541,6 +4675,7 @@ export type Database = {
         }[]
       }
       claim_notification_dispatch: { Args: never; Returns: boolean }
+      collect_ads_metrics_now: { Args: never; Returns: Json }
       collect_social_metrics_now: { Args: never; Returns: Json }
       complete_contract_signature: {
         Args: {
@@ -4967,6 +5102,7 @@ export type Database = {
         Args: { p_node_id: string; p_reference?: string }
         Returns: Json
       }
+      meta_ads_connection_status: { Args: never; Returns: Json }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -5196,6 +5332,10 @@ export type Database = {
       }
       save_editorial_post_unlocked: {
         Args: { p_expected_version?: number; p_payload: Json }
+        Returns: Json
+      }
+      save_meta_ads_token: {
+        Args: { _external_account_id?: string; _label?: string; _token: string }
         Returns: Json
       }
       save_quiz_invitation: {
