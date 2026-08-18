@@ -30,6 +30,8 @@ import {
   addAvulso, listAvulsos, removeAvulso, toggleAvulso, type Avulso,
 } from "@/lib/cycleExtras";
 import { weekRitualMessage } from "@/lib/cycleRitual";
+import { useClientGroupMessage } from "@/hooks/useClientGroupMessage";
+import type { GroupMoment } from "@/lib/groupMessage";
 
 /**
  * O cliente por dentro, a partir do Ciclo.
@@ -94,6 +96,9 @@ export default function ClientCycleSheet({
   const [pedidoChecklist, setPedidoChecklist] = useState("");
   const [gerandoChecklist, setGerandoChecklist] = useState(false);
   const [listas, setListas] = useState<Checklist[]>([]);
+  // A mensagem do grupo montada para ESTE cliente, pela mesma biblioteca que
+  // a Central usa — quem acabou de marcar a semana é quem quer mandar o recado.
+  const { montar: montarMensagemGrupo, isLoading: carregandoMensagem } = useClientGroupMessage(client);
   // Trabalhos fora da rotina: gravação na loja, reunião no meio da semana, o
   // ajuste que o cliente pediu. Sem eles a semana parecia menor do que foi.
   const [avulsos, setAvulsos] = useState<Avulso[]>([]);
@@ -406,6 +411,20 @@ export default function ClientCycleSheet({
     phase: fase,
   });
 
+  const copiarMensagemGrupo = async (momento: GroupMoment, rotulo: string) => {
+    const texto = montarMensagemGrupo(momento);
+    if (!texto) {
+      toast.error("Ainda buscando os dados deste cliente. Tente em instantes.");
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(texto);
+      toast.success(`Mensagem de ${rotulo.toLowerCase()} copiada!`);
+    } catch {
+      toast.error("Não foi possível copiar neste navegador.");
+    }
+  };
+
   const copiarResumo = async () => {
     try {
       await navigator.clipboard.writeText(resumo);
@@ -527,6 +546,38 @@ export default function ClientCycleSheet({
                   Copiar resumo
                 </button>
               </div>
+
+              {/* As mensagens da Central, aqui dentro.
+                  Quem acabou de marcar as etapas da semana é justamente quem
+                  quer mandar o recado — obrigar a trocar de tela para isso
+                  fazia a mensagem não sair. É a MESMA biblioteca da Central,
+                  então o texto nunca diverge entre as duas telas. */}
+              <p className="mt-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Mensagem do grupo
+              </p>
+              <div className="mt-1.5 grid grid-cols-3 gap-1.5">
+                {([
+                  { momento: "abertura" as const, texto: "Abertura", dia: "segunda" },
+                  { momento: "meio" as const, texto: "Meio", dia: "quarta" },
+                  { momento: "fechamento" as const, texto: "Fechamento", dia: "sexta" },
+                ]).map((opcao) => (
+                  <button
+                    key={opcao.momento}
+                    type="button"
+                    onClick={() => void copiarMensagemGrupo(opcao.momento, opcao.texto)}
+                    disabled={carregandoMensagem}
+                    className="flex flex-col items-center gap-0.5 rounded-xl border border-border bg-card px-2 py-2 text-[10.5px] font-semibold text-foreground disabled:opacity-40"
+                  >
+                    <ClipboardCopy className="h-3.5 w-3.5 text-primary" />
+                    {opcao.texto}
+                    <span className="text-[9px] font-normal text-muted-foreground">{opcao.dia}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[10px] leading-snug text-muted-foreground">
+                Montada agora com as entregas, o ciclo, os avulsos e as campanhas deste
+                cliente. Cada momento conta uma coisa diferente.
+              </p>
 
               {heranca !== null && (
                 <p className="mt-3 rounded-lg bg-amber-500/10 px-2.5 py-1.5 text-[11.5px] font-medium text-amber-600 dark:text-amber-400">

@@ -87,6 +87,9 @@ export default function AdminCiclo() {
     const saved = typeof localStorage !== "undefined" && localStorage.getItem(AREA_STORAGE_KEY);
     return saved === "trafego" ? "trafego" : "social";
   });
+  // A aba de avulsos convive com a frente escolhida em vez de substituí-la:
+  // ao voltar para Social ou Tráfego, a frente anterior continua valendo.
+  const [avulsosAbertos, setAvulsosAbertos] = useState(false);
   const [weekOffset, setWeekOffset] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -133,28 +136,43 @@ export default function AdminCiclo() {
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
 
-  // Entra no ciclo quem contratou a frente OU quem foi incluído à mão. O
-  // incluído à mão é separado de propósito: marcar o serviço no cadastro para
-  // ver o cliente aqui mexeria em cobrança, ritual e MRR.
+  /**
+   * Quem aparece na lista, e por quê.
+   *
+   * O ciclo semanal é rotina de quem tem contrato correndo. Cliente avulso
+   * (client_type one_off) não tem semana que se repete — tem uma entrega com
+   * começo e fim —, então misturá-lo na mesma lista faria a contagem
+   * "3/6 desta semana" mentir para os dois lados.
+   *
+   * Por isso ele ganhou aba própria, em vez de continuar invisível: eram seis
+   * clientes ativos que simplesmente não existiam nesta tela.
+   */
+  const ehAvulso = (client: any) => (client.client_type || "recurring") === "one_off";
+
   const activeClients = useMemo(
     () =>
-      ((clients || []) as any[]).filter(
-        (client) =>
-          !isInternalClient(client) &&
-          (client.plan_status || "active") === "active" &&
-          (client.client_type || "recurring") !== "one_off" &&
-          inCycle(client, area, hasService),
-      ),
-    [clients, area],
+      ((clients || []) as any[]).filter((client) => {
+        if (isInternalClient(client)) return false;
+        if ((client.plan_status || "active") !== "active") return false;
+        if (avulsosAbertos) return ehAvulso(client);
+        return !ehAvulso(client) && inCycle(client, area, hasService);
+      }),
+    [clients, area, avulsosAbertos],
   );
 
-  /** Quem existe, está ativo e ainda não aparece nesta frente. */
+  /**
+   * Quem existe, está ativo e ainda não aparece nesta frente.
+   *
+   * Avulso fica fora desta lista de propósito: ele tem aba própria, e oferecê-lo
+   * aqui convidaria a colocá-lo numa rotina semanal que não é a dele.
+   */
   const clientesDeFora = useMemo(
     () =>
       ((clients || []) as any[]).filter(
         (client) =>
           !isInternalClient(client) &&
           (client.plan_status || "active") === "active" &&
+          !ehAvulso(client) &&
           !inCycle(client, area, hasService),
       ),
     [clients, area],
@@ -734,17 +752,45 @@ export default function AdminCiclo() {
     );
   };
 
+  /** Os clientes avulsos ativos, contados para a aba mesmo quando ela está fechada. */
+  const totalAvulsos = useMemo(
+    () =>
+      ((clients || []) as any[]).filter(
+        (client) =>
+          !isInternalClient(client) &&
+          (client.plan_status || "active") === "active" &&
+          ehAvulso(client),
+      ).length,
+    [clients],
+  );
+
+  const AvulsosTab = () => (
+    <button
+      type="button"
+      onClick={() => setAvulsosAbertos(true)}
+      className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
+        avulsosAbertos ? "text-primary" : "text-muted-foreground"
+      }`}
+    >
+      <Sparkles className="h-5 w-5" />
+      <span className="flex items-center gap-1">
+        Avulsos
+        <span className="tabular-nums opacity-70">{totalAvulsos > 0 ? totalAvulsos : ""}</span>
+      </span>
+    </button>
+  );
+
   const AreaTab = ({ target }: { target: CycleArea }) => {
     const config = CYCLES[target];
     const Icon = config.icon;
-    const selected = area === target;
+    const selected = area === target && !avulsosAbertos;
     const totals = selected ? weekTotals : otherAreaTotals;
     return (
       // Mesma anatomia das abas do painel: ocupa toda a altura da barra,
       // ícone em cima e texto pequeno embaixo.
       <button
         type="button"
-        onClick={() => setArea(target)}
+        onClick={() => { setArea(target); setAvulsosAbertos(false); }}
         className={`flex h-full flex-1 flex-col items-center justify-center gap-0.5 text-[10px] font-medium transition-colors ${
           selected ? "text-primary" : "text-muted-foreground"
         }`}
@@ -785,7 +831,7 @@ export default function AdminCiclo() {
             <p className="flex items-center justify-center gap-1.5 text-[15px] font-bold leading-tight text-foreground">
               <ListChecks className="h-4 w-4 text-primary" /> Ciclo da Semana
             </p>
-            <p className="truncate text-[10px] leading-tight text-muted-foreground">{cycle.label}</p>
+            <p className="truncate text-[10px] leading-tight text-muted-foreground">{avulsosAbertos ? "Clientes avulsos" : cycle.label}</p>
           </div>
           <button
             type="button"
@@ -932,11 +978,12 @@ export default function AdminCiclo() {
           {activeClients.length === 0 && (
             <div className="rounded-2xl border border-dashed border-border p-6 text-center">
               <p className="text-sm font-medium text-foreground">
-                Nenhum cliente de {cycle.label.toLowerCase()}
+                {avulsosAbertos ? "Nenhum cliente avulso ativo" : `Nenhum cliente de ${cycle.label.toLowerCase()}`}
               </p>
               <p className="mt-1 text-[11.5px] text-muted-foreground">
-                A lista usa o serviço marcado no cadastro. Marque
-                "{area === "social" ? "Social" : "Tráfego"}" em Clientes para ele aparecer aqui.
+                {avulsosAbertos
+                  ? "Cliente avulso é o cadastrado como entrega pontual, sem contrato correndo. Nenhum está ativo agora."
+                  : `A lista usa o serviço marcado no cadastro. Marque "${area === "social" ? "Social" : "Tráfego"}" em Clientes, ou use "Incluir cliente nesta frente" aqui embaixo.`}
               </p>
             </div>
           )}
@@ -962,7 +1009,7 @@ export default function AdminCiclo() {
           {/* Incluir quem ficou de fora. O cadastro define o padrão, mas existe
               o caso real: o cliente em preparação, o que entrou no meio da
               semana, o que pediu uma frente por fora. */}
-          {clientesDeFora.length > 0 && (
+          {!avulsosAbertos && clientesDeFora.length > 0 && (
             <div className="mt-1 rounded-2xl border border-border bg-card px-3 py-2">
               <button
                 type="button"
@@ -1046,6 +1093,7 @@ export default function AdminCiclo() {
         <div className="flex items-stretch h-14 max-w-[560px] mx-auto">
           <AreaTab target="social" />
           <AreaTab target="trafego" />
+          <AvulsosTab />
         </div>
       </nav>
 
