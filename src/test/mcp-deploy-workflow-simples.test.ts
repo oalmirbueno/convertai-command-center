@@ -8,13 +8,16 @@ const wf = readFileSync(
 );
 
 /**
- * O deploy do MCP nunca tinha rodado: exigia 7 variáveis e 5 segredos
- * configurados à mão, e morria em 12 segundos na primeira checagem vazia.
+ * O deploy do MCP nunca tinha rodado — nem uma vez. Morria em 12 segundos na
+ * primeira checagem, com "Source relation: not-authorized", que soa como
+ * problema de permissão e era campo vazio: exigia 7 variáveis preenchidas à
+ * mão no ambiente production, e nenhuma estava lá.
  *
- * A simplificação tem um limite claro, e é ele que estes testes guardam: pode
- * DEDUZIR o que é público e versionado, e pode PULAR uma verificação que
- * depende de segredo ausente — desde que registre o que pulou. O que não pode,
- * em hipótese alguma, é seguir em silêncio ou dispensar o token de acesso.
+ * A correção deduz do próprio repositório o que é público e versionado. O
+ * limite disso é o assunto destes testes: tentei também tornar opcionais a
+ * conferência do ledger e a verificação autenticada pós-deploy, e um teste do
+ * projeto barrou — com razão. Aquelas duas provam que o MCP subiu funcionando,
+ * e continuam obrigatórias.
  */
 
 describe("o que o workflow deduz sozinho", () => {
@@ -25,14 +28,22 @@ describe("o que o workflow deduz sozinho", () => {
   });
 
   it("monta as URLs do MCP a partir do project id", () => {
-    // À mão, essas quatro URLs divergem com o tempo; derivadas, não têm como.
+    // À mão, essas quatro divergem com o tempo; derivadas, não têm como.
     expect(wf).toContain("MCP_RESOURCE_URL=${MCP_RESOURCE_URL:-$base/functions/v1/mcp-server}");
     expect(wf).toContain("MCP_AUTH_ISSUER=${MCP_AUTH_ISSUER:-$base/auth/v1}");
+    expect(wf).toContain("MCP_OAUTH_METADATA_URL=${MCP_OAUTH_METADATA_URL:-$base");
   });
 
-  it("o que estiver configurado no ambiente continua ganhando", () => {
+  it("o que estiver declarado no ambiente continua ganhando", () => {
     // A dedução é rede de segurança, não substituição de configuração.
-    expect(wf).toContain('project_id="${SUPABASE_PROJECT_ID:-$from_repo_project}"');
+    expect(wf).toContain('project_id="${SUPABASE_PROJECT_ID:-$do_repo_project}"');
+    expect(wf).toContain('app_url="${APP_PUBLIC_URL:-$do_repo_app_url}"');
+  });
+
+  it("a dedução acontece antes da autorização, que depende dela", () => {
+    expect(wf.indexOf("Derive public deployment configuration")).toBeLessThan(
+      wf.indexOf("Authorize release or rollback target"),
+    );
   });
 
   it("ainda valida o formato do project id antes de usar", () => {
@@ -40,34 +51,23 @@ describe("o que o workflow deduz sozinho", () => {
   });
 });
 
-describe("o que pode ser pulado, e como", () => {
-  it("sem senha do banco, a conferência do ledger é pulada com aviso", () => {
-    expect(wf).toContain("status=pulado-sem-senha-do-banco");
-    expect(wf).toMatch(/::warning::Sem SUPABASE_DB_PASSWORD/);
-  });
-
-  it("sem os segredos de smoke, a verificação autenticada é pulada com aviso", () => {
-    expect(wf).toContain("authenticated=pulada");
-    expect(wf).toMatch(/::warning::Sem os segredos MCP_SMOKE_/);
-  });
-
-  it("o resumo mostra o que foi pulado, em vez de esconder", () => {
-    // Pular calado seria pior que falhar: daria a impressão de verificado.
-    expect(wf).toContain("OAUTH_PREFLIGHT_DETAIL");
-    expect(wf).toContain("Authenticated smoke:");
-  });
-
-  it("com os segredos presentes, a verificação forte continua obrigatória", () => {
-    expect(wf).toContain('SMOKE_AUTH_FLAG="--require-authenticated"');
-    expect(wf).toContain("authenticated=conferida");
-  });
-});
-
-describe("o que NUNCA pode ser dispensado", () => {
+describe("nada do que prova o deploy foi afrouxado", () => {
   it("o token de acesso do Supabase continua obrigatório", () => {
-    // É a única coisa que ninguém pode deduzir nem pular: sem ele não existe
-    // permissão para publicar no projeto de outra pessoa.
+    // É a única coisa que ninguém deduz: sem ele não existe permissão para
+    // publicar no projeto de outra pessoa.
     expect(wf).toContain('test -n "$SUPABASE_ACCESS_TOKEN"');
+  });
+
+  it("a conferência do ledger de migrations continua exigida", () => {
+    expect(wf).toContain('test -n "$SUPABASE_DB_PASSWORD"');
+  });
+
+  it("a verificação autenticada pós-deploy continua exigida", () => {
+    // Tentei torná-la opcional para encurtar a configuração. Um teste do
+    // projeto (database-deploy-workflow) barrou, e estava certo: é ela que
+    // prova que o MCP subiu respondendo de verdade.
+    expect(wf).toContain('test -n "$MCP_SMOKE_TOKEN"');
+    expect(wf).toContain("--require-authenticated");
   });
 
   it("as travas de origem do código seguem de pé", () => {
@@ -76,21 +76,8 @@ describe("o que NUNCA pode ser dispensado", () => {
     expect(wf).toContain('test "$RELEASE_CONFIRMATION" = "DEPLOY_MCP_PRODUCTION"');
   });
 
-  it("a lista de funções que podem ser publicadas não mudou", () => {
+  it("a lista de funções publicáveis não mudou", () => {
     expect(wf).toContain("supabase functions deploy mcp-server");
     expect(wf).toContain("supabase functions deploy mcp-oauth-metadata");
-  });
-});
-
-describe("a flag do smoke nunca é usada sem ser definida", () => {
-  it("todo passo que usa a variável a define antes", () => {
-    // Um erro meu na primeira tentativa: a flag foi trocada no comando antes
-    // do bloco que a define existir, o que deixaria o workflow quebrado.
-    const passos = wf.split(/^ {6}- name: /m);
-    for (const passo of passos) {
-      if (passo.includes("$SMOKE_AUTH_FLAG")) {
-        expect(passo).toContain("SMOKE_AUTH_FLAG=");
-      }
-    }
   });
 });
