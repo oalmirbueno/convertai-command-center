@@ -9,6 +9,10 @@
 //   - never returns sensitive fields (portal_password, first_access_token,
 //     services_config, internal_notes, sync_error, etc.).
 
+// O dossiê usa as leituras de métricas. Os dois arquivos se importam, e
+// isso é seguro aqui: cada lado só chama o outro DENTRO de função, nunca
+// no carregamento do módulo, então o ciclo se resolve em tempo de chamada.
+import { listAdsPerformance, listSocialMetrics, listSocialPosts } from './aceleriq-metrics-services.ts';
 import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supabase-js@2.45.4';
 import { assertClientAccess, type AuthContext } from './mcp-auth.ts';
 
@@ -1469,6 +1473,17 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
     contracts: linhas(contratos),
     memory: linhas(memoria),
     ads_wallets: linhas(carteira),
+    // RESULTADO, e não só trabalho. Sem estas três, o agente montava o dossiê
+    // sabendo o que a equipe fez e sem saber se funcionou — e escrevia
+    // proposta e mensagem no escuro. Vêm com a mesma janela das ferramentas
+    // dedicadas, para as duas leituras nunca discordarem.
+    instagram: await listSocialMetrics({ client_id: id, weeks: 8 }).catch(() => null),
+    instagram_posts: await listSocialPosts({ client_id: id, limit: 10 })
+      .then((r: { top_posts: unknown }) => r.top_posts)
+      .catch(() => null),
+    ads: await listAdsPerformance({ client_id: id, days: 30 })
+      .then((r: { totals: unknown; by_campaign: unknown; period_days: number }) => ({ totals: r.totals, by_campaign: r.by_campaign, period_days: r.period_days }))
+      .catch(() => null),
     // Onde este cliente está no método A.C.E.L.E.R.A. A leitura é da evolução
     // real: quem entrou agora precisa de diagnóstico, quem já tem rotina
     // fechando precisa de escala. Serve para o agente propor o passo certo

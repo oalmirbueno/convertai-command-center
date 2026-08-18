@@ -221,7 +221,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.13.0',
+  version: '1.14.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1245,7 +1245,7 @@ const cancelContractTool: ToolDefinition = {
 const getClientDossierTool: ToolDefinition = {
   name: 'aceleriq_get_client_dossier',
   title: 'Dossiê do cliente',
-  description: 'Retrato COMPLETO de um cliente numa única chamada, pronto para virar contexto: cadastro, serviços contratados, frentes ativas, tarefas abertas, bastidor do ciclo semanal das últimas 6 semanas, publicações (no ar, agendadas e as que perderam a data), entregas recentes, aprovações paradas com dias de espera, últimos relatórios com o que foi prometido, briefings, contratos, carteira de anúncios, a história já registrada na memória e a FASE do método A.C.E.L.E.R.A em que o cliente está (analisar, clarear, estruturar, lancar, executar, revisar, acelerar), calculada pela evolução real dele. Use esta ferramenta ANTES de escrever qualquer coisa sobre o cliente: ela substitui dez chamadas separadas. Atenção: são fatos do painel. O que voltar vazio significa que não há registro, NÃO que o trabalho não existe.',
+  description: 'Retrato COMPLETO de um cliente numa única chamada, pronto para virar contexto: cadastro, serviços contratados, frentes ativas, tarefas abertas, bastidor do ciclo semanal das últimas 6 semanas, publicações (no ar, agendadas e as que perderam a data), entregas recentes, aprovações paradas com dias de espera, últimos relatórios com o que foi prometido, briefings, contratos, carteira de anúncios, os NÚMEROS REAIS do Instagram (8 semanas com variação) e das campanhas de Meta Ads (30 dias por campanha), as publicações que mais performaram, a história já registrada na memória e a FASE do método A.C.E.L.E.R.A em que o cliente está (analisar, clarear, estruturar, lancar, executar, revisar, acelerar), calculada pela evolução real dele. Use esta ferramenta ANTES de escrever qualquer coisa sobre o cliente: ela substitui dez chamadas separadas. Atenção: são fatos do painel. O que voltar vazio significa que não há registro, NÃO que o trabalho não existe.',
   scopes: ['clients:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {

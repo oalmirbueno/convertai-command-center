@@ -138,4 +138,12 @@ export const MEMORY_LABELS: Record<string, string> = {
   decisao: "Decisão",
   nota: "Anotação da equipe",
   marco: "Marco",
+  avulso: "Avulso da semana",
+  checklist: "Lista rápida",
+  second_brain: "Dossiê atualizado",
+  external: "Registro do agente",
+  note: "Anotação",
+  summary: "Resumo",
+  decision: "Decisão",
+  fact: "Fato registrado",
 };

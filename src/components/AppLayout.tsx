@@ -37,28 +37,53 @@ const adminMainNav: NavItem[] = [
   { title: "Clientes", url: "/clientes", icon: Users },
 ];
 
-const adminMoreNav: NavItem[] = [
-  { title: "Central", url: "/central", icon: HeartPulse },
-  { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
-  { title: "Métricas", url: "/metricas", icon: BarChart3 },
-  { title: "Anúncios", url: "/anuncios", icon: Megaphone },
-  { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
-  { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
-  { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
-  { title: "Briefings", url: "/briefings", icon: FileText },
-  { title: "Quiz Submissions", url: "/admin/quiz", icon: ClipboardList },
-  { title: "Equipe", url: "/equipe", icon: UsersRound },
-  { title: "Timeline", url: "/timeline", icon: GitBranch },
-  { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-  { title: "Arquivos", url: "/arquivos", icon: FileArchive },
-  { title: "Workspace", url: "/workspace", icon: HardDrive },
-  
-  
-  { title: "Cofre", url: "/cofre", icon: KeyRound },
-  { title: "Novidades", url: "/novidades", icon: Sparkles },
-  { title: "Config", url: "/config", icon: Settings },
-  { title: "API", url: "/api-docs", icon: Zap },
+// O menu "mais" agrupado por tema: 18 itens numa lista corrida obrigavam a
+// ler tudo para achar qualquer coisa. Os grupos seguem a pergunta de quem
+// procura: "onde opero a semana", "onde vejo resultado", "onde administro".
+// O Quiz saiu do menu (a rota continua viva para quem tem o link): era uma
+// ferramenta pontual ocupando espaço de todo dia.
+const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
+  {
+    label: "Operação da semana",
+    items: [
+      { title: "Central", url: "/central", icon: HeartPulse },
+      { title: "Ciclo", url: "/ciclo", icon: CheckSquare },
+      { title: "Aprovações", url: "/aprovacoes", icon: CheckSquare },
+      { title: "Pedidos", url: "/pedidos", icon: ShoppingBag },
+      { title: "Briefings", url: "/briefings", icon: FileText },
+    ],
+  },
+  {
+    label: "Resultados",
+    items: [
+      { title: "Métricas", url: "/metricas", icon: BarChart3 },
+      { title: "Anúncios", url: "/anuncios", icon: Megaphone },
+      { title: "Relatórios", url: "/relatorios", icon: BarChart3 },
+      { title: "Timeline", url: "/timeline", icon: GitBranch },
+    ],
+  },
+  {
+    label: "Gestão",
+    items: [
+      { title: "Equipe", url: "/equipe", icon: UsersRound },
+      { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+      { title: "Arquivos", url: "/arquivos", icon: FileArchive },
+      { title: "Workspace", url: "/workspace", icon: HardDrive },
+      { title: "Cofre", url: "/cofre", icon: KeyRound },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { title: "Novidades", url: "/novidades", icon: Sparkles },
+      { title: "Config", url: "/config", icon: Settings },
+      { title: "API", url: "/api-docs", icon: Zap },
+    ],
+  },
 ];
+
+// A lista plana continua existindo: o menu do celular percorre tudo de uma vez.
+const adminMoreNav: NavItem[] = adminMoreGroups.flatMap((group) => group.items);
 
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -204,23 +229,48 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               <MoreHorizontal className="w-4 h-4" />
             </button>
             {moreOpen && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-52 rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in"
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 w-56 max-h-[70vh] overflow-y-auto rounded-xl bg-popover border border-border p-1.5 shadow-lg animate-fade-in"
                 style={{ transformOrigin: 'top center' }}
               >
-                {moreNav.map((item) => (
-                  <NavLink
-                    key={item.url}
-                    to={item.url}
-                    onClick={() => setMoreOpen(false)}
-                    className={({ isActive }) => cn(
-                      "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors",
-                      isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
-                    )}
-                  >
-                    <item.icon className="w-3.5 h-3.5" />
-                    {item.title}
-                  </NavLink>
-                ))}
+                {/* Cliente não tem grupos: a lista dele é curta e direta. */}
+                {isAdminOrTeam ? (
+                  adminMoreGroups.map((group) => (
+                    <div key={group.label} className="mb-1 last:mb-0">
+                      <p className="px-3 pb-0.5 pt-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+                        {group.label}
+                      </p>
+                      {group.items.map((item) => (
+                        <NavLink
+                          key={item.url}
+                          to={item.url}
+                          onClick={() => setMoreOpen(false)}
+                          className={({ isActive }) => cn(
+                            "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] transition-colors",
+                            isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                          )}
+                        >
+                          <item.icon className="w-3.5 h-3.5" />
+                          {item.title}
+                        </NavLink>
+                      ))}
+                    </div>
+                  ))
+                ) : (
+                  moreNav.map((item) => (
+                    <NavLink
+                      key={item.url}
+                      to={item.url}
+                      onClick={() => setMoreOpen(false)}
+                      className={({ isActive }) => cn(
+                        "flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13px] transition-colors",
+                        isActive ? "text-foreground bg-secondary" : "text-muted-foreground hover:text-foreground hover:bg-secondary/50"
+                      )}
+                    >
+                      <item.icon className="w-3.5 h-3.5" />
+                      {item.title}
+                    </NavLink>
+                  ))
+                )}
               </div>
             )}
           </div>

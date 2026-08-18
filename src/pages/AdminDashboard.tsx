@@ -1,6 +1,7 @@
 import { useProjects, useUpdates, useTasks, useClients } from "@/hooks/useSupabaseData";
 import { useBilling, useAdsWallet, useRechargeRequests } from "@/hooks/useFinancialData";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRecentActivity } from "@/hooks/useRecentActivity";
 import { Clock, AlertTriangle, Plus, UserPlus, Upload, FileText, MoreHorizontal, Trash2, Edit3, Link2, TrendingUp, CreditCard, CheckCircle2, DollarSign, Wallet, Briefcase, Users, ClipboardList } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { Progress } from "@/components/ui/progress";
@@ -61,7 +62,7 @@ export default function AdminDashboard() {
   const { profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const { data: projects, isLoading: loadingProjects } = useProjects();
-  const { data: updates, isLoading: loadingUpdates } = useUpdates();
+  const { data: activity, isLoading: loadingActivity } = useRecentActivity();
   const { data: allTasks } = useTasks();
   const { data: clients } = useClients();
   const { data: billing } = useBilling();
@@ -632,28 +633,38 @@ export default function AdminDashboard() {
       {/* Updates + Urgent Tasks */}
       <div className="grid lg:grid-cols-2 gap-6">
         <div className="bg-card border border-border rounded-xl p-5">
+          {/* O feed lê as DUAS fontes: os updates de projeto e a memória dos
+              clientes (ritual, entrega, avulso, decisão, relatório). Antes só
+              a primeira aparecia, e o painel mostrava menos movimento do que
+              houve. */}
           <p className="label-sm mb-4">Atualizações Recentes</p>
-          {loadingUpdates ? (
+          {loadingActivity ? (
             <div className="text-sm text-muted-foreground py-4 text-center">Carregando...</div>
-          ) : (updates || []).length === 0 ? (
+          ) : (activity || []).length === 0 ? (
             <div className="text-sm text-muted-foreground py-4 text-center">Nenhuma atualização.</div>
           ) : (
           <div className="space-y-0">
-              {(updates || []).map((u: any, i: number) => (
-                <div key={u.id}>
+              {(activity || []).map((entrada, i: number) => (
+                <div key={entrada.id}>
                   {i > 0 && <div className="border-t border-border" />}
+                  {/* items-start + min-w-0 + break-words: no celular a linha
+                      longa quebrava desalinhada do ponto colorido. */}
                   <div
                     className="flex items-start gap-3 py-3 cursor-pointer hover:bg-secondary/30 rounded-lg transition-colors px-1"
                     onClick={() => {
-                      if (u.update_type === "system" && u.message.includes("pedido")) navigate("/pedidos");
-                      else if (u.update_type === "creative") navigate("/arquivos");
-                      else if (u.project_id) navigate("/projetos");
+                      if (entrada.origin === "entrega") navigate("/relatorios");
+                      else if (entrada.origin === "avulso" || entrada.origin === "ciclo") navigate("/ciclo");
+                      else if (entrada.origin === "ritual") navigate("/central");
+                      else if (entrada.projectId) navigate("/projetos");
                     }}
                   >
-                    <div className={`w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 ${updateTypeDotColors[u.update_type] || "bg-muted-foreground"}`} />
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[13px] text-foreground">{u.message}</p>
-                      <p className="text-xs text-muted-foreground mt-0.5">{new Date(u.created_at).toLocaleString("pt-BR")}</p>
+                    <div className={`mt-[7px] h-1.5 w-1.5 shrink-0 rounded-full ${updateTypeDotColors[entrada.origin] || "bg-primary/60"}`} />
+                    <div className="min-w-0 flex-1">
+                      <p className="break-words text-[13px] leading-snug text-foreground">{entrada.message}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground">
+                        <span className="mr-1.5 inline-block rounded bg-secondary px-1 py-px text-[10px] font-medium">{entrada.originLabel}</span>
+                        {new Date(entrada.created_at).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}
+                      </p>
                     </div>
                   </div>
                 </div>

@@ -15,6 +15,10 @@ import { useBilling } from "@/hooks/useFinancialData";
 import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
+import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
+import { stepLabelsForWeek } from "@/lib/cycleTasks";
+import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
+import { goalForCampaign, resultFromActions, statusLabel as adsStatusLabel } from "@/lib/adsLanguage";
 import { memoryAsContext, readMemory, recordMemory } from "@/lib/clientMemory";
 import { useNow } from "@/hooks/useNow";
 import { buildGrowthSeries } from "@/lib/reportGrowth";
@@ -272,6 +276,28 @@ export default function AdminExperience() {
     }
     return map;
   }, [igAllWeeks]);
+
+  // A história de todos os clientes, ao vivo: é ela que faz a mensagem do
+  // grupo mudar sozinha quando o dossiê é atualizado pelo agente, um avulso é
+  // marcado no Ciclo ou uma decisão entra no Studio. Sem esta consulta, a
+  // mensagem lia só arquivos e publicações — e saía igual a semana inteira.
+  const { data: expMemory = [] } = useQuery({
+    queryKey: ["exp-memory"],
+    queryFn: async () => {
+      const { data, error } = await (supabase as any)
+        .from("project_memory")
+        .select("client_id, kind, title, content, metadata, created_at")
+        .order("created_at", { ascending: false })
+        .limit(400);
+      if (error) return [];
+      return data || [];
+    },
+    ...AO_VIVO,
+  });
+
+  // Campanhas reais: a mensagem fala de anúncio com número, não com promessa.
+  const { data: adsWeekRows = [] } = useAdsDaily(undefined, 7);
+  const { data: adsCampaignList = [] } = useAdsCampaigns();
 
   const { data: allPublications = [] } = useQuery({
     queryKey: ["exp-publications"],
@@ -1383,106 +1409,143 @@ export default function AdminExperience() {
    * muda de forma conforme a semana daquele cliente: quem teve entrega recebe
    * uma mensagem diferente de quem está em produção.
    */
+  /**
+   * Monta o retrato da semana daquele cliente e entrega para a biblioteca da
+   * mensagem (src/lib/groupMessage.ts), onde cada momento tem um trabalho:
+   * abertura conta o plano, quarta conta o movimento, sexta fecha o balanço.
+   *
+   * Tudo vem de consultas ao vivo — quando o dossiê muda, um avulso é marcado
+   * ou uma campanha gasta, a mensagem seguinte já sai diferente.
+   */
   const buildGroupMessage = (client: any, moment: "abertura" | "meio" | "fechamento" = "abertura") => {
     const name = client.company_name || client.full_name || "time";
-    const primeiroNome = String(name).split(/\s+/)[0];
     const hour = new Date().getHours();
     const greeting = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
+
+    const segunda = new Date(`${cycleWeekKey}T00:00:00`);
+    const proximaSegunda = new Date(segunda);
+    proximaSegunda.setDate(proximaSegunda.getDate() + 7);
 
     const entregas = (releasedFiles || []).filter(
       (f: any) => f.client_id === client.id && (daysSince(f.created_at) ?? 99) <= 7,
     );
+    const entregasDesdeSegunda = entregas.filter(
+      (f: any) => f.created_at && new Date(f.created_at) >= segunda,
+    );
     const pending = (pendingApprovalFiles || []).filter((f: any) => f.client_id === client.id);
     const publicacoes = (allPublications || []).filter((p: any) => p.client_id === client.id);
-    const agendadas = publicacoes.filter(
-      (p: any) => p.status === "scheduled" && p.scheduled_at && new Date(p.scheduled_at) > new Date(),
+    const agendadasSemana = publicacoes
+      .filter(
+        (p: any) =>
+          p.status === "scheduled" && p.scheduled_at &&
+          new Date(p.scheduled_at) > new Date() && new Date(p.scheduled_at) < proximaSegunda,
+      )
+      .map((p: any) => new Date(p.scheduled_at))
+      .sort((a: Date, b: Date) => a.getTime() - b.getTime())
+      .map((d: Date) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }));
+    const publicadasSemana = publicacoes.filter(
+      (p: any) => p.status === "published" && p.published_at && new Date(p.published_at) >= segunda,
+    ).length;
+
+    // Etapas do ciclo desta semana, nas palavras daquele cliente e semana.
+    const cicloDoCliente = (cycleRows || []).filter(
+      (row: any) => row.client_id === client.id && row.step <= 6,
     );
-    const noAr = publicacoes.filter(
-      (p: any) =>
-        p.status === "published" && p.published_at &&
-        (daysSince(p.published_at) ?? 99) <= 7,
+    const cicloFeito: string[] = [];
+    for (const area of ["social", "trafego"] as const) {
+      const feitos = cicloDoCliente.filter((row: any) => row.area === area);
+      if (feitos.length === 0) continue;
+      const rotulos = stepLabelsForWeek(area, client.id, cycleWeekKey, {
+        services: client.services_config,
+      });
+      for (const row of feitos) {
+        const rotulo = rotulos[row.step - 1];
+        if (rotulo) cicloFeito.push(rotulo.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
+      }
+    }
+
+    const memoriaDoCliente = (expMemory || []).filter((m: any) => m.client_id === client.id);
+    const avulsosFeitos = memoriaDoCliente
+      .filter(
+        (m: any) =>
+          m.kind === "avulso" && m.metadata?.week_start === cycleWeekKey && m.metadata?.done === true,
+      )
+      .map((m: any) => String(m.title || "").toLowerCase())
+      .filter(Boolean);
+
+    // O contexto vivo: a última decisão, nota ou dossiê recente. É o que
+    // substitui o genérico "seguimos trabalhando em X".
+    const CONTEXTO_KINDS = new Set([
+      "decisao", "nota", "marco", "note", "summary", "decision", "fact", "second_brain", "external",
+    ]);
+    const contextoEntrada = memoriaDoCliente.find(
+      (m: any) => CONTEXTO_KINDS.has(m.kind) && (daysSince(m.created_at) ?? 99) <= 14,
     );
+    const contextoRecente = contextoEntrada
+      ? String(contextoEntrada.title || contextoEntrada.content || "").slice(0, 160).trim() || null
+      : null;
+
+    // O próximo passo combinado no último relatório publicado ainda fresco.
+    const relatorioComPasso = (reports || []).find(
+      (r: any) =>
+        r.client_id === client.id && r.status === "published" &&
+        String(r.next_steps || "").trim() && (daysSince(r.created_at) ?? 99) <= 21,
+    );
+    const proximoPasso = relatorioComPasso
+      ? String(relatorioComPasso.next_steps).split(/\n/)[0].slice(0, 160).trim()
+      : null;
+
+    // Campanhas: o que a semana investiu e trouxe, em linguagem simples.
+    const adsDoCliente = (adsWeekRows || []).filter((row: any) => row.client_id === client.id);
+    const campanhasNoAr = (adsCampaignList || []).filter(
+      (c: any) => c.client_id === client.id && adsStatusLabel(c.status, c.effective_status).noAr,
+    ).length;
+    let anuncios: GroupMessageContext["anuncios"] = null;
+    if (adsDoCliente.length > 0 || campanhasNoAr > 0) {
+      let investido = 0;
+      let resultados = 0;
+      let temResultado = false;
+      const acoesTodas = adsDoCliente.flatMap((row: any) =>
+        Array.isArray(row.actions) ? row.actions : [],
+      );
+      const meta = goalForCampaign(adsDoCliente[0]?.objective ?? null, acoesTodas);
+      for (const row of adsDoCliente) {
+        investido += Number(row.spend || 0);
+        const achado = resultFromActions(row.actions, row.objective, meta);
+        if (achado) {
+          resultados += achado.count;
+          temResultado = true;
+        }
+      }
+      anuncios = {
+        campanhasNoAr,
+        investidoSemana: investido,
+        resultadosSemana: temResultado ? resultados : null,
+        nomeDoResultado: meta.resultPlural,
+      };
+    }
 
     const frentes = (projects || [])
       .filter((p: any) => p.client_id === client.id && p.status !== "done" && !p.deleted_at)
       .map((p: any) => readableProjectName(p.name, name))
       .filter(Boolean);
 
-    const linhas: string[] = [];
-
-    // A abertura muda com o momento e com o que realmente aconteceu, em vez
-    // de sortear entre três frases fixas.
-    if (moment === "abertura") {
-      linhas.push(`${greeting}, ${name}! Começando a semana por aqui.`);
-    } else if (moment === "meio") {
-      linhas.push(`${greeting}, ${name}! Passando para contar como está a semana.`);
-    } else {
-      linhas.push(`${greeting}, ${name}! Fechando a semana com você.`);
-    }
-    linhas.push("");
-
-    // O que foi feito, pelo nome. Número solto não diz nada ao cliente.
-    if (entregas.length > 0) {
-      const nomes = listInWords(entregas.map((f: any) => readableFileName(f.file_name)));
-      linhas.push(
-        entregas.length === 1
-          ? `Ficou pronto: ${nomes}. Já está no painel para você ver.`
-          : `Ficaram prontos ${entregas.length} materiais, entre eles ${nomes}. Todos no painel.`,
-      );
-    }
-
-    if (noAr.length > 0) {
-      linhas.push(
-        noAr.length === 1
-          ? `Uma publicação foi ao ar nesta semana, na data combinada.`
-          : `${noAr.length} publicações foram ao ar nesta semana, no calendário que definimos.`,
-      );
-    }
-
-    if (agendadas.length > 0) {
-      const proxima = agendadas
-        .map((p: any) => new Date(p.scheduled_at))
-        .sort((a: Date, b: Date) => a.getTime() - b.getTime())[0];
-      linhas.push(
-        `Os próximos dias já estão garantidos: ${agendadas.length} ${
-          agendadas.length === 1 ? "publicação agendada" : "publicações agendadas"
-        }, a próxima em ${proxima.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}.`,
-      );
-    }
-
-    // Sem entrega nem publicação, a semana foi de construção. Isso é trabalho
-    // e é assim que se conta, nunca como semana parada.
-    if (entregas.length === 0 && noAr.length === 0) {
-      linhas.push(
-        frentes.length > 0
-          ? `A semana foi de construção em ${listInWords(frentes)}: material sendo produzido para as próximas publicações.`
-          : `A semana foi de construção por aqui, preparando o material das próximas publicações.`,
-      );
-    } else if (frentes.length > 0 && moment !== "fechamento") {
-      linhas.push(`Seguimos trabalhando em ${listInWords(frentes)}.`);
-    }
-
-    // O que depende do cliente, sempre pelo que destrava.
-    if (pending.length > 0) {
-      linhas.push("");
-      const nomes = listInWords(pending.map((f: any) => readableFileName(f.file_name)));
-      linhas.push(
-        pending.length === 1
-          ? `Tem uma coisa pronta esperando seu ok: ${nomes}. Com o seu sim, já entra no calendário.`
-          : `Tem ${pending.length} materiais prontos esperando seu ok, entre eles ${nomes}. Com o seu sim, já entram no calendário.`,
-      );
-    }
-
-    linhas.push("");
-    linhas.push(
-      moment === "fechamento"
-        ? "Bom fim de semana! O detalhe de tudo está no painel: aceleriq.online"
-        : "Qualquer coisa é só chamar. Tudo detalhado no painel: aceleriq.online",
-    );
-    return linhas
-      // Nunca duas linhas em branco seguidas.
-      .filter((linha, indice, lista) => !(linha === "" && lista[indice - 1] === ""))
-      .join("\n");
+    const ctx: GroupMessageContext = {
+      clientName: name,
+      greeting,
+      entregasSemana: entregas.map((f: any) => readableFileName(f.file_name)),
+      entregasDesdeSegunda: entregasDesdeSegunda.map((f: any) => readableFileName(f.file_name)),
+      aguardandoOk: pending.map((f: any) => readableFileName(f.file_name)),
+      publicadasSemana,
+      proximasAgendadas: agendadasSemana,
+      cicloFeito,
+      avulsosFeitos,
+      frentes,
+      contextoRecente,
+      proximoPasso,
+      anuncios,
+    };
+    return buildGroupMessageText(ctx, moment);
   };
 
   const copyText = async (text: string, okMessage: string) => {

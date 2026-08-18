@@ -15,6 +15,7 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
+import { recordMemory } from "@/lib/clientMemory";
 import { useIsMobile } from "@/hooks/use-mobile";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -589,6 +590,30 @@ export function StudioPanel({ contextKey, contextLabel, clientId, clientName, fo
     }
     lastSavedNotesRef.current = notesNow;
     if (data?.updated_at) lastRemoteAtRef.current = data.updated_at as string;
+
+    // Publicar o documento entra na história do cliente.
+    //
+    // O Studio era uma ilha: escrevia contexto rico e nada disso chegava à
+    // Central, ao ritual ou ao MCP. Um documento publicado é a decisão mais
+    // deliberada que se toma aqui — é o que merece virar memória, e não cada
+    // tecla digitada. O primeiro parágrafo vira o resumo lido pela IA.
+    if (effectiveClientId) {
+      const primeiraLinha = String(notesNow || "")
+        .split("\n")
+        .map((l) => l.replace(/^#+\s*/, "").trim())
+        .find((l) => l.length > 3) || "Documento do Studio";
+      await recordMemory({
+        clientId: effectiveClientId,
+        projectId: projectId || null,
+        kind: "nota",
+        title: next ? `Documento publicado: ${primeiraLinha.slice(0, 120)}` : `Documento despublicado: ${primeiraLinha.slice(0, 120)}`,
+        content: String(notesNow || "").slice(0, 4000),
+        source: "studio",
+        tags: ["studio", "documento"],
+        metadata: { published: next, project_id: projectId || null },
+      });
+    }
+
     toast({ title: next ? "Documento publicado" : "Publicação removida", description: next ? "O cliente já vê a versão ao vivo na aba Documento." : "O cliente não vê mais este documento." });
   }
 
