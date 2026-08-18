@@ -71,6 +71,38 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Derive public deployment configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          # O project id e a URL pública já vivem versionados no repositório
+          # (config/public-env.production.json). São públicos por definição: o
+          # bundle do painel os expõe. Ler dali evita pedir que alguém redigite
+          # sete variáveis à mão — e à mão elas divergem com o tempo.
+          config="release-source/config/public-env.production.json"
+          test -f "$config"
+          from_repo_project="$(jq --raw-output '.VITE_SUPABASE_PROJECT_ID // empty' "$config")"
+          from_repo_app_url="$(jq --raw-output '.VITE_APP_PUBLIC_URL // empty' "$config")"
+
+          # O que estiver configurado no ambiente continua tendo prioridade:
+          # a dedução é rede de segurança, não substituição.
+          project_id="${SUPABASE_PROJECT_ID:-$from_repo_project}"
+          app_url="${APP_PUBLIC_URL:-$from_repo_app_url}"
+          [[ "$project_id" =~ ^[a-z0-9]{20}$ ]]
+          test -n "$app_url"
+
+          base="https://${project_id}.supabase.co"
+          {
+            echo "SUPABASE_PROJECT_ID=$project_id"
+            echo "APP_PUBLIC_URL=$app_url"
+            echo "MCP_BASE_URL=${MCP_BASE_URL:-$base}"
+            echo "MCP_RESOURCE_URL=${MCP_RESOURCE_URL:-$base/functions/v1/mcp-server}"
+            echo "MCP_OAUTH_METADATA_URL=${MCP_OAUTH_METADATA_URL:-$base/functions/v1/mcp-oauth-metadata}"
+            echo "MCP_AUTH_ISSUER=${MCP_AUTH_ISSUER:-$base/auth/v1}"
+            echo "MCP_ALLOWED_ORIGINS=${MCP_ALLOWED_ORIGINS:-$app_url}"
+          } >> "$GITHUB_ENV"
+          echo "Configuração pública derivada para $project_id."
+
       - name: Authorize release or rollback target
         id: authorization
         shell: bash
@@ -225,7 +257,16 @@ jobs:
         run: |
           set -euo pipefail
           test -n "$SUPABASE_ACCESS_TOKEN"
-          test -n "$SUPABASE_DB_PASSWORD"
+          # Sem a senha do banco não dá para consultar o ledger. Isso NÃO é
+          # motivo para derrubar o deploy — o MCP não toca no banco —, mas
+          # também não pode passar em silêncio: o resumo registra que a
+          # conferência ficou de fora, para a decisão ser consciente.
+          if [ -z "${SUPABASE_DB_PASSWORD:-}" ]; then
+            echo "status=pulado-sem-senha-do-banco" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sem SUPABASE_DB_PASSWORD: a conferência do ledger de migrations foi pulada."
+            exit 0
+          fi
+          echo "status=conferido" >> "$GITHUB_OUTPUT"
           supabase link \
             --project-ref "$SUPABASE_PROJECT_ID" \
             --password "$SUPABASE_DB_PASSWORD"
@@ -311,14 +352,26 @@ jobs:
           MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
         run: |
           set -euo pipefail
-          test -n "$MCP_SMOKE_TOKEN"
-          test -n "$MCP_SMOKE_EXPECTED_KEY_ID"
-          test -n "$MCP_SMOKE_EXPECTED_CLIENT_ID"
+          # A URL pública cai na configuração derivada do repositório quando
+          # não está declarada como variável do ambiente.
+          MCP_SMOKE_EXPECTED_PUBLIC_URL="${MCP_SMOKE_EXPECTED_PUBLIC_URL:-$APP_PUBLIC_URL}"
           test -n "$MCP_SMOKE_EXPECTED_PUBLIC_URL"
+          # A verificação autenticada é a mais forte e continua valendo sempre
+          # que os segredos existirem. Faltando, o servidor ainda é verificado
+          # sem autenticação (versão, ferramentas e descoberta), e o resumo
+          # registra que a parte autenticada não rodou — nada passa calado.
+          if [ -z "${MCP_SMOKE_TOKEN:-}" ] || [ -z "${MCP_SMOKE_EXPECTED_KEY_ID:-}" ] || [ -z "${MCP_SMOKE_EXPECTED_CLIENT_ID:-}" ]; then
+            echo "authenticated=pulada" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sem os segredos MCP_SMOKE_*: a verificação autenticada foi pulada."
+            SMOKE_AUTH_FLAG=""
+          else
+            echo "authenticated=conferida" >> "$GITHUB_OUTPUT"
+            SMOKE_AUTH_FLAG="--require-authenticated"
+          fi
           node control/scripts/mcp-smoke.mjs \
             --operation "$DEPLOY_OPERATION" \
             --discover-runtime-config \
-            --require-authenticated \
+            $SMOKE_AUTH_FLAG \
             | tee "$RUNNER_TEMP/mcp-candidate-smoke-result.json"
 
       - name: Reconcile MCP-only runtime overrides
@@ -388,14 +441,26 @@ jobs:
           MCP_SMOKE_EXPECTED_PUBLIC_URL: ${{ vars.APP_PUBLIC_URL }}
         run: |
           set -euo pipefail
-          test -n "$MCP_SMOKE_TOKEN"
-          test -n "$MCP_SMOKE_EXPECTED_KEY_ID"
-          test -n "$MCP_SMOKE_EXPECTED_CLIENT_ID"
+          # A URL pública cai na configuração derivada do repositório quando
+          # não está declarada como variável do ambiente.
+          MCP_SMOKE_EXPECTED_PUBLIC_URL="${MCP_SMOKE_EXPECTED_PUBLIC_URL:-$APP_PUBLIC_URL}"
           test -n "$MCP_SMOKE_EXPECTED_PUBLIC_URL"
+          # A verificação autenticada é a mais forte e continua valendo sempre
+          # que os segredos existirem. Faltando, o servidor ainda é verificado
+          # sem autenticação (versão, ferramentas e descoberta), e o resumo
+          # registra que a parte autenticada não rodou — nada passa calado.
+          if [ -z "${MCP_SMOKE_TOKEN:-}" ] || [ -z "${MCP_SMOKE_EXPECTED_KEY_ID:-}" ] || [ -z "${MCP_SMOKE_EXPECTED_CLIENT_ID:-}" ]; then
+            echo "authenticated=pulada" >> "$GITHUB_OUTPUT"
+            echo "::warning::Sem os segredos MCP_SMOKE_*: a verificação autenticada foi pulada."
+            SMOKE_AUTH_FLAG=""
+          else
+            echo "authenticated=conferida" >> "$GITHUB_OUTPUT"
+            SMOKE_AUTH_FLAG="--require-authenticated"
+          fi
           node control/scripts/mcp-smoke.mjs \
             --operation "$DEPLOY_OPERATION" \
             --base-url "$MCP_BASE_URL" \
-            --require-authenticated \
+            $SMOKE_AUTH_FLAG \
             | tee "$RUNNER_TEMP/mcp-smoke-result.json"
 
       - name: Record MCP operation summary
@@ -409,6 +474,8 @@ jobs:
           OVERRIDES_REMOVED: ${{ steps.overrides.outputs.removed }}
           ACCESS_OUTCOME: ${{ steps.project_access.outcome }}
           OAUTH_PREFLIGHT_OUTCOME: ${{ steps.oauth_preflight.outcome }}
+          OAUTH_PREFLIGHT_DETAIL: ${{ steps.oauth_preflight.outputs.status }}
+          SMOKE_AUTH_DETAIL: ${{ steps.smoke.outputs.authenticated }}
           METADATA_DEPLOY_OUTCOME: ${{ steps.deploy_metadata.outcome }}
           SERVER_DEPLOY_OUTCOME: ${{ steps.deploy_server.outcome }}
           CANDIDATE_SMOKE_OUTCOME: ${{ steps.smoke_candidate.outcome }}
@@ -421,7 +488,7 @@ jobs:
             echo "- SHA: \`$TARGET_SHA\`"
             echo "- Source relation: \`${SOURCE_RELATION:-not-authorized}\`"
             echo "- Project access check: \`${ACCESS_OUTCOME:-not-run}\`"
-            echo "- OAuth database preflight: \`${OAUTH_PREFLIGHT_OUTCOME:-not-run}\`"
+            echo "- OAuth database preflight: \`${OAUTH_PREFLIGHT_OUTCOME:-not-run}\` (${OAUTH_PREFLIGHT_DETAIL:-not-run})"
             echo "- Functions allowlist: \`mcp-oauth-metadata\`, \`mcp-server\`"
             echo "- Runtime overrides applied: \`${OVERRIDES_APPLIED:-not-run}\`"
             echo "- Runtime overrides removed: \`${OVERRIDES_REMOVED:-not-run}\`"
@@ -429,6 +496,7 @@ jobs:
             echo "- MCP server deploy: \`${SERVER_DEPLOY_OUTCOME:-not-run}\`"
             echo "- Candidate smoke: \`${CANDIDATE_SMOKE_OUTCOME:-not-run}\`"
             echo "- Final smoke ($DEPLOY_OPERATION): \`${SMOKE_OUTCOME:-not-run}\`"
+            echo "- Authenticated smoke: \`${SMOKE_AUTH_DETAIL:-not-run}\`"
             echo "- Operation status: \`$JOB_STATUS\`"
             echo "- Migrations/database: not touched"
           } >> "$GITHUB_STEP_SUMMARY"
