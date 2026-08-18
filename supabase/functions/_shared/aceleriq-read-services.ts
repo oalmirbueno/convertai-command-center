@@ -1297,8 +1297,38 @@ export async function listWeeklyCycle(opts: {
     }
   }
 
+  // Trabalhos avulsos da semana: gravação na loja, reunião de alinhamento, o
+  // ajuste que o cliente pediu no meio da semana. Sem eles, o agente lia a
+  // semana só pelas 6 etapas fixas e concluía que houve menos trabalho do que
+  // realmente houve — e é justamente o avulso que costuma explicar o resultado.
+  const semanasLidas = [...new Set([...grupos.values()].map((g) => g.week_start))];
+  const avulsosPorChave = new Map<string, Array<{ text: string; done: boolean }>>();
+  if (semanasLidas.length > 0) {
+    let avulsosQb = db()
+      .from('project_memory')
+      .select('client_id, title, metadata')
+      .eq('kind', 'avulso')
+      .in('metadata->>week_start', semanasLidas)
+      .limit(READ_LIMITS.maxPageSize);
+    if (opts.client_id) avulsosQb = avulsosQb.eq('client_id', opts.client_id);
+    const { data: avulsos } = await avulsosQb;
+    for (const linha of avulsos || []) {
+      const meta = (linha as Record<string, unknown>).metadata as Record<string, unknown> | null;
+      const chave = `${(linha as Record<string, unknown>).client_id}:${meta?.area}:${meta?.week_start}`;
+      const lista = avulsosPorChave.get(chave) || [];
+      lista.push({
+        text: String((linha as Record<string, unknown>).title || ''),
+        done: meta?.done === true,
+      });
+      avulsosPorChave.set(chave, lista);
+    }
+  }
+
   const items = [...grupos.values()].map((grupo) => {
     const doCiclo = grupo.steps.filter((step) => step <= CICLO_TOTAL);
+    const avulsos = avulsosPorChave.get(
+      `${grupo.client_id}:${grupo.area}:${grupo.week_start}`,
+    ) || [];
     return {
       client_id: grupo.client_id,
       area: grupo.area,
@@ -1308,6 +1338,8 @@ export async function listWeeklyCycle(opts: {
       closed: doCiclo.length >= CICLO_TOTAL,
       onboarding_steps: grupo.steps.filter((step) => step > CICLO_TOTAL),
       last_done_at: grupo.last_done_at,
+      extras: avulsos,
+      extras_done: avulsos.filter((item) => item.done).length,
     };
   });
 

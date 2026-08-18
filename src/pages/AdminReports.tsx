@@ -3,11 +3,12 @@ import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useProjects, useClients } from "@/hooks/useSupabaseData";
-import { Plus, FileText, Eye, Send, Edit, Folder, ChevronRight } from "lucide-react";
+import { Plus, FileText, Eye, Send, Edit, Folder, ChevronRight, Megaphone } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { groupReports, getClientName, PERIOD_ORDER } from "@/lib/reportGrouping";
+import { recordMemory } from "@/lib/clientMemory";
 
 const metricLabels: Record<string, string> = {
   reach: "Alcance", impressions: "Impressões", frequency: "Freq.",
@@ -61,6 +62,28 @@ export default function AdminReports() {
         toast.error("Não foi possível publicar o relatório");
         return;
       }
+      // Publicar por aqui é o mesmo fato que publicar pela tela de criação:
+      // a história do cliente precisa registrar dos dois caminhos, senão a
+      // Central escreve o ritual sem saber que houve entrega.
+      await recordMemory({
+        clientId: r.client_id,
+        projectId: r.project_id || null,
+        kind: "entrega",
+        title: `Relatório publicado: ${r.title}`,
+        content: [
+          r.period_start && r.period_end
+            ? `Período: ${r.period_start} a ${r.period_end}.`
+            : "",
+          r.summary || "",
+          r.next_steps ? `Próximos passos combinados: ${r.next_steps}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n"),
+        source: "relatorio",
+        tags: ["relatorio", "entrega"],
+        metadata: { report_title: r.title, report_id: r.id },
+      });
+      queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
     }
     const { error: notificationError } = await supabase.from("notifications").insert({
       user_id: r.client_id,
@@ -89,11 +112,22 @@ export default function AdminReports() {
   return (
     <div className="-mx-4 flex h-full min-h-0 flex-col animate-fade-in md:mx-0 md:block md:h-auto md:space-y-6">
       <div className="shrink-0 border-b border-border/60 bg-background/95 px-4 pb-3 backdrop-blur-sm md:border-b-0 md:bg-transparent md:px-0 md:pb-0 md:backdrop-blur-none">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <h1 className="heading-page">Relatórios</h1>
-        <button onClick={() => navigate("/relatorios/novo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer">
-          <Plus className="w-4 h-4" /> Novo Relatório
-        </button>
+        <div className="flex items-center gap-2">
+          {/* O relatório de anúncios passou a nascer em Anúncios, onde os
+              números já estão coletados — aqui ficaria pedindo a planilha do
+              Gerenciador de novo. O de entrega continua sendo criado daqui. */}
+          <button
+            onClick={() => navigate("/anuncios")}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border text-[13px] font-medium text-foreground hover:border-primary/40 transition-colors cursor-pointer"
+          >
+            <Megaphone className="w-4 h-4" /> De anúncios
+          </button>
+          <button onClick={() => navigate("/relatorios/novo")} className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-primary text-primary-foreground text-[13px] font-medium hover:opacity-90 transition-opacity cursor-pointer">
+            <Plus className="w-4 h-4" /> De entrega
+          </button>
+        </div>
       </div>
       </div>
 

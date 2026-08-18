@@ -14,11 +14,17 @@ const admin = () => createClient(
 export type MemoryKind =
   // origem: painel Aceleriq
   | 'ritual' | 'ciclo' | 'entrega' | 'aprovacao' | 'decisao' | 'nota' | 'marco'
+  // trabalho da semana fora da rotina fixa, e as listas rápidas do ciclo
+  | 'avulso' | 'checklist'
   // origem: agentes externos e Studio
   | 'note' | 'summary' | 'decision' | 'fact' | 'second_brain' | 'external';
 
+// Esta lista e os enums declarados em mcp-tools.ts precisam andar juntos:
+// quando divergiram, o MCP validava contra a lista velha e o agente externo
+// simplesmente não enxergava parte da história do cliente.
 export const MEMORY_KINDS: readonly MemoryKind[] = [
   'ritual', 'ciclo', 'entrega', 'aprovacao', 'decisao', 'nota', 'marco',
+  'avulso', 'checklist',
   'note', 'summary', 'decision', 'fact', 'second_brain', 'external',
 ] as const;
 

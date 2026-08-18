@@ -1,5 +1,5 @@
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -9,6 +9,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Plus, X, Loader2, Upload, FileSpreadsheet, Trash2, BarChart3, LineChart, PieChart, Sparkles } from "lucide-react";
 import { parseFile, type ParsedReport } from "@/lib/adsParser";
 import { notifyAdmin } from "@/lib/notifyHelpers";
+import { recordMemory } from "@/lib/clientMemory";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -81,16 +82,37 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
   const { data: clients } = useClients();
   const csvInputRef = useRef<HTMLInputElement>(null);
 
-  const [clientId, setClientId] = useState("");
+  // Vindo da área de Anúncios, a tela já abre preenchida com os números REAIS
+  // da campanha. Antes o caminho era exportar a planilha do Gerenciador e
+  // subir aqui; agora o dado já está no painel e digitar de novo só criaria
+  // chance de erro.
+  const [params] = useSearchParams();
+
+  const [clientId, setClientId] = useState(params.get("cliente") || "");
   const [projectId, setProjectId] = useState("");
-  const [title, setTitle] = useState("");
-  const [periodStart, setPeriodStart] = useState("");
-  const [periodEnd, setPeriodEnd] = useState("");
-  const [summary, setSummary] = useState("");
-  const [highlights, setHighlights] = useState("");
+  const [title, setTitle] = useState(params.get("titulo") || "");
+  const [periodStart, setPeriodStart] = useState(params.get("inicio") || "");
+  const [periodEnd, setPeriodEnd] = useState(params.get("fim") || "");
+  const [summary, setSummary] = useState(params.get("resumo") || "");
+  const [highlights, setHighlights] = useState(params.get("destaques") || "");
   const [nextSteps, setNextSteps] = useState("");
   const [internalNotes, setInternalNotes] = useState("");
-  const [metrics, setMetrics] = useState<Record<string, number>>({});
+  const [metrics, setMetrics] = useState<Record<string, number>>(() => {
+    // Os números chegam da área de Anúncios já nos nomes que este relatório
+    // usa (ad_spend, reach, results...), então caem direto nos campos.
+    try {
+      const cru = params.get("metricas");
+      if (!cru) return {};
+      const lido = JSON.parse(cru) as Record<string, unknown>;
+      return Object.fromEntries(
+        Object.entries(lido)
+          .filter(([, valor]) => Number.isFinite(Number(valor)))
+          .map(([chave, valor]) => [chave, Number(valor)]),
+      );
+    } catch {
+      return {};
+    }
+  });
   const [customMetrics, setCustomMetrics] = useState<CustomMetric[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -238,9 +260,41 @@ export default function AdminReportCreate({ editId }: { editId?: string }) {
           update_type: "milestone",
         }).select().single();
         notifyOpsUpdate(upd);
+
+        // O relatório entra na história do cliente.
+        //
+        // Sem isto ele era um documento solto: a Central escrevia o ritual da
+        // semana sem saber que um relatório tinha sido publicado, e o ciclo
+        // não contava com essa entrega. Agora a mesma memória que alimenta o
+        // ritual, o dossiê e o MCP passa a conhecer o que foi entregue e o que
+        // ficou combinado como próximo passo.
+        await recordMemory({
+          clientId,
+          projectId,
+          kind: "entrega",
+          title: `Relatório publicado: ${title}`,
+          content: [
+            periodStart && periodEnd ? `Período: ${periodStart} a ${periodEnd}.` : "",
+            summary,
+            highlights ? `Destaques: ${highlights}` : "",
+            nextSteps ? `Próximos passos combinados: ${nextSteps}` : "",
+          ]
+            .filter(Boolean)
+            .join("\n"),
+          source: "relatorio",
+          tags: ["relatorio", "entrega"],
+          metadata: {
+            report_title: title,
+            period_start: periodStart || null,
+            period_end: periodEnd || null,
+            source_kind: parsedSource?.source || null,
+          },
+        });
       }
 
       queryClient.invalidateQueries({ queryKey: ["reports"] });
+      // A Central e o ciclo leem a memória do cliente: recarregam junto.
+      queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
       toast.success(status === "published" ? "Relatório publicado!" : "Rascunho salvo!");
       navigate("/relatorios");
     } catch (err: any) {

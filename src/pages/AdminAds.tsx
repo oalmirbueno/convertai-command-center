@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertTriangle,
   ArrowLeft,
   ChevronRight,
   Link2,
+  FileText,
   Megaphone,
   RefreshCw,
   Search,
@@ -26,6 +27,7 @@ import {
   type AdsDaily,
 } from "@/hooks/useAdsMetrics";
 import {
+  clientCampaignLine,
   clientCampaignSentence,
   dinheiro,
   numero,
@@ -100,6 +102,7 @@ function ClientAdsDetail({
   campaigns: AdsCampaign[];
   onBack: () => void;
 }) {
+  const navigate = useNavigate();
   const porCampanha = useMemo(() => {
     const mapa = new Map<string, AdsDaily[]>();
     for (const row of rows) {
@@ -118,6 +121,35 @@ function ClientAdsDetail({
 
   const carteira = useMemo(() => summarizeAccount(rows), [rows]);
 
+  /**
+   * Abre o relatório já preenchido com o que a Meta devolveu.
+   *
+   * O resumo sai na língua do cliente (a mesma camada que alimenta o portal),
+   * e os números vão nos nomes que o relatório já entende — nada de digitar de
+   * novo o que o painel acabou de ler.
+   */
+  const gerarRelatorio = () => {
+    const dias = [...rows].map((row) => row.day).sort();
+    const linhas = porCampanha
+      .map(({ resumo }) => `· ${resumo.name}: ${clientCampaignLine(resumo)}`)
+      .join("\n");
+
+    const parametros = new URLSearchParams({
+      cliente: clientId,
+      titulo: `Anúncios · ${clientName}`,
+      inicio: dias[0] || "",
+      fim: dias[dias.length - 1] || "",
+      resumo: `Resumo dos anúncios no período:\n${linhas}`,
+      destaques: porCampanha[0] ? clientCampaignSentence(porCampanha[0].resumo) : "",
+      metricas: JSON.stringify({
+        ad_spend: Number(carteira.investido.toFixed(2)),
+        reach: carteira.alcance,
+        ...(carteira.resultados != null ? { results: carteira.resultados } : {}),
+      }),
+    });
+    navigate(`/relatorios/novo?${parametros.toString()}`);
+  };
+
   return (
     <div className="space-y-4">
       <button
@@ -129,11 +161,21 @@ function ClientAdsDetail({
       </button>
 
       <div className="rounded-2xl border border-border bg-card p-4">
-        <h2 className="text-sm font-semibold text-foreground">{clientName}</h2>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          Últimos 30 dias · {carteira.campanhas}{" "}
-          {carteira.campanhas === 1 ? "campanha" : "campanhas"}
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-2">
+          <div>
+            <h2 className="text-sm font-semibold text-foreground">{clientName}</h2>
+            <p className="mt-0.5 text-[11px] text-muted-foreground">
+              Últimos 30 dias · {carteira.campanhas}{" "}
+              {carteira.campanhas === 1 ? "campanha" : "campanhas"}
+            </p>
+          </div>
+          {/* O relatório de anúncios nasce aqui, onde o dado está. Antes era
+              exportar a planilha do Gerenciador e subir em Relatórios; agora
+              os números já vêm preenchidos e ninguém redigita. */}
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={gerarRelatorio}>
+            <FileText className="h-3.5 w-3.5" /> Gerar relatório
+          </Button>
+        </div>
         <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
           <Numero
             rotulo="Investido"

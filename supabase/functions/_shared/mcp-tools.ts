@@ -221,7 +221,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.12.0',
+  version: '1.13.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1266,7 +1266,7 @@ const getClientDossierTool: ToolDefinition = {
 const getWeeklyCycleTool: ToolDefinition = {
   name: 'aceleriq_get_weekly_cycle',
   title: 'Ciclo da semana — ler',
-  description: 'Lê o checklist semanal de operação por cliente: quais etapas do ciclo (Social Media ou Tráfego Pago) foram concluídas em cada semana, quando e por quem. É o bastidor do trabalho, o que mostra se a rotina rodou de verdade naquela semana. Sem week_start, devolve a semana atual.',
+  description: 'Lê o checklist semanal de operação por cliente: quais etapas do ciclo (Social Media ou Tráfego Pago) foram concluídas em cada semana, quando e por quem. É o bastidor do trabalho, o que mostra se a rotina rodou de verdade naquela semana. Traz também os avulsos (extras): gravação, reunião, ajuste pedido no meio da semana — trabalho real que não cabe nas 6 etapas fixas e que costuma explicar o resultado. Sem week_start, devolve a semana atual.',
   scopes: ['projects:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -1406,7 +1406,7 @@ import { listMemory as _listProjectMemory, upsertMemory as _upsertProjectMemory 
 const getProjectMemoryTool: ToolDefinition = {
   name: 'aceleriq_get_project_memory',
   title: 'Memória do projeto — ler',
-  description: 'Lê a história persistente de um cliente: mensagens enviadas (ritual), semanas de operação fechadas (ciclo), entregas, aprovações, decisões, anotações da equipe e marcos, além do que agentes externos registraram. Ordem do mais recente para o mais antigo. Use para retomar contexto de onde parou antes de escrever ou decidir qualquer coisa sobre o cliente.',
+  description: 'Lê a história persistente de um cliente: mensagens enviadas (ritual), semanas de operação fechadas (ciclo), entregas, aprovações, decisões, anotações da equipe, trabalhos avulsos da semana, listas rápidas e marcos, além do que agentes externos registraram. Ordem do mais recente para o mais antigo. Use para retomar contexto de onde parou antes de escrever ou decidir qualquer coisa sobre o cliente.',
   scopes: ['projects:read'] as const,
   annotations: READ_ANNOTATIONS,
   inputSchema: {
@@ -1414,7 +1414,7 @@ const getProjectMemoryTool: ToolDefinition = {
     properties: {
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
-      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external'] },
+      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','avulso','checklist','note','summary','decision','fact','second_brain','external'] },
       limit: { type: 'integer', minimum: 1, maximum: 200 },
     },
     required: ['client_id'],
@@ -1424,7 +1424,7 @@ const getProjectMemoryTool: ToolDefinition = {
     const schema = z.object({
       client_id: z.string().uuid(),
       project_id: z.string().uuid().optional(),
-      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external']).optional(),
+      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','avulso','checklist','note','summary','decision','fact','second_brain','external']).optional(),
       limit: z.number().int().min(1).max(200).optional(),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
@@ -1445,7 +1445,7 @@ const upsertProjectMemoryTool: ToolDefinition = {
     properties: {
       client_id: { type: 'string', format: 'uuid' },
       project_id: { type: 'string', format: 'uuid' },
-      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external'] },
+      kind: { type: 'string', enum: ['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','avulso','checklist','note','summary','decision','fact','second_brain','external'] },
       source: { type: 'string', maxLength: 60 },
       title: { type: 'string', maxLength: 200 },
       content: { type: 'string', minLength: 3, maxLength: 20000 },
@@ -1459,7 +1459,7 @@ const upsertProjectMemoryTool: ToolDefinition = {
     const schema = z.object({
       client_id: z.string().uuid(),
       project_id: z.string().uuid().optional(),
-      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','note','summary','decision','fact','second_brain','external']).optional(),
+      kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','avulso','checklist','note','summary','decision','fact','second_brain','external']).optional(),
       source: z.string().max(60).optional(),
       title: z.string().max(200).optional(),
       content: z.string().min(3).max(20000),

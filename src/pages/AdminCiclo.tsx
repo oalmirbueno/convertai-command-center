@@ -12,6 +12,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
+import { extraAreas, inCycle, setCycleExtra } from "@/lib/cycleExtras";
 import { recordMemory } from "@/lib/clientMemory";
 import {
   PHASE_LABELS, phaseForClient, stepLabelForWeek, stepLabelsForWeek, stepsForWeek,
@@ -132,6 +133,9 @@ export default function AdminCiclo() {
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
 
+  // Entra no ciclo quem contratou a frente OU quem foi incluído à mão. O
+  // incluído à mão é separado de propósito: marcar o serviço no cadastro para
+  // ver o cliente aqui mexeria em cobrança, ritual e MRR.
   const activeClients = useMemo(
     () =>
       ((clients || []) as any[]).filter(
@@ -139,10 +143,48 @@ export default function AdminCiclo() {
           !isInternalClient(client) &&
           (client.plan_status || "active") === "active" &&
           (client.client_type || "recurring") !== "one_off" &&
-          hasService(client, area),
+          inCycle(client, area, hasService),
       ),
     [clients, area],
   );
+
+  /** Quem existe, está ativo e ainda não aparece nesta frente. */
+  const clientesDeFora = useMemo(
+    () =>
+      ((clients || []) as any[]).filter(
+        (client) =>
+          !isInternalClient(client) &&
+          (client.plan_status || "active") === "active" &&
+          !inCycle(client, area, hasService),
+      ),
+    [clients, area],
+  );
+
+  const [incluindo, setIncluindo] = useState(false);
+  const [abrirInclusao, setAbrirInclusao] = useState(false);
+
+  const incluirNoCiclo = async (clientId: string, nome: string) => {
+    setIncluindo(true);
+    try {
+      if (await setCycleExtra(clientId, area, true)) {
+        toast.success(`${nome} entrou no ciclo de ${CYCLES[area].label}.`);
+        await queryClient.invalidateQueries({ queryKey: ["clients"] });
+      } else {
+        toast.error("Não foi possível incluir.");
+      }
+    } finally {
+      setIncluindo(false);
+    }
+  };
+
+  const tirarDoCiclo = async (clientId: string, nome: string) => {
+    if (await setCycleExtra(clientId, area, false)) {
+      toast.success(`${nome} saiu do ciclo de ${CYCLES[area].label}.`);
+      await queryClient.invalidateQueries({ queryKey: ["clients"] });
+    } else {
+      toast.error("Não foi possível remover.");
+    }
+  };
 
   const unassignedCount = useMemo(
     () =>
@@ -917,10 +959,77 @@ export default function AdminCiclo() {
             </div>
           )}
 
-          {unassignedCount > 0 && (
-            <p className="px-1 pb-2 text-[10px] leading-relaxed text-muted-foreground">
-              {unassignedCount} {unassignedCount === 1 ? "cliente ativo não tem" : "clientes ativos não têm"} Social
-              nem Tráfego marcado no cadastro, então {unassignedCount === 1 ? "não aparece" : "não aparecem"} aqui.
+          {/* Incluir quem ficou de fora. O cadastro define o padrão, mas existe
+              o caso real: o cliente em preparação, o que entrou no meio da
+              semana, o que pediu uma frente por fora. */}
+          {clientesDeFora.length > 0 && (
+            <div className="mt-1 rounded-2xl border border-border bg-card px-3 py-2">
+              <button
+                type="button"
+                onClick={() => setAbrirInclusao((valor) => !valor)}
+                className="w-full text-left text-[11px] font-semibold text-foreground"
+              >
+                Incluir cliente nesta frente
+                <span className="ml-1.5 font-normal text-muted-foreground">
+                  ({clientesDeFora.length} fora)
+                </span>
+              </button>
+              {/* Os nomes só entram na tela quando o painel abre: soltos aqui,
+                  se misturariam com a lista do ciclo e dariam a impressão de
+                  que aquele cliente já está na frente. */}
+              {abrirInclusao && (
+                <>
+              <p className="mt-1.5 text-[10px] leading-relaxed text-muted-foreground">
+                Entra só no ciclo, sem virar serviço contratado — nada muda em
+                cobrança nem no plano.
+              </p>
+              <div className="mt-2 space-y-1">
+                {clientesDeFora.map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    disabled={incluindo}
+                    onClick={() =>
+                      void incluirNoCiclo(
+                        client.id,
+                        client.company_name || client.full_name || "Cliente",
+                      )
+                    }
+                    className="flex w-full items-center justify-between gap-2 rounded-xl border border-border/60 bg-secondary/40 px-2.5 py-1.5 text-left disabled:opacity-40"
+                  >
+                    <span className="min-w-0 truncate text-[12px] text-foreground">
+                      {client.company_name || client.full_name}
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold text-primary">incluir</span>
+                  </button>
+                ))}
+              </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Quem está aqui por inclusão manual pode sair pelo mesmo caminho. */}
+          {activeClients.filter((client) => extraAreas(client).includes(area)).length > 0 && (
+            <p className="px-1 pt-2 text-[10px] leading-relaxed text-muted-foreground">
+              Incluídos à mão nesta frente:{" "}
+              {activeClients
+                .filter((client) => extraAreas(client).includes(area))
+                .map((client) => (
+                  <button
+                    key={client.id}
+                    type="button"
+                    onClick={() =>
+                      void tirarDoCiclo(
+                        client.id,
+                        client.company_name || client.full_name || "Cliente",
+                      )
+                    }
+                    className="mr-1.5 underline decoration-dotted hover:text-destructive"
+                  >
+                    {client.company_name || client.full_name} ✕
+                  </button>
+                ))}
             </p>
           )}
         </div>

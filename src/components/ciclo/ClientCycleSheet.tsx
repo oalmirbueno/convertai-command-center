@@ -26,6 +26,10 @@ import {
   checklistProgress, createChecklist, deleteChecklist, listChecklists,
   splitRequestIntoItems, toggleChecklistItem, type Checklist,
 } from "@/lib/clientChecklist";
+import {
+  addAvulso, listAvulsos, removeAvulso, toggleAvulso, type Avulso,
+} from "@/lib/cycleExtras";
+import { weekRitualMessage } from "@/lib/cycleRitual";
 
 /**
  * O cliente por dentro, a partir do Ciclo.
@@ -90,6 +94,11 @@ export default function ClientCycleSheet({
   const [pedidoChecklist, setPedidoChecklist] = useState("");
   const [gerandoChecklist, setGerandoChecklist] = useState(false);
   const [listas, setListas] = useState<Checklist[]>([]);
+  // Trabalhos fora da rotina: gravação na loja, reunião no meio da semana, o
+  // ajuste que o cliente pediu. Sem eles a semana parecia menor do que foi.
+  const [avulsos, setAvulsos] = useState<Avulso[]>([]);
+  const [novoAvulso, setNovoAvulso] = useState("");
+  const [salvandoAvulso, setSalvandoAvulso] = useState(false);
   const cycle = CYCLES[area];
   const totalSteps = cycle.steps.length;
   const open = !!client;
@@ -168,6 +177,61 @@ export default function ClientCycleSheet({
     enabled: open && !!client?.id,
     staleTime: 30_000,
   });
+
+  // Os avulsos são por semana E por frente: o que foi feito de tráfego numa
+  // semana não deve aparecer no social da seguinte.
+  const { refetch: recarregarAvulsos } = useQuery({
+    queryKey: ["avulsos-ciclo", client?.id, area, localIso(weekStart)],
+    queryFn: async () => {
+      const dados = await listAvulsos(client!.id, area, localIso(weekStart));
+      setAvulsos(dados);
+      return dados;
+    },
+    enabled: open && !!client?.id,
+    staleTime: 15_000,
+  });
+
+  const adicionarAvulso = async () => {
+    const texto = novoAvulso.trim();
+    if (!client || texto.length < 3 || salvandoAvulso) return;
+    setSalvandoAvulso(true);
+    try {
+      const criado = await addAvulso({
+        clientId: client.id,
+        area,
+        weekStart: localIso(weekStart),
+        text: texto,
+      });
+      if (!criado) {
+        toast.error("Não foi possível registrar o avulso.");
+        return;
+      }
+      setNovoAvulso("");
+      await recarregarAvulsos();
+      // A história do cliente ganhou uma linha: a Central lê daqui.
+      await recarregarHistoria();
+    } finally {
+      setSalvandoAvulso(false);
+    }
+  };
+
+  const marcarAvulso = async (avulso: Avulso) => {
+    const atualizado = await toggleAvulso(avulso, area, localIso(weekStart));
+    if (!atualizado) {
+      toast.error("Não foi possível marcar.");
+      return;
+    }
+    await recarregarAvulsos();
+    await recarregarHistoria();
+  };
+
+  const apagarAvulso = async (id: string) => {
+    if (!(await removeAvulso(id))) {
+      toast.error("Não foi possível remover.");
+      return;
+    }
+    await recarregarAvulsos();
+  };
 
   const gerarChecklist = async () => {
     const pedido = pedidoChecklist.trim();
@@ -322,9 +386,14 @@ export default function ClientCycleSheet({
     .filter(([key, value]) => value === true && SERVICE_LABELS[key])
     .map(([key]) => SERVICE_LABELS[key]);
 
-  const resumo = weekSummaryText({
+  // A mensagem que a equipe copia daqui. Antes era só a lista de etapas
+  // concluídas: servia de comprovante e falhava como comunicação, porque o
+  // cliente não sabia por que aquilo era bom para ele nem o que vinha depois.
+  // Agora entra o porquê da fase, o trabalho avulso da semana e a continuidade.
+  const resumo = weekRitualMessage({
     clientName,
     area,
+    weekStart: localIso(weekStart),
     doneSteps,
     totalSteps: clientTotal,
     stepNames: client
@@ -332,6 +401,9 @@ export default function ClientCycleSheet({
           stepLabelForWeek(area, client.id, localIso(weekStart), i + 1, opcoesEtapa),
         )
       : undefined,
+    avulsosFeitos: avulsos.filter((item) => item.done).map((item) => item.text),
+    sequencia: streak,
+    phase: fase,
   });
 
   const copiarResumo = async () => {
@@ -585,6 +657,70 @@ export default function ClientCycleSheet({
                   </div>
                 </>
               ) : null}
+
+              {/* Avulsos: o trabalho da semana que a rotina fixa não cobre.
+                  Fica junto das etapas, e não numa lista à parte, porque é a
+                  mesma semana — e entra na mensagem que o cliente recebe. */}
+              <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                Avulsos da semana
+              </p>
+              <div className="mt-2 flex gap-1.5">
+                <input
+                  value={novoAvulso}
+                  onChange={(event) => setNovoAvulso(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") void adicionarAvulso();
+                  }}
+                  placeholder="Ex: gravação na loja com o time"
+                  className="min-w-0 flex-1 rounded-xl border border-border bg-card px-3 py-2 text-[12.5px] text-foreground placeholder:text-muted-foreground/70 focus:border-primary/50 focus:outline-none"
+                />
+                <button
+                  type="button"
+                  onClick={() => void adicionarAvulso()}
+                  disabled={novoAvulso.trim().length < 3 || salvandoAvulso}
+                  className="shrink-0 rounded-xl bg-secondary px-3 text-[11.5px] font-bold text-foreground disabled:opacity-40"
+                >
+                  Somar
+                </button>
+              </div>
+
+              {avulsos.length > 0 && (
+                <div className="mt-2 space-y-1">
+                  {avulsos.map((avulso) => (
+                    <div
+                      key={avulso.id}
+                      className="flex items-center gap-2 rounded-xl border border-border/60 bg-card px-2.5 py-1.5"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => void marcarAvulso(avulso)}
+                        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
+                          avulso.done
+                            ? "border-success bg-success text-background"
+                            : "border-border"
+                        }`}
+                        aria-label={avulso.done ? "Desmarcar" : "Marcar como feito"}
+                      >
+                        {avulso.done && <Check className="h-3 w-3" />}
+                      </button>
+                      <span
+                        className={`min-w-0 flex-1 truncate text-[12px] ${
+                          avulso.done ? "text-muted-foreground line-through" : "text-foreground"
+                        }`}
+                      >
+                        {avulso.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => void apagarAvulso(avulso.id)}
+                        className="shrink-0 text-[10px] text-muted-foreground hover:text-destructive"
+                      >
+                        remover
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {/* Checklist do momento: o que não cabe no ciclo semanal */}
               <p className="mt-5 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
