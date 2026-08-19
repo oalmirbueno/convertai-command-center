@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Loader2, Upload } from "lucide-react";
+import { Images, Loader2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -32,6 +32,15 @@ const storageSafeName = (name: string) =>
     .replace(/^-+|-+$/g, "")
     .slice(0, 120) || "arquivo";
 
+/**
+ * O que a pessoa quis subir.
+ *
+ * Não é só rótulo: escolher "carrossel" declara a intenção ANTES do envio, e
+ * com isso dá para recusar um arquivo só — que subiria como arte única sem
+ * ninguém perceber que o carrossel não aconteceu.
+ */
+type Intencao = "unica" | "carrossel";
+
 interface Props {
   clientId: string | null;
   projectId: string | null;
@@ -46,10 +55,16 @@ export default function EditorialArtDropZone({
 }: Props) {
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const intencaoRef = useRef<Intencao>("unica");
   const [enviando, setEnviando] = useState(false);
   const [arrastando, setArrastando] = useState(false);
 
-  const enviar = async (lista: FileList | File[]) => {
+  const abrirSeletor = (intencao: Intencao) => {
+    intencaoRef.current = intencao;
+    inputRef.current?.click();
+  };
+
+  const enviar = async (lista: FileList | File[], intencao: Intencao) => {
     const files = Array.from(lista);
     if (files.length === 0 || !clientId || disabled || enviando) return;
 
@@ -60,10 +75,16 @@ export default function EditorialArtDropZone({
       toast.error("Só imagem ou vídeo viram arte do conteúdo.");
       return;
     }
-    // Mais de um arquivo é carrossel, e carrossel é de imagens — igual ao
-    // Arquivos: vídeo não entra em carrossel na publicação.
+    // Pediu carrossel e mandou um arquivo só: subiria como arte única e o
+    // carrossel simplesmente não teria acontecido, sem aviso nenhum.
+    if (intencao === "carrossel" && files.length < 2) {
+      toast.error("Carrossel precisa de pelo menos duas imagens. Selecione todas de uma vez, na ordem que devem aparecer.");
+      return;
+    }
+    // Carrossel é de imagens, igual ao Arquivos: vídeo não entra em carrossel
+    // na publicação.
     if (files.length > 1 && tipos.some((tipo) => tipo !== "image")) {
-      toast.error("Vários arquivos formam um carrossel, e carrossel é só de imagens. Envie o vídeo sozinho.");
+      toast.error("Carrossel é só de imagens. Envie o vídeo sozinho.");
       return;
     }
 
@@ -76,6 +97,7 @@ export default function EditorialArtDropZone({
       const authUid = authData.user.id;
       const batchId = crypto.randomUUID();
       const isCarousel = files.length > 1;
+      void intencao;
       let parentFileId: string | null = null;
 
       for (let i = 0; i < files.length; i += 1) {
@@ -132,8 +154,8 @@ export default function EditorialArtDropZone({
 
       if (parentFileId) await onUploaded(parentFileId);
       toast.success(
-        files.length > 1
-          ? `Carrossel com ${files.length} imagens enviado e vinculado.`
+        isCarousel
+          ? `Carrossel com ${files.length} imagens enviado e vinculado, na ordem escolhida.`
           : "Arte enviada e vinculada. Ela já está em Arquivos também.",
       );
     } catch (erro) {
@@ -156,7 +178,13 @@ export default function EditorialArtDropZone({
       onDrop={(e) => {
         e.preventDefault();
         setArrastando(false);
-        if (!disabled && !enviando) void enviar(e.dataTransfer.files);
+        // Arrastar não declara intenção: vários arquivos falam por si.
+        if (!disabled && !enviando) {
+          void enviar(
+            e.dataTransfer.files,
+            e.dataTransfer.files.length > 1 ? "carrossel" : "unica",
+          );
+        }
       }}
       className={cn(
         "relative rounded-xl transition-shadow",
@@ -170,25 +198,46 @@ export default function EditorialArtDropZone({
         multiple
         className="hidden"
         onChange={(e) => {
-          if (e.target.files) void enviar(e.target.files);
+          if (e.target.files) void enviar(e.target.files, intencaoRef.current);
           e.target.value = "";
         }}
       />
-      <button
-        type="button"
-        disabled={disabled || enviando || !clientId}
-        onClick={() => inputRef.current?.click()}
-        className="mb-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {enviando ? (
+      {enviando ? (
+        <p className="mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        ) : (
-          <Upload className="h-3.5 w-3.5" />
-        )}
-        {enviando
-          ? "Enviando e vinculando…"
-          : "Subir arte do computador — ou arraste os arquivos aqui"}
-      </button>
+          Enviando e vinculando…
+        </p>
+      ) : (
+        <div className="mb-2 grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            disabled={disabled || !clientId}
+            onClick={() => abrirSeletor("unica")}
+            title="Uma imagem ou um vídeo"
+            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Upload className="h-3.5 w-3.5" />
+            Subir arte
+          </button>
+          <button
+            type="button"
+            disabled={disabled || !clientId}
+            onClick={() => abrirSeletor("carrossel")}
+            title="Selecione todas as imagens de uma vez, na ordem em que devem aparecer"
+            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <Images className="h-3.5 w-3.5" />
+            Subir carrossel
+          </button>
+        </div>
+      )}
+      {!enviando && (
+        // A ordem do carrossel é a da seleção, e isso não é adivinhável: sem
+        // dizer, a pessoa descobre depois de publicado.
+        <p className="mb-2 text-center text-[10px] leading-snug text-muted-foreground">
+          Do computador ou arrastando aqui. No carrossel, a ordem é a da seleção.
+        </p>
+      )}
       {children}
       {arrastando && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-primary/10">

@@ -85,7 +85,7 @@ describe("o upload do card é o mesmo caminho do Arquivos", () => {
   it("vários arquivos viram carrossel de imagens, como no Arquivos", () => {
     expect(zona).toContain('"carrossel"');
     expect(zona).toContain("parent_file_id");
-    expect(zona).toMatch(/carrossel é só de imagens/);
+    expect(zona).toMatch(/Carrossel é só de imagens/);
   });
 
   it("o editor vincula o upload como arte do card na hora", () => {
@@ -98,5 +98,48 @@ describe("o upload do card é o mesmo caminho do Arquivos", () => {
 
   it("conteúdo travado não aceita upload", () => {
     expect(editor).toMatch(/disabled=\{savedContentLocked\}/);
+  });
+});
+
+describe("o carrossel é uma opção declarada, não um efeito colateral", () => {
+  it("os dois botões existem e dizem o que fazem", () => {
+    expect(zona).toContain("Subir arte");
+    expect(zona).toContain("Subir carrossel");
+  });
+
+  it("pedir carrossel com um arquivo só é recusado", () => {
+    // Sem isto, subiria como arte única e o carrossel simplesmente não teria
+    // acontecido — sem aviso nenhum.
+    expect(zona).toContain('intencao === "carrossel" && files.length < 2');
+    expect(zona).toMatch(/pelo menos duas imagens/);
+  });
+
+  it("a ordem do carrossel é dita na tela", () => {
+    // A ordem é a da seleção e isso não é adivinhável: sem dizer, a pessoa
+    // descobre depois de publicado.
+    expect(zona).toMatch(/a ordem é a da seleção/i);
+  });
+
+  it("arrastar vários arquivos também vira carrossel", () => {
+    expect(zona).toContain('e.dataTransfer.files.length > 1 ? "carrossel" : "unica"');
+  });
+
+  it("vídeo não entra em carrossel, como no Arquivos", () => {
+    expect(zona).toMatch(/Carrossel é só de imagens/);
+  });
+
+  it("o card assume o formato do que foi subido", () => {
+    // Vincular só o id deixava o formato como estava: um carrossel recém
+    // subido continuava valendo como arte única, com as imagens seguintes
+    // existindo no banco e nunca chegando à publicação.
+    const trecho = editor.slice(editor.indexOf("<EditorialArtDropZone"));
+    expect(trecho).toContain("buildApprovedMediaAssets(");
+    expect(trecho).toContain("selectApprovedMedia(asset)");
+  });
+
+  it("arquivo que o seletor não classifica ainda é vinculado", () => {
+    // Perder o envio seria pior que vincular sem ajustar o formato.
+    const trecho = editor.slice(editor.indexOf("<EditorialArtDropZone"));
+    expect(trecho).toContain("setPrimaryFileId(rootFileId)");
   });
 });

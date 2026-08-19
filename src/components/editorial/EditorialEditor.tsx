@@ -1207,10 +1207,25 @@ export default function EditorialEditor({
                   projectId={projectId || null}
                   disabled={savedContentLocked}
                   onUploaded={async (rootFileId) => {
-                    // O arquivo acabou de nascer pelo mesmo RPC do Arquivos;
-                    // recarregar as opções o traz para o seletor, e ele já
-                    // vira a arte deste card.
-                    await refetchOptions();
+                    /* O arquivo nasceu pelo mesmo RPC do Arquivos; recarregar
+                       as opções o traz para o seletor.
+
+                       Vincular só o id NÃO bastava: o formato do card ficava
+                       como estava, então um carrossel recém-subido continuava
+                       valendo como arte única — com as imagens seguintes
+                       existindo no banco e nunca chegando à publicação.
+                       Passar pelo MESMO caminho de escolher à mão faz o
+                       formato, o título e a legenda seguirem uma regra só. */
+                    const fresco = await refetchOptions();
+                    const asset = buildApprovedMediaAssets(
+                      fresco.data?.files || [],
+                    ).find((candidato) => candidato.root.id === rootFileId);
+                    if (asset) {
+                      selectApprovedMedia(asset);
+                      return;
+                    }
+                    // Sem o asset (arquivo que o seletor não classifica), ao
+                    // menos o vínculo é feito em vez de perder o envio.
                     setPrimaryFileId(rootFileId);
                     markChanged();
                   }}
