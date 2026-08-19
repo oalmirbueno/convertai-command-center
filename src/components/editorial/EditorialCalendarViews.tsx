@@ -738,19 +738,12 @@ function TaskSchedulePill({
   dateKey,
   compact = false,
   projectScopeName,
-  linkedPost = null,
   onClick,
 }: {
   task: EditorialInboxTask;
   dateKey: string;
   compact?: boolean;
   projectScopeName?: string;
-  /**
-   * O conteúdo que nasceu desta tarefa, quando ele ainda não tem publicação
-   * agendada. O post não tem dia próprio no banco — o dia é herdado daqui —
-   * e sem isto o item sumia do calendário na hora em que ganhava arte.
-   */
-  linkedPost?: EditorialPostBundle | null;
   onClick: () => void;
 }) {
   const deliveryType = taskDeliveryTypeLabel(task);
@@ -760,59 +753,6 @@ function TaskSchedulePill({
     "dd 'de' MMMM 'de' yyyy",
     { locale: ptBR },
   );
-  // Com conteúdo ligado, a pílula fala do ESTADO dele (cor + nome da etapa),
-  // não mais de "preparar conteúdo": esse trabalho já começou.
-  const etapa = linkedPost
-    ? editorialVisualStage(linkedPost.post.production_status)
-    : null;
-  const cor = etapa ? corDaEtapa(etapa) : null;
-
-  if (linkedPost && cor) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={`Abrir o conteúdo "${linkedPost.post.title}". Dia herdado do prazo da tarefa: ${dueDateLabel}. Etapa: ${EDITORIAL_VISUAL_STAGE_LABELS[etapa!] || etapa}.`}
-        className={cn(
-          "group w-full rounded-lg border text-left text-foreground transition-colors hover:border-primary/45",
-          cor.borda,
-          cor.fundo,
-          compact ? "px-2 py-1.5" : "p-2.5",
-        )}
-        data-content-density={compact ? "compact" : "comfortable"}
-      >
-        <div className="flex min-w-0 items-center gap-1.5">
-          <EditorialFileThumbnail
-            post={linkedPost}
-            className={compact ? "h-6 w-6 shrink-0" : "h-9 w-9 shrink-0"}
-          />
-          <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1">
-              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
-              <span className={cn("truncate text-[9px] font-semibold uppercase tracking-wide", cor.texto)}>
-                {EDITORIAL_VISUAL_STAGE_LABELS[etapa!] || etapa}
-              </span>
-            </span>
-            <span
-              className={cn(
-                "block truncate font-medium",
-                compact ? "text-[10px]" : "text-[11.5px]",
-              )}
-              title={linkedPost.post.title}
-            >
-              {linkedPost.post.title}
-            </span>
-            {!compact && (
-              <span className="block truncate text-[9.5px] text-muted-foreground">
-                Dia herdado do prazo da tarefa · toque para abrir
-              </span>
-            )}
-          </span>
-        </div>
-      </button>
-    );
-  }
-
   return (
     <button
       type="button"
