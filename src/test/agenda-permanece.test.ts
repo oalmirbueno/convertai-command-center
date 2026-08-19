@@ -102,9 +102,10 @@ describe("o upload do card é o mesmo caminho do Arquivos", () => {
 });
 
 describe("o carrossel é uma opção declarada, não um efeito colateral", () => {
-  it("os dois botões existem e dizem o que fazem", () => {
-    expect(zona).toContain("Subir arte");
-    expect(zona).toContain("Subir carrossel");
+  it("os dois alvos existem e dizem o que fazem", () => {
+    // Viraram alvos de arrasto além de botões, então o rótulo mudou junto.
+    expect(zona).toContain("Arte / post");
+    expect(zona).toContain("Carrossel");
   });
 
   it("pedir carrossel com um arquivo só é recusado", () => {
@@ -120,8 +121,11 @@ describe("o carrossel é uma opção declarada, não um efeito colateral", () =>
     expect(zona).toMatch(/a ordem é a da seleção/i);
   });
 
-  it("arrastar vários arquivos também vira carrossel", () => {
-    expect(zona).toContain('e.dataTransfer.files.length > 1 ? "carrossel" : "unica"');
+  it("arrastar não adivinha mais: o alvo declara a intenção", () => {
+    // Deduzir pela quantidade transformava duas artes separadas em carrossel,
+    // e um arquivo pretendendo carrossel em arte única.
+    expect(zona).not.toContain('e.dataTransfer.files.length > 1 ? "carrossel"');
+    expect(zona).toContain("void enviar(e.dataTransfer.files, intencao)");
   });
 
   it("vídeo não entra em carrossel, como no Arquivos", () => {
