@@ -16,6 +16,8 @@ import { isInternalClient } from "@/lib/clientFlags";
 import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
+import DossieDoCliente from "@/components/admin/DossieDoCliente";
+import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
@@ -1455,6 +1457,10 @@ export default function AdminExperience() {
           "exp-released-files", "exp-pending-approvals", "exp-publications",
           "exp-memory", "exp-pautas", "exp-reports", "weekly-cycle-ritual",
           "ads-daily", "ads-campaigns",
+          // O dossiê tem consulta própria por cliente; sem esta chave, o
+          // botão dizia "atualizado" e a caixa do dossiê seguia na versão
+          // anterior — que é exatamente o que dá a impressão de nada mudar.
+          "dossie-cliente",
         ].map((chave) => queryClient.invalidateQueries({ queryKey: [chave] })),
       );
       toast.success("Mensagens atualizadas com o que há de mais recente.");
@@ -1521,15 +1527,10 @@ export default function AdminExperience() {
 
     // O contexto vivo: a última decisão, nota ou dossiê recente. É o que
     // substitui o genérico "seguimos trabalhando em X".
-    const CONTEXTO_KINDS = new Set([
-      "decisao", "nota", "marco", "note", "summary", "decision", "fact", "second_brain", "external",
-    ]);
     const contextoEntrada = memoriaDoCliente.find(
       (m: any) => CONTEXTO_KINDS.has(m.kind) && (daysSince(m.created_at) ?? 99) <= 14,
     );
-    const contextoRecente = contextoEntrada
-      ? String(contextoEntrada.title || contextoEntrada.content || "").slice(0, 160).trim() || null
-      : null;
+    const contextoRecente = contextoEntrada ? trechoDoContexto(contextoEntrada) || null : null;
 
     // O próximo passo combinado no último relatório publicado ainda fresco.
     const relatorioComPasso = (reports || []).find(
@@ -2044,6 +2045,11 @@ export default function AdminExperience() {
                         </div>
                       );
                     })()}
+
+                    <DossieDoCliente
+                      clientId={client.id}
+                      clientName={client.company_name || client.full_name}
+                    />
 
                     <div className="bg-card border border-border rounded-xl p-5">
                       <ProjectJournal clientId={client.id} canWrite />
