@@ -39,6 +39,7 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
+import EditorialArtDropZone from "@/components/editorial/EditorialArtDropZone";
 import {
   findEditorialPostIdByPrimaryFile,
   loadEditorialPostForMutation,
@@ -1201,6 +1202,19 @@ export default function EditorialEditor({
                   </Select>
                 </div>
               ) : (
+                <EditorialArtDropZone
+                  clientId={clientId || null}
+                  projectId={projectId || null}
+                  disabled={savedContentLocked}
+                  onUploaded={async (rootFileId) => {
+                    // O arquivo acabou de nascer pelo mesmo RPC do Arquivos;
+                    // recarregar as opções o traz para o seletor, e ele já
+                    // vira a arte deste card.
+                    await refetchOptions();
+                    setPrimaryFileId(rootFileId);
+                    markChanged();
+                  }}
+                >
                 <ApprovedMediaPicker
                   files={optionFiles}
                   usedRootFileIds={options?.usedFileIds || EMPTY_ID_LIST}
@@ -1218,6 +1232,7 @@ export default function EditorialEditor({
                   disabled={!clientId || !projectId || savedContentLocked}
                   onRetry={() => refetchOptions()}
                 />
+                </EditorialArtDropZone>
               )}
               {selectedFile && (
                 <Badge

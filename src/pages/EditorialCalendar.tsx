@@ -732,16 +732,6 @@ export default function EditorialCalendar() {
   // Tarefa que já virou conteúdo some de TODAS as visões, não só do quadro.
   // Era o "card duplicado que fica na data velha": o prazo roxo da tarefa
   // continuava no calendário ao lado do card de conteúdo.
-  const deadlineTasksUnlinked = useMemo(
-    () => editorialDeadlineTasks.filter((task) => !linkedPostIdByTaskId[task.id]),
-    [editorialDeadlineTasks, linkedPostIdByTaskId],
-  );
-  const tasksForCurrentView =
-    !taskDataReady
-      ? []
-      : view === "board"
-        ? productionTasks
-        : deadlineTasksUnlinked;
   const filteredProjects = useMemo(
     () =>
       editorialProjectRows.filter(
@@ -815,6 +805,60 @@ export default function EditorialCalendar() {
       teamRows,
     ],
   );
+  /**
+   * A tarefa com prazo continua na grade DEPOIS de virar conteúdo.
+   *
+   * O fluxo real do sumiço: a tarefa aparecia no dia dela; na hora em que o
+   * conteúdo nascia dela (com a arte), o filtro antigo tirava a tarefa — e o
+   * conteúdo novo, ainda sem publicação agendada, não tem dia próprio no
+   * banco. O item desaparecia do calendário exatamente no momento em que
+   * ganhava arte.
+   *
+   * Agora a tarefa ligada permanece no dia, representando o conteúdo: o
+   * clique já abria o card (openTaskItem resolve o vínculo), e a pílula
+   * passa a mostrar a arte e a cor da etapa. Ela só sai da grade quando o
+   * conteúdo ganha agendamento de verdade — aí quem ocupa o dia é a
+   * publicação, e manter as duas seria dupla contagem.
+   */
+  const postsById = useMemo(
+    () => new Map(filteredPosts.map((bundle) => [bundle.post.id, bundle])),
+    [filteredPosts],
+  );
+  const temPlanoVivo = (bundle: (typeof filteredPosts)[number]) =>
+    bundle.publications.some(
+      ({ publication }) =>
+        publication.scheduled_at && publication.status !== "cancelled",
+    );
+  const deadlineTasksForGrid = useMemo(
+    () =>
+      editorialDeadlineTasks.filter((task) => {
+        const postId = linkedPostIdByTaskId[task.id];
+        if (!postId) return true;
+        const dia = task.due_date?.slice(0, 10) || "";
+        if (!/^d{4}-d{2}-d{2}$/.test(dia)) return false;
+        const bundle = postsById.get(postId);
+        // Conteúdo filtrado da tela não ressuscita pela tarefa; com plano
+        // vivo, o dia é da publicação.
+        return Boolean(bundle) && !temPlanoVivo(bundle!);
+      }),
+    [editorialDeadlineTasks, linkedPostIdByTaskId, postsById],
+  );
+  /** O conteúdo que cada tarefa da grade representa, para a pílula pintar. */
+  const linkedPostByTaskId = useMemo(() => {
+    const mapa = new Map<string, (typeof filteredPosts)[number]>();
+    for (const task of deadlineTasksForGrid) {
+      const postId = linkedPostIdByTaskId[task.id];
+      const bundle = postId ? postsById.get(postId) : null;
+      if (bundle) mapa.set(task.id, bundle);
+    }
+    return mapa;
+  }, [deadlineTasksForGrid, linkedPostIdByTaskId, postsById]);
+  const tasksForCurrentView =
+    !taskDataReady
+      ? []
+      : view === "board"
+        ? productionTasks
+        : deadlineTasksForGrid;
   const selectedPost = detailQuery.data?.posts[0] || null;
 
   useEffect(() => {
@@ -1782,6 +1826,7 @@ export default function EditorialCalendar() {
               onSelectPost={openDetail}
               onCreateFromTask={openTaskItem}
               onCreateOnDate={openCreateOnDate}
+              linkedPostByTaskId={linkedPostByTaskId}
               onShowBacklog={() => setParam("view", "list")}
             />
           )}

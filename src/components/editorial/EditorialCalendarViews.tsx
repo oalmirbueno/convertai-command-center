@@ -83,6 +83,8 @@ interface EditorialCalendarViewsProps {
     targetDateKey?: string,
   ) => void;
   onCreateOnDate: (dateKey: string) => void;
+  /** O conteúdo que cada tarefa da grade representa (a pílula pinta com ele). */
+  linkedPostByTaskId?: Map<string, EditorialPostBundle>;
   onShowBacklog: () => void;
 }
 
@@ -266,8 +268,14 @@ function groupTasksByDate(tasks: EditorialInboxTask[]) {
   return grouped;
 }
 
-function flattenBacklog(posts: EditorialPostBundle[]) {
+function flattenBacklog(
+  posts: EditorialPostBundle[],
+  // O conteúdo que já ocupa um dia na grade (herdado da tarefa) sai da lista
+  // de "sem prazo": aparecer nos dois lugares viraria dupla contagem.
+  jaNaGrade?: Set<string>,
+) {
   return posts.flatMap<BacklogItem>((post) => {
+    if (jaNaGrade?.has(post.post.id)) return [];
     const unscheduled = post.publications.filter(
       ({ publication }) => !publication.scheduled_at,
     );
@@ -666,12 +674,19 @@ function TaskSchedulePill({
   dateKey,
   compact = false,
   projectScopeName,
+  linkedPost = null,
   onClick,
 }: {
   task: EditorialInboxTask;
   dateKey: string;
   compact?: boolean;
   projectScopeName?: string;
+  /**
+   * O conteúdo que nasceu desta tarefa, quando ele ainda não tem publicação
+   * agendada. O post não tem dia próprio no banco — o dia é herdado daqui —
+   * e sem isto o item sumia do calendário na hora em que ganhava arte.
+   */
+  linkedPost?: EditorialPostBundle | null;
   onClick: () => void;
 }) {
   const deliveryType = taskDeliveryTypeLabel(task);
@@ -681,6 +696,58 @@ function TaskSchedulePill({
     "dd 'de' MMMM 'de' yyyy",
     { locale: ptBR },
   );
+  // Com conteúdo ligado, a pílula fala do ESTADO dele (cor + nome da etapa),
+  // não mais de "preparar conteúdo": esse trabalho já começou.
+  const etapa = linkedPost
+    ? editorialVisualStage(linkedPost.post.production_status)
+    : null;
+  const cor = etapa ? corDaEtapa(etapa) : null;
+
+  if (linkedPost && cor) {
+    return (
+      <button
+        type="button"
+        onClick={onClick}
+        aria-label={`Abrir o conteúdo "${linkedPost.post.title}". Dia herdado do prazo da tarefa: ${dueDateLabel}. Etapa: ${EDITORIAL_VISUAL_STAGE_LABELS[etapa!] || etapa}.`}
+        className={cn(
+          "group w-full rounded-lg border text-left text-foreground transition-colors hover:border-primary/45",
+          cor.borda,
+          cor.fundo,
+          compact ? "px-2 py-1.5" : "p-2.5",
+        )}
+        data-content-density={compact ? "compact" : "comfortable"}
+      >
+        <div className="flex min-w-0 items-center gap-1.5">
+          <EditorialFileThumbnail
+            post={linkedPost}
+            className={compact ? "h-6 w-6 shrink-0" : "h-9 w-9 shrink-0"}
+          />
+          <span className="min-w-0 flex-1">
+            <span className="flex items-center gap-1">
+              <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
+              <span className={cn("truncate text-[9px] font-semibold uppercase tracking-wide", cor.texto)}>
+                {EDITORIAL_VISUAL_STAGE_LABELS[etapa!] || etapa}
+              </span>
+            </span>
+            <span
+              className={cn(
+                "block truncate font-medium",
+                compact ? "text-[10px]" : "text-[11.5px]",
+              )}
+              title={linkedPost.post.title}
+            >
+              {linkedPost.post.title}
+            </span>
+            {!compact && (
+              <span className="block truncate text-[9.5px] text-muted-foreground">
+                Dia herdado do prazo da tarefa · toque para abrir
+              </span>
+            )}
+          </span>
+        </div>
+      </button>
+    );
+  }
 
   return (
     <button
@@ -804,6 +871,7 @@ function MobileAgenda({
   days,
   itemsByDate,
   tasksByDate,
+  linkedPostByTaskId,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -816,6 +884,7 @@ function MobileAgenda({
   days: Date[];
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
+  linkedPostByTaskId: Map<string, EditorialPostBundle>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -866,6 +935,7 @@ function MobileAgenda({
             <div className="space-y-2">
               {dayTasks.map((task) => (
                 <TaskSchedulePill
+                linkedPost={linkedPostByTaskId.get(task.id) || null}
                   key={task.id}
                   task={task}
                   dateKey={key}
@@ -900,6 +970,7 @@ function MonthView({
   anchorDate,
   itemsByDate,
   tasksByDate,
+  linkedPostByTaskId,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -912,6 +983,7 @@ function MonthView({
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
+  linkedPostByTaskId: Map<string, EditorialPostBundle>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -935,6 +1007,7 @@ function MonthView({
         days={days.filter((day) => isSameMonth(day, anchorDate))}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
+        linkedPostByTaskId={linkedPostByTaskId}
         projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
@@ -1032,6 +1105,7 @@ function MonthView({
                     ))}
                     {visibleTasks.map((task) => (
                       <TaskSchedulePill
+                linkedPost={linkedPostByTaskId.get(task.id) || null}
                         key={task.id}
                         task={task}
                         dateKey={key}
@@ -1075,6 +1149,7 @@ function MonthView({
                             ))}
                             {hiddenTasks.map((task) => (
                               <TaskSchedulePill
+                linkedPost={linkedPostByTaskId.get(task.id) || null}
                                 key={task.id}
                                 task={task}
                                 dateKey={key}
@@ -1103,6 +1178,7 @@ function WeekView({
   anchorDate,
   itemsByDate,
   tasksByDate,
+  linkedPostByTaskId,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -1115,6 +1191,7 @@ function WeekView({
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
+  linkedPostByTaskId: Map<string, EditorialPostBundle>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1137,6 +1214,7 @@ function WeekView({
         days={days}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
+        linkedPostByTaskId={linkedPostByTaskId}
         projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
@@ -1194,6 +1272,7 @@ function WeekView({
                 <div className="space-y-2 p-2.5">
                   {dayTasks.map((task) => (
                     <TaskSchedulePill
+                linkedPost={linkedPostByTaskId.get(task.id) || null}
                       key={task.id}
                       task={task}
                       dateKey={key}
@@ -1702,6 +1781,7 @@ function ListView({
   canEdit,
   canPublish,
   moving,
+  linkedPostByTaskId,
   onSelectPost,
   onCreateFromTask,
 }: {
@@ -1716,13 +1796,17 @@ function ListView({
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
+  linkedPostByTaskId: Map<string, EditorialPostBundle>;
   onSelectPost: (post: EditorialPostBundle) => void;
   onCreateFromTask: (
     task: EditorialInboxTask,
     targetDateKey?: string,
   ) => void;
 }) {
-  const backlogItems = flattenBacklog(posts);
+  const naGrade = new Set(
+    Array.from(linkedPostByTaskId.values(), (bundle) => bundle.post.id),
+  );
+  const backlogItems = flattenBacklog(posts, naGrade);
   const monthStartKey = localDateKey(startOfMonth(anchorDate));
   const monthEndKey = localDateKey(endOfMonth(anchorDate));
   const datedTasks = tasks
@@ -2043,6 +2127,7 @@ export default function EditorialCalendarViews({
   onSelectPost,
   onCreateFromTask = () => undefined,
   onCreateOnDate,
+  linkedPostByTaskId = new Map(),
   onShowBacklog,
 }: EditorialCalendarViewsProps) {
   const items = useMemo(() => flattenScheduled(posts), [posts]);
@@ -2054,12 +2139,19 @@ export default function EditorialCalendarViews({
     () => groupTasksByDate(tasks),
     [tasks],
   );
+  const naGradePorTarefa = useMemo(
+    () =>
+      new Set(
+        Array.from(linkedPostByTaskId.values(), (bundle) => bundle.post.id),
+      ),
+    [linkedPostByTaskId],
+  );
   const backlogSummary = useMemo(
     () => ({
-      publicationCount: flattenBacklog(posts).length,
+      publicationCount: flattenBacklog(posts, naGradePorTarefa).length,
       taskCount: tasks.filter((task) => !taskDateKey(task)).length,
     }),
-    [posts, tasks],
+    [posts, tasks, naGradePorTarefa],
   );
   const backlogCount =
     backlogSummary.publicationCount + backlogSummary.taskCount;
@@ -2133,6 +2225,7 @@ export default function EditorialCalendarViews({
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
+        linkedPostByTaskId={linkedPostByTaskId}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
@@ -2153,6 +2246,7 @@ export default function EditorialCalendarViews({
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
+        linkedPostByTaskId={linkedPostByTaskId}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
@@ -2168,6 +2262,7 @@ export default function EditorialCalendarViews({
   return (
     <ListView
       anchorDate={anchorDate}
+      linkedPostByTaskId={linkedPostByTaskId}
       posts={posts}
       items={items}
       tasks={tasks}
