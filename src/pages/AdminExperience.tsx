@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,6 +18,7 @@ import { listInWords, readableFileName, readableProjectName } from "@/lib/client
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { buscarTodas } from "@/lib/buscaCompleta";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
@@ -121,6 +122,15 @@ interface DraftPreview {
 export default function AdminExperience() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+
+  /**
+   * Quais consultas voltaram incompletas.
+   *
+   * Fica em ref porque é efeito colateral da busca, não estado que comanda
+   * renderização: gravar em state dentro do queryFn provocaria laço. O aviso
+   * na tela lê isto na renderização seguinte, que é quando os dados chegam.
+   */
+  const cortes = useRef<Record<string, boolean>>({});
   const { user, profile } = useAuth();
   const isAdmin = profile?.role === "admin";
   const { data: clients } = useClients();
@@ -185,17 +195,20 @@ export default function AdminExperience() {
   const { data: pendingApprovalFiles = [] } = useQuery({
     queryKey: ["exp-pending-approvals"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("files")
-        .select("id, client_id, project_id, file_name, created_at")
-        .eq("visibility", "approval")
-        .eq("requires_approval", true)
-        .eq("approval_status", "pending")
-        .eq("status", "ready")
-        .is("archived_at", null)
-        .is("parent_file_id", null)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("files")
+          .select("id, client_id, project_id, file_name, created_at")
+          .eq("visibility", "approval")
+          .eq("requires_approval", true)
+          .eq("approval_status", "pending")
+          .eq("status", "ready")
+          .is("archived_at", null)
+          .is("parent_file_id", null)
+          .order("created_at", { ascending: true })
+          .range(de, ate),
+      );
+      cortes.current.aprovacoes = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -203,15 +216,18 @@ export default function AdminExperience() {
   const { data: releasedFiles = [] } = useQuery({
     queryKey: ["exp-released-files"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("files")
-        .select("id, client_id, file_name, created_at")
-        .in("visibility", ["client_shared", "approval"])
-        .eq("status", "ready")
-        .is("archived_at", null)
-        .is("parent_file_id", null)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("files")
+          .select("id, client_id, file_name, created_at")
+          .in("visibility", ["client_shared", "approval"])
+          .eq("status", "ready")
+          .is("archived_at", null)
+          .is("parent_file_id", null)
+          .order("created_at", { ascending: false })
+          .range(de, ate),
+      );
+      cortes.current.arquivos = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -219,12 +235,15 @@ export default function AdminExperience() {
   const { data: allMilestones = [] } = useQuery({
     queryKey: ["exp-milestones"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("milestones")
-        .select("id, project_id, title, status, target_date")
-        .is("deleted_at", null)
-        .order("target_date", { ascending: true });
-      if (error) throw error;
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("milestones")
+          .select("id, project_id, title, status, target_date")
+          .is("deleted_at", null)
+          .order("target_date", { ascending: true })
+          .range(de, ate),
+      );
+      cortes.current.marcos = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -290,13 +309,15 @@ export default function AdminExperience() {
   const { data: expMemory = [] } = useQuery({
     queryKey: ["exp-memory"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
-        .from("project_memory")
-        .select("client_id, kind, title, content, metadata, created_at")
-        .order("created_at", { ascending: false })
-        .limit(400);
-      if (error) return [];
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        (supabase as any)
+          .from("project_memory")
+          .select("client_id, kind, title, content, metadata, created_at")
+          .order("created_at", { ascending: false })
+          .range(de, ate),
+      );
+      cortes.current.memoria = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -311,14 +332,16 @@ export default function AdminExperience() {
   const { data: expPautas = [] } = useQuery({
     queryKey: ["exp-pautas"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("editorial_posts")
-        .select("client_id, title, production_status")
-        .is("archived_at", null)
-        .in("production_status", ["ready", "production"])
-        .order("updated_at", { ascending: false })
-        .limit(300);
-      if (error) return [];
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("editorial_posts")
+          .select("client_id, title, production_status")
+          .is("archived_at", null)
+          .in("production_status", ["ready", "production"])
+          .order("updated_at", { ascending: false })
+          .range(de, ate),
+      );
+      cortes.current.pautas = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -326,12 +349,15 @@ export default function AdminExperience() {
   const { data: allPublications = [] } = useQuery({
     queryKey: ["exp-publications"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("editorial_publications")
-        .select("id, client_id, status, platform, scheduled_at, published_at")
-        .in("status", ["scheduled", "published"])
-        .order("scheduled_at", { ascending: true });
-      if (error) return [];
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("editorial_publications")
+          .select("id, client_id, status, platform, scheduled_at, published_at")
+          .in("status", ["scheduled", "published"])
+          .order("scheduled_at", { ascending: true })
+          .range(de, ate),
+      );
+      cortes.current.publicacoes = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -339,12 +365,14 @@ export default function AdminExperience() {
   const { data: reports = [] } = useQuery({
     queryKey: ["exp-reports"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("reports")
-        .select("id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, client:profiles!reports_client_id_fkey(full_name, company_name)")
-        .order("created_at", { ascending: false })
-        .limit(150);
-      if (error) throw error;
-      return data || [];
+      const { linhas, truncado } = await buscarTodas<any>((de, ate) =>
+        supabase.from("reports")
+          .select("id, client_id, project_id, title, status, metrics, summary, next_steps, highlights, created_at, period_start, period_end, client:profiles!reports_client_id_fkey(full_name, company_name)")
+          .order("created_at", { ascending: false })
+          .range(de, ate),
+      );
+      cortes.current.relatorios = truncado;
+      return linhas;
     },
     ...AO_VIVO,
   });
@@ -1621,6 +1649,19 @@ export default function AdminExperience() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="heading-page">Central de Experiência</h1>
+          {/* Se alguma consulta voltar cortada, a tela DIZ. Dado incompleto
+              apresentado como completo é o defeito que estamos matando; dado
+              incompleto que se anuncia é aceitável. */}
+          {Object.entries(cortes.current).some(([, cortado]) => cortado) && (
+            <p className="mt-1 rounded-lg bg-warning/10 px-2.5 py-1.5 text-[11px] font-medium text-warning">
+              Parte dos dados não coube nesta leitura (
+              {Object.entries(cortes.current)
+                .filter(([, cortado]) => cortado)
+                .map(([nome]) => nome)
+                .join(", ")}
+              ). O que está abaixo pode estar incompleto — recarregue ou avise o suporte.
+            </p>
+          )}
           <p className="mt-1 max-w-2xl text-xs leading-relaxed text-muted-foreground">
             Aqui você cuida da relação com cada cliente: gera as mensagens, revisa, publica e age nos alertas. Nada desta tela aparece ao cliente.
           </p>
