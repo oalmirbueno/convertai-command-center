@@ -62,6 +62,7 @@ import {
 } from "@/lib/editorialDrag";
 import { editorialStageForTaskStatus } from "@/lib/taskWorkstreams";
 import { mediaKindFromFile, useResolvedFileUrl } from "@/lib/fileUrls";
+import { corDaEtapa } from "@/lib/editorialCores";
 
 interface EditorialCalendarViewsProps {
   view: EditorialView;
@@ -1965,7 +1966,18 @@ function ListView({
                 </p>
               </button>
             ))}
-            {backlogItems.map(({ post, publication }) => (
+            {backlogItems.map(({ post, publication }) => {
+              /* Sem data não quer dizer sem estado: o conteúdo pode estar em
+                 revisão, pronto ou já publicado por fora. O card saía todo
+                 cinza e igual, então era preciso abrir um por um para saber
+                 em que pé estava — e a arte, que já existe, não aparecia. */
+              const etapa = editorialVisualStage(
+                post.post.production_status,
+                publication?.publication.status,
+                publication?.publication.scheduled_at,
+              );
+              const cor = corDaEtapa(etapa);
+              return (
               <button
                 key={
                   publication
@@ -1974,8 +1986,24 @@ function ListView({
                 }
                 type="button"
                 onClick={() => onSelectPost(post)}
-                className="rounded-xl border border-border bg-background p-3 text-left transition-colors hover:border-primary/35"
+                className={cn(
+                  "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors hover:border-primary/45",
+                  cor.borda,
+                  cor.fundo,
+                )}
               >
+                <EditorialFileThumbnail
+                  post={post}
+                  publication={publication}
+                  className="h-12 w-12 shrink-0"
+                />
+                <span className="min-w-0 flex-1">
+                <span className="mb-1 flex items-center gap-1.5">
+                  <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
+                  <span className={cn("text-[9.5px] font-semibold uppercase tracking-wide", cor.texto)}>
+                    {EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa}
+                  </span>
+                </span>
                 <ContentDirection
                   theme={post.post.title}
                   context={postContentContext(post, publication)}
@@ -1988,8 +2016,10 @@ function ListView({
                     ? `${platformLabels[publication.publication.platform] || publication.publication.platform}${publication.account?.handle ? ` · ${publication.account.handle}` : ""}`
                     : post.post.production_status}
                 </p>
+                </span>
               </button>
-            ))}
+              );
+            })}
           </div>
         </section>
       )}
