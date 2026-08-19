@@ -120,19 +120,19 @@ describe("production migration view", () => {
     expect(statements[2]).toBe("SELECT (1 + 2)");
   });
 
-  it("validates the explicit 96 + 2 + 48 canonical + 12 alias contract", () => {
+  it("validates the explicit 96 + 2 + 49 canonical + 12 alias contract", () => {
     const plan = loadProductionMigrationPlan();
     const versions = listProductionVersions();
     const attested = new Set(plan.attestations.map((entry) => entry.local_version));
 
     expect(plan.legacyEntries).toHaveLength(96);
     expect(plan.attestations).toHaveLength(2);
-    expect(plan.manifest.forward_migrations).toHaveLength(48);
-    expect(plan.forwardMigrations).toHaveLength(48);
+    expect(plan.manifest.forward_migrations).toHaveLength(49);
+    expect(plan.forwardMigrations).toHaveLength(49);
     expect(plan.manifest.applied_forward_aliases).toHaveLength(12);
     expect(plan.appliedAliases).toHaveLength(12);
     expect(plan.shadowPaths).toHaveLength(12);
-    expect(plan.forwardLedger).toHaveLength(48);
+    expect(plan.forwardLedger).toHaveLength(49);
     expect(versions).toHaveLength(145);
     expect(versions).toEqual([...versions].sort());
     expect(versions.some((version) => attested.has(version))).toBe(false);
@@ -338,7 +338,7 @@ describe("production migration view", () => {
       appliedForward: 0,
       appliedAliases: 0,
       pendingForward: 49,
-      files: 144,
+      files: 145,
     });
     expect(filenames).toHaveLength(145);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
@@ -361,10 +361,10 @@ describe("production migration view", () => {
 
     expect(result).toEqual({
       aliases: 96,
-      appliedForward: 48,
+      appliedForward: 49,
       appliedAliases: 12,
       pendingForward: 0,
-      files: 144,
+      files: 145,
     });
     expect(filenames).toHaveLength(145);
     expect(filenames.filter((name) => name.endsWith("_production_ledger_sentinel.sql")))
