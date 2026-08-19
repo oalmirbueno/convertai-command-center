@@ -24,6 +24,7 @@ import {
   Send,
 } from "lucide-react";
 import { toast } from "sonner";
+import { ancorasPorDia, idsAncorados } from "@/lib/agendaPermanencia";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import EditorialToolbar, {
@@ -824,35 +825,46 @@ export default function EditorialCalendar() {
     () => new Map(filteredPosts.map((bundle) => [bundle.post.id, bundle])),
     [filteredPosts],
   );
-  const temPlanoVivo = (bundle: (typeof filteredPosts)[number]) =>
-    bundle.publications.some(
-      ({ publication }) =>
-        publication.scheduled_at && publication.status !== "cancelled",
-    );
+  /**
+   * O conteúdo sem agendamento herda o dia do prazo da tarefa de origem.
+   *
+   * A tarefa sai da grade quando vira conteúdo — quem ocupa o dia passa a ser
+   * o CONTEÚDO, com a arte dele. A tentativa anterior mantinha a TAREFA no
+   * lugar e falhou por depender de ela sobreviver à régua toda das tarefas
+   * (tipo publicável, escopo, prazo vencido há mais de 7 dias): bastava um
+   * desses cortes e o conteúdo seguia invisível. Agora quem decide é o post.
+   */
   const deadlineTasksForGrid = useMemo(
-    () =>
-      editorialDeadlineTasks.filter((task) => {
-        const postId = linkedPostIdByTaskId[task.id];
-        if (!postId) return true;
-        const dia = task.due_date?.slice(0, 10) || "";
-        if (!/^d{4}-d{2}-d{2}$/.test(dia)) return false;
-        const bundle = postsById.get(postId);
-        // Conteúdo filtrado da tela não ressuscita pela tarefa; com plano
-        // vivo, o dia é da publicação.
-        return Boolean(bundle) && !temPlanoVivo(bundle!);
-      }),
-    [editorialDeadlineTasks, linkedPostIdByTaskId, postsById],
+    () => editorialDeadlineTasks.filter((task) => !linkedPostIdByTaskId[task.id]),
+    [editorialDeadlineTasks, linkedPostIdByTaskId],
   );
-  /** O conteúdo que cada tarefa da grade representa, para a pílula pintar. */
-  const linkedPostByTaskId = useMemo(() => {
-    const mapa = new Map<string, (typeof filteredPosts)[number]>();
-    for (const task of deadlineTasksForGrid) {
-      const postId = linkedPostIdByTaskId[task.id];
-      const bundle = postId ? postsById.get(postId) : null;
-      if (bundle) mapa.set(task.id, bundle);
+  const ancoradosPorDia = useMemo(
+    () =>
+      ancorasPorDia({
+        // O bundle guarda o id em post.id; a âncora só precisa disso e das
+        // publicações, então a adaptação fica aqui e a lib segue sem saber
+        // do formato da tela.
+        posts: filteredPosts.map((bundle) => ({
+          id: bundle.post.id,
+          publications: bundle.publications,
+        })),
+        tarefas: (tasksQuery.data || []) as Array<{ id: string; due_date?: string | null }>,
+        postIdPorTarefa: linkedPostIdByTaskId,
+      }),
+    [filteredPosts, tasksQuery.data, linkedPostIdByTaskId],
+  );
+  /** Dia → os conteúdos ancorados nele, já resolvidos em bundle. */
+  const ancorasResolvidas = useMemo(() => {
+    const mapa = new Map<string, Array<(typeof filteredPosts)[number]>>();
+    for (const [dia, ids] of ancoradosPorDia) {
+      const bundles = ids
+        .map((id) => postsById.get(id))
+        .filter(Boolean) as Array<(typeof filteredPosts)[number]>;
+      if (bundles.length > 0) mapa.set(dia, bundles);
     }
     return mapa;
-  }, [deadlineTasksForGrid, linkedPostIdByTaskId, postsById]);
+  }, [ancoradosPorDia, postsById]);
+  const idsNaGrade = useMemo(() => idsAncorados(ancoradosPorDia), [ancoradosPorDia]);
   const tasksForCurrentView =
     !taskDataReady
       ? []
@@ -1826,7 +1838,8 @@ export default function EditorialCalendar() {
               onSelectPost={openDetail}
               onCreateFromTask={openTaskItem}
               onCreateOnDate={openCreateOnDate}
-              linkedPostByTaskId={linkedPostByTaskId}
+              ancorasPorDia={ancorasResolvidas}
+              idsNaGrade={idsNaGrade}
               onShowBacklog={() => setParam("view", "list")}
             />
           )}

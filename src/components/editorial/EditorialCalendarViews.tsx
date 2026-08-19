@@ -83,8 +83,14 @@ interface EditorialCalendarViewsProps {
     targetDateKey?: string,
   ) => void;
   onCreateOnDate: (dateKey: string) => void;
-  /** O conteúdo que cada tarefa da grade representa (a pílula pinta com ele). */
-  linkedPostByTaskId?: Map<string, EditorialPostBundle>;
+  /**
+   * Dia → conteúdos sem agendamento que herdam aquele dia do prazo da tarefa
+   * de origem. É o que impede o card de sumir ao ganhar arte: o post não tem
+   * data própria no banco.
+   */
+  ancorasPorDia?: Map<string, EditorialPostBundle[]>;
+  /** Posts já ancorados num dia, para não repetirem na lista de sem prazo. */
+  idsNaGrade?: Set<string>;
   onShowBacklog: () => void;
 }
 
@@ -669,6 +675,64 @@ function taskDeliveryTypeLabel(task: EditorialInboxTask) {
     : "Conteúdo";
 }
 
+/**
+ * O conteúdo que herdou o dia do prazo da tarefa.
+ *
+ * Ele não tem publicação agendada — e, portanto, não tem data própria no
+ * banco. Sem este card ele desaparecia da grade exatamente no instante em que
+ * ganhava a arte, que é quando o trabalho fica pronto para ser visto.
+ */
+function AnchoredPostPill({
+  post,
+  compact = false,
+  onClick,
+}: {
+  post: EditorialPostBundle;
+  compact?: boolean;
+  onClick: () => void;
+}) {
+  const etapa = editorialVisualStage(post.post.production_status);
+  const cor = corDaEtapa(etapa);
+  const nomeEtapa = EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa;
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={`Abrir o conteúdo "${post.post.title}". Etapa: ${nomeEtapa}. Dia herdado do prazo da tarefa; ainda sem agendamento de publicação.`}
+      title={`${post.post.title} · ${nomeEtapa} · dia herdado do prazo da tarefa`}
+      className={cn(
+        "group flex w-full items-center gap-1.5 rounded-lg border text-left text-foreground transition-colors hover:border-primary/50",
+        cor.borda,
+        cor.fundo,
+        compact ? "px-1.5 py-1" : "p-2.5",
+      )}
+      data-content-density={compact ? "compact" : "comfortable"}
+    >
+      <EditorialFileThumbnail
+        post={post}
+        className={compact ? "h-6 w-6 shrink-0" : "h-10 w-10 shrink-0"}
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center gap-1">
+          <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", cor.ponto)} />
+          <span className={cn("truncate text-[9px] font-semibold uppercase tracking-wide", cor.texto)}>
+            {nomeEtapa}
+          </span>
+        </span>
+        <span className={cn("block truncate font-medium", compact ? "text-[10px]" : "text-[11.5px]")}>
+          {post.post.title}
+        </span>
+        {!compact && (
+          <span className="block truncate text-[9.5px] text-muted-foreground">
+            Dia herdado do prazo da tarefa · sem agendamento
+          </span>
+        )}
+      </span>
+    </button>
+  );
+}
+
 function TaskSchedulePill({
   task,
   dateKey,
@@ -871,7 +935,7 @@ function MobileAgenda({
   days,
   itemsByDate,
   tasksByDate,
-  linkedPostByTaskId,
+  ancorasPorDia,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -884,7 +948,7 @@ function MobileAgenda({
   days: Date[];
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
-  linkedPostByTaskId: Map<string, EditorialPostBundle>;
+  ancorasPorDia: Map<string, EditorialPostBundle[]>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -903,6 +967,9 @@ function MobileAgenda({
         const key = localDateKey(day);
         const dayItems = itemsByDate.get(key) || [];
         const dayTasks = tasksByDate.get(key) || [];
+              // Conteúdo sem agendamento que herdou este dia do prazo da
+              // tarefa: é o que some da grade quando ganha arte.
+              const dayAnchored = ancorasPorDia.get(key) || [];
         return (
           <DroppableDay
             key={key}
@@ -933,9 +1000,15 @@ function MobileAgenda({
               )}
             </div>
             <div className="space-y-2">
+              {dayAnchored.map((bundle) => (
+                <AnchoredPostPill
+                  key={bundle.post.id}
+                  post={bundle}
+                  onClick={() => onSelectPost(bundle)}
+                />
+              ))}
               {dayTasks.map((task) => (
                 <TaskSchedulePill
-                linkedPost={linkedPostByTaskId.get(task.id) || null}
                   key={task.id}
                   task={task}
                   dateKey={key}
@@ -970,7 +1043,7 @@ function MonthView({
   anchorDate,
   itemsByDate,
   tasksByDate,
-  linkedPostByTaskId,
+  ancorasPorDia,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -983,7 +1056,7 @@ function MonthView({
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
-  linkedPostByTaskId: Map<string, EditorialPostBundle>;
+  ancorasPorDia: Map<string, EditorialPostBundle[]>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1007,7 +1080,7 @@ function MonthView({
         days={days.filter((day) => isSameMonth(day, anchorDate))}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
-        linkedPostByTaskId={linkedPostByTaskId}
+        ancorasPorDia={ancorasPorDia}
         projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
@@ -1040,16 +1113,25 @@ function MonthView({
               const key = localDateKey(day);
               const dayItems = itemsByDate.get(key) || [];
               const dayTasks = tasksByDate.get(key) || [];
+              // Conteúdo sem agendamento que herdou este dia do prazo da
+              // tarefa: é o que some da grade quando ganha arte.
+              const dayAnchored = ancorasPorDia.get(key) || [];
               const visibleItems = dayItems.slice(0, 3);
-              const visibleTasks = dayTasks.slice(
+              const visibleAnchored = dayAnchored.slice(
                 0,
                 Math.max(0, 3 - visibleItems.length),
               );
+              const visibleTasks = dayTasks.slice(
+                0,
+                Math.max(0, 3 - visibleItems.length - visibleAnchored.length),
+              );
               const hiddenTasks = dayTasks.slice(visibleTasks.length);
               const hiddenItems = dayItems.slice(visibleItems.length);
-              const dayCount = dayItems.length + dayTasks.length;
+              const hiddenAnchored = dayAnchored.slice(visibleAnchored.length);
+              const dayCount =
+                dayItems.length + dayTasks.length + dayAnchored.length;
               const visibleCount =
-                visibleItems.length + visibleTasks.length;
+                visibleItems.length + visibleTasks.length + visibleAnchored.length;
               return (
                 <DroppableDay
                   key={key}
@@ -1103,9 +1185,16 @@ function MonthView({
                         onClick={() => onSelectPost(item.post)}
                       />
                     ))}
+                    {visibleAnchored.map((bundle) => (
+                      <AnchoredPostPill
+                        key={bundle.post.id}
+                        post={bundle}
+                        compact
+                        onClick={() => onSelectPost(bundle)}
+                      />
+                    ))}
                     {visibleTasks.map((task) => (
                       <TaskSchedulePill
-                linkedPost={linkedPostByTaskId.get(task.id) || null}
                         key={task.id}
                         task={task}
                         dateKey={key}
@@ -1147,9 +1236,15 @@ function MonthView({
                                 onClick={() => onSelectPost(item.post)}
                               />
                             ))}
+                            {hiddenAnchored.map((bundle) => (
+                              <AnchoredPostPill
+                                key={bundle.post.id}
+                                post={bundle}
+                                onClick={() => onSelectPost(bundle)}
+                              />
+                            ))}
                             {hiddenTasks.map((task) => (
                               <TaskSchedulePill
-                linkedPost={linkedPostByTaskId.get(task.id) || null}
                                 key={task.id}
                                 task={task}
                                 dateKey={key}
@@ -1178,7 +1273,7 @@ function WeekView({
   anchorDate,
   itemsByDate,
   tasksByDate,
-  linkedPostByTaskId,
+  ancorasPorDia,
   projectScopeNames,
   canCreate,
   canEdit,
@@ -1191,7 +1286,7 @@ function WeekView({
   anchorDate: Date;
   itemsByDate: Map<string, ScheduledEditorialItem[]>;
   tasksByDate: Map<string, EditorialInboxTask[]>;
-  linkedPostByTaskId: Map<string, EditorialPostBundle>;
+  ancorasPorDia: Map<string, EditorialPostBundle[]>;
   projectScopeNames: Map<string, string>;
   canCreate: boolean;
   canEdit: boolean;
@@ -1214,7 +1309,7 @@ function WeekView({
         days={days}
         itemsByDate={itemsByDate}
         tasksByDate={tasksByDate}
-        linkedPostByTaskId={linkedPostByTaskId}
+        ancorasPorDia={ancorasPorDia}
         projectScopeNames={projectScopeNames}
         canCreate={canCreate}
         canEdit={canEdit}
@@ -1230,6 +1325,9 @@ function WeekView({
             const key = localDateKey(day);
             const dayItems = itemsByDate.get(key) || [];
             const dayTasks = tasksByDate.get(key) || [];
+              // Conteúdo sem agendamento que herdou este dia do prazo da
+              // tarefa: é o que some da grade quando ganha arte.
+              const dayAnchored = ancorasPorDia.get(key) || [];
             return (
               <DroppableDay
                 key={key}
@@ -1270,9 +1368,15 @@ function WeekView({
                   </div>
                 </header>
                 <div className="space-y-2 p-2.5">
+                  {dayAnchored.map((bundle) => (
+                    <AnchoredPostPill
+                      key={bundle.post.id}
+                      post={bundle}
+                      onClick={() => onSelectPost(bundle)}
+                    />
+                  ))}
                   {dayTasks.map((task) => (
                     <TaskSchedulePill
-                linkedPost={linkedPostByTaskId.get(task.id) || null}
                       key={task.id}
                       task={task}
                       dateKey={key}
@@ -1781,7 +1885,7 @@ function ListView({
   canEdit,
   canPublish,
   moving,
-  linkedPostByTaskId,
+  idsNaGrade,
   onSelectPost,
   onCreateFromTask,
 }: {
@@ -1796,17 +1900,14 @@ function ListView({
   canEdit: boolean;
   canPublish: boolean;
   moving: boolean;
-  linkedPostByTaskId: Map<string, EditorialPostBundle>;
+  idsNaGrade: Set<string>;
   onSelectPost: (post: EditorialPostBundle) => void;
   onCreateFromTask: (
     task: EditorialInboxTask,
     targetDateKey?: string,
   ) => void;
 }) {
-  const naGrade = new Set(
-    Array.from(linkedPostByTaskId.values(), (bundle) => bundle.post.id),
-  );
-  const backlogItems = flattenBacklog(posts, naGrade);
+  const backlogItems = flattenBacklog(posts, idsNaGrade);
   const monthStartKey = localDateKey(startOfMonth(anchorDate));
   const monthEndKey = localDateKey(endOfMonth(anchorDate));
   const datedTasks = tasks
@@ -2127,7 +2228,8 @@ export default function EditorialCalendarViews({
   onSelectPost,
   onCreateFromTask = () => undefined,
   onCreateOnDate,
-  linkedPostByTaskId = new Map(),
+  ancorasPorDia = new Map(),
+  idsNaGrade = new Set(),
   onShowBacklog,
 }: EditorialCalendarViewsProps) {
   const items = useMemo(() => flattenScheduled(posts), [posts]);
@@ -2139,19 +2241,12 @@ export default function EditorialCalendarViews({
     () => groupTasksByDate(tasks),
     [tasks],
   );
-  const naGradePorTarefa = useMemo(
-    () =>
-      new Set(
-        Array.from(linkedPostByTaskId.values(), (bundle) => bundle.post.id),
-      ),
-    [linkedPostByTaskId],
-  );
   const backlogSummary = useMemo(
     () => ({
-      publicationCount: flattenBacklog(posts, naGradePorTarefa).length,
+      publicationCount: flattenBacklog(posts, idsNaGrade).length,
       taskCount: tasks.filter((task) => !taskDateKey(task)).length,
     }),
-    [posts, tasks, naGradePorTarefa],
+    [posts, tasks, idsNaGrade],
   );
   const backlogCount =
     backlogSummary.publicationCount + backlogSummary.taskCount;
@@ -2225,7 +2320,7 @@ export default function EditorialCalendarViews({
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
-        linkedPostByTaskId={linkedPostByTaskId}
+        ancorasPorDia={ancorasPorDia}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
@@ -2246,7 +2341,7 @@ export default function EditorialCalendarViews({
           anchorDate={anchorDate}
           itemsByDate={itemsByDate}
           tasksByDate={tasksByDate}
-        linkedPostByTaskId={linkedPostByTaskId}
+        ancorasPorDia={ancorasPorDia}
           projectScopeNames={projectScopeNames}
           canCreate={canCreate}
           canEdit={canEdit}
@@ -2262,7 +2357,7 @@ export default function EditorialCalendarViews({
   return (
     <ListView
       anchorDate={anchorDate}
-      linkedPostByTaskId={linkedPostByTaskId}
+      idsNaGrade={idsNaGrade}
       posts={posts}
       items={items}
       tasks={tasks}

@@ -17,41 +17,48 @@ const editor = ler("src/components/editorial/EditorialEditor.tsx");
  * do calendário exatamente no momento em que ganhava arte.
  */
 
-describe("o conteúdo permanece no dia da tarefa", () => {
-  it("a tarefa ligada não é mais filtrada da grade", () => {
-    expect(pagina).not.toContain("deadlineTasksUnlinked");
-    expect(pagina).toContain("deadlineTasksForGrid");
+describe("o conteúdo permanece no dia, e quem decide é o post", () => {
+  it("a decisão saiu da régua das tarefas", () => {
+    // A primeira tentativa segurava a TAREFA na grade e falhou: dependia de
+    // ela sobreviver a tipo publicável, escopo e prazo vencido há mais de 7
+    // dias. Qualquer um desses cortes e o conteúdo seguia invisível.
+    expect(pagina).toContain("ancorasPorDia({");
+    expect(pagina).toContain("idsAncorados(ancoradosPorDia)");
   });
 
-  it("sai da grade só quando o agendamento de verdade assume o dia", () => {
-    // Com plano vivo, quem ocupa o dia é a publicação; manter os dois seria
-    // dupla contagem do mesmo conteúdo.
-    expect(pagina).toContain("temPlanoVivo");
-    expect(pagina).toMatch(/publication\.scheduled_at && publication\.status !== "cancelled"/);
+  it("a âncora recebe só os posts que a tela já decidiu mostrar", () => {
+    // Ancorar um post filtrado o traria de volta por cima do filtro escolhido.
+    expect(pagina).toContain("posts: filteredPosts.map((bundle) => ({");
   });
 
-  it("a pílula pinta com a etapa e mostra a arte", () => {
-    expect(views).toContain("linkedPost?: EditorialPostBundle | null");
-    const pill = views.slice(
+  it("o conteúdo ancorado tem card próprio, com arte e cor da etapa", () => {
+    const card = views.slice(
+      views.indexOf("function AnchoredPostPill"),
       views.indexOf("function TaskSchedulePill"),
-      views.indexOf("function EmptyState"),
     );
-    expect(pill).toContain("<EditorialFileThumbnail");
-    expect(pill).toContain("corDaEtapa(etapa)");
-    expect(pill).toContain("EDITORIAL_VISUAL_STAGE_LABELS");
+    expect(card).toContain("<EditorialFileThumbnail");
+    expect(card).toContain("corDaEtapa(etapa)");
+    expect(card).toContain("EDITORIAL_VISUAL_STAGE_LABELS");
+    expect(card).toContain("editorialVisualStage(post.post.production_status)");
   });
 
-  it("as quatro posições de pílula recebem o conteúdo ligado", () => {
-    const ligadas = views.match(/linkedPost=\{linkedPostByTaskId\.get\(task\.id\) \|\| null\}/g) || [];
-    expect(ligadas.length).toBe(4);
+  it("as quatro células da grade desenham o ancorado", () => {
+    // Mês (visível e dentro do "+N"), semana e mobile. Faltar uma deixaria o
+    // conteúdo invisível justamente para quem usa o celular.
+    expect((views.match(/<AnchoredPostPill/g) || []).length).toBe(4);
+  });
+
+  it("o ancorado entra na contagem do dia e no corte do +N", () => {
+    expect(views).toContain("dayItems.length + dayTasks.length + dayAnchored.length");
+    expect(views).toContain("hiddenAnchored");
   });
 
   it("quem está na grade não repete na lista de sem prazo", () => {
     expect(views).toContain("jaNaGrade?: Set<string>");
-    expect(views).toContain("flattenBacklog(posts, naGrade)");
-    expect(views).toContain("flattenBacklog(posts, naGradePorTarefa)");
+    expect(views).toContain("flattenBacklog(posts, idsNaGrade)");
   });
 });
+
 
 describe("o upload do card é o mesmo caminho do Arquivos", () => {
   it("grava pelo mesmo RPC, no mesmo bucket, com o padrão dominante", () => {
