@@ -142,7 +142,7 @@ describe("production migration view", () => {
       expect(versions).not.toContain(alias.canonical.version);
     }
     const unaliased = plan.forwardLedger.filter((entry) => entry.alias === null);
-    expect(unaliased).toHaveLength(36);
+    expect(unaliased).toHaveLength(37);
     for (const forward of unaliased) {
       expect(versions).toContain(forward.canonical.version);
     }
@@ -356,7 +356,7 @@ describe("production migration view", () => {
 
   it("reconciles the live aliased ledger to sentinels only and zero pending forward", () => {
     const plan = loadProductionMigrationPlan();
-    const { outputDir, result } = buildFixture(48);
+    const { outputDir, result } = buildFixture(49);
     const filenames = readdirSync(outputDir).sort();
 
     expect(result).toEqual({
