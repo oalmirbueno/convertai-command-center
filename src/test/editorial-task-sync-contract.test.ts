@@ -122,9 +122,12 @@ describe("editorial design task workspace contract", () => {
   it("shows only publishable Kanban deadlines in every editorial view", () => {
     expect(page).toContain("isPublishableTask(task)");
     expect(page).toMatch(
-      // Atualizado de proposito: tarefa vinculada a conteudo some de TODAS
-      // as visoes (deadlineTasksUnlinked), nao so do quadro.
-      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksUnlinked/,
+      // Atualizado de novo, de proposito. A intencao — nada aparece duas
+      // vezes — continua, mas o corte antigo fazia o item SUMIR do
+      // calendario na hora em que ganhava arte (o conteudo nao tem dia
+      // proprio no banco). A tarefa ligada agora permanece na grade
+      // representando o conteudo e sai quando o agendamento assume o dia.
+      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksForGrid/,
     );
     expect(page).toContain(
       "editorialDeadlineTasks.filter((task) => !linkedTaskIds.has(task.id))",

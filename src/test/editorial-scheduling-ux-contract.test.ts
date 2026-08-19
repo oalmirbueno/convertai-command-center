@@ -35,10 +35,13 @@ describe("editorial scheduling UX contract", () => {
     expect(toolbar).toContain("Todos os formatos");
     expect(page).toContain("isPublishableTask(task)");
     expect(page).toMatch(
-      // Atualizado de proposito: tarefa que ja virou conteudo some de TODAS
-      // as visoes (deadlineTasksUnlinked), nao so do quadro. Era o card
+      // Atualizado de novo, de proposito. A intencao — nada aparece duas
+      // vezes — continua, mas o corte antigo fazia o item SUMIR do
+      // calendario na hora em que ganhava arte (o conteudo nao tem dia
+      // proprio no banco). A tarefa ligada agora permanece na grade
+      // representando o conteudo e sai quando o agendamento assume o dia. Era o card
       // duplicado que ficava na data velha depois do arrasto.
-      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksUnlinked/,
+      /view === "board"\s*\? productionTasks\s*:\s*deadlineTasksForGrid/,
     );
   });
 
