@@ -41,6 +41,24 @@ const storageSafeName = (name: string) =>
  */
 type Intencao = "unica" | "carrossel";
 
+/**
+ * Como cada arquivo é nomeado.
+ *
+ * Com nome escolhido, a peça inteira usa ele — e o carrossel numera as
+ * imagens seguintes, para a ordem ficar legível na lista de Arquivos.
+ */
+function nomeDaPeca(
+  nome: string,
+  files: File[],
+  indice: number,
+  isCarousel: boolean,
+): string {
+  const escolhido = nome.trim();
+  const base = escolhido || files[0].name;
+  if (!isCarousel) return escolhido || files[indice].name;
+  return indice === 0 ? base : `${base} (${indice + 1}/${files.length})`;
+}
+
 interface Props {
   clientId: string | null;
   projectId: string | null;
@@ -57,7 +75,9 @@ export default function EditorialArtDropZone({
   const inputRef = useRef<HTMLInputElement | null>(null);
   const intencaoRef = useRef<Intencao>("unica");
   const [enviando, setEnviando] = useState(false);
-  const [arrastando, setArrastando] = useState(false);
+  const [nome, setNome] = useState("");
+  /** Qual alvo está sob o cursor: é o que dá o retorno visual do arrasto. */
+  const [alvoAtivo, setAlvoAtivo] = useState<Intencao | null>(null);
 
   const abrirSeletor = (intencao: Intencao) => {
     intencaoRef.current = intencao;
@@ -119,7 +139,10 @@ export default function EditorialArtDropZone({
         const inserted = await createFileRecord({
           id: fileId,
           client_id: clientId,
-          file_name: isCarousel && i > 0 ? `${files[0].name} (${i + 1}/${files.length})` : file.name,
+          // O nome escolhido vale para a peça inteira; sem ele, o do arquivo.
+          // Nome de arquivo de celular ("IMG_20260819.jpg") é o que deixava
+          // tudo com cara de genérico em Arquivos.
+          file_name: nomeDaPeca(nome, files, i, isCarousel),
           file_url: `files://${path}`,
           // Os valores do padrão dominante do Arquivos, para o atalho criar
           // registros indistinguíveis dos criados por lá.
@@ -153,6 +176,7 @@ export default function EditorialArtDropZone({
       ]);
 
       if (parentFileId) await onUploaded(parentFileId);
+      setNome("");
       toast.success(
         isCarousel
           ? `Carrossel com ${files.length} imagens enviado e vinculado, na ordem escolhida.`
@@ -167,30 +191,40 @@ export default function EditorialArtDropZone({
     }
   };
 
+  /**
+   * Cada alvo aceita o arrasto declarando o que ele significa.
+   *
+   * Antes o arrasto adivinhava pela quantidade de arquivos: soltar duas
+   * imagens virava carrossel mesmo quando eram duas artes separadas, e soltar
+   * uma pretendendo carrossel virava arte única. Com dois alvos, o gesto diz
+   * a intenção — e a validação do carrossel passa a valer também no arrasto.
+   */
+  const alvoDeArrasto = (intencao: Intencao) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (disabled || enviando) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setAlvoAtivo(intencao);
+    },
+    onDragLeave: () => setAlvoAtivo((atual) => (atual === intencao ? null : atual)),
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setAlvoAtivo(null);
+      if (!disabled && !enviando) void enviar(e.dataTransfer.files, intencao);
+    },
+  });
+
+  const classeDoAlvo = (intencao: Intencao) =>
+    cn(
+      "flex cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed px-3 py-2.5 text-[11.5px] font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50",
+      alvoAtivo === intencao
+        ? "border-primary bg-primary/15 text-primary"
+        : "border-primary/40 bg-primary/[0.04] text-primary hover:bg-primary/10",
+    );
+
   return (
-    <div
-      onDragOver={(e) => {
-        if (disabled || enviando) return;
-        e.preventDefault();
-        setArrastando(true);
-      }}
-      onDragLeave={() => setArrastando(false)}
-      onDrop={(e) => {
-        e.preventDefault();
-        setArrastando(false);
-        // Arrastar não declara intenção: vários arquivos falam por si.
-        if (!disabled && !enviando) {
-          void enviar(
-            e.dataTransfer.files,
-            e.dataTransfer.files.length > 1 ? "carrossel" : "unica",
-          );
-        }
-      }}
-      className={cn(
-        "relative rounded-xl transition-shadow",
-        arrastando && "ring-2 ring-primary/60 ring-offset-1",
-      )}
-    >
+    <div className="rounded-xl">
       <input
         ref={inputRef}
         type="file"
@@ -202,6 +236,23 @@ export default function EditorialArtDropZone({
           e.target.value = "";
         }}
       />
+
+      {/* O nome da peça, escolhido ANTES do envio.
+
+          Sem ele o registro nasce com o nome do arquivo — "IMG_20260819.jpg" —
+          e é isso que deixa a lista de Arquivos com cara de genérica. */}
+      <label className="mb-1.5 block">
+        <span className="sr-only">Nome da peça</span>
+        <input
+          type="text"
+          value={nome}
+          onChange={(e) => setNome(e.target.value)}
+          disabled={disabled || enviando}
+          placeholder="Nome da peça (opcional — sem isto vale o nome do arquivo)"
+          className="w-full rounded-lg border border-border bg-background px-2.5 py-1.5 text-[11.5px] text-foreground placeholder:text-muted-foreground focus:border-primary/50 focus:outline-none disabled:opacity-50"
+        />
+      </label>
+
       {enviando ? (
         <p className="mb-2 flex items-center justify-center gap-2 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -213,39 +264,32 @@ export default function EditorialArtDropZone({
             type="button"
             disabled={disabled || !clientId}
             onClick={() => abrirSeletor("unica")}
-            title="Uma imagem ou um vídeo"
-            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Uma imagem ou um vídeo. Pode soltar o arquivo aqui."
+            className={classeDoAlvo("unica")}
+            {...alvoDeArrasto("unica")}
           >
             <Upload className="h-3.5 w-3.5" />
-            Subir arte
+            {alvoAtivo === "unica" ? "Soltar como arte" : "Arte / post"}
           </button>
           <button
             type="button"
             disabled={disabled || !clientId}
             onClick={() => abrirSeletor("carrossel")}
-            title="Selecione todas as imagens de uma vez, na ordem em que devem aparecer"
-            className="flex cursor-pointer items-center justify-center gap-1.5 rounded-lg border border-dashed border-primary/40 bg-primary/[0.04] px-3 py-2 text-[11.5px] font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-50"
+            title="Duas imagens ou mais, na ordem em que devem aparecer. Pode soltar aqui."
+            className={classeDoAlvo("carrossel")}
+            {...alvoDeArrasto("carrossel")}
           >
             <Images className="h-3.5 w-3.5" />
-            Subir carrossel
+            {alvoAtivo === "carrossel" ? "Soltar como carrossel" : "Carrossel"}
           </button>
         </div>
       )}
       {!enviando && (
-        // A ordem do carrossel é a da seleção, e isso não é adivinhável: sem
-        // dizer, a pessoa descobre depois de publicado.
         <p className="mb-2 text-center text-[10px] leading-snug text-muted-foreground">
-          Do computador ou arrastando aqui. No carrossel, a ordem é a da seleção.
+          Clique para escolher, ou arraste até o alvo certo. No carrossel, a ordem é a da seleção.
         </p>
       )}
       {children}
-      {arrastando && (
-        <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-xl bg-primary/10">
-          <p className="rounded-lg bg-card px-3 py-1.5 text-xs font-medium text-primary shadow">
-            Solte para enviar e vincular
-          </p>
-        </div>
-      )}
     </div>
   );
 }

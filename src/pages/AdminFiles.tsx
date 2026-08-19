@@ -444,23 +444,38 @@ export default function AdminFiles() {
     setSearchParams(next, { replace: true });
   };
 
+  /**
+   * Renomear é mudar o RÓTULO, não o material.
+   *
+   * A trava era `isEditableFile`, a mesma de editar conteúdo: exigia arquivo
+   * interno, sem aprovação e sem revisão. O efeito prático era que todo
+   * arquivo já compartilhado ficava preso ao nome com que subiu — em geral o
+   * do celular, "IMG_20260819.jpg" —, e a lista inteira parecia genérica sem
+   * jeito de arrumar.
+   *
+   * O que a aprovação protege é o CONTEÚDO: caminho no storage, versão,
+   * decisão registrada. Nada disso muda ao trocar o nome exibido. Continua
+   * bloqueado o arquivo travado (`locked_at`), porque aí a peça é imutável de
+   * propósito.
+   */
   const handleRename = async () => {
     if (!previewFile || !editNameValue.trim()) return;
-    if (!isEditableFile(previewFile)) {
+    if (previewFile.locked_at) {
       toast({
-        title: "Edição indisponível",
-        description: "O arquivo só pode ser renomeado antes de entrar em revisão.",
+        title: "Arquivo travado",
+        description: "Esta peça está travada e não aceita mudanças, nem de nome.",
         variant: "destructive",
       });
       return;
     }
     try {
-      const { data, error } = await supabase
-        .from("files")
-        .update({ file_name: editNameValue.trim() })
-        .eq("id", previewFile.id)
-        .select("id")
-        .maybeSingle();
+      // Pela função dedicada, e não pelo UPDATE direto: a política de escrita
+      // da tabela exige arquivo intocado, então o update falharia justamente
+      // nos arquivos que mais precisam de nome decente.
+      const { data, error } = await (supabase as any).rpc("rename_file", {
+        _file_id: previewFile.id,
+        _new_name: editNameValue.trim(),
+      });
       if (error) throw error;
       if (!data) throw new Error("O arquivo não foi alterado.");
       void invalidateFileViews();
@@ -1445,7 +1460,7 @@ export default function AdminFiles() {
             ) : (
               <div className="flex items-center gap-2 pr-6">
                 <DialogTitle className="truncate text-base">{previewFile?.file_name}</DialogTitle>
-                {isEditableFile(previewFile) && (
+                {!previewFile?.locked_at && (
                   <button
                     onClick={() => { setEditNameValue(previewFile?.file_name || ""); setEditingName(true); }}
                     className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
