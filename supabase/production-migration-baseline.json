@@ -385,6 +385,14 @@
       "remote_name": "meta_ads_campanhas",
       "remote_statements_sha256": "af32bd13c2f9c6f42847fc4891a23a41e8ad94fd665568596d6f62726e65b0df",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260819210000",
+      "path": "supabase/migrations/20260819210000_renomear_arquivo.sql",
+      "local_sha256": "776d6d33341a8f9f593c9ed7e340b817e82b2557a28837fab69b9b923e22c82f",
+      "remote_name": "renomear_arquivo",
+      "remote_statements_sha256": "f3d18b843ff6f6e038719253f7c5061d64d7f2ba0a784ffaefd39d34fbd1a907",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
