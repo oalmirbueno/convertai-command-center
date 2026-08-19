@@ -277,6 +277,22 @@ function flattenBacklog(posts: EditorialPostBundle[]) {
     if (post.publications.length === 0) {
       return [{ post, publication: null }];
     }
+
+    /**
+     * Todas as publicações canceladas: o conteúdo sumia da tela INTEIRA.
+     *
+     * A grade não desenha cancelada (ela guarda a data antiga e virava card
+     * fantasma) e este backlog só olhava para publicação sem data. Um post
+     * com plano todo cancelado não passava por nenhum dos dois filtros e
+     * ficava invisível — existindo no banco, com arte e história, sem lugar
+     * nenhum para ser reaberto. Conteúdo que existe precisa aparecer em
+     * algum lugar; some da agenda é decisão de quem apaga, não efeito
+     * colateral de cancelar um agendamento.
+     */
+    if (post.publications.every(({ publication }) => publication.status === "cancelled")) {
+      return [{ post, publication: null }];
+    }
+
     return [];
   });
 }
