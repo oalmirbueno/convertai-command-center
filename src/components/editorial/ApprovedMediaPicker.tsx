@@ -118,7 +118,7 @@ function MediaPreview({
   );
 }
 
-function AssetPreview({ asset }: { asset: EditorialApprovedMediaAsset }) {
+export function AssetPreview({ asset }: { asset: EditorialApprovedMediaAsset }) {
   const visibleFiles = asset.files.slice(0, 3);
 
   if (visibleFiles.length === 1) {

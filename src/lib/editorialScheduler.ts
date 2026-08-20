@@ -14,6 +14,16 @@ export interface EditorialSchedulePayloadInput {
 
 export interface EditorialSchedulePublicationTarget {
   accountId: string;
+  /**
+   * A conta tem conexão oficial com automação LIGADA.
+   *
+   * Sem isto o app declarava "automatic" olhando só a quantidade de
+   * arquivos, e o banco recusava o agendamento inteiro: "automatic delivery
+   * requires an enabled official connection". O gate do banco está certo —
+   * quem estava errado era a declaração. Ausente (undefined) mantém o
+   * comportamento antigo para quem ainda não passa o dado.
+   */
+  automationReady?: boolean;
   id?: string | null;
   idempotencyKey: string;
   asset?: EditorialApprovedMediaAsset | null;
@@ -119,7 +129,23 @@ export const AUTOMATIC_DELIVERY_MAX_ASSETS = 10;
  * dentro do limite da Meta. Fora disso, o agendamento continua valendo, só que
  * a publicação é feita pela equipe.
  */
-export function canDeliverAutomatically(assetFileIds: readonly string[]) {
+/**
+ * Este agendamento pode nascer com entrega automática?
+ *
+ * Duas condições, e as duas são do mundo real: a peça tem de caber no limite
+ * de arquivos da Meta, e a CONTA tem de ter conexão oficial com automação
+ * ligada. Faltando a segunda, o banco recusa o agendamento inteiro em vez de
+ * aceitar como manual — então declarar "automatic" às cegas transformava uma
+ * conta sem automação num impedimento para agendar qualquer coisa.
+ *
+ * `automationReady` ausente preserva o comportamento anterior: quem ainda
+ * não informa o estado da conta continua decidindo pela contagem.
+ */
+export function canDeliverAutomatically(
+  assetFileIds: readonly string[],
+  automationReady?: boolean,
+) {
+  if (automationReady === false) return false;
   return (
     assetFileIds.length > 0 && assetFileIds.length <= AUTOMATIC_DELIVERY_MAX_ASSETS
   );
@@ -186,7 +212,9 @@ export function buildEditorialSchedulePayload(
         // simplesmente nunca olhava para ele: nada saía sozinho. O limite de 10
         // é da própria Meta; acima disso o envio segue manual para o
         // agendamento continuar funcionando em vez de ser recusado.
-        delivery_mode: canDeliverAutomatically(assetFileIds) ? "automatic" : "manual",
+        delivery_mode: canDeliverAutomatically(assetFileIds, target.automationReady)
+          ? "automatic"
+          : "manual",
         scheduled_at: input.scheduledAtIso,
         scheduled_timezone: input.timezone,
       };

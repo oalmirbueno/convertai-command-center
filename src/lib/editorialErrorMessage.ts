@@ -9,6 +9,21 @@ const TRANSLATIONS: Array<{ test: RegExp; message: string }> = [
   // para o dono como "em revisão" na hora de agendar. Específicos primeiro;
   // o genérico é o último recurso.
   {
+    test: /automatic delivery requires an enabled official connection/i,
+    message:
+      "Esta conta não tem a publicação automática ligada. O agendamento fica registrado e a publicação sai manualmente — ou ligue a automação em Contas para sair sozinha.",
+  },
+  {
+    test: /automatic delivery requires sha256/i,
+    message:
+      "Um dos arquivos ainda está sendo processado. Aguarde alguns segundos e agende de novo.",
+  },
+  {
+    test: /automatic delivery requires an ordered approved asset snapshot/i,
+    message:
+      "A lista de arquivos desta publicação não está completa. Atualize a página e agende de novo.",
+  },
+  {
     test: /approved editorial snapshot is immutable/i,
     message:
       "O registro de aprovação deste conteúdo não bate com o material atual. Recarregue a página e tente de novo; persistindo, crie uma revisão.",

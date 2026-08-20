@@ -640,10 +640,19 @@ export default function EditorialEditor({
             first_comment: publication.firstComment.trim() || null,
             alt_text: publication.altText.trim() || null,
             asset_file_ids: assetIds,
-            // Declara a entrega automática quando a lista congelada existe e
-            // cabe no limite da Meta. Sem isto o registro nascia "manual" e o
-            // motor antigo nunca olhava para ele.
-            delivery_mode: canDeliverAutomatically(assetIds)
+            // Declara entrega automática quando a lista congelada cabe no
+            // limite da Meta E a conta tem conexão oficial com automação
+            // ligada. Sem a segunda condição o banco recusava o agendamento
+            // inteiro em vez de aceitá-lo como manual.
+            delivery_mode: canDeliverAutomatically(
+              assetIds,
+              (options?.accounts || []).some(
+                (account: any) =>
+                  account.id === publication.externalAccountId &&
+                  account.connection_status === "connected" &&
+                  account.automation_enabled === true,
+              ),
+            )
               ? "automatic"
               : "manual",
             scheduled_at: scheduledAt,

@@ -13,7 +13,7 @@ import {
   Share2,
 } from "lucide-react";
 import { toast } from "sonner";
-import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
+import ApprovedMediaPicker, { AssetPreview } from "@/components/editorial/ApprovedMediaPicker";
 import { EditorialFileThumbnail } from "@/components/editorial/EditorialCalendarViews";
 import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import EditorialAssetPreviewDialog from "@/components/editorial/EditorialAssetPreviewDialog";
@@ -491,6 +491,18 @@ export default function EditorialScheduleDialog({
         ...selectedAccountIds,
         ...existingPublicationByAccountId.keys(),
       ]);
+      // A conta tem conexão oficial com automação LIGADA? Sem isto o payload
+      // declarava "automatic" olhando só a quantidade de arquivos, e o banco
+      // recusava o agendamento inteiro. Verzelo é o caso real: conectado,
+      // token válido, automação desligada.
+      const automacaoPorConta = new Map(
+        (options?.accounts || []).map((account: any) => [
+          account.id,
+          account.connection_status === "connected" &&
+            account.automation_enabled === true,
+        ]),
+      );
+
       const publicationTargets: EditorialSchedulePublicationTarget[] = [
         ...completeAccountIds,
       ].map((accountId) => {
@@ -520,6 +532,7 @@ export default function EditorialScheduleDialog({
             caption: existing.publication.caption,
             firstComment: existing.publication.first_comment,
             altText: existing.publication.alt_text,
+            automationReady: automacaoPorConta.get(accountId) === true,
           };
         }
         let idempotencyKey = attempt.publicationKeys.get(accountId);
@@ -527,7 +540,11 @@ export default function EditorialScheduleDialog({
           idempotencyKey = newId();
           attempt.publicationKeys.set(accountId, idempotencyKey);
         }
-        return { accountId, idempotencyKey };
+        return {
+          accountId,
+          idempotencyKey,
+          automationReady: automacaoPorConta.get(accountId) === true,
+        };
       });
 
       const payload = buildEditorialSchedulePayload({
@@ -754,14 +771,20 @@ export default function EditorialScheduleDialog({
                 {selectedAsset && !showLibrary ? (
                   <div className="rounded-xl border border-primary/25 bg-primary/[0.04] p-3">
                     <div className="flex min-w-0 items-start gap-3">
-                      <span className="inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                        <FileCheck2 className="h-5 w-5" aria-hidden="true" />
+                      {/* A ARTE, não um ícone genérico. O card é a confirmação
+                          visual de que a peça certa foi escolhida — com um
+                          clipe de papel, quem confere no celular precisa ler o
+                          nome do arquivo para ter certeza. */}
+                      <span className="h-14 w-14 shrink-0 overflow-hidden rounded-lg border border-border">
+                        <AssetPreview asset={selectedAsset} />
                       </span>
                       <span className="min-w-0 flex-1">
                         <span className="block text-[10px] font-semibold uppercase tracking-wide text-primary">
                           Conteúdo escolhido
                         </span>
-                        <span className="mt-1 block truncate text-sm font-medium text-foreground">
+                        {/* Duas linhas em vez de corte: no celular o nome
+                            terminava em "..." e virava adivinhação. */}
+                        <span className="mt-1 block line-clamp-2 text-sm font-medium leading-snug text-foreground">
                           {selectedAsset.root.file_name}
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
@@ -773,7 +796,9 @@ export default function EditorialScheduleDialog({
                         </span>
                       </span>
                     </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
+                    {/* Empilhados no aparelho estreito: lado a lado, "Trocar
+                        conteúdo" quebrava dentro do próprio botão. */}
+                    <div className="mt-3 grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -808,7 +833,10 @@ export default function EditorialScheduleDialog({
                         <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
                           Prontos no calendário — um clique
                         </p>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        {/* Rolagem própria: com dezenas de prontos, a lista
+                            empurrava o resto do diálogo para fora da tela no
+                            celular e o botão de agendar sumia. */}
+                        <div className="grid max-h-[300px] gap-2 overflow-y-auto pr-1 sm:max-h-none sm:grid-cols-2 sm:overflow-visible sm:pr-0">
                           {schedulablePosts.map((bundle) => {
                             const asset = bundle.post.primary_file_id
                               ? approvedAssetByRootId.get(bundle.post.primary_file_id)
@@ -819,14 +847,14 @@ export default function EditorialScheduleDialog({
                                 key={bundle.post.id}
                                 type="button"
                                 onClick={() => selectAsset(asset)}
-                                className="flex items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
+                                className="flex min-h-[60px] items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
                               >
                                 <EditorialFileThumbnail
                                   post={bundle}
                                   className="h-12 w-12 shrink-0"
                                 />
                                 <span className="min-w-0 flex-1">
-                                  <span className="block truncate text-[12.5px] font-medium text-foreground">
+                                  <span className="block line-clamp-2 text-[12.5px] font-medium leading-snug text-foreground">
                                     {bundle.post.title}
                                   </span>
                                   <span className="block truncate text-[10.5px] text-muted-foreground">
