@@ -71,7 +71,9 @@ const mensagemCom = (registros: typeof DOSSIES) =>
 describe("atualizar o dossiê muda a mensagem", () => {
   it("o texto do dossiê chega à mensagem", () => {
     const texto = mensagemCom(DOSSIES);
-    expect(texto).toContain("Por dentro:");
+    // "Por dentro:" virou o bloco "*Onde estamos*" quando a abertura passou a
+    // ter linha do tempo. O compromisso é o mesmo: o dossiê abre a mensagem.
+    expect(texto).toContain("*Onde estamos*");
     expect(texto).toContain("virada de posicionamento");
   });
 
@@ -99,7 +101,7 @@ describe("atualizar o dossiê muda a mensagem", () => {
 
   it("sem dossiê a mensagem sai sem a linha, em vez de sair quebrada", () => {
     const texto = buildGroupMessageText({ ...base, contextoRecente: null }, "abertura");
-    expect(texto).not.toContain("Por dentro:");
+    expect(texto).not.toContain("*Onde estamos*");
     expect(texto.length).toBeGreaterThan(0);
   });
 
