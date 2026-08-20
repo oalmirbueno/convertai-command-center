@@ -75,6 +75,15 @@ export interface GroupMessageContext {
    */
   porqueDaSemana?: string | null;
 
+  /**
+   * O que o dossiê promete para a frente, em vida real.
+   *
+   * A situação diz onde o negócio está; esta diz o que o cliente pode
+   * ESPERAR — e expectativa dita é o que segura a confiança entre uma
+   * mensagem e outra.
+   */
+  oQueEsperar?: string | null;
+
   /** Próximo passo combinado no último relatório publicado, se recente. */
   proximoPasso?: string | null;
 
@@ -158,8 +167,13 @@ function abertura(ctx: GroupMessageContext): string {
   if (ctx.proximoPasso) {
     caminho.push(`o foco combinado segue valendo: ${ctx.proximoPasso}`);
   }
-  if (caminho.length > 0) {
-    linhas.push("", `*Para onde vamos*`, `${maiuscula(caminho.join(", "))}.`);
+  if (caminho.length > 0 || ctx.oQueEsperar) {
+    linhas.push("", `*Para onde vamos*`);
+    if (caminho.length > 0) linhas.push(`${maiuscula(caminho.join(", "))}.`);
+    // O que o dossiê promete vem em linha própria: ele já chega em frases
+    // completas, e embutido numa junção de vírgulas saía com ponto duplo e
+    // maiúscula no meio da frase.
+    if (ctx.oQueEsperar) linhas.push(ctx.oQueEsperar);
   }
 
   // 4. O QUE DEPENDE DELE. Sempre por último e sempre com o ganho explícito:
@@ -185,10 +199,10 @@ function abertura(ctx: GroupMessageContext): string {
 
 function meio(ctx: GroupMessageContext): string {
   const linhas: string[] = [
-    `${ctx.greeting}, ${ctx.clientName}! Check de quarta: o que já andou desde segunda.`,
-    "",
+    `${ctx.greeting}, ${ctx.clientName}! Meio de semana — o que já andou e o que ainda vem até sexta.`,
   ];
 
+  // 1. O QUE JÁ ANDOU. Movimento concreto desde segunda, uma linha por item.
   const movimento: string[] = [];
   if (ctx.entregasDesdeSegunda.length > 0) {
     movimento.push(
@@ -198,10 +212,6 @@ function meio(ctx: GroupMessageContext): string {
     );
   }
   if (ctx.cicloFeito.length > 0) {
-    // Molde com dois-pontos porque as etapas chegam como ORAÇÕES ("o conteúdo
-    // ficou pronto"), não como substantivos. Com "já saíram X" a frase saía
-    // "já saíram o conteúdo da semana ficou pronto" — e a oração informa mais
-    // do que o substantivo, então quem cede é o molde.
     movimento.push(`da rotina da semana: ${listInWords(ctx.cicloFeito, 3)}`);
   }
   if (ctx.avulsosFeitos.length > 0) {
@@ -216,50 +226,68 @@ function meio(ctx: GroupMessageContext): string {
   }
 
   if (movimento.length > 0) {
-    linhas.push(movimento.map((frase) => `${maiuscula(frase)}.`).join("\n"));
+    linhas.push("", `*O que já andou desde segunda*`, ...movimento.map((m) => `• ${maiuscula(m)}.`));
+    if (ctx.porqueDaSemana) linhas.push(`Na prática: ${ctx.porqueDaSemana}.`);
   } else if ((ctx.pautasProntas || []).length > 0) {
-    // Sem movimento novo desde segunda, mas com peça pronta: o cliente
-    // reconhece o nome e sabe exatamente o que está esperando data.
+    // Sem movimento novo, mas com peça pronta: o cliente reconhece o nome e
+    // sabe exatamente o que está esperando data.
     linhas.push(
+      "",
       `Da produção da semana, ${listInWords(ctx.pautasProntas!, 3)} ${
         ctx.pautasProntas!.length === 1 ? "já está pronto" : "já estão prontos"
       } e aguardando a data no calendário.`,
     );
   } else {
     linhas.push(
+      "",
       "O começo da semana foi de produção interna: o material está tomando forma e chega até sexta.",
     );
   }
 
+  // 2. ONDE ESTAMOS. O retrato em vida real, vindo do dossiê: o meio da
+  // semana também situa, não só lista tarefa.
+  if (ctx.contextoRecente) {
+    linhas.push("", `*Onde estamos*`, ctx.contextoRecente);
+  }
+
+  // 3. O QUE AINDA VEM ATÉ SEXTA. O caminho do resto da semana.
+  const aindaVem: string[] = [];
   if (ctx.anuncios && ctx.anuncios.investidoSemana > 0) {
     const { investidoSemana, resultadosSemana, nomeDoResultado } = ctx.anuncios;
-    linhas.push(
-      "",
+    aindaVem.push(
       resultadosSemana != null && resultadosSemana > 0
-        ? `Nos anúncios, a semana já soma ${dinheiro(investidoSemana)} investidos e ${resultadosSemana} ${nomeDoResultado}.`
-        : `Nos anúncios, a campanha segue rodando com ${dinheiro(investidoSemana)} investidos na semana.`,
+        ? `nos anúncios, a semana já soma ${dinheiro(investidoSemana)} investidos e ${resultadosSemana} ${nomeDoResultado}`
+        : `nos anúncios, a campanha segue rodando com ${dinheiro(investidoSemana)} investidos na semana`,
     );
   }
-
   if (ctx.proximasAgendadas.length > 0) {
-    linhas.push(
-      "",
+    aindaVem.push(
       ctx.proximasAgendadas.length === 1
-        ? `Até o fim da semana ainda entra publicação no dia ${ctx.proximasAgendadas[0]}.`
-        : `Até o fim da semana ainda entram publicações: ${listInWords(ctx.proximasAgendadas, 3)}.`,
+        ? `ainda entra publicação no dia ${ctx.proximasAgendadas[0]}`
+        : `ainda entram publicações: ${listInWords(ctx.proximasAgendadas, 3)}`,
     );
   }
+  if (aindaVem.length > 0 || ctx.oQueEsperar) {
+    linhas.push("", `*O que ainda vem até sexta*`);
+    if (aindaVem.length > 0) linhas.push(`${maiuscula(aindaVem.join(", "))}.`);
+    if (ctx.oQueEsperar) linhas.push(ctx.oQueEsperar);
+  }
 
+  // 4. O QUE DEPENDE DELE, com o ganho explícito. "Seu ok em a arte" era
+  // gramática de formulário; o travessão deixa como se fala.
   if (ctx.aguardandoOk.length > 0) {
     linhas.push(
       "",
-      `Seu ok em ${listInWords(ctx.aguardandoOk)} destrava o resto da semana.`,
+      ctx.aguardandoOk.length === 1
+        ? `${maiuscula(ctx.aguardandoOk[0])} está esperando seu ok — com o sim, o resto da semana anda.`
+        : `${maiuscula(listInWords(ctx.aguardandoOk))} estão esperando seu ok — com o sim, o resto da semana anda.`,
     );
   }
 
   linhas.push("", "Qualquer coisa é só chamar. Tudo detalhado no painel: aceleriq.online");
   return montar(linhas);
 }
+
 
 /* ────────────────────────── fechamento · o balanço ───────────────────────── */
 
@@ -338,8 +366,10 @@ function fechamento(ctx: GroupMessageContext): string {
     );
   }
   if (ctx.proximoPasso) proxima.push(`e o foco combinado segue: ${ctx.proximoPasso}`);
-  if (proxima.length > 0) {
-    linhas.push("", `*Já preparado para a próxima semana*`, `${maiuscula(proxima.join(", "))}.`);
+  if (proxima.length > 0 || ctx.oQueEsperar) {
+    linhas.push("", `*Já preparado para a próxima semana*`);
+    if (proxima.length > 0) linhas.push(`${maiuscula(proxima.join(", "))}.`);
+    if (ctx.oQueEsperar) linhas.push(ctx.oQueEsperar);
   }
 
   if (ctx.aguardandoOk.length > 0) {

@@ -10,7 +10,7 @@ import {
 import { goalForCampaign, resultFromActions, statusLabel } from "@/lib/adsLanguage";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
-import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import {
   porqueDaSemana as porqueDaSemana_,
@@ -151,6 +151,11 @@ export function useClientGroupMessage(client: any | null) {
         (m) => CONTEXTO_KINDS.has(m.kind) && diasDesde(m.created_at) <= 14,
       );
       const contextoRecente = contexto ? trechoDoContexto(contexto) || null : null;
+      // A outra metade do dossiê: o que ele promete para a frente. É lido do
+      // MESMO registro que deu a situação, então os dois nunca desencontram.
+      const oQueEsperar = contexto
+        ? oQueEsperarDoDossie(String(contexto.content || "")) || null
+        : null;
 
       const comPasso = ((relatorios.data || []) as any[]).find(
         (r) => String(r.next_steps || "").trim() && diasDesde(r.created_at) <= 21,
@@ -208,6 +213,7 @@ export function useClientGroupMessage(client: any | null) {
           .map((linha: any) => readableFileName(String(linha.title || "")))
           .filter(Boolean),
         contextoRecente,
+        oQueEsperar,
         proximoPasso,
         anuncios,
       };

@@ -17,7 +17,7 @@ import { SERVICE_LABELS as SERVICE_NAMES } from "@/lib/cycleDefs";
 import { listInWords, readableFileName, readableProjectName } from "@/lib/clientText";
 import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMessage";
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
-import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { CONTEXTO_KINDS, oQueEsperarDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import {
@@ -1553,6 +1553,9 @@ export default function AdminExperience() {
       (m: any) => CONTEXTO_KINDS.has(m.kind) && (daysSince(m.created_at) ?? 99) <= 14,
     );
     const contextoRecente = contextoEntrada ? trechoDoContexto(contextoEntrada) || null : null;
+    const oQueEsperar = contextoEntrada
+      ? oQueEsperarDoDossie(String(contextoEntrada.content || "")) || null
+      : null;
 
     // O próximo passo combinado no último relatório publicado ainda fresco.
     const relatorioComPasso = (reports || []).find(
@@ -1616,6 +1619,7 @@ export default function AdminExperience() {
         .map((linha: any) => readableFileName(String(linha.title || "")))
         .filter(Boolean),
       contextoRecente,
+      oQueEsperar,
       proximoPasso,
       anuncios,
     };

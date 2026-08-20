@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { resumoDoDossie, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { oQueEsperarDoDossie, resumoDoDossie, soVidaReal, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { rotinaEmLinguagemDeCliente, temTraducao } from "@/lib/rotinaDoCliente";
 import { CYCLES } from "@/lib/cycleDefs";
 
@@ -50,15 +50,23 @@ ONDE ESTAMOS
 O site institucional está concluído, com entrega registrada em 23/07/2026.`;
 
 describe("o dossiê entrega a situação, não a ficha técnica", () => {
-  it("acha a seção que diz onde o cliente está", () => {
-    expect(resumoDoDossie(PRESERVA)).toContain("70% de progresso");
+  it("acha a seção que diz onde o cliente está — em vida real", () => {
+    // "70% de progresso registrado" é contabilidade do painel, não vida do
+    // negócio: a porcentagem sai e a frase continua de pé com o que é real.
+    const texto = resumoDoDossie(PRESERVA);
+    expect(texto).toContain("está ativo");
+    expect(texto).toContain("A mídia ainda não foi ativada");
+    expect(texto).not.toContain("70%");
+    expect(texto).not.toContain("progresso");
     expect(resumoDoDossie(VERZELO)).toContain("site institucional está concluído");
   });
 
   it("entende cabeçalho em markdown também", () => {
     // Um dos clientes recebe o dossiê em markdown ("## Status atual").
-    expect(resumoDoDossie(MIRANTE)).toContain("83% de progresso");
-    expect(resumoDoDossie(MIRANTE)).not.toContain("#");
+    const texto = resumoDoDossie(MIRANTE);
+    expect(texto).toContain("segue ativo");
+    expect(texto).not.toContain("83%");
+    expect(texto).not.toContain("#");
   });
 
   it("a lista de fontes que a IA consultou não é assunto do cliente", () => {
@@ -125,5 +133,38 @@ describe("a rotina é contada na língua do cliente", () => {
 
   it("etapa fora da faixa não quebra a mensagem", () => {
     expect(rotinaEmLinguagemDeCliente([{ area: "social", step: 99 }])).toEqual([]);
+  });
+});
+
+describe("vida real: o negócio, não o painel", () => {
+  it("a oração interna sai e a frase continua de pé", () => {
+    expect(
+      soVidaReal("O projeto está ativo, com 70% de progresso registrado e fase de lançamento no método do painel."),
+    ).toBe("O projeto está ativo.");
+  });
+
+  it("frase que é só checklist sai inteira", () => {
+    // "6 de 6 etapas" não tem metade aproveitável para o cliente.
+    expect(
+      soVidaReal("A semana de Tráfego Pago de 17/08 está fechada em 6 de 6 etapas. Os carrosséis foram publicados."),
+    ).toBe("Os carrosséis foram publicados.");
+  });
+
+  it("data não é confundida com contagem de etapas", () => {
+    // "20/08" tem dígito-barra-dígito como "6/6"; sem fronteiras, frases
+    // legítimas com data sumiam da mensagem.
+    expect(soVidaReal("A entrega foi registrada em 23/07/2026.")).toContain("23/07/2026");
+  });
+
+  it("o que esperar vem da seção de futuro, também em vida real", () => {
+    const dossie = "ONDE ESTAMOS\n\nTudo certo.\n\nPRÓXIMOS PASSOS\n\nAtivar a mídia assim que a verba for aprovada, com 20% de folga no método.";
+    const texto = oQueEsperarDoDossie(dossie);
+    expect(texto).toContain("Ativar a mídia");
+    expect(texto).not.toContain("método");
+    expect(texto).not.toContain("20%");
+  });
+
+  it("dossiê sem seção de futuro devolve vazio em vez de inventar", () => {
+    expect(oQueEsperarDoDossie("ONDE ESTAMOS\n\nTudo certo.")).toBe("");
   });
 });

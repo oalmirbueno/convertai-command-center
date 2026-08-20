@@ -80,6 +80,94 @@ function ateOFimDaFrase(texto: string, limite: number): string {
   return `${pedaco.slice(0, espaco > 0 ? espaco : limite).trim()}…`;
 }
 
+/* ───────────────── Vida real: o que o negócio sente, não o painel ────────── */
+
+/**
+ * Pedaços de frase que são contabilidade interna, não vida do negócio.
+ *
+ * O dossiê é escrito para o DONO da operação, então mistura as duas coisas na
+ * mesma frase: "o projeto está ativo, com 70% de progresso registrado e fase
+ * de lançamento no método do painel". O cliente não mede a vida dele em
+ * porcentagem de painel — remove-se a oração interna e a frase continua de
+ * pé com o que é real: "o projeto está ativo".
+ */
+const ORACOES_INTERNAS: RegExp[] = [
+  /,?\s*(e\s+)?com \d+\s*%[^,.;]*/gi,
+  /,?\s*(e\s+)?\d+\s*% de progresso[^,.;]*/gi,
+  /,?\s*(e\s+)?(em\s+)?fase de [^,.;]* (no\s+)?m[ée]todo[^,.;]*/gi,
+  /,?\s*(e\s+)?o ciclo [^,.;]*\d\s*(\/|de)\s*\d[^,.;]*/gi,
+  /,?\s*(e\s+)?registrad[oa] no painel[^,.;]*/gi,
+  /\s+no painel\b/gi,
+  /\s+do painel\b/gi,
+];
+
+/**
+ * Frases que, mesmo depois da limpeza, seguem sendo bastidor puro.
+ *
+ * "A semana de Tráfego Pago de 17/08 está fechada em 6 de 6 etapas" não tem
+ * metade aproveitável: o assunto inteiro é o checklist. Sai a frase toda.
+ */
+// As fronteiras (\b) importam: sem elas, "6/6" também casa com o meio de
+// uma DATA ("20/08" tem dígito-barra-dígito), e frases legítimas com data
+// sumiam da mensagem.
+const FRASE_INTERNA =
+  /\b\d\s*(\/|de)\s*\d\b\s*(etapas?)?(?!\d)|\bm[ée]todo\b|\bkanban\b|\bbacklog\b|\b\d+\s+tarefas?\b|\bchecklist\b|\bprogresso\b/i;
+
+/** Divide em frases sem perder as datas ("23/07/2026" tem pontos? não — barras). */
+function emFrases(texto: string): string[] {
+  return texto
+    .split(/(?<=[.;!?])\s+/)
+    .map((f) => f.trim())
+    .filter(Boolean);
+}
+
+/**
+ * Reduz um trecho de dossiê ao que é vida real do negócio.
+ *
+ * Duas passadas: primeiro remove a ORAÇÃO interna de dentro da frase (a
+ * porcentagem, a fase do método), depois descarta a FRASE que continua sendo
+ * bastidor por inteiro. O que sobra é o que o cliente sente: site no ar,
+ * mídia ainda não ativada, decisão aprovada, material criado.
+ */
+export function soVidaReal(texto: string): string {
+  const frases = emFrases(texto)
+    .map((frase) => {
+      let limpa = frase;
+      for (const padrao of ORACOES_INTERNAS) limpa = limpa.replace(padrao, "");
+      return limpa.replace(/\s{2,}/g, " ").replace(/\s+([,.;])/g, "$1").trim();
+    })
+    .filter((frase) => frase.length > 8 && !FRASE_INTERNA.test(frase));
+  return frases.join(" ").trim();
+}
+
+/** Cabeçalhos que anunciam o que vem pela frente. */
+const SECAO_DE_FUTURO =
+  /^#*\s*(pr[óo]ximos? passos?|o que vem( agora| por a[íi])?|pr[óo]xima semana|planos?|foco da semana)\s*:?\s*$/i;
+
+/**
+ * O que o dossiê promete para a frente, em vida real.
+ *
+ * É a metade que faltava: a situação diz onde o negócio está; esta diz o que
+ * o cliente pode ESPERAR — e expectativa dita é o que segura confiança entre
+ * uma mensagem e outra.
+ */
+export function oQueEsperarDoDossie(conteudo: string, limite = 240): string {
+  const linhas = String(conteudo || "").split("\n").map((l) => l.trim());
+  const inicio = linhas.findIndex((l) => SECAO_DE_FUTURO.test(l));
+  if (inicio < 0) return "";
+
+  const prosa: string[] = [];
+  for (const linha of linhas.slice(inicio + 1)) {
+    if (linha.length === 0) continue;
+    if (/^#+\s/.test(linha) || (linha === linha.toUpperCase() && linha.length <= 40)) break;
+    if (LINHA_DE_FICHA.test(linha) || TEM_IDENTIFICADOR.test(linha)) continue;
+    // Lista vira prosa: "- Ativar a mídia" -> "Ativar a mídia".
+    prosa.push(linha.replace(/^[-•*]\s*/, ""));
+  }
+  const texto = soVidaReal(prosa.join(" ").replace(/\s+/g, " ").trim());
+  return texto ? ateOFimDaFrase(texto, limite) : "";
+}
+
 /**
  * O que o dossiê diz sobre a situação do cliente, em prosa que se lê.
  *
@@ -110,7 +198,8 @@ export function resumoDoDossie(conteudo: string, limite = 320): string {
     prosa.push(linha);
   }
 
-  const texto = prosa.join(" ").replace(/\s+/g, " ").trim();
+  // O dossiê fala com o dono; o cliente recebe só a vida real do negócio.
+  const texto = soVidaReal(prosa.join(" ").replace(/\s+/g, " ").trim());
   return texto ? ateOFimDaFrase(texto, limite) : "";
 }
 

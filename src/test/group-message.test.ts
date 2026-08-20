@@ -96,7 +96,9 @@ describe("regras de tom que valem nos três momentos", () => {
   it("o que espera o cliente aparece pelo que destrava, não como cobrança", () => {
     const comPendencia = { ...vazio, aguardandoOk: ["arte do reservatório"] };
     const meio = buildGroupMessageText(comPendencia, "meio");
-    expect(meio).toContain("destrava");
+    // A palavra mudou ("com o sim, o resto da semana anda"), a intenção não:
+    // o pedido mostra o GANHO de aprovar, nunca vira cobrança.
+    expect(meio).toContain("com o sim");
     expect(meio).not.toMatch(/aguardando você|não recebemos/i);
   });
 
