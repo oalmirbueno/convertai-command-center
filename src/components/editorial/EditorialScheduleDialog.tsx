@@ -624,7 +624,7 @@ export default function EditorialScheduleDialog({
             Agendar publicação
           </DialogTitle>
           <DialogDescription>
-            Escolha um conteúdo já aprovado. Conta e horário são registrados
+            Escolha o conteúdo. Conta e horário são registrados
             juntos, sem misturar com a criação editorial.
           </DialogDescription>
           <div className="grid grid-cols-4 gap-1.5 pt-2" aria-label="Etapas do agendamento">
@@ -758,10 +758,15 @@ export default function EditorialScheduleDialog({
                 <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-semibold text-foreground">
-                      Conteúdo aprovado
+                      Conteúdo
                     </h3>
+                    {/* O título dizia "Conteúdo aprovado" e a lista sempre
+                        trouxe também o que não foi aprovado — a espera é do
+                        agendamento, não da seleção. Do jeito antigo, quem
+                        procurava uma arte em revisão concluía que ela não
+                        estava lá. */}
                     <p className="mt-1 text-xs text-muted-foreground">
-                      A busca considera título, legenda e todos os slides.
+                      Aprovados e em produção. A busca considera título, legenda e todos os slides.
                     </p>
                   </div>
                   <Badge variant="secondary">
@@ -789,10 +794,10 @@ export default function EditorialScheduleDialog({
                         </span>
                         <span className="mt-1 block text-xs text-muted-foreground">
                           {selectedAsset.contentType === "carousel"
-                            ? `Carrossel completo · ${selectedAsset.files.length} arquivos`
+                            ? `Carrossel · ${selectedAsset.files.length} arquivos`
                             : selectedAsset.contentType === "video"
-                              ? "Vídeo aprovado"
-                              : "Post aprovado"}
+                              ? "Vídeo"
+                              : "Post"}
                         </span>
                       </span>
                     </div>
@@ -816,7 +821,7 @@ export default function EditorialScheduleDialog({
                         className="h-10"
                         onClick={() => setShowLibrary(true)}
                       >
-                        Trocar conteúdo
+                        Buscar outro
                       </Button>
                     </div>
                   </div>

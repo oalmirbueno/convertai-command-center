@@ -8,6 +8,7 @@ import {
   createFileRecord,
 } from "@/lib/fileRecordActions";
 import { mediaKindFromFile } from "@/lib/fileUrls";
+import { requestFileAgencyReview } from "@/lib/fileApprovalActions";
 import { cn } from "@/lib/utils";
 
 /**
@@ -76,6 +77,14 @@ export default function EditorialArtDropZone({
   const intencaoRef = useRef<Intencao>("unica");
   const [enviando, setEnviando] = useState(false);
   const [nome, setNome] = useState("");
+  /**
+   * Para onde a arte vai depois de subir.
+   *
+   * O Arquivos sempre teve essa escolha no envio; aqui não tinha, então
+   * subir pelo card significava ir depois em Arquivos só para pedir a
+   * revisão — o atalho economizava um passo e cobrava outro.
+   */
+  const [destino, setDestino] = useState<"rascunho" | "revisao">("rascunho");
   /** Qual alvo está sob o cursor: é o que dá o retorno visual do arrasto. */
   const [alvoAtivo, setAlvoAtivo] = useState<Intencao | null>(null);
 
@@ -175,12 +184,32 @@ export default function EditorialArtDropZone({
         queryClient.invalidateQueries({ queryKey: ["workspace-client-files"] }),
       ]);
 
+      // A revisão é pedida ANTES de vincular: se ela falhar, o material já
+      // existe em Arquivos e o card não fica apontando para algo que o dono
+      // pensa estar em revisão e não está.
+      let revisaoPedida = false;
+      if (parentFileId && destino === "revisao") {
+        try {
+          await requestFileAgencyReview(parentFileId);
+          revisaoPedida = true;
+        } catch (erro) {
+          toast.error(
+            erro instanceof Error
+              ? `Arte enviada, mas a revisão não foi pedida: ${erro.message}`
+              : "Arte enviada, mas a revisão não foi pedida. Peça em Arquivos.",
+          );
+        }
+      }
+
       if (parentFileId) await onUploaded(parentFileId);
       setNome("");
+      const oQueSubiu = isCarousel
+        ? `Carrossel com ${files.length} imagens enviado e vinculado`
+        : "Arte enviada e vinculada";
       toast.success(
-        isCarousel
-          ? `Carrossel com ${files.length} imagens enviado e vinculado, na ordem escolhida.`
-          : "Arte enviada e vinculada. Ela já está em Arquivos também.",
+        revisaoPedida
+          ? `${oQueSubiu}, e já entrou na fila de revisão.`
+          : `${oQueSubiu}. Está em Arquivos como rascunho.`,
       );
     } catch (erro) {
       toast.error(
@@ -285,9 +314,35 @@ export default function EditorialArtDropZone({
         </div>
       )}
       {!enviando && (
-        <p className="mb-2 text-center text-[10px] leading-snug text-muted-foreground">
-          Clique para escolher, ou arraste até o alvo certo. No carrossel, a ordem é a da seleção.
-        </p>
+        <>
+          {/* Para onde a arte vai. Mesma escolha que o Arquivos oferece no
+              envio: sem ela, subir pelo card obrigava a ir depois em
+              Arquivos só para pedir a revisão. */}
+          <div className="mb-2 flex items-center gap-1 rounded-lg bg-secondary/60 p-0.5">
+            {([
+              { valor: "rascunho" as const, texto: "Deixar como rascunho" },
+              { valor: "revisao" as const, texto: "Enviar para revisão" },
+            ]).map((opcao) => (
+              <button
+                key={opcao.valor}
+                type="button"
+                disabled={disabled}
+                onClick={() => setDestino(opcao.valor)}
+                className={cn(
+                  "flex-1 cursor-pointer rounded-md border-none px-2 py-1.5 text-[10.5px] font-semibold transition-colors disabled:opacity-50",
+                  destino === opcao.valor
+                    ? "bg-card text-foreground shadow-sm"
+                    : "bg-transparent text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {opcao.texto}
+              </button>
+            ))}
+          </div>
+          <p className="mb-2 text-center text-[10px] leading-snug text-muted-foreground">
+            Clique para escolher, ou arraste até o alvo certo. No carrossel, a ordem é a da seleção.
+          </p>
+        </>
       )}
       {children}
     </div>
