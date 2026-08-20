@@ -4,6 +4,7 @@ import { useConfirm } from "@/components/shared/confirmDialog";
 import { X, Loader2, Trash2, FileText, Camera, DollarSign, CheckCircle2, Clock, AlertCircle, Plus, ChevronDown, ChevronUp, Activity, ListChecks, PackageCheck, FolderOpen, BarChart3, Briefcase, KeyRound, Pause, Play } from "lucide-react";
 import ClientVault from "@/components/vault/ClientVault";
 import { supabase } from "@/integrations/supabase/client";
+import CobrancasDoCliente from "@/components/admin/CobrancasDoCliente";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
@@ -699,6 +700,10 @@ export default function EditClientDrawer({
                 )
               )}
             </div>
+
+            {/* Cobranças editáveis: valor, vencimento e pago/pendente. É o
+                caminho de corrigir o financeiro sem caçar linha no banco. */}
+            {client?.id && <CobrancasDoCliente clientId={client.id} />}
 
             {/* Tipo de Cliente + Brand */}
             <div className="space-y-3 p-3 rounded-[10px] border border-border bg-secondary/30">

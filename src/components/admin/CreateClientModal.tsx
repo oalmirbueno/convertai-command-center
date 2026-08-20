@@ -73,6 +73,17 @@ export default function CreateClientModal({ open, onClose }: Props) {
   const [projectValue, setProjectValue] = useState("");
   const [payMode, setPayMode] = useState<"integral" | "installments">("integral");
   const [installmentsCount, setInstallmentsCount] = useState("2");
+  /**
+   * O cadastro assumia que TODO pagamento inicial já tinha caído — a
+   * mensalidade e a 1ª parcela nasciam "pagas no ato", sem pergunta. Cliente
+   * que entrou sem pagar ficava como pago, e o financeiro mentia até alguém
+   * caçar a linha errada. Recebido continua sendo o padrão (é o caso comum);
+   * a diferença é que agora é uma ESCOLHA.
+   */
+  const [mensalidadeRecebida, setMensalidadeRecebida] = useState(true);
+  const [entradaRecebida, setEntradaRecebida] = useState(true);
+  /** Valor da 1ª parcela quando difere do rateio (entrada maior ou menor). */
+  const [entradaValor, setEntradaValor] = useState("");
   const [firstDueDate, setFirstDueDate] = useState("");
 
   if (!open) return null;
@@ -160,9 +171,9 @@ export default function CreateClientModal({ open, onClose }: Props) {
         .eq("id", newUserId);
       if (profileError) throw new Error("Não foi possível completar o cadastro do cliente.");
 
-      // Ao cadastrar um cliente recorrente, o pagamento do ciclo atual JÁ está pago
-      // (motivo do cadastro). Registramos a entrada paga de hoje e a próxima
-      // renovação como pendente na data informada.
+      // O ciclo atual entra como o DONO disse — recebido ou a receber. A
+      // premissa antiga ("cadastrou porque pagou") virava registro falso
+      // sempre que o combinado era pagar depois.
       if (showRecurring && planValueNum > 0) {
         const todayStr = new Date().toISOString().slice(0, 10);
         const rowsRec: BillingInsert[] = [{
@@ -170,10 +181,10 @@ export default function CreateClientModal({ open, onClose }: Props) {
           type: "renewal",
           amount: planValueNum,
           due_date: todayStr,
-          paid_date: todayStr,
-          paid_amount: planValueNum,
-          description: `Mensalidade · ${company.trim() || fullName.trim()} (pago no cadastro)`,
-          status: "paid",
+          paid_date: mensalidadeRecebida ? todayStr : null,
+          paid_amount: mensalidadeRecebida ? planValueNum : null,
+          description: `Mensalidade · ${company.trim() || fullName.trim()}${mensalidadeRecebida ? " (pago no cadastro)" : " (a receber)"}`,
+          status: mensalidadeRecebida ? "paid" : "pending",
         }];
         if (planRenewalDate && planRenewalDate > todayStr) {
           rowsRec.push({
@@ -197,28 +208,41 @@ export default function CreateClientModal({ open, onClose }: Props) {
       const projValueNum = parseFloat(projectValue) || 0;
       if (showOneOff && projValueNum > 0 && firstDueDate) {
         const n = payMode === "integral" ? 1 : Math.max(parseInt(installmentsCount) || 1, 1);
-        const per = +(projValueNum / n).toFixed(2);
+        /* A entrada pode ter valor PRÓPRIO (ex.: 500 de sinal e o resto em
+           parcelas iguais). Antes o rateio era sempre igual, e o dono
+           acertava depois à mão no financeiro — errando de vez em quando. */
+        const entradaNum = parseFloat(entradaValor);
+        const temEntradaPropria =
+          n > 1 && Number.isFinite(entradaNum) && entradaNum > 0 && entradaNum < projValueNum;
+        const primeira = temEntradaPropria ? +entradaNum.toFixed(2) : +(projValueNum / n).toFixed(2);
+        const restantePer = n > 1 ? +((projValueNum - primeira) / (n - 1)).toFixed(2) : 0;
         const first = new Date(firstDueDate + "T00:00:00");
         const todayIso = new Date().toISOString().slice(0, 10);
         const rows: BillingInsert[] = Array.from({ length: n }, (_, idx) => {
           const due = new Date(first);
           due.setMonth(due.getMonth() + idx);
           const dueStr = due.toISOString().slice(0, 10);
-          // Última parcela acerta arredondamento
-          const amount = idx === n - 1 ? +(projValueNum - per * (n - 1)).toFixed(2) : per;
-          // 1ª parcela / valor integral → já pago no ato do cadastro
           const isFirst = idx === 0;
+          // Última parcela acerta o arredondamento sobre o RESTANTE.
+          const amount = isFirst
+            ? primeira
+            : idx === n - 1
+              ? +(projValueNum - primeira - restantePer * (n - 2)).toFixed(2)
+              : restantePer;
+          const primeiraRecebida = isFirst && entradaRecebida;
           return {
             client_id: newUserId,
             type: "one_off",
             amount,
-            due_date: isFirst ? todayIso : dueStr,
-            paid_date: isFirst ? todayIso : null,
-            paid_amount: isFirst ? amount : null,
+            // Recebida entra datada de hoje; a combinada para depois vence na
+            // data informada, como qualquer parcela.
+            due_date: primeiraRecebida ? todayIso : dueStr,
+            paid_date: primeiraRecebida ? todayIso : null,
+            paid_amount: primeiraRecebida ? amount : null,
             description: n === 1
-              ? `Projeto · ${company.trim() || fullName.trim()} (pago no cadastro)`
-              : `Projeto · Parcela ${idx + 1}/${n}${isFirst ? " (pago no cadastro)" : ""}`,
-            status: isFirst ? "paid" : "pending",
+              ? `Projeto · ${company.trim() || fullName.trim()}${primeiraRecebida ? " (pago no cadastro)" : " (a receber)"}`
+              : `Projeto · ${isFirst ? "Entrada" : `Parcela ${idx + 1}/${n}`}${primeiraRecebida ? " (pago no cadastro)" : isFirst ? " (a receber)" : ""}`,
+            status: primeiraRecebida ? "paid" : "pending",
           };
         });
         const { error: projectBillingError } = await supabase
@@ -512,6 +536,26 @@ export default function CreateClientModal({ open, onClose }: Props) {
                           className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground focus:outline-none focus:border-primary/50 transition-colors" />
                       </div>
                     </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { v: true, label: "Recebida no cadastro", hint: "O dinheiro já caiu" },
+                        { v: false, label: "Vai pagar", hint: "Fica pendente no financeiro" },
+                      ].map((opt) => (
+                        <button
+                          key={String(opt.v)}
+                          type="button"
+                          onClick={() => setMensalidadeRecebida(opt.v)}
+                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
+                            mensalidadeRecebida === opt.v
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          <p className="font-semibold leading-tight">{opt.label}</p>
+                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
+                        </button>
+                      ))}
+                    </div>
                     <p className="text-[10px] text-muted-foreground">Gera a 1ª fatura mensal na data informada. As próximas são criadas automaticamente.</p>
                   </div>
                 )}
@@ -552,7 +596,13 @@ export default function CreateClientModal({ open, onClose }: Props) {
                       ))}
                     </div>
                     {payMode === "installments" && (
-                      <div className="grid grid-cols-[1fr_auto] gap-3 items-end">
+                      <div className="grid grid-cols-2 gap-3 items-end">
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Valor da entrada (R$)</label>
+                          <input value={entradaValor} onChange={(e) => setEntradaValor(e.target.value)} type="number" step="0.01" min="0"
+                            placeholder="vazio = parcelas iguais"
+                            className="w-full bg-background border border-border rounded-[10px] px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/50 transition-colors" />
+                        </div>
                         <div className="space-y-1.5">
                           <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Nº de parcelas</label>
                           <input value={installmentsCount} onChange={(e) => setInstallmentsCount(e.target.value)} type="number" step="1" min="2" max="36"
@@ -567,6 +617,26 @@ export default function CreateClientModal({ open, onClose }: Props) {
                         </p>
                       </div>
                     )}
+                    <div className="grid grid-cols-2 gap-2">
+                      {[
+                        { v: true, label: "1ª parcela recebida", hint: "O valor já caiu no cadastro" },
+                        { v: false, label: "1ª a receber", hint: "Vence na data informada" },
+                      ].map((opt) => (
+                        <button
+                          key={String(opt.v)}
+                          type="button"
+                          onClick={() => setEntradaRecebida(opt.v)}
+                          className={`px-3 py-2 rounded-[10px] text-[12px] border transition-all cursor-pointer text-left ${
+                            entradaRecebida === opt.v
+                              ? "border-primary bg-primary/10 text-foreground"
+                              : "border-border bg-background text-muted-foreground hover:border-muted-foreground/40"
+                          }`}
+                        >
+                          <p className="font-semibold leading-tight">{opt.label}</p>
+                          <p className="text-[10px] opacity-70 mt-0.5">{opt.hint}</p>
+                        </button>
+                      ))}
+                    </div>
                     <p className="text-[10px] text-muted-foreground">Cria uma cobrança para cada parcela com vencimento mensal a partir da data escolhida.</p>
                   </div>
                 )}
