@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import ApprovedMediaPicker from "@/components/editorial/ApprovedMediaPicker";
+import { EditorialFileThumbnail } from "@/components/editorial/EditorialCalendarViews";
 import EditorialAccountSetup from "@/components/editorial/EditorialAccountSetup";
 import EditorialAssetPreviewDialog from "@/components/editorial/EditorialAssetPreviewDialog";
 import {
@@ -795,12 +796,59 @@ export default function EditorialScheduleDialog({
                     </div>
                   </div>
                 ) : (
-                  <ApprovedMediaPicker
-                    files={options?.files || []}
-                    usedRootFileIds={blockedUsedRootIds}
-                    selectedFileId={selectedAsset?.id || null}
-                    onSelect={selectAsset}
-                  />
+                  <>
+                    {/* Os conteúdos do CALENDÁRIO prontos para agendar, em um
+                        clique. O diálogo sempre soube quais são
+                        (schedulablePosts) — mas só os usava como índice
+                        interno, e quem agendava era obrigado a reencontrar a
+                        mídia na lista de arquivos. O card já carrega arte,
+                        título e plano de contas: escolher ele é escolher tudo. */}
+                    {schedulablePosts.length > 0 && (
+                      <div className="mb-3">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+                          Prontos no calendário — um clique
+                        </p>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {schedulablePosts.map((bundle) => {
+                            const asset = bundle.post.primary_file_id
+                              ? approvedAssetByRootId.get(bundle.post.primary_file_id)
+                              : undefined;
+                            if (!asset) return null;
+                            return (
+                              <button
+                                key={bundle.post.id}
+                                type="button"
+                                onClick={() => selectAsset(asset)}
+                                className="flex items-center gap-2.5 rounded-xl border border-primary/25 bg-primary/[0.04] p-2.5 text-left transition-colors hover:border-primary/50 hover:bg-primary/10"
+                              >
+                                <EditorialFileThumbnail
+                                  post={bundle}
+                                  className="h-12 w-12 shrink-0"
+                                />
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-[12.5px] font-medium text-foreground">
+                                    {bundle.post.title}
+                                  </span>
+                                  <span className="block truncate text-[10.5px] text-muted-foreground">
+                                    Arte e contas já definidas · só falta a data
+                                  </span>
+                                </span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                        <p className="my-2 text-center text-[10px] text-muted-foreground">
+                          ou escolha direto dos arquivos
+                        </p>
+                      </div>
+                    )}
+                    <ApprovedMediaPicker
+                      files={options?.files || []}
+                      usedRootFileIds={blockedUsedRootIds}
+                      selectedFileId={selectedAsset?.id || null}
+                      onSelect={selectAsset}
+                    />
+                  </>
                 )}
               </section>
 

@@ -422,7 +422,7 @@ function ContentDirection({
   );
 }
 
-function EditorialFileThumbnail({
+export function EditorialFileThumbnail({
   post,
   publication,
   className,
