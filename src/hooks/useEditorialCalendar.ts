@@ -174,6 +174,15 @@ export interface EditorialPublicationBundle {
 export interface EditorialPostBundle {
   post: EditorialPostRow;
   internal: EditorialPostInternalRow | null;
+  /**
+   * O plano visto INTEIRO, sem o recorte do mês. A tela carrega só as
+   * publicações do período visível; decidir "tem agendamento?" ou "já foi
+   * publicado?" pelas publicações recortadas fazia o conteúdo agendado para
+   * outro mês aparecer DUAS vezes (ancorado no prazo + no dia agendado) e o
+   * publicado continuar pintado de "Pronto".
+   */
+  temPlanoVivoGlobal: boolean;
+  publicadoGlobal: boolean;
   primaryFile: EditorialFileRow | null;
   primaryFileChildren?: EditorialFileRow[];
   publications: EditorialPublicationBundle[];
@@ -509,15 +518,19 @@ async function readEditorialCalendar(
   const hasPeriodFilter =
     Boolean(filters.rangeStart && filters.rangeEnd) && !filters.postId;
   let postIdsWithAnyRelevantPublications = new Set<string>();
+  const postIdsComPlanoVivoGlobal = new Set<string>();
+  const postIdsPublicadosGlobal = new Set<string>();
 
   if (hasPeriodFilter) {
     const presenceRows = await readAllPages<{
       id: string;
       post_id: string;
+      status: string;
+      scheduled_at: string | null;
     }>((from, to) => {
       let query = editorialDb
         .from("editorial_publications")
-        .select("id, post_id");
+        .select("id, post_id, status, scheduled_at");
 
       if (filters.clientId) {
         query = query.eq("client_id", filters.clientId);
@@ -545,6 +558,21 @@ async function readEditorialCalendar(
         .map((row) => row.post_id)
         .filter((postId) => postIdSet.has(postId)),
     );
+    /* O recorte por período era a raiz do card DUPLICADO: a tela só carrega
+       as publicações do mês visível, então um conteúdo agendado para OUTRO
+       mês parecia "sem plano" — continuava ancorado no prazo da tarefa (ou
+       no backlog) e ainda aparecia no dia agendado quando aquele mês era
+       aberto. E o publicado fora do recorte seguia pintado de "Pronto".
+       Estes dois conjuntos enxergam o plano INTEIRO, sem recorte. */
+    for (const row of presenceRows) {
+      if (!postIdSet.has(row.post_id)) continue;
+      if (row.scheduled_at && row.status !== "cancelled") {
+        postIdsComPlanoVivoGlobal.add(row.post_id);
+      }
+      if (row.status === "published" || row.status === "partially_published") {
+        postIdsPublicadosGlobal.add(row.post_id);
+      }
+    }
   }
   const accountIds = unique(
     publications.map((publication) => publication.external_account_id),
@@ -676,9 +704,25 @@ async function readEditorialCalendar(
     const primaryFile = post.primary_file_id
       ? fileById.get(post.primary_file_id) || null
       : null;
+    const vivoLocal = (publicationsByPostId.get(post.id) || []).some(
+      (publication) =>
+        Boolean(publication.scheduled_at) && publication.status !== "cancelled",
+    );
+    const publicadoLocal = (publicationsByPostId.get(post.id) || []).some(
+      (publication) =>
+        publication.status === "published" ||
+        publication.status === "partially_published",
+    );
     return {
       post,
       internal: postInternalById.get(post.id) || null,
+      // Sem recorte de período (quadro, detalhe), o local JÁ é o global.
+      temPlanoVivoGlobal: hasPeriodFilter
+        ? postIdsComPlanoVivoGlobal.has(post.id)
+        : vivoLocal,
+      publicadoGlobal: hasPeriodFilter
+        ? postIdsPublicadosGlobal.has(post.id)
+        : publicadoLocal,
       primaryFile,
       primaryFileChildren: orderedChildren(primaryFile),
       publications: (publicationsByPostId.get(post.id) || []).map(

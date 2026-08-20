@@ -282,6 +282,10 @@ function flattenBacklog(
 ) {
   return posts.flatMap<BacklogItem>((post) => {
     if (jaNaGrade?.has(post.post.id)) return [];
+    /* Agendado para OUTRO mês não é "sem prazo": ele tem data — só não é
+       neste recorte. Aparecia aqui porque as publicações chegam filtradas
+       pelo período, e a lista lia o vazio como plano inexistente. */
+    if (post.temPlanoVivoGlobal) return [];
     const unscheduled = post.publications.filter(
       ({ publication }) => !publication.scheduled_at,
     );

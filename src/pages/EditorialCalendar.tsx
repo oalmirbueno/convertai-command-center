@@ -844,10 +844,15 @@ export default function EditorialCalendar() {
         // O bundle guarda o id em post.id; a âncora só precisa disso e das
         // publicações, então a adaptação fica aqui e a lib segue sem saber
         // do formato da tela.
-        posts: filteredPosts.map((bundle) => ({
-          id: bundle.post.id,
-          publications: bundle.publications,
-        })),
+        /* O corte usa o estado GLOBAL, não as publicações recortadas pelo
+           mês: agendado para outro mês também sai da âncora — era o card
+           que aparecia em duas datas. */
+        posts: filteredPosts
+          .filter((bundle) => !bundle.temPlanoVivoGlobal)
+          .map((bundle) => ({
+            id: bundle.post.id,
+            publications: bundle.publications,
+          })),
         tarefas: (tasksQuery.data || []) as Array<{ id: string; due_date?: string | null }>,
         postIdPorTarefa: linkedPostIdByTaskId,
       }),
