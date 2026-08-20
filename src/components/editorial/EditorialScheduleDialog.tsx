@@ -240,15 +240,24 @@ export default function EditorialScheduleDialog({
     () => (schedulingPosts.data || []).filter(isSchedulablePost),
     [schedulingPosts.data],
   );
-  const existingPostByRootId = useMemo(
-    () =>
-      new Map(
-        schedulablePosts
-          .filter((bundle) => bundle.post.primary_file_id)
-          .map((bundle) => [bundle.post.primary_file_id!, bundle]),
-      ),
-    [schedulablePosts],
-  );
+  const existingPostByRootId = useMemo(() => {
+    /* TODO post vivo entra no índice, não só os estritamente agendáveis.
+       Antes, escolher a arte de um post que existia mas falhava a régua
+       estrita fazia o save tentar CRIAR outro post com o mesmo arquivo — e o
+       banco recusava com "already linked to another content". O dono lia:
+       "não consigo agendar de nenhuma forma". Com o post no índice, o save
+       vira ATUALIZAÇÃO do que já existe. Os estritos entram por último para
+       manterem prioridade. */
+    const mapa = new Map(
+      ((schedulingPosts.data || []) as EditorialPostBundle[])
+        .filter((bundle) => bundle.post.primary_file_id)
+        .map((bundle) => [bundle.post.primary_file_id!, bundle]),
+    );
+    for (const bundle of schedulablePosts) {
+      if (bundle.post.primary_file_id) mapa.set(bundle.post.primary_file_id, bundle);
+    }
+    return mapa;
+  }, [schedulingPosts.data, schedulablePosts]);
   const allowedUsedRootIds = useMemo(
     () => new Set(existingPostByRootId.keys()),
     [existingPostByRootId],

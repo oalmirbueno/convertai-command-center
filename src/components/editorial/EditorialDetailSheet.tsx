@@ -329,6 +329,35 @@ export default function EditorialDetailSheet({
   // Agendamento inline: conta + data no proprio popup, sem abrir o editor.
   const [inlineAccountId, setInlineAccountId] = useState("");
   const [inlineWhen, setInlineWhen] = useState("");
+
+  /** A publicação agendada deste card, se houver — vira remarcação. */
+  const agendadaAtual = useMemo(
+    () =>
+      post?.publications.find(
+        ({ publication }) =>
+          publication.status === "scheduled" && publication.scheduled_at,
+      ) || null,
+    [post],
+  );
+
+  // Remarcar começa do estado REAL: conta e horário atuais preenchidos.
+  // Campos vazios num card já agendado davam a impressão de agendar do zero
+  // — e era um passo a mais para quem só quer empurrar o horário.
+  useEffect(() => {
+    if (!open) return;
+    if (agendadaAtual) {
+      setInlineAccountId(agendadaAtual.publication.external_account_id || "");
+      setInlineWhen(
+        isoUtcToZonedDateTimeLocal(
+          agendadaAtual.publication.scheduled_at!,
+          EDITORIAL_DEFAULT_TIME_ZONE,
+        ) || "",
+      );
+    } else {
+      setInlineAccountId("");
+      setInlineWhen("");
+    }
+  }, [open, agendadaAtual]);
   const [inlineSaving, setInlineSaving] = useState(false);
   const editorOptions = useEditorialEditorOptions(
     post?.post.client_id || null,
@@ -369,23 +398,77 @@ export default function EditorialDetailSheet({
       );
 
       if (active && hasTerminal) {
-        // Já entrou no fluxo (agendada ou em falha): reagenda pela transição
-        // oficial, na mesma conta. O save completo é bloqueado pelo banco
-        // nesse estado, e era daqui que nascia o card duplicado.
         if (!scheduledAtIso) {
           toast.error(
-            "Este conteúdo já está no fluxo de publicação. Informe a nova data e horário para reagendar.",
+            "Este conteúdo já está no fluxo de publicação. Informe a nova data e horário para remarcar.",
           );
           return;
         }
-        await transitionPublication.mutateAsync({
-          publicationId: active.publication.id,
-          action: "schedule",
-          expectedVersion: active.publication.version,
-          scheduledAt: scheduledAtIso,
-          timezone: EDITORIAL_DEFAULT_TIME_ZONE,
-        });
-        toast.success("Publicação reagendada no mesmo card, sem duplicar.");
+        const contaMudou =
+          inlineAccountId !== active.publication.external_account_id;
+        if (contaMudou && active.publication.status === "scheduled") {
+          /* Trocar a CONTA de uma publicação agendada. A transição oficial só
+             move a data; o save do caminho aprovado é quem sabe editar uma
+             agendada inteira (conta + horário) no MESMO card — ele a volta
+             para o plano e re-agenda no fim, tudo numa transação. Antes, a
+             única saída era cancelar e criar outra, que é exatamente o
+             card duplicado que estamos evitando. */
+          const publications = fresh.publications
+            .filter(({ publication }) =>
+              ["planned", "scheduled"].includes(publication.status),
+            )
+            .map(({ publication, internal }) => {
+              const alvo = publication.id === active.publication.id;
+              return {
+                id: publication.id,
+                idempotency_key:
+                  internal?.idempotency_key || crypto.randomUUID(),
+                external_account_id: alvo
+                  ? inlineAccountId
+                  : publication.external_account_id,
+                file_id: publication.file_id,
+                caption: publication.caption,
+                first_comment: publication.first_comment,
+                alt_text: publication.alt_text,
+                scheduled_at: alvo ? scheduledAtIso : publication.scheduled_at,
+                scheduled_timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+              };
+            });
+          await savePost.mutateAsync({
+            payload: {
+              id: fresh.post.id,
+              idempotency_key:
+                fresh.internal?.idempotency_key || crypto.randomUUID(),
+              mutation_id: crypto.randomUUID(),
+              client_id: fresh.post.client_id,
+              project_id: fresh.post.project_id,
+              primary_file_id: fresh.post.primary_file_id,
+              title: fresh.post.title,
+              content_type: fresh.post.content_type,
+              objective: fresh.post.objective,
+              default_caption: fresh.post.default_caption,
+              production_status: fresh.post.production_status,
+              task_id: fresh.internal?.task_id || null,
+              responsible_id: fresh.internal?.responsible_id || null,
+              internal_notes: fresh.internal?.internal_notes || null,
+              revision_of_post_id: fresh.internal?.revision_of_post_id ?? null,
+              publications,
+            },
+            expectedVersion: fresh.post.version,
+          });
+          toast.success("Conta e horário atualizados no mesmo card.");
+        } else {
+          // Só a data mudou (ou a publicação está em falha): a transição
+          // oficial resolve sem tocar no resto do plano.
+          await transitionPublication.mutateAsync({
+            publicationId: active.publication.id,
+            action: "schedule",
+            expectedVersion: active.publication.version,
+            scheduledAt: scheduledAtIso,
+            timezone: EDITORIAL_DEFAULT_TIME_ZONE,
+          });
+          toast.success("Publicação remarcada no mesmo card, sem duplicar.");
+        }
       } else if (!active && hasTerminal) {
         toast.info(
           "Este conteúdo já foi publicado. Para publicar de novo, crie um novo conteúdo.",
@@ -1439,11 +1522,12 @@ export default function EditorialDetailSheet({
               {post.publications.length === 0 && (
                 <div className="rounded-xl border border-dashed border-primary/40 bg-primary/[0.04] p-4 sm:p-5">
                   <p className="text-[13px] font-medium text-foreground">
-                    Programar publicação
+                    {agendadaAtual ? "Remarcar publicação" : "Programar publicação"}
                   </p>
                   <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                    Escolha a conta e o horário aqui mesmo. Se o material já estiver aprovado,
-                    sai no horário marcado; se ainda não estiver, sai até 1 hora depois da aprovação.
+                    {agendadaAtual
+                      ? "Já agendada — mude a conta ou o horário e confirme: atualiza no mesmo card, sem duplicar."
+                      : "Escolha a conta e o horário aqui mesmo. Se o material já estiver aprovado, sai no horário marcado; se ainda não estiver, sai até 1 hora depois da aprovação."}
                   </p>
                   {canEdit && !isImpersonating && (
                     <div className="mt-3 space-y-2.5">
@@ -1490,7 +1574,7 @@ export default function EditorialDetailSheet({
                         ) : (
                           <CalendarCheck2 className="mr-1.5 h-3.5 w-3.5" />
                         )}
-                        Programar
+                        {agendadaAtual ? "Remarcar" : "Programar"}
                       </Button>
                     </div>
                   )}
