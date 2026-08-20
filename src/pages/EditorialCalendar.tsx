@@ -1949,6 +1949,22 @@ export default function EditorialCalendar() {
           defaultScheduledAt={scheduleDefaultAt}
           onOpenChange={setScheduleOpen}
           onScheduled={({ postId, scheduledAt, clientId, projectId }) => {
+            /* Agendar mudava a URL e NÃO relia o calendário.
+               O conteúdo continuava desenhado no lugar antigo — ancorado no
+               prazo da tarefa, porque a cópia em cache ainda não tinha
+               publicação — enquanto o novo agendamento aparecia no dia
+               marcado. Dois cards do MESMO conteúdo, e a impressão de que
+               agendar duplica em vez de mover.
+
+               As três fontes precisam ser relidas juntas: o calendário
+               (publicações), os vínculos (o que é âncora) e as tarefas (o
+               dia herdado). Relendo só uma, a duplicata sobrevive na que
+               ficou para trás. */
+            void Promise.all([
+              queryClient.invalidateQueries({ queryKey: ["editorial-calendar"] }),
+              queryClient.invalidateQueries({ queryKey: ["editorial-linked-task-ids"] }),
+              queryClient.invalidateQueries({ queryKey: ["tasks"] }),
+            ]);
             const next = new URLSearchParams(searchParams);
             next.set("view", view === "board" ? "month" : view);
             const scheduledDateKey = dateKeyInTimeZone(scheduledAt);

@@ -691,7 +691,20 @@ function AnchoredPostPill({
   compact?: boolean;
   onClick: () => void;
 }) {
-  const etapa = editorialVisualStage(post.post.production_status);
+  /* A etapa considera as PUBLICAÇÕES, não só o status de produção.
+     Lendo só production_status, um conteúdo que já saiu continuava exibido
+     como "Pronto" — o card contava uma etapa anterior à realidade. */
+  const agregado = aggregateEditorialStatus(
+    post.publications.map(({ publication }) => publication),
+  );
+  const publicacaoComData = post.publications.find(
+    ({ publication }) => publication.scheduled_at,
+  );
+  const etapa = editorialVisualStage(
+    post.post.production_status,
+    agregado,
+    publicacaoComData?.publication.scheduled_at ?? null,
+  );
   const cor = corDaEtapa(etapa);
   const nomeEtapa = EDITORIAL_VISUAL_STAGE_LABELS[etapa] || etapa;
 
@@ -725,7 +738,9 @@ function AnchoredPostPill({
         </span>
         {!compact && (
           <span className="block truncate text-[9.5px] text-muted-foreground">
-            Dia herdado do prazo da tarefa · sem agendamento
+            {etapa === "published"
+              ? "Já publicado · dia herdado do prazo da tarefa"
+              : "Dia herdado do prazo da tarefa · sem agendamento"}
           </span>
         )}
       </span>
