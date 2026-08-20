@@ -39,7 +39,10 @@ describe("o conteúdo permanece no dia, e quem decide é o post", () => {
     expect(card).toContain("<EditorialFileThumbnail");
     expect(card).toContain("corDaEtapa(etapa)");
     expect(card).toContain("EDITORIAL_VISUAL_STAGE_LABELS");
-    expect(card).toContain("editorialVisualStage(post.post.production_status)");
+    // A chamada de um argumento só ERA o defeito seguinte: lia apenas
+    // production_status e conteúdo publicado seguia como "Pronto".
+    expect(card).toContain("aggregateEditorialStatus(");
+    expect(card).toContain("post.post.production_status,");
   });
 
   it("as quatro células da grade desenham o ancorado", () => {
