@@ -61,8 +61,12 @@ describe("cada momento tem um trabalho próprio", () => {
   });
 
   it("o fechamento faz o balanço e aponta o próximo passo", () => {
-    expect(fim).toContain("balanço");
-    expect(fim).toContain("Próximo passo: Subir a campanha de conversas");
+    // A intenção é a mesma; a sexta virou narrativa e as palavras mudaram
+    // com ela. O que não pode faltar: o que rendeu, para onde vamos, e o
+    // fecho cordial.
+    expect(fim).toContain("o que foi feito, o que rendeu");
+    expect(fim).toContain("Subir a campanha de conversas");
+    expect(fim).toContain("Já preparado para a próxima semana");
     expect(fim).toContain("Bom fim de semana");
   });
 });

@@ -38,13 +38,17 @@ describe("o calendário editorial tira a mensagem do genérico", () => {
   it("a abertura cita a peça pronta pelo nome", () => {
     const texto = buildGroupMessageText(comPautas, "abertura");
     expect(texto).toContain("Seu Vizinho vai te agradecer");
-    expect(texto).toContain("prontos para entrar no ar");
+    // A promessa é a mesma — a peça é citada pelo NOME e com destino —, agora
+    // dentro do bloco "O que já está garantido".
+    expect(texto).toContain("entram no calendário");
   });
 
   it("a peça pronta substitui o genérico 'em produção nesta semana'", () => {
     // Era a linha que dominava o texto quando não havia entrega na janela.
-    expect(buildGroupMessageText(semNada, "abertura")).toContain("Em produção nesta semana");
-    expect(buildGroupMessageText(comPautas, "abertura")).not.toContain("Em produção nesta semana");
+    // Sem peça pronta, a abertura fala das frentes em vez de ficar vazia;
+    // com peça pronta, ela some — que era o ponto original do teste.
+    expect(buildGroupMessageText(semNada, "abertura")).toContain("em produção");
+    expect(buildGroupMessageText(comPautas, "abertura")).not.toContain("em produção");
   });
 
   it("o meio da semana conta o que está pronto quando nada mais andou", () => {
@@ -53,10 +57,14 @@ describe("o calendário editorial tira a mensagem do genérico", () => {
     expect(texto).not.toContain("produção interna");
   });
 
-  it("o fechamento inclui as peças no balanço", () => {
+  it("o fechamento inclui as peças, agora como preparo da semana seguinte", () => {
+    // Mudança deliberada de lugar: peça pronta não é entrega feita, é o que
+    // JÁ está preparado para a próxima — e é isso que evita a sexta soar
+    // como se nada continuasse.
     const texto = buildGroupMessageText(comPautas, "fechamento");
-    expect(texto).toContain("ficaram prontos");
-    expect(texto).toContain("entrar no calendário");
+    expect(texto).toContain("Já preparado para a próxima semana");
+    expect(texto).toContain("Seu Vizinho vai te agradecer");
+    expect(texto).toContain("esperando data");
   });
 
   it("sem pauta pronta, o texto antigo continua valendo", () => {
