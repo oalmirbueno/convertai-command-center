@@ -28,7 +28,10 @@ describe("o conteúdo permanece no dia, e quem decide é o post", () => {
 
   it("a âncora recebe só os posts que a tela já decidiu mostrar", () => {
     // Ancorar um post filtrado o traria de volta por cima do filtro escolhido.
-    expect(pagina).toContain("posts: filteredPosts.map((bundle) => ({");
+    // A forma evoluiu: além de mostrar só o que a tela decidiu, a âncora
+    // corta pelo estado GLOBAL do plano (agendado em qualquer mês sai).
+    expect(pagina).toContain(".filter((bundle) => !bundle.temPlanoVivoGlobal)");
+    expect(pagina).toContain(".map((bundle) => ({");
   });
 
   it("o conteúdo ancorado tem card próprio, com arte e cor da etapa", () => {
