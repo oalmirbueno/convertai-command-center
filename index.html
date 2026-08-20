@@ -8,6 +8,13 @@
     <meta name="author" content="Aceleriq" />
     <meta name="referrer" content="no-referrer" />
 
+    <!-- CSP: a camada que falta contra script injetado e roubo de sessão.
+         Os DOIS scripts inline (o truque do manifest /ciclo e a tela de
+         carregamento) são liberados por HASH — se qualquer um deles mudar UMA vírgula, o hash
+         correspondente precisa ser recalculado, senão o PWA do Ciclo para de instalar.
+         frame-ancestors não funciona em meta; o resto cobre o essencial. -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'sha256-FZoK0LH5u342WeKcUReCZliwHoSlyRewd8+FMkrbIi0=' 'sha256-tlCwAKfqEy7+wdGMuN73mbzCuFfzYWn1s4ekekOifP0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https:; media-src 'self' blob: https://*.supabase.co; connect-src 'self' https://*.supabase.co wss://*.supabase.co; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'" />
+
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#0D0D0D" />
     <meta name="apple-mobile-web-app-capable" content="yes" />

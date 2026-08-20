@@ -409,6 +409,14 @@
       "remote_name": "carrossel_liberado_agendavel",
       "remote_statements_sha256": "840a4091123f96de9b39e15c809ccbe2bdda74265fbf3310b05949521cf122fd",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260821150000",
+      "path": "supabase/migrations/20260821150000_mover_arquivo.sql",
+      "local_sha256": "1c2902a4f171e1229c517ba657b930a98247bbd27c26bb7bf9f40afeb7ee4223",
+      "remote_name": "mover_arquivo",
+      "remote_statements_sha256": "9af2966b4c2720a239b025a2f65efc6476f3e30dbe37072a928dd6982bdfdbe0",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

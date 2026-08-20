@@ -488,23 +488,17 @@ export default function AdminFiles() {
   };
 
   const handleMoveFolder = async (fileId: string, newFolder: string) => {
-    const target = (allFiles || []).find((file: any) => file.id === fileId);
-    if (!isEditableFile(target)) {
-      toast({
-        title: "Edição indisponível",
-        description: "O arquivo só pode ser movido antes de entrar em revisão.",
-        variant: "destructive",
-      });
-      return;
-    }
+    /* Mover de pasta é organizar a gaveta, não mexer no material — vale para
+       qualquer arquivo, em revisão ou liberado. O update direto era barrado
+       pela política de escrita (que exige arquivo intocado), então a mudança
+       passa pela função dedicada, com a régua própria dela. */
     try {
-      const { data, error } = await supabase
-        .from("files")
-        .update({ folder: newFolder })
-        .or(`id.eq.${fileId},parent_file_id.eq.${fileId}`)
-        .select("id");
+      const { data, error } = await (supabase as any).rpc("move_file", {
+        _file_id: fileId,
+        _folder: newFolder,
+      });
       if (error) throw error;
-      if (!data?.length) throw new Error("Nenhum arquivo foi alterado.");
+      if (!data) throw new Error("Nenhum arquivo foi alterado.");
       void invalidateFileViews();
       if (previewFile?.id === fileId) {
         setPreviewFile((prev: any) => prev ? { ...prev, folder: newFolder } : null);
@@ -1528,19 +1522,54 @@ export default function AdminFiles() {
                   <p className="text-xs text-foreground">{previewFile.agency_feedback}</p>
                 </div>
               )}
-              {/* Move folder */}
+              {/* Mover de pasta e de projeto: organização vale para qualquer
+                  arquivo — a trava antiga (só antes da revisão) prendia
+                  exatamente os que mais precisavam de arrumação. */}
               <div className="flex items-center gap-2">
                 <FolderInput className="w-4 h-4 text-muted-foreground shrink-0" />
                 <Select
                   value={previewFile.folder || "estrategicos"}
                   onValueChange={(v) => handleMoveFolder(previewFile.id, v)}
-                  disabled={!isEditableFile(previewFile)}
                 >
                   <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {FOLDERS.map(f => <SelectItem key={f.id} value={f.id}>{f.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+                <Select
+                  value={previewFile.project_id || ""}
+                  onValueChange={async (v) => {
+                    try {
+                      const { error } = await (supabase as any).rpc("move_file", {
+                        _file_id: previewFile.id,
+                        _project_id: v,
+                      });
+                      if (error) throw error;
+                      void invalidateFileViews();
+                      setPreviewFile((prev: any) =>
+                        prev ? { ...prev, project_id: v } : null,
+                      );
+                      toast({ title: "Projeto do arquivo atualizado" });
+                    } catch (e: any) {
+                      toast({
+                        title: "Não foi possível mudar o projeto",
+                        description: e?.message || "Tente de novo.",
+                        variant: "destructive",
+                      });
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-8 text-xs bg-secondary border-border rounded-lg">
+                    <SelectValue placeholder="Projeto" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(projects || [])
+                      .filter((pj: any) => pj.client_id === previewFile.client_id)
+                      .map((pj: any) => (
+                        <SelectItem key={pj.id} value={pj.id}>{pj.name}</SelectItem>
+                      ))}
                   </SelectContent>
                 </Select>
               </div>

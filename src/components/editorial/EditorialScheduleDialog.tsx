@@ -808,6 +808,14 @@ export default function EditorialScheduleDialog({
                               ? "Vídeo"
                               : "Post"}
                         </span>
+                        {/* O desenho da casa: organizar na agenda NÃO exige
+                            aprovação — só o publicar exige. O selo diz isso
+                            antes de o dono descobrir na prática. */}
+                        {!isFilePublishable(selectedAsset.root as never) && (
+                          <span className="mt-1.5 inline-flex rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-semibold text-warning">
+                            Entra na agenda · publica após aprovação
+                          </span>
+                        )}
                       </span>
                     </div>
                     {/* Empilhados no aparelho estreito: lado a lado, "Trocar
