@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -50,7 +51,6 @@ import {
   type EditorialFileRow,
   type EditorialPostBundle,
 } from "@/hooks/useEditorialCalendar";
-import { editorialErrorMessage } from "@/lib/editorialErrorMessage";
 import {
   EDITORIAL_DEFAULT_TIME_ZONE,
   isoUtcToZonedDateTimeLocal,
@@ -545,23 +545,44 @@ export default function EditorialEditor({
     setPublications([]);
   };
 
+  /**
+   * Arquivo subido sem projeto é adotado NESTE projeto.
+   *
+   * A primeira versão disto rodava em segundo plano no clique — e o salvar
+   * disparava antes de a adoção terminar: o banco recusava com "files must
+   * be readable root files from the selected client and project", em cima
+   * do arquivo certo. Agora a adoção é AGUARDÁVEL, o salvar espera por ela,
+   * e falha aparece em vez de ser engolida.
+   */
+  const adotarArquivoNoProjeto = async (
+    rootId: string,
+    fileIds: string[],
+  ): Promise<boolean> => {
+    if (!projectId) return false;
+    const { error } = await (supabase as any)
+      .from("files")
+      .update({ project_id: projectId })
+      .in("id", [rootId, ...fileIds])
+      .is("project_id", null);
+    if (error) {
+      toast.error(
+        error instanceof Error
+          ? `A arte não pôde entrar no projeto: ${error.message}`
+          : "A arte não pôde entrar no projeto. Vincule-a em Arquivos e tente de novo.",
+      );
+      return false;
+    }
+    void refetchOptions();
+    return true;
+  };
+
   const selectApprovedMedia = (asset: EditorialApprovedMediaAsset) => {
     if (savedContentLocked) return;
-    /* Arquivo subido sem projeto é adotado NESTE projeto ao ser escolhido.
-       Sem isto, o salvar recusaria ("files must be ... from the selected
-       client and project") — e o arquivo aparecia na lista mas não servia,
-       que é pior do que não aparecer. Só o editável aceita update; os já
-       revisados nunca chegam aqui sem projeto. */
     if (!asset.root.project_id && projectId) {
-      void (async () => {
-        const ids = [asset.root.id, ...asset.files.map((f) => f.id)];
-        const { error } = await (supabase as any)
-          .from("files")
-          .update({ project_id: projectId })
-          .in("id", ids)
-          .is("project_id", null);
-        if (!error) void refetchOptions();
-      })();
+      void adotarArquivoNoProjeto(
+        asset.root.id,
+        asset.files.map((f) => f.id),
+      );
     }
     const approvedCaption = asset.root.caption?.trim() || "";
     setPrimaryFileId(asset.root.id);
@@ -677,6 +698,21 @@ export default function EditorialEditor({
           };
         });
 
+      /* O clique já dispara a adoção, mas clique e salvar correm em
+         paralelo: se o arquivo escolhido AINDA está sem projeto no estado
+         atual, o salvar espera a adoção concluir — senão o banco recusa a
+         arte certa por projeto divergente. */
+      if (primaryFileId) {
+        const raiz = optionFiles.find((file) => file.id === primaryFileId);
+        if (raiz && !raiz.project_id) {
+          const filhos = optionFiles
+            .filter((file) => file.parent_file_id === primaryFileId)
+            .map((file) => file.id);
+          const adotado = await adotarArquivoNoProjeto(primaryFileId, filhos);
+          if (!adotado) return;
+        }
+      }
+
       savingNavigationRef.current = true;
       const result = await savePost.mutateAsync({
         payload: {
@@ -771,7 +807,9 @@ export default function EditorialEditor({
         );
         return;
       }
-      toast.error(message);
+      // O tradutor conhece as guardas do banco; cru em inglês não chega
+      // mais à tela.
+      toast.error(editorialErrorMessage(error, message));
     }
   };
 
