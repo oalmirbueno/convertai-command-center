@@ -3,14 +3,29 @@
 // os erros conhecidos viram frases em português com o próximo passo. Erro
 // desconhecido mantém o texto original para não esconder informação.
 const TRANSLATIONS: Array<{ test: RegExp; message: string }> = [
+  // A ordem importa: o primeiro padrão que casa vence, e vários erros do
+  // banco terminam em "create a revision". Com o genérico no topo, TODOS
+  // viravam "está em revisão" — foi assim que um conteúdo APROVADO apareceu
+  // para o dono como "em revisão" na hora de agendar. Específicos primeiro;
+  // o genérico é o último recurso.
   {
-    test: /already under review|create a revision/i,
+    test: /approved editorial snapshot is immutable/i,
     message:
-      "Este material está em revisão. Atualize a página e tente de novo; se continuar, crie uma revisão do material.",
+      "O registro de aprovação deste conteúdo não bate com o material atual. Recarregue a página e tente de novo; persistindo, crie uma revisão.",
+  },
+  {
+    test: /approved editorial copy is immutable/i,
+    message:
+      "Este conteúdo aprovado teve o texto ou o plano alterado por fora. Recarregue a página e tente de novo; persistindo, crie uma revisão.",
   },
   {
     test: /approved editorial version is immutable/i,
     message: "Este conteúdo já foi aprovado. Para trocar o material, crie uma revisão.",
+  },
+  {
+    test: /already under review|create a revision/i,
+    message:
+      "Este material está em revisão. Atualize a página e tente de novo; se continuar, crie uma revisão do material.",
   },
   {
     test: /scheduled or terminal publications cannot be edited/i,
