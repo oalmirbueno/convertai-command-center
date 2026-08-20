@@ -28,7 +28,8 @@ describe("o cadastro pergunta em vez de presumir", () => {
   });
 
   it("recebido continua sendo o padrão — o caso comum não ganha passo extra", () => {
-    expect(modal).toContain("useState(true);\n  const [entradaRecebida, setEntradaRecebida] = useState(true)");
+    expect(modal).toContain("const [mensalidadeRecebida, setMensalidadeRecebida] = useState(true)");
+    expect(modal).toContain("const [entradaRecebida, setEntradaRecebida] = useState(true)");
   });
 });
 
