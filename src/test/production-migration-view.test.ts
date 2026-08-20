@@ -96,7 +96,10 @@ function buildFixture(appliedForward = 0) {
   return { root, ledgerCsvPath, outputDir, result };
 }
 
-describe("production migration view", () => {
+// Timeout proprio: os its montam pacotes reais no filesystem e, com a suite
+// inteira em paralelo, o padrao de 5s estoura por CARGA — nao por regressao.
+// O falso-vermelho recorrente custava um cheque manual a cada rodada.
+describe("production migration view", { timeout: 30000 }, () => {
   it("parses quoted RFC-style CSV and the Supabase statement boundaries", () => {
     expect(parseCsv(
       '\uFEFF"first","comma,value","escaped ""quote"""\r\n'
