@@ -173,7 +173,11 @@ function meio(ctx: GroupMessageContext): string {
     );
   }
   if (ctx.cicloFeito.length > 0) {
-    movimento.push(`da rotina da semana, já saíram ${listInWords(ctx.cicloFeito, 3)}`);
+    // Molde com dois-pontos porque as etapas chegam como ORAÇÕES ("o conteúdo
+    // ficou pronto"), não como substantivos. Com "já saíram X" a frase saía
+    // "já saíram o conteúdo da semana ficou pronto" — e a oração informa mais
+    // do que o substantivo, então quem cede é o molde.
+    movimento.push(`da rotina da semana: ${listInWords(ctx.cicloFeito, 3)}`);
   }
   if (ctx.avulsosFeitos.length > 0) {
     movimento.push(`fora da rotina, também fizemos ${listInWords(ctx.avulsosFeitos, 2)}`);

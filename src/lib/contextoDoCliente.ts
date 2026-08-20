@@ -37,6 +37,84 @@ function ehCabecalho(linha: string): boolean {
   return limpa.length > 0 && limpa.length <= 40 && limpa === limpa.toUpperCase();
 }
 
+/* ──────────────────── O que, no dossiê, vale a pena contar ───────────────── */
+
+/**
+ * Cabeçalhos que anunciam a SITUAÇÃO do cliente.
+ *
+ * Todo dossiê que a rotina do GPT escreve tem uma seção assim, e é a única
+ * parte que interessa a quem vai receber a mensagem. O que vem antes é
+ * aparato: título, data, fontes consultadas, regras de leitura.
+ */
+const SECAO_DE_SITUACAO =
+  /^#*\s*(onde estamos|status atual|situa[çc][ãa]o atual|situa[çc][ãa]o|status|resumo|panorama)\s*:?\s*$/i;
+
+/**
+ * Linhas que são ficha técnica, não informação.
+ *
+ * `Client ID:` e `Project ID:` são o caso grave: identificadores internos que
+ * chegariam ao cliente numa mensagem de WhatsApp se o texto fosse cortado
+ * cru pelos primeiros caracteres.
+ */
+const LINHA_DE_FICHA =
+  /^(#*\s*)?(dossi[êe] de contexto|fontes? consultadas?|data( da atualiza[çc][ãa]o)?|cliente|marca|unidade|natureza|projeto|client id|project id|fonte principal|complemento|regra de leitura|atualiza[çc][ãa]o de)\b.*$/i;
+
+/** Qualquer coisa com cara de identificador não sai do painel. */
+const TEM_IDENTIFICADOR =
+  /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i;
+
+/** Corta no fim de uma frase, nunca no meio de uma palavra. */
+function ateOFimDaFrase(texto: string, limite: number): string {
+  if (texto.length <= limite) return texto;
+  const pedaco = texto.slice(0, limite + 1);
+  const fim = Math.max(
+    pedaco.lastIndexOf(". "),
+    pedaco.lastIndexOf("; "),
+    pedaco.lastIndexOf("! "),
+    pedaco.lastIndexOf("? "),
+  );
+  // Sem frase inteira que caiba, recua até o último espaço: melhor curto e
+  // legível do que uma palavra partida ao meio.
+  if (fim > limite * 0.4) return pedaco.slice(0, fim + 1).trim();
+  const espaco = pedaco.lastIndexOf(" ");
+  return `${pedaco.slice(0, espaco > 0 ? espaco : limite).trim()}…`;
+}
+
+/**
+ * O que o dossiê diz sobre a situação do cliente, em prosa que se lê.
+ *
+ * Pegar os primeiros caracteres dava, nos textos reais, o cabeçalho: "FONTES
+ * CONSULTADAS Painel Aceleriq: cadastro, projetos, dossiê completo…" — o
+ * cliente recebendo a lista de fontes que a IA consultou, cortada no meio de
+ * uma palavra. Aqui a leitura procura a seção de situação, pula a ficha
+ * técnica e corta no fim de uma frase.
+ */
+export function resumoDoDossie(conteudo: string, limite = 320): string {
+  const linhas = String(conteudo || "")
+    .split("\n")
+    .map((l) => l.trim());
+
+  const inicio = linhas.findIndex((l) => SECAO_DE_SITUACAO.test(l));
+  const corpo = inicio >= 0 ? linhas.slice(inicio + 1) : linhas;
+
+  const prosa: string[] = [];
+  for (const linha of corpo) {
+    if (linha.length === 0) continue;
+    // Cabeçalho da PRÓXIMA seção encerra o trecho: misturar seções produz
+    // exatamente o texto confuso que se quer evitar.
+    if (prosa.length > 0 && (/^#+\s/.test(linha) || (linha === linha.toUpperCase() && linha.length <= 40))) break;
+    if (LINHA_DE_FICHA.test(linha)) continue;
+    if (TEM_IDENTIFICADOR.test(linha)) continue;
+    if (/^#+\s/.test(linha)) continue;
+    if (linha === linha.toUpperCase() && linha.length <= 40) continue;
+    prosa.push(linha);
+  }
+
+  const texto = prosa.join(" ").replace(/\s+/g, " ").trim();
+  return texto ? ateOFimDaFrase(texto, limite) : "";
+}
+
+
 /**
  * O trecho que representa a entrada na tela.
  *
@@ -53,11 +131,16 @@ export function trechoDoContexto(entrada: EntradaDeContexto, limite = 160): stri
   const bruto = usarCorpo && corpo.length > 0 ? corpo : titulo;
   if (!bruto) return "";
 
+  // Texto com secoes -- o formato que a rotina do GPT escreve -- tem leitura
+  // propria: ela acha a situacao e pula a ficha tecnica.
+  const resumo = usarCorpo ? resumoDoDossie(bruto, limite) : "";
+  if (resumo) return resumo;
+
   const linhas = bruto.split("\n").map((l) => l.trim()).filter(Boolean);
   // O cabeçalho sozinho não vira o trecho inteiro; ele acompanha o texto.
   const comeco = linhas.length > 1 && ehCabecalho(linhas[0]) ? linhas.slice(1) : linhas;
   const texto = comeco.join(" ").replace(/\s+/g, " ").trim();
-  return texto.length > limite ? `${texto.slice(0, limite).trimEnd()}…` : texto;
+  return ateOFimDaFrase(texto, limite);
 }
 
 /**

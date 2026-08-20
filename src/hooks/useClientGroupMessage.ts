@@ -12,6 +12,7 @@ import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
+import { rotinaEmLinguagemDeCliente } from "@/lib/rotinaDoCliente";
 
 /**
  * A mensagem do grupo de UM cliente, montada onde ela for precisa.
@@ -117,20 +118,12 @@ export function useClientGroupMessage(client: any | null) {
         .map((d) => d.toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }));
 
       // As etapas do ciclo desta semana, nas palavras daquele cliente.
-      const cicloFeito: string[] = [];
-      for (const area of ["social", "trafego"] as const) {
-        const marcados = ((ciclo as any).data || []).filter(
-          (r: any) => r.area === area && r.step <= 6,
-        );
-        if (marcados.length === 0) continue;
-        const rotulos = stepLabelsForWeek(area, clientId!, semanaKey, {
-          services: client.services_config,
-        });
-        for (const row of marcados) {
-          const rotulo = rotulos[row.step - 1];
-          if (rotulo) cicloFeito.push(rotulo.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
-        }
-      }
+      // Mesma traducao da Central: uma regra so para as duas telas.
+      const cicloFeito = rotinaEmLinguagemDeCliente(
+        (((ciclo as any).data || []) as any[])
+          .filter((r) => r.step <= 6)
+          .map((r) => ({ area: r.area, step: r.step })),
+      );
 
       const registros = ((memoria as any).data || []) as any[];
       const avulsosFeitos = registros

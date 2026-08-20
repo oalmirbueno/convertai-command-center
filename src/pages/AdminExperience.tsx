@@ -20,6 +20,7 @@ import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
+import { rotinaEmLinguagemDeCliente } from "@/lib/rotinaDoCliente";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
@@ -1526,18 +1527,12 @@ export default function AdminExperience() {
     const cicloDoCliente = (cycleRows || []).filter(
       (row: any) => row.client_id === client.id && row.step <= 6,
     );
-    const cicloFeito: string[] = [];
-    for (const area of ["social", "trafego"] as const) {
-      const feitos = cicloDoCliente.filter((row: any) => row.area === area);
-      if (feitos.length === 0) continue;
-      const rotulos = stepLabelsForWeek(area, client.id, cycleWeekKey, {
-        services: client.services_config,
-      });
-      for (const row of feitos) {
-        const rotulo = rotulos[row.step - 1];
-        if (rotulo) cicloFeito.push(rotulo.replace(/\s*\(.*?\)\s*/g, "").toLowerCase());
-      }
-    }
+    // As etapas do ciclo ditas na lingua do cliente. O checklist e escrito
+    // para quem EXECUTA ("subir no painel"), e passa-lo cru mandava bastidor
+    // da agencia como se fosse noticia do cliente.
+    const cicloFeito = rotinaEmLinguagemDeCliente(
+      cicloDoCliente.map((row: any) => ({ area: row.area, step: row.step })),
+    );
 
     const memoriaDoCliente = (expMemory || []).filter((m: any) => m.client_id === client.id);
     const avulsosFeitos = memoriaDoCliente
