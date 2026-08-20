@@ -60,3 +60,26 @@ describe("agendar puxa os conteúdos do calendário", () => {
     expect(dialogo).toContain("<ApprovedMediaPicker");
   });
 });
+
+describe("uma lista por vez — a bagunça era as duas juntas", () => {
+  it("com prontos na tela, o seletor de arquivos espera o clique", () => {
+    // Antes as duas listas rendiam empilhadas: dezenas de cards de origens
+    // diferentes no mesmo rolo. Agora "ou escolha direto dos arquivos" é um
+    // botão que revela o seletor — e sem prontos, o seletor abre direto.
+    expect(dialogo).toContain("setMostrarArquivos(true)");
+    expect(dialogo).toContain(
+      "{(schedulablePosts.length === 0 || mostrarArquivos) && (",
+    );
+  });
+
+  it("o Resumo duplicado saiu — o card escolhido e o rodapé já dizem tudo", () => {
+    expect(dialogo).not.toContain("Resumo");
+    // A linha viva do rodapé continua sendo o indicador do que falta.
+    expect(dialogo).toContain("Tudo pronto para agendar");
+  });
+
+  it("trocar cliente, projeto ou reabrir recolhe o seletor de arquivos", () => {
+    const ocorrencias = dialogo.split("setMostrarArquivos(false)").length - 1;
+    expect(ocorrencias).toBe(4);
+  });
+});

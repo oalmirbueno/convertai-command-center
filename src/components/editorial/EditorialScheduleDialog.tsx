@@ -188,6 +188,10 @@ export default function EditorialScheduleDialog({
   const [scheduledAt, setScheduledAt] = useState("");
   const [accountSearch, setAccountSearch] = useState("");
   const [showLibrary, setShowLibrary] = useState(true);
+  // Uma lista por vez: com prontos do calendario na tela, o seletor de
+  // arquivos espera um clique. As duas listas empilhadas eram a bagunca -
+  // quem abria via dezenas de cards de origens diferentes misturados.
+  const [mostrarArquivos, setMostrarArquivos] = useState(false);
   const [previewSelectedAsset, setPreviewSelectedAsset] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -221,6 +225,7 @@ export default function EditorialScheduleDialog({
     setScheduledAt(defaultScheduledAt || nextHourLocal());
     setAccountSearch("");
     setShowLibrary(true);
+    setMostrarArquivos(false);
     setPreviewSelectedAsset(false);
     setDiscardConfirmOpen(false);
     setDirty(false);
@@ -603,6 +608,7 @@ export default function EditorialScheduleDialog({
         setSelectedExistingPlan(null);
         setSelectedAccountIds([]);
         setShowLibrary(true);
+        setMostrarArquivos(false);
         setPreviewSelectedAsset(false);
         await Promise.all([refetchOptions(), schedulingPosts.refetch()]);
       }
@@ -672,6 +678,7 @@ export default function EditorialScheduleDialog({
                   setSelectedAccountIds([]);
                   setAccountSearch("");
                   setShowLibrary(true);
+                  setMostrarArquivos(false);
                   setDirty(true);
                   attemptRef.current = null;
                 }}
@@ -699,6 +706,7 @@ export default function EditorialScheduleDialog({
                   setSelectedAccountIds([]);
                   setAccountSearch("");
                   setShowLibrary(true);
+                  setMostrarArquivos(false);
                   setDirty(true);
                   attemptRef.current = null;
                 }}
@@ -887,11 +895,18 @@ export default function EditorialScheduleDialog({
                             );
                           })}
                         </div>
-                        <p className="my-2 text-center text-[10px] text-muted-foreground">
-                          ou escolha direto dos arquivos
-                        </p>
+                        {!mostrarArquivos && (
+                          <button
+                            type="button"
+                            onClick={() => setMostrarArquivos(true)}
+                            className="mt-2 w-full rounded-lg border border-dashed border-border px-3 py-2 text-center text-[11px] font-medium text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
+                          >
+                            ou escolha direto dos arquivos
+                          </button>
+                        )}
                       </div>
                     )}
+                    {(schedulablePosts.length === 0 || mostrarArquivos) && (
                     <ApprovedMediaPicker
                       files={options?.files || []}
                       usedRootFileIds={blockedUsedRootIds}
@@ -908,6 +923,7 @@ export default function EditorialScheduleDialog({
                         ]);
                       }}
                     />
+                    )}
                   </>
                 )}
               </section>
@@ -1085,24 +1101,6 @@ export default function EditorialScheduleDialog({
                   </div>
                 </section>
 
-                <section className="rounded-xl border border-primary/20 bg-primary/[0.04] p-4">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
-                    Resumo
-                  </p>
-                  <p className="mt-2 line-clamp-2 text-sm font-medium text-foreground">
-                    {selectedAsset?.root.file_name || "Escolha um conteúdo"}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    {selectedAccountIds.length > 0
-                      ? `${selectedAccountIds.length} conta${selectedAccountIds.length === 1 ? "" : "s"} selecionada${selectedAccountIds.length === 1 ? "" : "s"}`
-                      : "Nenhuma conta selecionada"}
-                  </p>
-                  {selectedAsset?.contentType === "carousel" && (
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      Carrossel completo · {selectedAsset.files.length} arquivos
-                    </p>
-                  )}
-                </section>
               </div>
             </div>
           )}
