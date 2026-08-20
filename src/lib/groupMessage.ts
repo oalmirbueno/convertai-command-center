@@ -66,6 +66,15 @@ export interface GroupMessageContext {
    */
   pautasProntas?: string[];
 
+  /**
+   * Por que a rotina desta semana importa, na voz do cliente.
+   *
+   * Vem da etapa do ciclo mais forte que foi concluída. Sem isto, contar o
+   * que foi feito vira relatório de horas: uma lista de tarefas que não
+   * explica nada a quem paga por resultado.
+   */
+  porqueDaSemana?: string | null;
+
   /** Próximo passo combinado no último relatório publicado, se recente. */
   proximoPasso?: string | null;
 
@@ -100,61 +109,77 @@ const maiuscula = (frase: string) => frase.charAt(0).toUpperCase() + frase.slice
 
 function abertura(ctx: GroupMessageContext): string {
   const linhas: string[] = [
-    `${ctx.greeting}, ${ctx.clientName}! Abrindo a semana com o plano na mão.`,
-    "",
+    `${ctx.greeting}, ${ctx.clientName}! Semana nova começando — segue o retrato de onde estamos e para onde vamos.`,
   ];
 
-  if (ctx.proximasAgendadas.length > 0) {
-    linhas.push(
-      ctx.proximasAgendadas.length === 1
-        ? `Esta semana tem publicação garantida no dia ${ctx.proximasAgendadas[0]}.`
-        : `Esta semana o calendário já está garantido: publicações nos dias ${listInWords(ctx.proximasAgendadas, 4)}.`,
-    );
-  }
-
-  if (ctx.anuncios && ctx.anuncios.campanhasNoAr > 0) {
-    linhas.push(
-      ctx.anuncios.campanhasNoAr === 1
-        ? `A campanha segue no ar trazendo ${ctx.anuncios.nomeDoResultado} ao longo da semana.`
-        : `As ${ctx.anuncios.campanhasNoAr} campanhas seguem no ar trazendo ${ctx.anuncios.nomeDoResultado} ao longo da semana.`,
-    );
-  }
-
-  // O que está pronto para sair, pelo nome. Vem antes do contexto porque é o
-  // mais concreto que existe: o cliente reconhece a peça de que se falou.
-  const prontas = ctx.pautasProntas || [];
-  if (prontas.length > 0) {
-    linhas.push(
-      prontas.length === 1
-        ? `Já está pronto para entrar no ar: ${prontas[0]}.`
-        : `Já estão prontos para entrar no ar: ${listInWords(prontas, 3)}.`,
-    );
-  }
-
-  // O contexto vivo entra no lugar do antigo "seguimos trabalhando em X":
-  // a última decisão ou registro real conta mais que o nome do projeto.
+  // 1. ONDE ESTAMOS. Abre pelo retrato, não pela tarefa: o cliente precisa se
+  // situar antes de ouvir o que vem. Vem do dossiê, que é a fonte de verdade.
   if (ctx.contextoRecente) {
-    linhas.push(`Por dentro: ${ctx.contextoRecente}`);
-  } else if (prontas.length === 0 && ctx.frentes.length > 0) {
-    linhas.push(`Em produção nesta semana: ${listInWords(ctx.frentes)}.`);
+    linhas.push("", `*Onde estamos*`, ctx.contextoRecente);
   }
 
+  // 2. O QUE JÁ ESTÁ NA MÃO. O concreto que ele reconhece, com o motivo de
+  // isso ser bom para ele — e não só para a agência.
+  const prontas = ctx.pautasProntas || [];
+  const naMao: string[] = [];
+  if (prontas.length > 0) {
+    naMao.push(
+      prontas.length === 1
+        ? `${prontas[0]} está pronto e entra no calendário`
+        : `${listInWords(prontas, 3)} estão prontos e entram no calendário`,
+    );
+  }
+  if (ctx.proximasAgendadas.length > 0) {
+    naMao.push(
+      ctx.proximasAgendadas.length === 1
+        ? `a publicação do dia ${ctx.proximasAgendadas[0]} já está agendada`
+        : `as publicações dos dias ${listInWords(ctx.proximasAgendadas, 4)} já estão agendadas`,
+    );
+  }
+  if (naMao.length > 0) {
+    linhas.push("", `*O que já está garantido*`, `${maiuscula(naMao.join(", "))}.`);
+    if (ctx.porqueDaSemana) linhas.push(`Na prática: ${ctx.porqueDaSemana}.`);
+  }
+
+  // 3. O QUE ACONTECE ESTA SEMANA. O caminho, não só o ponto.
+  const caminho: string[] = [];
+  if (ctx.anuncios && ctx.anuncios.campanhasNoAr > 0) {
+    caminho.push(
+      ctx.anuncios.campanhasNoAr === 1
+        ? `a campanha segue no ar trazendo ${ctx.anuncios.nomeDoResultado}`
+        : `as ${ctx.anuncios.campanhasNoAr} campanhas seguem no ar trazendo ${ctx.anuncios.nomeDoResultado}`,
+    );
+  }
+  if (naMao.length === 0 && ctx.frentes.length > 0) {
+    caminho.push(`seguimos com ${listInWords(ctx.frentes)} em produção`);
+  }
+  // Sem o "e" colado: com um item só, o bloco abriria com conector solto
+  // ("E o foco combinado…"). O conector é do JOIN, não da frase.
   if (ctx.proximoPasso) {
-    linhas.push("", `O foco combinado segue valendo: ${ctx.proximoPasso}`);
+    caminho.push(`o foco combinado segue valendo: ${ctx.proximoPasso}`);
+  }
+  if (caminho.length > 0) {
+    linhas.push("", `*Para onde vamos*`, `${maiuscula(caminho.join(", "))}.`);
   }
 
+  // 4. O QUE DEPENDE DELE. Sempre por último e sempre com o ganho explícito:
+  // pedido sem consequência clara é o que faz aprovação ficar parada.
   if (ctx.aguardandoOk.length > 0) {
     linhas.push(
       "",
+      `*O que depende de você*`,
       ctx.aguardandoOk.length === 1
-        ? `Para a semana render desde já: ${ctx.aguardandoOk[0]} está pronto esperando seu ok — com o sim, entra no calendário.`
-        : `Para a semana render desde já: ${listInWords(ctx.aguardandoOk)} estão prontos esperando seu ok.`,
+        // Sem adjetivo: "a arte ... está pronto" era erro de concordância, e
+        // o painel não sabe o gênero do nome que o cliente deu à peça.
+        ? `${maiuscula(ctx.aguardandoOk[0])} está esperando seu ok — com o sim, já entra no calendário.`
+        : `${maiuscula(listInWords(ctx.aguardandoOk))} estão esperando seu ok — com o sim, já entram no calendário.`,
     );
   }
 
   linhas.push("", "Qualquer coisa é só chamar. Tudo detalhado no painel: aceleriq.online");
   return montar(linhas);
 }
+
 
 /* ─────────────────────────── meio · o movimento ──────────────────────────── */
 
@@ -240,70 +265,97 @@ function meio(ctx: GroupMessageContext): string {
 
 function fechamento(ctx: GroupMessageContext): string {
   const linhas: string[] = [
-    `${ctx.greeting}, ${ctx.clientName}! Fechando a semana com o balanço do que ela rendeu.`,
-    "",
+    `${ctx.greeting}, ${ctx.clientName}! Fechando a semana — o que foi feito, o que rendeu e o que já está pronto para a próxima.`,
   ];
 
-  const saiu: string[] = [];
+  // 1. O QUE FOI FEITO. Entregas com nome, rotina em linguagem dele, e o que
+  // aconteceu fora do combinado — que costuma ser o que explica o resultado.
+  const feito: string[] = [];
   if (ctx.entregasSemana.length > 0) {
-    saiu.push(
+    feito.push(
       ctx.entregasSemana.length === 1
-        ? `ficou pronto ${ctx.entregasSemana[0]}`
-        : `ficaram prontos ${listInWords(ctx.entregasSemana, 3)}`,
+        ? `${ctx.entregasSemana[0]} ficou pronto`
+        : `${listInWords(ctx.entregasSemana, 3)} ficaram prontos`,
     );
   }
-  if (ctx.publicadasSemana > 0) {
-    saiu.push(
-      ctx.publicadasSemana === 1
-        ? "uma publicação foi ao ar"
-        : `${ctx.publicadasSemana} publicações foram ao ar`,
-    );
+  if (ctx.cicloFeito.length > 0) {
+    feito.push(listInWords(ctx.cicloFeito, 3));
   }
   if (ctx.avulsosFeitos.length > 0) {
-    saiu.push(`e ainda saiu ${listInWords(ctx.avulsosFeitos, 2)}`);
+    feito.push(`fora da rotina, ainda fizemos ${listInWords(ctx.avulsosFeitos, 2)}`);
+  }
+  if (feito.length > 0) {
+    // Uma linha por bloco. Emendado com vírgulas virava parágrafo corrido com
+    // dois "e" na mesma frase — no celular, ninguém lê até o fim.
+    linhas.push("", `*O que foi feito*`, ...feito.map((f) => `• ${maiuscula(f)}.`));
+    // O motivo vem colado no que foi feito: é o que separa explicação de
+    // relatório de horas.
+    if (ctx.porqueDaSemana) linhas.push(`Isso importa porque ${ctx.porqueDaSemana}.`);
   }
 
-  if ((ctx.pautasProntas || []).length > 0) {
-    saiu.push(
-      `${listInWords(ctx.pautasProntas!, 3)} ${
-        ctx.pautasProntas!.length === 1 ? "ficou pronto" : "ficaram prontos"
-      } para entrar no calendário`,
+  // 2. O RESULTADO. Números primeiro, sem enfeite — é o que dá confiança.
+  const resultado: string[] = [];
+  if (ctx.publicadasSemana > 0) {
+    resultado.push(
+      ctx.publicadasSemana === 1
+        ? "uma publicação foi ao ar na data combinada"
+        : `${ctx.publicadasSemana} publicações foram ao ar nas datas combinadas`,
     );
   }
-
-  if (saiu.length > 0) {
-    linhas.push(`Nesta semana ${saiu.join(", ")}.`);
-  } else {
-    linhas.push(
-      ctx.frentes.length > 0
-        ? `A semana foi de construção em ${listInWords(ctx.frentes)}: o material desta produção aparece nas próximas publicações.`
-        : "A semana foi de construção: o material produzido aparece nas próximas publicações.",
-    );
-  }
-
   if (ctx.anuncios && ctx.anuncios.investidoSemana > 0) {
     const { investidoSemana, resultadosSemana, nomeDoResultado } = ctx.anuncios;
-    linhas.push(
+    resultado.push(
       resultadosSemana != null && resultadosSemana > 0
-        ? `Os anúncios fecharam a semana com ${dinheiro(investidoSemana)} investidos e ${resultadosSemana} ${nomeDoResultado}.`
-        : `Os anúncios seguiram no ar a semana toda, com ${dinheiro(investidoSemana)} investidos.`,
+        ? `os anúncios somaram ${dinheiro(investidoSemana)} investidos e ${resultadosSemana} ${nomeDoResultado}`
+        : `os anúncios rodaram com ${dinheiro(investidoSemana)} investidos`,
     );
   }
+  if (resultado.length > 0) {
+    linhas.push("", `*O que isso rendeu*`, `${maiuscula(resultado.join(", "))}.`);
+  }
 
-  // O fechamento sempre aponta para frente: próximo passo combinado ou a
-  // próxima publicação — a semana termina, o trabalho não.
-  if (ctx.proximoPasso) {
-    linhas.push("", `Próximo passo: ${ctx.proximoPasso}`);
-  } else if (ctx.proximasAgendadas.length > 0) {
-    linhas.push("", `A próxima publicação já está agendada: dia ${ctx.proximasAgendadas[0]}.`);
+  // 3. ONDE ISSO NOS DEIXA. O dossiê fecha o arco: começou na semana passada,
+  // passou pelo trabalho, e agora está aqui.
+  if (ctx.contextoRecente) {
+    linhas.push("", `*Onde isso nos deixa*`, ctx.contextoRecente);
+  }
+
+  // 4. O QUE JÁ ESTÁ PREPARADO. Sexta sem próximo passo deixa o cliente com a
+  // sensação de que a semana acabou e nada continua.
+  const proxima: string[] = [];
+  if ((ctx.pautasProntas || []).length > 0) {
+    proxima.push(
+      ctx.pautasProntas!.length === 1
+        ? `${ctx.pautasProntas![0]} já está pronto esperando data`
+        : `${listInWords(ctx.pautasProntas!, 3)} já estão prontos esperando data`,
+    );
+  }
+  if (ctx.proximasAgendadas.length > 0) {
+    proxima.push(
+      ctx.proximasAgendadas.length === 1
+        ? `a próxima publicação já está marcada para ${ctx.proximasAgendadas[0]}`
+        : `as próximas publicações já estão marcadas: ${listInWords(ctx.proximasAgendadas, 3)}`,
+    );
+  }
+  if (ctx.proximoPasso) proxima.push(`e o foco combinado segue: ${ctx.proximoPasso}`);
+  if (proxima.length > 0) {
+    linhas.push("", `*Já preparado para a próxima semana*`, `${maiuscula(proxima.join(", "))}.`);
   }
 
   if (ctx.aguardandoOk.length > 0) {
     linhas.push(
       "",
-      `Fica só um lembrete bom: ${listInWords(ctx.aguardandoOk)} ${
-        ctx.aguardandoOk.length === 1 ? "está pronto" : "estão prontos"
-      } esperando seu ok para entrar no calendário.`,
+      ctx.aguardandoOk.length === 1
+        ? `Fica só ${ctx.aguardandoOk[0]} esperando seu ok para destravar a semana que vem.`
+        : `Ficam ${listInWords(ctx.aguardandoOk)} esperando seu ok para destravar a semana que vem.`,
+    );
+  }
+
+  // Sem nada registrado, a mensagem não inventa: reconhece e aponta adiante.
+  if (feito.length === 0 && resultado.length === 0 && proxima.length === 0) {
+    linhas.push(
+      "",
+      "A semana foi de construção interna: o material está tomando forma e chega na próxima.",
     );
   }
 

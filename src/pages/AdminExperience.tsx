@@ -20,7 +20,10 @@ import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { buscarTodas } from "@/lib/buscaCompleta";
 import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
-import { rotinaEmLinguagemDeCliente } from "@/lib/rotinaDoCliente";
+import {
+  porqueDaSemana as porqueDaSemana_,
+  rotinaEmLinguagemDeCliente,
+} from "@/lib/rotinaDoCliente";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
@@ -1533,6 +1536,7 @@ export default function AdminExperience() {
     const cicloFeito = rotinaEmLinguagemDeCliente(
       cicloDoCliente.map((row: any) => ({ area: row.area, step: row.step })),
     );
+    const porqueDaSemana = porqueDaSemana_(cicloDoCliente.map((row: any) => ({ area: row.area, step: row.step })));
 
     const memoriaDoCliente = (expMemory || []).filter((m: any) => m.client_id === client.id);
     const avulsosFeitos = memoriaDoCliente
@@ -1604,6 +1608,7 @@ export default function AdminExperience() {
       publicadasSemana,
       proximasAgendadas: agendadasSemana,
       cicloFeito,
+      porqueDaSemana,
       avulsosFeitos,
       frentes,
       pautasProntas: (expPautas || [])

@@ -12,7 +12,10 @@ import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
-import { rotinaEmLinguagemDeCliente } from "@/lib/rotinaDoCliente";
+import {
+  porqueDaSemana as porqueDaSemana_,
+  rotinaEmLinguagemDeCliente,
+} from "@/lib/rotinaDoCliente";
 
 /**
  * A mensagem do grupo de UM cliente, montada onde ela for precisa.
@@ -124,6 +127,7 @@ export function useClientGroupMessage(client: any | null) {
           .filter((r) => r.step <= 6)
           .map((r) => ({ area: r.area, step: r.step })),
       );
+      const porqueDaSemana = porqueDaSemana_((((ciclo as any).data || []) as any[]).filter((r) => r.step <= 6).map((r) => ({ area: r.area, step: r.step })));
 
       const registros = ((memoria as any).data || []) as any[];
       const avulsosFeitos = registros
@@ -192,6 +196,7 @@ export function useClientGroupMessage(client: any | null) {
         publicadasSemana,
         proximasAgendadas,
         cicloFeito,
+        porqueDaSemana,
         avulsosFeitos,
         frentes: ((projetos.data || []) as any[])
           .map((p) => readableProjectName(p.name, nome))
