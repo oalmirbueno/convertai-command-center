@@ -880,6 +880,16 @@ export default function EditorialScheduleDialog({
                       usedRootFileIds={blockedUsedRootIds}
                       selectedFileId={selectedAsset?.id || null}
                       onSelect={selectAsset}
+                      loading={optionsLoading}
+                      // Sem onRetry o botão de atualizar do seletor não
+                      // existia: o componente sempre soube recarregar, e
+                      // quem o usava nunca passou por onde.
+                      onRetry={() => {
+                        void Promise.all([
+                          refetchOptions(),
+                          schedulingPosts.refetch(),
+                        ]);
+                      }}
                     />
                   </>
                 )}

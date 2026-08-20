@@ -168,19 +168,36 @@ export default function ApprovedMediaPicker({
   return (
     <div className={cn("space-y-3", className)}>
       <div className="space-y-2.5">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden="true"
-          />
-          <Input
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            disabled={disabled || loading}
-            className="h-11 pl-9"
-            aria-label="Buscar mídia aprovada"
-            placeholder="Buscar por título, legenda ou slide"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <Search
+              className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden="true"
+            />
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              disabled={disabled || loading}
+              className="h-11 pl-9"
+              aria-label="Buscar conteúdo"
+              placeholder="Buscar por título, legenda ou slide"
+            />
+          </div>
+          {/* Recarregar a lista sem fechar o diálogo. Arte recém-subida por
+              outra aba (ou pelo card ao lado) não aparecia até reabrir tudo,
+              e não havia botão nenhum para forçar a releitura. */}
+          {onRetry && (
+            <button
+              type="button"
+              onClick={() => void onRetry()}
+              disabled={disabled || loading}
+              title="Buscar conteúdos novos"
+              aria-label="Atualizar a lista de conteúdos"
+              className="inline-flex h-11 w-11 shrink-0 cursor-pointer items-center justify-center rounded-lg border border-border bg-background text-muted-foreground transition-colors hover:border-primary/35 hover:text-foreground disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <RefreshCw className={cn("h-4 w-4", loading && "animate-spin")} />
+            </button>
+          )}
         </div>
         <div
           className="flex gap-2 overflow-x-auto pb-1"
