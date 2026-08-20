@@ -913,10 +913,11 @@ export default function EditorialDetailSheet({
       );
       closeAction(true);
     } catch (error: unknown) {
+      // A mensagem crua do banco vem em inglês técnico e, quando o erro não
+      // era instância de Error, o texto genérico engolia até a causa. O
+      // tradutor devolve o que aconteceu E o que fazer.
       toast.error(
-        error instanceof Error
-          ? error.message
-          : "Não foi possível atualizar a publicação.",
+        editorialErrorMessage(error, "Não foi possível atualizar a publicação."),
       );
     }
   };

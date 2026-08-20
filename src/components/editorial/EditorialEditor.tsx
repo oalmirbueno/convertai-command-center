@@ -17,6 +17,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
 import { useConfirm } from "@/components/shared/confirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -546,6 +547,22 @@ export default function EditorialEditor({
 
   const selectApprovedMedia = (asset: EditorialApprovedMediaAsset) => {
     if (savedContentLocked) return;
+    /* Arquivo subido sem projeto é adotado NESTE projeto ao ser escolhido.
+       Sem isto, o salvar recusaria ("files must be ... from the selected
+       client and project") — e o arquivo aparecia na lista mas não servia,
+       que é pior do que não aparecer. Só o editável aceita update; os já
+       revisados nunca chegam aqui sem projeto. */
+    if (!asset.root.project_id && projectId) {
+      void (async () => {
+        const ids = [asset.root.id, ...asset.files.map((f) => f.id)];
+        const { error } = await (supabase as any)
+          .from("files")
+          .update({ project_id: projectId })
+          .in("id", ids)
+          .is("project_id", null);
+        if (!error) void refetchOptions();
+      })();
+    }
     const approvedCaption = asset.root.caption?.trim() || "";
     setPrimaryFileId(asset.root.id);
     setTitle(asset.root.file_name.trim());

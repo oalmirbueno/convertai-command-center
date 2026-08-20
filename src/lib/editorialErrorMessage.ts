@@ -9,6 +9,19 @@ const TRANSLATIONS: Array<{ test: RegExp; message: string }> = [
   // para o dono como "em revisão" na hora de agendar. Específicos primeiro;
   // o genérico é o último recurso.
   {
+    test: /publication requires ready content and approved immutable files/i,
+    message:
+      "O material desta publicação não está no estado exigido (aprovado e travado). Se é um carrossel já liberado ao cliente, aplique a correção pendente do banco; senão, confira a aprovação do material.",
+  },
+  {
+    test: /publication changed; refresh before transitioning/i,
+    message: "Esta publicação mudou desde que a tela carregou. Recarregue e tente de novo.",
+  },
+  {
+    test: /publication account is inactive, changed or unlinked/i,
+    message: "A conta desta publicação está inativa ou foi desvinculada do projeto. Revise em Contas.",
+  },
+  {
     test: /automatic delivery requires an enabled official connection/i,
     message:
       "Esta conta não tem a publicação automática ligada. O agendamento fica registrado e a publicação sai manualmente — ou ligue a automação em Contas para sair sozinha.",

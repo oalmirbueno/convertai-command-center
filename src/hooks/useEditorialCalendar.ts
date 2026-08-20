@@ -1089,7 +1089,11 @@ export function useEditorialEditorOptions(
               "id, client_id, project_id, file_name, file_type, mime_type, extension, file_url, storage_bucket, storage_path, size_bytes, caption, carousel_text, description, approval_status, agency_approval_status, visibility, locked_at, status, archived_at, parent_file_id, created_at",
             )
             .eq("client_id", clientId)
-            .eq("project_id", projectId)
+            // Arquivo do cliente SEM projeto também entra: o upload em
+            // Arquivos permite subir sem escolher projeto, e o material
+            // recém-subido ficava invisível aqui — nenhum botão de atualizar
+            // o traria. Ao ser escolhido como arte, ele é adotado no projeto.
+            .or(`project_id.eq.${projectId},project_id.is.null`)
             .is("archived_at", null)
             .order("created_at", { ascending: true })
             .order("id", { ascending: true })
