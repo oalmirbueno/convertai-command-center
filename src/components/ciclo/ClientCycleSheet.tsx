@@ -3,7 +3,7 @@ import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import {
   CalendarDays, Check, CheckCheck, ClipboardCopy, Clock, ExternalLink,
-  FileArchive, FileText, MessageCircle, Sparkles, X,
+  FileArchive, FileText, MessageCircle, RefreshCw, Sparkles, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -108,7 +108,12 @@ export default function ClientCycleSheet({
   const [listas, setListas] = useState<Checklist[]>([]);
   // A mensagem do grupo montada para ESTE cliente, pela mesma biblioteca que
   // a Central usa — quem acabou de marcar a semana é quem quer mandar o recado.
-  const { montar: montarMensagemGrupo, isLoading: carregandoMensagem } = useClientGroupMessage(client);
+  const {
+    montar: montarMensagemGrupo,
+    isLoading: carregandoMensagem,
+    recarregar: recarregarMensagem,
+    recarregando: recarregandoMensagem,
+  } = useClientGroupMessage(client);
   // Trabalhos fora da rotina: gravação na loja, reunião no meio da semana, o
   // ajuste que o cliente pediu. Sem eles a semana parecia menor do que foi.
   const [avulsos, setAvulsos] = useState<Avulso[]>([]);
@@ -562,9 +567,25 @@ export default function ClientCycleSheet({
                   quer mandar o recado — obrigar a trocar de tela para isso
                   fazia a mensagem não sair. É a MESMA biblioteca da Central,
                   então o texto nunca diverge entre as duas telas. */}
-              <p className="mt-4 text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
-                Mensagem do grupo
-              </p>
+              <div className="mt-4 flex items-center gap-2">
+                <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+                  Mensagem do grupo
+                </p>
+                {/* A rotina do GPT grava o dossiê pelo MCP, por fora do
+                    painel: nenhuma mutação do app acontece, então nada
+                    invalida o cache e a mensagem sai com o contexto lido
+                    antes. Sem esta porta, a saída era recarregar a página. */}
+                <button
+                  type="button"
+                  onClick={() => void recarregarMensagem()}
+                  disabled={recarregandoMensagem}
+                  className="ml-auto cursor-pointer rounded border-none bg-transparent p-1 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  aria-label="Reler o contexto do cliente"
+                  title="Buscar o contexto mais recente (dossiê, entregas, ciclo)"
+                >
+                  <RefreshCw className={`h-3 w-3 ${recarregandoMensagem ? "animate-spin" : ""}`} />
+                </button>
+              </div>
               <div className="mt-1.5 grid grid-cols-3 gap-1.5">
                 {([
                   { momento: "abertura" as const, texto: "Abertura", dia: "segunda" },

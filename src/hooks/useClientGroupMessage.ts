@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { readableFileName, readableProjectName } from "@/lib/clientText";
@@ -10,6 +10,7 @@ import {
 import { goalForCampaign, resultFromActions, statusLabel } from "@/lib/adsLanguage";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
+import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 
 /**
  * A mensagem do grupo de UM cliente, montada onde ela for precisa.
@@ -37,8 +38,10 @@ export function useClientGroupMessage(client: any | null) {
   const segunda = mondayOf(new Date());
   const semanaKey = localIso(segunda);
 
-  const { data, isLoading } = useQuery({
-    queryKey: ["mensagem-grupo-cliente", clientId, semanaKey],
+  const queryClient = useQueryClient();
+  const chave = ["mensagem-grupo-cliente", clientId, semanaKey];
+  const { data, isLoading, isFetching, refetch } = useQuery({
+    queryKey: chave,
     queryFn: async () => {
       const desdeSemana = new Date(segunda);
       const proximaSegunda = new Date(segunda);
@@ -134,15 +137,22 @@ export function useClientGroupMessage(client: any | null) {
         .map((m) => String(m.title || "").toLowerCase())
         .filter(Boolean);
 
-      const CONTEXTO = new Set([
-        "decisao", "nota", "marco", "note", "summary", "decision", "fact", "second_brain", "external",
-      ]);
+      /**
+       * O contexto vem do CORPO do registro, não do título.
+       *
+       * Esta lógica vivia duplicada aqui e na Central, e a correção só chegou
+       * lá — então a mensagem do Ciclo continuou lendo o título. O título do
+       * dossiê é um rótulo com data ("Dossiê de contexto - 18/08/2026"), igual
+       * em toda versão: por mais que a rotina do GPT reescrevesse milhares de
+       * caracteres, a mensagem semanal saía sempre a mesma.
+       *
+       * Agora as duas telas chamam a MESMA função. Regra repetida em dois
+       * lugares é regra que diverge no primeiro conserto.
+       */
       const contexto = registros.find(
-        (m) => CONTEXTO.has(m.kind) && diasDesde(m.created_at) <= 14,
+        (m) => CONTEXTO_KINDS.has(m.kind) && diasDesde(m.created_at) <= 14,
       );
-      const contextoRecente = contexto
-        ? String(contexto.title || contexto.content || "").slice(0, 160).trim() || null
-        : null;
+      const contextoRecente = contexto ? trechoDoContexto(contexto) || null : null;
 
       const comPasso = ((relatorios.data || []) as any[]).find(
         (r) => String(r.next_steps || "").trim() && diasDesde(r.created_at) <= 21,
@@ -211,6 +221,20 @@ export function useClientGroupMessage(client: any | null) {
   const montar = (momento: GroupMoment): string | null =>
     data ? buildGroupMessageText(data, momento) : null;
 
-  return { contexto: data ?? null, montar, isLoading };
+  /**
+   * Reler agora, ignorando o staleTime.
+   *
+   * A rotina do GPT grava o dossiê pelo MCP, por fora do painel: nenhuma
+   * mutação do app acontece, então nada invalida o cache e a tela continua
+   * mostrando o que leu antes. Sem uma porta explícita, a única saída era
+   * recarregar a página inteira — e quem não sabe disso conclui que a
+   * mensagem "não atualiza".
+   */
+  const recarregar = async () => {
+    await queryClient.invalidateQueries({ queryKey: chave });
+    await refetch();
+  };
+
+  return { contexto: data ?? null, montar, isLoading, recarregar, recarregando: isFetching };
 }
 
