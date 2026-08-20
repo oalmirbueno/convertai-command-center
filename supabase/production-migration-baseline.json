@@ -393,6 +393,14 @@
       "remote_name": "renomear_arquivo",
       "remote_statements_sha256": "f3d18b843ff6f6e038719253f7c5061d64d7f2ba0a784ffaefd39d34fbd1a907",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260820190000",
+      "path": "supabase/migrations/20260820190000_agendar_conteudo_aprovado.sql",
+      "local_sha256": "05cc091367b8f60ae563462b41ca1c8c5c95bc078f6456faebb10072f9b372e7",
+      "remote_name": "agendar_conteudo_aprovado",
+      "remote_statements_sha256": "8c6abe641e466b086bf220a75f8c0a4b9a30cfc66350b017894e187423265509",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
