@@ -11,6 +11,7 @@ import { goalForCampaign, resultFromActions, statusLabel } from "@/lib/adsLangua
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { localIso, mondayOf } from "@/lib/cycleWeek";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
+import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 
 /**
  * A mensagem do grupo de UM cliente, montada onde ela for precisa.
@@ -216,6 +217,9 @@ export function useClientGroupMessage(client: any | null) {
     },
     enabled: !!user && !!clientId,
     staleTime: 30_000,
+    // O dossiê é escrito pelo MCP, fora do painel: sem isto a mensagem só
+    // mudaria ao recarregar a página inteira.
+    ...AO_VIVO_CALMO,
   });
 
   const montar = (momento: GroupMoment): string | null =>

@@ -5,6 +5,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   CONTEXTO_KINDS, dossieMaisRecente, idadeEmPalavras,
 } from "@/lib/contextoDoCliente";
+import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 
 /**
  * O dossiê do cliente, com o texto inteiro.
@@ -46,6 +47,7 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
     },
     enabled: Boolean(clientId),
     staleTime: 15_000,
+    ...AO_VIVO_CALMO,
   });
 
   const dossie = dossieMaisRecente(data || []);

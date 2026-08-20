@@ -56,3 +56,27 @@ describe("o que o MCP grava por fora tem como ser relido", () => {
     expect(folha).toContain("Reler o contexto do cliente");
   });
 });
+
+describe("o painel se mantém em dia sozinho", () => {
+  const preset = readFileSync(resolve(raiz, "src/lib/consultaAoVivo.ts"), "utf8");
+  const dossie = readFileSync(resolve(raiz, "src/components/admin/DossieDoCliente.tsx"), "utf8");
+
+  it("voltar para a aba relê na hora", () => {
+    // É o gesto real de quem atualiza o dossiê no ChatGPT e volta para o
+    // painel: o retorno à aba dispara a releitura, sem esperar o relógio.
+    expect(preset).toContain("refetchOnWindowFocus: true");
+    expect(preset).toContain("refetchOnReconnect: true");
+  });
+
+  it("a mensagem do Ciclo e o dossiê usam o preset", () => {
+    expect(hook).toContain("...AO_VIVO_CALMO");
+    expect(dossie).toContain("...AO_VIVO_CALMO");
+  });
+
+  it("o preset tem um dono só", () => {
+    // A Central tinha o dela declarada localmente; três cópias da mesma regra
+    // foi o que deixou o Ciclo lendo o campo errado por tanto tempo.
+    expect(central).toContain('from "@/lib/consultaAoVivo"');
+    expect(central).not.toMatch(/const AO_VIVO = \{/);
+  });
+});

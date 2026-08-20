@@ -19,6 +19,7 @@ import { buildGroupMessageText, type GroupMessageContext } from "@/lib/groupMess
 import DossieDoCliente from "@/components/admin/DossieDoCliente";
 import { CONTEXTO_KINDS, trechoDoContexto } from "@/lib/contextoDoCliente";
 import { buscarTodas } from "@/lib/buscaCompleta";
+import { AO_VIVO, INTERVALO_AO_VIVO as LIVE } from "@/lib/consultaAoVivo";
 import { ritualTiming } from "@/lib/ritualTiming";
 import { stepLabelsForWeek } from "@/lib/cycleTasks";
 import { useAdsCampaigns, useAdsDaily } from "@/hooks/useAdsMetrics";
@@ -185,12 +186,6 @@ export default function AdminExperience() {
     staleTime: 300_000,
   });
 
-  const LIVE = 20000;
-  const AO_VIVO = {
-    refetchInterval: LIVE,
-    refetchOnWindowFocus: true,
-    refetchOnReconnect: true,
-  } as const;
 
   const { data: pendingApprovalFiles = [] } = useQuery({
     queryKey: ["exp-pending-approvals"],
