@@ -449,6 +449,14 @@
       "remote_name": "agenda_com_compromisso_proprio",
       "remote_statements_sha256": "cfe158095c56b014a662b6d5ec4120e56b8299c4fd763886bcf25fee88b09929",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260822010000",
+      "path": "supabase/migrations/20260822010000_crm_empresas_e_contatos.sql",
+      "local_sha256": "426837aadde92198311440fe9b563f3581212a58859c3251c7984f2bb5ba5ac0",
+      "remote_name": "crm_empresas_e_contatos",
+      "remote_statements_sha256": "2537b840e08d3f587708084cf0b3b77348199566e76c67fea9f95ec32b734858",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

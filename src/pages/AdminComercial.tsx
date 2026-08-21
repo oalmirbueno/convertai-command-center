@@ -1,11 +1,13 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Briefcase, CalendarClock, KanbanSquare, Megaphone, Plus, Target, X } from "lucide-react";
+import { ArrowRight, Briefcase, Building2, CalendarClock, KanbanSquare, Megaphone, Plus, Sparkles, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClients } from "@/hooks/useSupabaseData";
 import FunilKanban from "@/components/comercial/FunilKanban";
+import EmpresasCRM from "@/components/comercial/EmpresasCRM";
+import MarketingDaCasa from "@/components/comercial/MarketingDaCasa";
 import AgendaComercial from "@/components/comercial/AgendaComercial";
 import AtividadesDoLead from "@/components/comercial/AtividadesDoLead";
 import { useTeamMembers } from "@/hooks/useSupabaseData";
@@ -37,6 +39,8 @@ import {
   kpisDaCampanha,
   listarAtividades,
   listarCampanhas,
+  listarContatos,
+  listarEmpresas,
   listarLeads,
   listarMetas,
   moverLead,
@@ -64,7 +68,7 @@ import {
  * número que o financeiro não reconhece.
  */
 
-type Aba = "crm" | "agenda" | "metas" | "marketing";
+type Aba = "crm" | "agenda" | "metas" | "campanhas" | "marketing";
 
 /**
  * O que cada aba e, dita na propria tela.
@@ -74,10 +78,11 @@ type Aba = "crm" | "agenda" | "metas" | "marketing";
  * que o departamento faz.
  */
 const TITULO_DA_ABA: Record<Aba, string> = {
-  crm: "Quem está em conversa, em que pé está e quanto vale. Arraste o cartão para mover de etapa.",
+  crm: "Empresas, pessoas e negócios. Arraste o cartão para mover de etapa; a ficha da empresa guarda o histórico.",
   agenda: "Sua semana: reuniões, ligações e blocos de trabalho. O que vencer chega no sininho às 8h.",
   metas: "O alvo do mês e quanto já saiu. A receita vem do Financeiro, não é digitada aqui.",
-  marketing: "O que a Aceleriq investe para aparecer, e quantos clientes aquilo virou.",
+  campanhas: "O que a Aceleriq investe para aparecer, e quantos clientes aquilo virou.",
+  marketing: "A presença da própria casa: o que está no ar e o que vem por aí.",
 };
 
 const hojeIso = () => new Date().toISOString().slice(0, 10);
@@ -96,7 +101,7 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
-const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "marketing"];
+const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "campanhas", "marketing"];
 
 export default function AdminComercial() {
   const queryClient = useQueryClient();
@@ -117,6 +122,12 @@ export default function AdminComercial() {
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
   const [novoLead, setNovoLead] = useState(false);
   const [campanhaAberta, setCampanhaAberta] = useState<Campanha | "nova" | null>(null);
+  /**
+   * O CRM tem duas leituras do mesmo dado: o QUADRO (o negocio de agora) e a
+   * FICHA (a empresa ao longo do tempo). Sao a mesma area, e nao duas abas:
+   * separar em abas faria parecer que sao assuntos diferentes.
+   */
+  const [visaoDoCrm, setVisaoDoCrm] = useState<"negocios" | "empresas">("negocios");
 
   const { data: leads = [], isLoading: carregandoLeads } = useQuery({
     queryKey: ["comercial-leads"],
@@ -152,6 +163,15 @@ export default function AdminComercial() {
     [equipeBruta],
   );
 
+  const { data: empresas = [] } = useQuery({
+    queryKey: ["comercial-empresas"],
+    queryFn: listarEmpresas,
+  });
+  const { data: contatos = [] } = useQuery({
+    queryKey: ["comercial-contatos"],
+    queryFn: listarContatos,
+  });
+
   const { data: campanhas = [] } = useQuery({
     queryKey: ["comercial-campanhas"],
     queryFn: listarCampanhas,
@@ -172,6 +192,8 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-campanhas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-metas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-atividades"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-empresas"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-contatos"] }),
     ]);
 
   const resumo = useMemo(
@@ -214,7 +236,7 @@ export default function AdminComercial() {
           </div>
           {/* O mes so aparece onde ele manda: metas e marketing olham para um
               mes fechado; CRM e agenda vivem no presente. */}
-          {(aba === "metas" || aba === "marketing") && (
+          {(aba === "metas" || aba === "campanhas" || aba === "marketing") && (
             <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
               <button
                 type="button"
@@ -245,7 +267,8 @@ export default function AdminComercial() {
               { id: "crm", label: "CRM", icone: KanbanSquare },
               { id: "agenda", label: "Agenda", icone: CalendarClock },
               { id: "metas", label: "Metas", icone: Target },
-              { id: "marketing", label: "Marketing", icone: Megaphone },
+              { id: "campanhas", label: "Campanhas", icone: Megaphone },
+              { id: "marketing", label: "Marketing", icone: Sparkles },
             ] as const
           ).map((item) => (
             <button
@@ -326,6 +349,41 @@ export default function AdminComercial() {
       )}
 
       {aba === "crm" && (
+        <div className="flex gap-1.5">
+          {(
+            [
+              { id: "negocios", label: "Negócios", icone: KanbanSquare },
+              { id: "empresas", label: "Empresas", icone: Building2 },
+            ] as const
+          ).map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              onClick={() => setVisaoDoCrm(item.id)}
+              className={`flex h-8 items-center gap-1.5 rounded-lg border px-3 text-[11.5px] font-semibold transition-colors ${
+                visaoDoCrm === item.id
+                  ? "border-primary/40 bg-primary/10 text-primary"
+                  : "border-border bg-card text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <item.icone className="h-3.5 w-3.5" />
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {aba === "crm" && visaoDoCrm === "empresas" && (
+        <EmpresasCRM
+          empresas={empresas}
+          contatos={contatos}
+          leads={leads}
+          onAbrirLead={setLeadAberto}
+          onMudou={recarregar}
+        />
+      )}
+
+      {aba === "crm" && visaoDoCrm === "negocios" && (
         <FunilKanban
           leads={leads}
           atividades={atividades}
@@ -374,6 +432,10 @@ export default function AdminComercial() {
       )}
 
       {aba === "marketing" && (
+        <MarketingDaCasa leads={leads} campanhas={campanhas} periodo={periodo} />
+      )}
+
+      {aba === "campanhas" && (
         <Marketing
           campanhas={campanhas}
           leads={leads}
@@ -408,7 +470,7 @@ export default function AdminComercial() {
         />
       )}
 
-      {aba === "marketing" && (
+      {aba === "campanhas" && (
         <button
           type="button"
           onClick={() => setCampanhaAberta("nova")}

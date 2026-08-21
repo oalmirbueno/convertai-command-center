@@ -74,7 +74,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
       { title: "CRM", url: "/comercial", icon: KanbanSquare, soGestao: true },
       { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
-      { title: "Marketing", url: "/comercial/marketing", icon: Megaphone, soGestao: true },
+      { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },
+      { title: "Marketing", url: "/comercial/marketing", icon: Sparkles, soGestao: true },
     ],
   },
   {

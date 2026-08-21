@@ -41,6 +41,8 @@ const lead = (parcial: Partial<Lead>): Lead => ({
   closed_at: null,
   created_at: "2026-08-10T12:00:00Z",
   expected_close_date: null,
+  organization_id: null,
+  contact_id: null,
   ...parcial,
 });
 

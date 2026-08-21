@@ -644,6 +644,112 @@ export type Database = {
         }
         Relationships: []
       }
+      commercial_contacts: {
+        Row: {
+          archived_at: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          is_primary: boolean
+          name: string
+          notes: string | null
+          organization_id: string | null
+          role: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_primary?: boolean
+          name: string
+          notes?: string | null
+          organization_id?: string | null
+          role?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_primary?: boolean
+          name?: string
+          notes?: string | null
+          organization_id?: string | null
+          role?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_contacts_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_organizations: {
+        Row: {
+          archived_at: string | null
+          city: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          owner_id: string | null
+          segment: string | null
+          site: string | null
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          city?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          owner_id?: string | null
+          segment?: string | null
+          site?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          city?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          owner_id?: string | null
+          segment?: string | null
+          site?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_organizations_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       commercial_goals: {
         Row: {
           created_at: string
@@ -727,6 +833,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           email: string | null
+          contact_id: string | null
           expected_close_date: string | null
           id: string
           lost_reason: string | null
@@ -736,6 +843,7 @@ export type Database = {
           next_action_at: string | null
           notes: string | null
           one_off_value: number
+          organization_id: string | null
           origin: string
           owner_id: string | null
           quiz_submission_id: string | null
@@ -752,6 +860,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           email?: string | null
+          contact_id?: string | null
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
@@ -761,6 +870,7 @@ export type Database = {
           next_action_at?: string | null
           notes?: string | null
           one_off_value?: number
+          organization_id?: string | null
           origin?: string
           owner_id?: string | null
           quiz_submission_id?: string | null
@@ -777,6 +887,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           email?: string | null
+          contact_id?: string | null
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
@@ -786,6 +897,7 @@ export type Database = {
           next_action_at?: string | null
           notes?: string | null
           one_off_value?: number
+          organization_id?: string | null
           origin?: string
           owner_id?: string | null
           quiz_submission_id?: string | null

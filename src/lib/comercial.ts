@@ -83,6 +83,9 @@ export interface Lead {
   created_at: string;
   /** Quando se espera fechar. Sem isto não existe previsão, só soma. */
   expected_close_date: string | null;
+  /** A ficha da empresa. O negócio termina; ela fica, com a história toda. */
+  organization_id: string | null;
+  contact_id: string | null;
 }
 
 export interface Campanha {
@@ -145,6 +148,8 @@ export async function salvarLead(
     next_action_at: lead.next_action_at || null,
     expected_close_date: lead.expected_close_date || null,
     owner_id: lead.owner_id || null,
+    organization_id: lead.organization_id || null,
+    contact_id: lead.contact_id || null,
     notes: lead.notes?.trim() || null,
   };
   if (lead.id) {
@@ -649,12 +654,17 @@ export async function salvarAtividade(input: {
 }): Promise<boolean> {
   const titulo = input.title.trim();
   if (titulo.length < 2 || !input.dueAt) return false;
+  // Data invalida derruba a tela inteira: `new Date("2026-08-21T")` vira
+  // Invalid Date, e toISOString() nele LANCA. Basta o campo de hora ficar
+  // vazio para o formulario explodir em vez de recusar.
+  const quando = new Date(input.dueAt);
+  if (Number.isNaN(quando.getTime())) return false;
   const { data: sessao } = await supabase.auth.getUser();
   const corpo = {
     lead_id: input.leadId || null,
     kind: input.kind || "tarefa",
     title: titulo.slice(0, 200),
-    due_at: new Date(input.dueAt).toISOString(),
+    due_at: quando.toISOString(),
     owner_id: input.ownerId || null,
     notes: input.notes?.trim() || null,
   };
@@ -792,5 +802,166 @@ export function previsaoDoMes(leads: Lead[], periodo: string): Previsao {
     ),
     leads: noMes.length,
     semData: abertos.filter((lead) => !lead.expected_close_date).length,
+  };
+}
+
+/* ─────────────────────── Empresas e contatos (o CRM) ────────────────────── */
+
+/**
+ * A ficha da empresa e a das pessoas dela.
+ *
+ * O negocio termina; a empresa e o contato ficam. E o que faz a segunda
+ * conversa com a mesma empresa comecar de onde a primeira parou, em vez de
+ * um cadastro novo do zero com o historico orfao no negocio antigo.
+ */
+export interface Empresa {
+  id: string;
+  name: string;
+  segment: string | null;
+  site: string | null;
+  city: string | null;
+  notes: string | null;
+  client_id: string | null;
+  owner_id: string | null;
+}
+
+export interface Contato {
+  id: string;
+  organization_id: string | null;
+  name: string;
+  role: string | null;
+  email: string | null;
+  whatsapp: string | null;
+  is_primary: boolean;
+  notes: string | null;
+}
+
+export async function listarEmpresas(): Promise<Empresa[]> {
+  const { data, error } = await supabase
+    .from("commercial_organizations")
+    .select("id, name, segment, site, city, notes, client_id, owner_id")
+    .is("archived_at", null)
+    .order("name");
+  if (error || !data) return [];
+  return data as unknown as Empresa[];
+}
+
+export async function listarContatos(): Promise<Contato[]> {
+  const { data, error } = await supabase
+    .from("commercial_contacts")
+    .select("id, organization_id, name, role, email, whatsapp, is_primary, notes")
+    .is("archived_at", null)
+    .order("name");
+  if (error || !data) return [];
+  return data as unknown as Contato[];
+}
+
+export async function salvarEmpresa(
+  empresa: Partial<Empresa> & { name: string },
+): Promise<string | null> {
+  const nome = empresa.name.trim();
+  if (nome.length < 2) return null;
+  const { data: sessao } = await supabase.auth.getUser();
+  const corpo = {
+    name: nome.slice(0, 160),
+    segment: empresa.segment?.trim() || null,
+    site: empresa.site?.trim() || null,
+    city: empresa.city?.trim() || null,
+    notes: empresa.notes?.trim() || null,
+    client_id: empresa.client_id || null,
+    owner_id: empresa.owner_id || null,
+  };
+  if (empresa.id) {
+    const { error } = await supabase
+      .from("commercial_organizations")
+      .update(corpo as never)
+      .eq("id", empresa.id);
+    return error ? null : empresa.id;
+  }
+  const { data, error } = await supabase
+    .from("commercial_organizations")
+    .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return String((data as Record<string, unknown>).id);
+}
+
+export async function salvarContato(
+  contato: Partial<Contato> & { name: string },
+): Promise<string | null> {
+  const nome = contato.name.trim();
+  if (nome.length < 2) return null;
+  const { data: sessao } = await supabase.auth.getUser();
+  const corpo = {
+    organization_id: contato.organization_id || null,
+    name: nome.slice(0, 160),
+    role: contato.role?.trim() || null,
+    email: contato.email?.trim() || null,
+    whatsapp: contato.whatsapp?.trim() || null,
+    is_primary: contato.is_primary === true,
+    notes: contato.notes?.trim() || null,
+  };
+  if (contato.id) {
+    const { error } = await supabase
+      .from("commercial_contacts")
+      .update(corpo as never)
+      .eq("id", contato.id);
+    return error ? null : contato.id;
+  }
+  const { data, error } = await supabase
+    .from("commercial_contacts")
+    .insert({ ...corpo, created_by: sessao?.user?.id || null } as never)
+    .select("id")
+    .single();
+  if (error || !data) return null;
+  return String((data as Record<string, unknown>).id);
+}
+
+export async function arquivarEmpresa(id: string): Promise<boolean> {
+  const { error } = await supabase
+    .from("commercial_organizations")
+    .update({ archived_at: new Date().toISOString() } as never)
+    .eq("id", id);
+  return !error;
+}
+
+export interface FichaDaEmpresa {
+  empresa: Empresa;
+  contatos: Contato[];
+  negocios: Lead[];
+  /** Fechado alguma vez, some do funil mas continua na historia da empresa. */
+  ganhos: number;
+  perdidos: number;
+  abertos: number;
+  /** Quanto essa empresa ja rendeu em mensalidade nova, somando os ganhos. */
+  mrrGanho: number;
+}
+
+/**
+ * Tudo o que se sabe de uma empresa, junto.
+ *
+ * E a tela que a planilha nunca teve: quantas vezes a casa conversou com
+ * aquela empresa, quem sao as pessoas, o que fechou e o que nao fechou.
+ */
+export function fichaDaEmpresa(
+  empresa: Empresa,
+  contatos: Contato[],
+  leads: Lead[],
+): FichaDaEmpresa {
+  const negocios = leads.filter((lead) => lead.organization_id === empresa.id);
+  const ganhos = negocios.filter((lead) => lead.stage === "ganho");
+  return {
+    empresa,
+    contatos: contatos
+      .filter((c) => c.organization_id === empresa.id)
+      .sort((a, b) => Number(b.is_primary) - Number(a.is_primary)),
+    negocios,
+    ganhos: ganhos.length,
+    perdidos: negocios.filter((lead) => lead.stage === "perdido").length,
+    abertos: negocios.filter((lead) =>
+      ESTAGIOS_ABERTOS.includes(lead.stage as EstagioId),
+    ).length,
+    mrrGanho: ganhos.reduce((soma, lead) => soma + lead.monthly_value, 0),
   };
 }

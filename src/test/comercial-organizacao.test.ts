@@ -25,7 +25,9 @@ const migration = ler(
 describe("cada aba é uma área, com nome que diz o que é", () => {
   it("a aba se chama CRM", () => {
     expect(pagina).toContain('{ id: "crm", label: "CRM"');
-    expect(pagina).toContain('const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "marketing"]');
+    expect(pagina).toContain(
+      'const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "campanhas", "marketing"]',
+    );
   });
 
   it("o menu leva direto para CRM e para Agenda", () => {
@@ -42,8 +44,22 @@ describe("cada aba é uma área, com nome que diz o que é", () => {
   });
 
   it("o seletor de mês só aparece onde o mês manda", () => {
-    // CRM e agenda vivem no presente; metas e marketing olham um mês fechado.
-    expect(pagina).toContain('{(aba === "metas" || aba === "marketing") && (');
+    // CRM e agenda vivem no presente; metas, campanhas e marketing olham um
+    // mês fechado.
+    expect(pagina).toContain(
+      '{(aba === "metas" || aba === "campanhas" || aba === "marketing") && (',
+    );
+    expect(pagina).not.toContain('{(aba === "crm"');
+  });
+
+  it("as cinco áreas existem, cada uma com seu endereço", () => {
+    // Campanhas (o que se investe) e Marketing (a presença da própria casa)
+    // são assuntos diferentes: juntos, um escondia o outro.
+    for (const area of ["crm", "agenda", "metas", "campanhas", "marketing"]) {
+      expect(pagina).toContain(`${area}:`);
+    }
+    expect(layout).toContain('url: "/comercial/campanhas"');
+    expect(layout).toContain('url: "/comercial/marketing"');
   });
 
   it("os números moram dentro da aba que os usa", () => {
