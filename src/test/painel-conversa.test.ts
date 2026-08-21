@@ -72,7 +72,13 @@ describe("o menu ficou organizado", () => {
   });
 
   it("a lista plana continua existindo para o menu do celular", () => {
-    expect(layout).toContain("adminMoreNav: NavItem[] = adminMoreGroups.flatMap");
+    // A asserção mudou de nome de constante para COMPORTAMENTO quando o
+    // Comercial entrou: o menu passou a ter itens restritos a admin e
+    // manager, e a lista do celular agora sai da MESMA peneira dos grupos do
+    // desktop. É isso que importa — duas peneiras deixariam o item vazar em
+    // uma das saídas no primeiro conserto distraído.
+    expect(layout).toContain("gruposDoMenu.flatMap((grupo) => grupo.items)");
+    expect(layout).toContain("const gruposPorPapel = (podeGestao: boolean)");
   });
 });
 
