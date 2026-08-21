@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, ReactNode } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { notifyOpsProfile } from "@/lib/opsSync";
 import { notifyAdmin } from "@/lib/notifyHelpers";
@@ -34,22 +34,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  /**
+   * A sessao ja deu resposta (havendo usuario ou nao)?
+   *
+   * Fica em ref, e nao em estado, porque quem le e um setTimeout criado uma
+   * vez: estado lido de dentro dele chega congelado no valor do primeiro
+   * render, que foi exatamente o defeito que existia aqui.
+   */
+  const sessaoRespondeu = useRef(false);
 
   const getOrCreateProfile = useCallback(async (authUser: User): Promise<UserProfile | null> => {
     try {
-      // 1. Try to fetch profile
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, company_name, avatar_url, plan_renewal_date, plan_status, services_config, onboarding_done")
-        .eq("id", authUser.id)
-        .maybeSingle();
-
-      // 2. Fetch role
-      const { data: roleData } = await supabase
-        .from("user_roles")
-        .select("role")
-        .eq("user_id", authUser.id)
-        .maybeSingle();
+      // Perfil e papel JUNTOS, não um depois do outro.
+      //
+      // As duas consultas são independentes, e em sequência somavam duas idas
+      // ao servidor antes de qualquer coisa aparecer na tela. Em conexão com
+      // meio segundo de latência isso é um segundo inteiro de tela parada, e
+      // é o tipo de espera que faz o painel "demorar para abrir" sem que
+      // nenhuma consulta esteja lenta.
+      const [{ data: profileData }, { data: roleData }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("id, full_name, email, company_name, avatar_url, plan_renewal_date, plan_status, services_config, onboarding_done")
+          .eq("id", authUser.id)
+          .maybeSingle(),
+        supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", authUser.id)
+          .maybeSingle(),
+      ]);
 
       const role = (roleData?.role as AppRole) || "client";
 
@@ -91,13 +105,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true;
 
-    // Safety timeout
+    /**
+     * Rede de segurança: se a checagem de sessão travar, o painel não pode
+     * ficar preso na tela de carregando para sempre.
+     *
+     * DOIS DEFEITOS CONSERTADOS AQUI, e os dois só apareciam em conexão lenta:
+     *
+     * 1. A condição era `if (mounted && loading)`, e `loading` vinha CONGELADO
+     *    do primeiro render (a dependência do efeito é getOrCreateProfile).
+     *    Valia `true` para sempre, então o desligamento acontecia SEMPRE aos
+     *    6 segundos, mesmo com tudo já resolvido.
+     * 2. Pior: quando o perfil ainda estava vindo, desligar o "carregando"
+     *    fazia o app renderizar com perfil NULO. Papel nulo cai no padrão de
+     *    cliente, e o dono via a tela de cliente, com as telas internas
+     *    redirecionando de volta. Parecia que o painel tinha quebrado.
+     *
+     * Agora quem manda é um sinal explícito de "a sessão respondeu". Enquanto
+     * há um usuário e o perfil dele está a caminho, a espera continua: melhor
+     * carregar mais um instante do que abrir com a identidade errada.
+     */
     const safetyTimer = setTimeout(() => {
-      if (mounted && loading) {
-        console.warn("[Auth] Safety timeout - forcing unauthenticated");
-        setLoading(false);
-      }
-    }, 6000);
+      if (!mounted || sessaoRespondeu.current) return;
+      console.warn("[Auth] Sessão não respondeu a tempo; seguindo sem autenticar");
+      setLoading(false);
+    }, 8000);
 
     // 1. Check existing session — force a refresh to guarantee the token is
     // signed with the current JWKS (handles signing-key rotation, which the
@@ -110,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (refErr) {
             // Refresh token is invalid/rotated — force clean logout
             console.warn("[Auth] refresh failed, signing out:", refErr.message);
+            sessaoRespondeu.current = true;
             await supabase.auth.signOut();
             if (mounted) { setUser(null); setProfile(null); setLoading(false); }
             return;
@@ -119,12 +151,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!mounted) return;
         if (session?.user) {
           setUser(session.user);
+          // A sessao respondeu: daqui para frente a espera e pelo PERFIL, e
+          // essa vale a pena esperar. Abrir sem ele mostraria a tela errada.
+          sessaoRespondeu.current = true;
           const p = await getOrCreateProfile(session.user);
           if (mounted) { setProfile(p); setLoading(false); }
         } else {
+          sessaoRespondeu.current = true;
           setLoading(false);
         }
       } catch (e) {
+        sessaoRespondeu.current = true;
         if (mounted) setLoading(false);
       }
     })();
