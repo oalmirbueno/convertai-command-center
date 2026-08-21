@@ -441,6 +441,14 @@
       "remote_name": "crm_atividades_e_previsao",
       "remote_statements_sha256": "4ec7b982f0a4af0c7d76bbea51cb46d6e65cf6e01df49f4fc41dd23c77b1d9a6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260821230000",
+      "path": "supabase/migrations/20260821230000_agenda_com_compromisso_proprio.sql",
+      "local_sha256": "9039c17e13907011300346131d1c93945bf31cdaaeead02979a7e440adb7ee2f",
+      "remote_name": "agenda_com_compromisso_proprio",
+      "remote_statements_sha256": "cfe158095c56b014a662b6d5ec4120e56b8299c4fd763886bcf25fee88b09929",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

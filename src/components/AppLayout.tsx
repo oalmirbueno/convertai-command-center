@@ -15,7 +15,7 @@ import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Briefcase, TrendingUp, Target,
+  HeartPulse, Megaphone, Briefcase, Target, KanbanSquare, CalendarClock,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -71,7 +71,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     // tráfego são equipe, mas operam entrega.
     label: "Comercial",
     items: [
-      { title: "Funil", url: "/comercial", icon: TrendingUp, soGestao: true },
+      { title: "CRM", url: "/comercial", icon: KanbanSquare, soGestao: true },
+      { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Marketing", url: "/comercial/marketing", icon: Megaphone, soGestao: true },
     ],

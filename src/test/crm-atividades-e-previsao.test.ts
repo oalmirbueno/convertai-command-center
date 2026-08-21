@@ -230,14 +230,19 @@ describe("a agenda cobra pelo sininho do painel", () => {
 });
 
 describe("a agenda do dia existe como tela", () => {
-  it("separa atrasado, hoje e depois", () => {
-    for (const grupo of ["Atrasadas", "Hoje", "Depois"]) {
-      expect(agenda).toContain(`titulo: "${grupo}"`);
-    }
+  it("virou calendario de mes, e nao mais tres listas", () => {
+    // A lista respondia "o que faco agora"; o calendario responde "como
+    // esta minha semana", que e a pergunta de quem vai marcar reuniao.
+    expect(agenda).toContain("grid-cols-7");
+    expect(agenda).not.toContain('titulo: "Atrasadas"');
+  });
+
+  it("o que passou da hora continua gritando", () => {
+    expect(agenda).toContain("compromissos passaram da hora");
   });
 
   it("dá para concluir sem abrir o lead", () => {
-    expect(agenda).toContain("concluirAtividade(atividade, true)");
+    expect(agenda).toContain("concluirAtividade(atividade, !feita)");
   });
 
   it("o lead abre a partir da atividade", () => {

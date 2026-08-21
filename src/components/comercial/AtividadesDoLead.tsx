@@ -183,7 +183,7 @@ export default function AtividadesDoLead({ leadId, donoPadrao, onMudou }: Props)
         ))}
         {doLead.length === 0 && (
           <p className="rounded-lg border border-dashed border-border px-3 py-3 text-center text-[10.5px] leading-relaxed text-muted-foreground">
-            Nada agendado. Lead sem próximo compromisso é lead que some — o funil
+            Nada agendado. Lead sem próximo compromisso é lead que some: o funil
             morre de esquecimento, não de proposta recusada.
           </p>
         )}

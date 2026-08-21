@@ -246,7 +246,7 @@ export default function FunilKanban({
           <p className="mx-auto mt-1 max-w-md text-[11.5px] leading-relaxed text-muted-foreground">
             Cadastre quem já está em conversa, ou traga de uma vez quem preencheu o
             diagnóstico. Cada lead guarda o valor proposto separado em mensalidade e
-            entrada — é o que faz a meta de mensalidade nova bater no fim do mês.
+            entrada, que é o que faz a meta de mensalidade nova bater no fim do mês.
           </p>
         </div>
       ) : (
@@ -369,7 +369,7 @@ function Coluna({
         </span>
       </div>
       <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
-        {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "—"}
+        {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
       </p>
 
       <div className="mt-2 space-y-1.5">
@@ -543,7 +543,7 @@ function DialogoDeFechamento({
                 {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} de entrada`}
                 {lead.monthly_value === 0 &&
                   lead.one_off_value === 0 &&
-                  "Este lead está sem valor definido — a meta de mensalidade nova não vai contar nada por ele."}
+                  "Este lead está sem valor definido. A meta de mensalidade nova não vai contar nada por ele."}
               </p>
               <div className="space-y-1.5">
                 <p className="text-[11px] text-muted-foreground">

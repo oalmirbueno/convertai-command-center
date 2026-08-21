@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Briefcase, CalendarClock, Megaphone, Plus, Target, TrendingUp, X } from "lucide-react";
+import { ArrowRight, Briefcase, CalendarClock, KanbanSquare, Megaphone, Plus, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -64,7 +64,21 @@ import {
  * número que o financeiro não reconhece.
  */
 
-type Aba = "funil" | "agenda" | "metas" | "marketing";
+type Aba = "crm" | "agenda" | "metas" | "marketing";
+
+/**
+ * O que cada aba e, dita na propria tela.
+ *
+ * Uma linha so por aba, no lugar da frase generica que descrevia o modulo
+ * inteiro em todas elas: quem abre Metas quer saber o que Metas faz, nao o
+ * que o departamento faz.
+ */
+const TITULO_DA_ABA: Record<Aba, string> = {
+  crm: "Quem está em conversa, em que pé está e quanto vale. Arraste o cartão para mover de etapa.",
+  agenda: "Sua semana: reuniões, ligações e blocos de trabalho. O que vencer chega no sininho às 8h.",
+  metas: "O alvo do mês e quanto já saiu. A receita vem do Financeiro, não é digitada aqui.",
+  marketing: "O que a Aceleriq investe para aparecer, e quantos clientes aquilo virou.",
+};
 
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 
@@ -82,7 +96,7 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
-const ABAS_VALIDAS: Aba[] = ["funil", "agenda", "metas", "marketing"];
+const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "marketing"];
 
 export default function AdminComercial() {
   const queryClient = useQueryClient();
@@ -96,9 +110,9 @@ export default function AdminComercial() {
    * mandado para alguém.
    */
   const { aba: abaDaUrl } = useParams<{ aba?: string }>();
-  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "funil";
+  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "crm";
   const setAba = (proxima: Aba) =>
-    navigate(proxima === "funil" ? "/comercial" : `/comercial/${proxima}`);
+    navigate(proxima === "crm" ? "/comercial" : `/comercial/${proxima}`);
   const [periodo, setPeriodo] = useState(() => primeiroDiaDoMes(new Date()));
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
   const [novoLead, setNovoLead] = useState(false);
@@ -165,10 +179,6 @@ export default function AdminComercial() {
     [leads, periodo, atividades],
   );
   const previsao = useMemo(() => previsaoDoMes(leads, periodo), [leads, periodo]);
-  const atrasadasAgora = useMemo(() => {
-    const agora = new Date().toISOString();
-    return atividades.filter((a) => !a.done_at && a.due_at < agora).length;
-  }, [atividades]);
 
   const importar = useMutation({
     mutationFn: importarLeadsDoQuiz,
@@ -185,7 +195,10 @@ export default function AdminComercial() {
 
   return (
     <div className="space-y-4 pb-8">
-      {/* ─────────────────────────── Cabeçalho ─────────────────────────── */}
+      {/* ── Cabecalho: identidade e a aba. Os numeros ficam com quem os
+             usa, e nao empilhados aqui em cima: cinco cartoes iguais no topo
+             de quatro telas diferentes obrigam a ler tudo para achar o que
+             importa naquela. ── */}
       <header className="rounded-2xl border border-border bg-card p-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
@@ -196,100 +209,40 @@ export default function AdminComercial() {
               Comercial
             </h1>
             <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
-              Funil, metas e o marketing da própria Aceleriq. Interno — o cliente não
-              vê nada desta tela.
+              {TITULO_DA_ABA[aba]}
             </p>
           </div>
-          {/* O mês manda em metas e receita; o funil aberto é sempre o de hoje. */}
-          <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
-            <button
-              type="button"
-              onClick={() => setPeriodo(somarMeses(periodo, -1))}
-              className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-secondary"
-              aria-label="Mês anterior"
-            >
-              ‹
-            </button>
-            <span className="min-w-[110px] text-center text-[11.5px] font-semibold capitalize text-foreground">
-              {mesLegivel(periodo)}
-            </span>
-            <button
-              type="button"
-              onClick={() => setPeriodo(somarMeses(periodo, 1))}
-              className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-secondary"
-              aria-label="Próximo mês"
-            >
-              ›
-            </button>
-          </div>
+          {/* O mes so aparece onde ele manda: metas e marketing olham para um
+              mes fechado; CRM e agenda vivem no presente. */}
+          {(aba === "metas" || aba === "marketing") && (
+            <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
+              <button
+                type="button"
+                onClick={() => setPeriodo(somarMeses(periodo, -1))}
+                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-secondary"
+                aria-label="Mês anterior"
+              >
+                ‹
+              </button>
+              <span className="min-w-[110px] text-center text-[11.5px] font-semibold capitalize text-foreground">
+                {mesLegivel(periodo)}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPeriodo(somarMeses(periodo, 1))}
+                className="h-8 w-8 rounded-lg text-muted-foreground hover:bg-secondary"
+                aria-label="Próximo mês"
+              >
+                ›
+              </button>
+            </div>
+          )}
         </div>
-
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-          <Tile
-            titulo="Em aberto"
-            valor={String(resumo.abertos)}
-            apoio={
-              atrasadasAgora > 0
-                ? `${atrasadasAgora} atividade${atrasadasAgora === 1 ? "" : "s"} atrasada${atrasadasAgora === 1 ? "" : "s"}`
-                : "leads no funil"
-            }
-          />
-          <Tile
-            titulo="Em jogo"
-            valor={dinheiro(resumo.valorEmJogo)}
-            apoio="mensalidade × 12 + entrada"
-          />
-          <Tile
-            titulo="Ganhos no mês"
-            valor={String(resumo.ganhosNoMes)}
-            apoio={
-              resumo.taxaDeGanho == null
-                ? "nada fechado ainda"
-                : `${Math.round(resumo.taxaDeGanho * 100)}% de aproveitamento`
-            }
-          />
-          <Tile
-            titulo="Receita do mês"
-            valor={dinheiro(receita)}
-            apoio="lida do Financeiro"
-          />
-          <Tile
-            titulo="Previsão"
-            valor={dinheiro(previsao.ponderado)}
-            /* Previsão feita só sobre quem tem data parece precisa e esconde
-               metade do funil; dizer quantos ficaram de fora impede a conta
-               de virar promessa. */
-            apoio={
-              previsao.semData > 0
-                ? `${previsao.leads} com data · ${previsao.semData} sem`
-                : `${previsao.leads} com data prevista`
-            }
-          />
-        </div>
-
-        {/* Funil não morre de proposta recusada — morre de lead esquecido. */}
-        {(resumo.atrasados > 0 || resumo.semProximoPasso > 0) && (
-          <p className="mt-2 rounded-xl border border-warning/25 bg-warning/[0.06] px-3 py-2 text-[11px] leading-relaxed text-warning">
-            {resumo.atrasados > 0 && (
-              <>
-                {resumo.atrasados}{" "}
-                {resumo.atrasados === 1 ? "lead com passo atrasado" : "leads com passo atrasado"}
-              </>
-            )}
-            {resumo.atrasados > 0 && resumo.semProximoPasso > 0 && " · "}
-            {resumo.semProximoPasso > 0 && (
-              <>
-                {resumo.semProximoPasso}{" "}
-                {resumo.semProximoPasso === 1 ? "sem próximo passo" : "sem próximo passo"}
-              </>
-            )}
-          </p>
-        )}
 
         <div className="mt-3 flex gap-1.5 overflow-x-auto">
           {(
             [
-              { id: "funil", label: "Funil", icone: TrendingUp },
+              { id: "crm", label: "CRM", icone: KanbanSquare },
               { id: "agenda", label: "Agenda", icone: CalendarClock },
               { id: "metas", label: "Metas", icone: Target },
               { id: "marketing", label: "Marketing", icone: Megaphone },
@@ -312,7 +265,67 @@ export default function AdminComercial() {
         </div>
       </header>
 
-      {aba === "funil" && (
+      {aba === "crm" && (
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          <Tile
+            titulo="Em aberto"
+            valor={String(resumo.abertos)}
+            apoio={resumo.abertos === 1 ? "lead em conversa" : "leads em conversa"}
+          />
+          <Tile
+            titulo="Em jogo"
+            valor={dinheiro(resumo.valorEmJogo)}
+            apoio="mensalidade x 12 + entrada"
+          />
+          <Tile
+            titulo="Previsão do mês"
+            valor={dinheiro(previsao.ponderado)}
+            /* Previsão feita só sobre quem tem data parece precisa e esconde
+               metade do funil; dizer quantos ficaram de fora impede a conta
+               de virar promessa. */
+            apoio={
+              previsao.semData > 0
+                ? `${previsao.leads} com data, ${previsao.semData} sem`
+                : `${previsao.leads} com data prevista`
+            }
+          />
+          <Tile
+            titulo="Ganhos no mês"
+            valor={String(resumo.ganhosNoMes)}
+            apoio={
+              resumo.taxaDeGanho == null
+                ? "nada fechado ainda"
+                : `${Math.round(resumo.taxaDeGanho * 100)}% de aproveitamento`
+            }
+          />
+        </div>
+      )}
+
+      {/* O que está parado, dito onde dá para agir. Funil não morre de
+          proposta recusada, morre de lead esquecido. */}
+      {aba === "crm" && (resumo.atrasados > 0 || resumo.semProximoPasso > 0) && (
+        <p className="rounded-xl border border-warning/25 bg-warning/[0.06] px-3 py-2 text-[11px] leading-relaxed text-warning">
+          {resumo.atrasados > 0 && (
+            <>
+              {resumo.atrasados}{" "}
+              {resumo.atrasados === 1
+                ? "lead com compromisso atrasado"
+                : "leads com compromisso atrasado"}
+            </>
+          )}
+          {resumo.atrasados > 0 && resumo.semProximoPasso > 0 && ", "}
+          {resumo.semProximoPasso > 0 && (
+            <>
+              {resumo.semProximoPasso}{" "}
+              {resumo.semProximoPasso === 1
+                ? "sem nada marcado"
+                : "sem nada marcado"}
+            </>
+          )}
+        </p>
+      )}
+
+      {aba === "crm" && (
         <FunilKanban
           leads={leads}
           atividades={atividades}
@@ -333,6 +346,21 @@ export default function AdminComercial() {
           onAbrirLead={setLeadAberto}
           onMudou={recarregar}
         />
+      )}
+
+      {aba === "metas" && (
+        <div className="grid grid-cols-2 gap-2">
+          <Tile
+            titulo="Receita do mês"
+            valor={dinheiro(receita)}
+            apoio="lida do Financeiro"
+          />
+          <Tile
+            titulo="Fechados no mês"
+            valor={String(resumo.ganhosNoMes)}
+            apoio="leads que entraram em Ganho"
+          />
+        </div>
       )}
 
       {aba === "metas" && (
@@ -589,11 +617,11 @@ function Marketing({
               <Kpi rotulo="Leads" valor={String(kpi.leads)} />
               <Kpi
                 rotulo="Custo por lead"
-                valor={kpi.custoPorLead == null ? "—" : dinheiro(kpi.custoPorLead)}
+                valor={kpi.custoPorLead == null ? "sem dado" : dinheiro(kpi.custoPorLead)}
               />
               <Kpi
                 rotulo="Custo por cliente"
-                valor={kpi.custoPorCliente == null ? "—" : dinheiro(kpi.custoPorCliente)}
+                valor={kpi.custoPorCliente == null ? "sem dado" : dinheiro(kpi.custoPorCliente)}
               />
             </div>
 
@@ -700,7 +728,7 @@ function EditorDeLead({
   const mover = async (para: EstagioId) => {
     if (!lead) return;
     if (para === "perdido" && motivo.trim().length < 3) {
-      toast.error("Diga em uma linha por que foi perdido — é o que ensina o próximo.");
+      toast.error("Diga em uma linha por que foi perdido. É o que ensina o próximo.");
       return;
     }
     if (await moverLead({ lead, paraEstagio: para, motivo })) {
@@ -817,7 +845,7 @@ function EditorDeLead({
 
           <div className="grid gap-3 sm:grid-cols-2">
             {/* Dono e data prevista: sem o primeiro, dois ligam para o mesmo
-                lead ou nenhum liga; sem o segundo, não existe previsão — só
+                lead ou nenhum liga; sem o segundo, não existe previsão, só
                 a soma do funil inteiro, inclusive o que fecha ano que vem. */}
             <Campo rotulo="Dono">
               <Select

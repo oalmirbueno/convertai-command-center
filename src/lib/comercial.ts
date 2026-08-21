@@ -29,7 +29,7 @@ export const ESTAGIOS = [
   { id: "proposta", label: "Proposta", ajuda: "Proposta enviada, esperando resposta" },
   { id: "negociacao", label: "Negociação", ajuda: "Ajustando valor, escopo ou prazo" },
   { id: "ganho", label: "Ganho", ajuda: "Fechou e virou cliente" },
-  { id: "perdido", label: "Perdido", ajuda: "Não seguiu — o motivo fica registrado" },
+  { id: "perdido", label: "Perdido", ajuda: "Não seguiu. O motivo fica registrado" },
 ] as const;
 
 export type EstagioId = (typeof ESTAGIOS)[number]["id"];
@@ -303,25 +303,25 @@ export const METRICAS = [
   {
     id: "receita",
     label: "Receita do mês",
-    fonte: "Financeiro — entradas com competência no mês",
+    fonte: "Financeiro: entradas com competência no mês",
     dinheiro: true,
   },
   {
     id: "mrr_novo",
     label: "Mensalidade nova",
-    fonte: "Funil — mensalidade dos leads ganhos no mês",
+    fonte: "CRM: mensalidade dos leads ganhos no mês",
     dinheiro: true,
   },
   {
     id: "fechamentos",
     label: "Contratos fechados",
-    fonte: "Funil — leads que entraram em Ganho no mês",
+    fonte: "CRM: leads que entraram em Ganho no mês",
     dinheiro: false,
   },
   {
     id: "leads",
     label: "Leads novos",
-    fonte: "Funil — leads criados no mês",
+    fonte: "CRM: leads criados no mês",
     dinheiro: false,
   },
 ] as const;
@@ -612,7 +612,13 @@ export const rotuloDaAtividade = (id: string) =>
 
 export interface Atividade {
   id: string;
-  lead_id: string;
+  /**
+   * Nulo quando o compromisso e proprio: reuniao de planejamento, bloco
+   * para escrever proposta, almoco com quem ainda nao virou lead. Sem isto
+   * a agenda do painel seria metade da verdade, e nao daria para confiar
+   * nela para saber se o dia esta cheio.
+   */
+  lead_id: string | null;
   kind: string;
   title: string;
   due_at: string;
@@ -634,7 +640,7 @@ export async function listarAtividades(): Promise<Atividade[]> {
 
 export async function salvarAtividade(input: {
   id?: string;
-  leadId: string;
+  leadId?: string | null;
   kind: string;
   title: string;
   dueAt: string;
@@ -645,7 +651,7 @@ export async function salvarAtividade(input: {
   if (titulo.length < 2 || !input.dueAt) return false;
   const { data: sessao } = await supabase.auth.getUser();
   const corpo = {
-    lead_id: input.leadId,
+    lead_id: input.leadId || null,
     kind: input.kind || "tarefa",
     title: titulo.slice(0, 200),
     due_at: new Date(input.dueAt).toISOString(),
@@ -682,7 +688,9 @@ export async function concluirAtividade(
     .update({ done_at: concluir ? new Date().toISOString() : null } as never)
     .eq("id", atividade.id);
   if (error) return false;
-  if (concluir) {
+  // So o compromisso ligado a um lead vira linha na historia dele; o
+  // proprio nao tem onde ser registrado, nem precisa.
+  if (concluir && atividade.lead_id) {
     await supabase.from("commercial_lead_events").insert({
       lead_id: atividade.lead_id,
       kind: "atividade",

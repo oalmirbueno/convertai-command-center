@@ -331,16 +331,21 @@ describe("Comercial é área própria, não item de Gestão", () => {
     expect(app).toContain('path="/comercial/:aba"');
   });
 
-  it("as três entradas continuam restritas", () => {
+  it("todas as entradas do grupo continuam restritas", () => {
+    // Eram tres (CRM, Metas, Marketing); a Agenda virou a quarta quando o
+    // calendario ganhou tela propria. O que o teste protege e a regra, nao
+    // a quantidade: NENHUMA entrada do grupo pode ficar sem a trava.
     const grupo = layout.slice(
       layout.indexOf('label: "Comercial"'),
       layout.indexOf('label: "Gestão"'),
     );
-    expect(grupo.split("soGestao: true").length - 1).toBe(3);
+    const entradas = grupo.split("{ title:").length - 1;
+    expect(entradas).toBeGreaterThanOrEqual(4);
+    expect(grupo.split("soGestao: true").length - 1).toBe(entradas);
   });
 
   it("a aba sai da URL, então o voltar do navegador funciona", () => {
     expect(pagina).toContain("useParams<{ aba?: string }>()");
-    expect(pagina).toContain('navigate(proxima === "funil" ? "/comercial" : `/comercial/${proxima}`)');
+    expect(pagina).toContain('navigate(proxima === "crm" ? "/comercial" : `/comercial/${proxima}`)');
   });
 });
