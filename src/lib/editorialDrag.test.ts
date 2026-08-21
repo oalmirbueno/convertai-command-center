@@ -45,6 +45,8 @@ function bundle(
     },
     primaryFile: null,
     publicationSetComplete: true,
+    temPlanoVivoGlobal: false,
+    publicadoGlobal: false,
     publications: [
       {
         publication: {
@@ -155,6 +157,8 @@ describe("editorial drag helpers", () => {
     const partial = {
       ...bundle(),
       publicationSetComplete: false,
+      temPlanoVivoGlobal: false,
+      publicadoGlobal: false,
     };
 
     expect(() =>

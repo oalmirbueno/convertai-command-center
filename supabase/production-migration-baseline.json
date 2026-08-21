@@ -433,6 +433,14 @@
       "remote_name": "departamento_comercial",
       "remote_statements_sha256": "557658b2f08c64911d04a126d65d07e14fb6c1390bf13556f095688039dad4c1",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260821210000",
+      "path": "supabase/migrations/20260821210000_crm_atividades_e_previsao.sql",
+      "local_sha256": "ac1e3e3a908dccce3d321e2967ab151959092c4c73d5afe5e57e1a51d0d2283e",
+      "remote_name": "crm_atividades_e_previsao",
+      "remote_statements_sha256": "4ec7b982f0a4af0c7d76bbea51cb46d6e65cf6e01df49f4fc41dd23c77b1d9a6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

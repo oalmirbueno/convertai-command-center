@@ -540,6 +540,284 @@ export type Database = {
         }
         Relationships: []
       }
+      commercial_activities: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          done_at: string | null
+          due_at: string
+          id: string
+          kind: string
+          lead_id: string
+          notes: string | null
+          owner_id: string | null
+          reminded_on: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          done_at?: string | null
+          due_at: string
+          id?: string
+          kind?: string
+          lead_id: string
+          notes?: string | null
+          owner_id?: string | null
+          reminded_on?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          done_at?: string | null
+          due_at?: string
+          id?: string
+          kind?: string
+          lead_id?: string
+          notes?: string | null
+          owner_id?: string | null
+          reminded_on?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_activities_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_campaigns: {
+        Row: {
+          archived_at: string | null
+          budget: number
+          channel: string
+          created_at: string
+          created_by: string | null
+          ends_on: string | null
+          goal: string | null
+          id: string
+          name: string
+          notes: string | null
+          spent: number
+          starts_on: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          budget?: number
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          ends_on?: string | null
+          goal?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          spent?: number
+          starts_on?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          budget?: number
+          channel?: string
+          created_at?: string
+          created_by?: string | null
+          ends_on?: string | null
+          goal?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          spent?: number
+          starts_on?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      commercial_goals: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          id: string
+          metric: string
+          notes: string | null
+          period: string
+          target: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric: string
+          notes?: string | null
+          period: string
+          target: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          metric?: string
+          notes?: string | null
+          period?: string
+          target?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      commercial_lead_events: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          from_stage: string | null
+          id: string
+          kind: string
+          lead_id: string
+          note: string | null
+          to_stage: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          from_stage?: string | null
+          id?: string
+          kind?: string
+          lead_id: string
+          note?: string | null
+          to_stage?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          from_stage?: string | null
+          id?: string
+          kind?: string
+          lead_id?: string
+          note?: string | null
+          to_stage?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_lead_events_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_leads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_leads: {
+        Row: {
+          archived_at: string | null
+          campaign_id: string | null
+          closed_at: string | null
+          company: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          expected_close_date: string | null
+          id: string
+          lost_reason: string | null
+          monthly_value: number
+          name: string
+          next_action: string | null
+          next_action_at: string | null
+          notes: string | null
+          one_off_value: number
+          origin: string
+          owner_id: string | null
+          quiz_submission_id: string | null
+          stage: string
+          updated_at: string
+          whatsapp: string | null
+          won_client_id: string | null
+        }
+        Insert: {
+          archived_at?: string | null
+          campaign_id?: string | null
+          closed_at?: string | null
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          expected_close_date?: string | null
+          id?: string
+          lost_reason?: string | null
+          monthly_value?: number
+          name: string
+          next_action?: string | null
+          next_action_at?: string | null
+          notes?: string | null
+          one_off_value?: number
+          origin?: string
+          owner_id?: string | null
+          quiz_submission_id?: string | null
+          stage?: string
+          updated_at?: string
+          whatsapp?: string | null
+          won_client_id?: string | null
+        }
+        Update: {
+          archived_at?: string | null
+          campaign_id?: string | null
+          closed_at?: string | null
+          company?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          expected_close_date?: string | null
+          id?: string
+          lost_reason?: string | null
+          monthly_value?: number
+          name?: string
+          next_action?: string | null
+          next_action_at?: string | null
+          notes?: string | null
+          one_off_value?: number
+          origin?: string
+          owner_id?: string | null
+          quiz_submission_id?: string | null
+          stage?: string
+          updated_at?: string
+          whatsapp?: string | null
+          won_client_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_leads_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercial_leads_quiz_submission_id_fkey"
+            columns: ["quiz_submission_id"]
+            isOneToOne: false
+            referencedRelation: "quiz_submissions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercial_leads_won_client_id_fkey"
+            columns: ["won_client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       contracts: {
         Row: {
           admin_signature_ip: string | null

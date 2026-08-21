@@ -81,6 +81,8 @@ export interface Lead {
   won_client_id: string | null;
   closed_at: string | null;
   created_at: string;
+  /** Quando se espera fechar. Sem isto não existe previsão, só soma. */
+  expected_close_date: string | null;
 }
 
 export interface Campanha {
@@ -141,6 +143,8 @@ export async function salvarLead(
     one_off_value: numero(lead.one_off_value),
     next_action: lead.next_action?.trim() || null,
     next_action_at: lead.next_action_at || null,
+    expected_close_date: lead.expected_close_date || null,
+    owner_id: lead.owner_id || null,
     notes: lead.notes?.trim() || null,
   };
   if (lead.id) {
@@ -541,9 +545,16 @@ export interface ResumoDoFunil {
  * pequena e um projeto grande caberem na mesma conta.
  *
  * `semProximoPasso` e `atrasados` existem porque funil não morre de proposta
- * recusada — morre de lead esquecido.
+ * recusada — morre de lead esquecido. Os dois saem da AGENDA, não de um
+ * campo de texto: compromisso com data é fato, anotação livre é intenção —
+ * e a intenção nunca era atualizada quando o combinado mudava.
  */
-export function resumoDoFunil(leads: Lead[], periodo: string, hojeIso: string): ResumoDoFunil {
+export function resumoDoFunil(
+  leads: Lead[],
+  periodo: string,
+  agoraIso: string,
+  atividades: Atividade[] = [],
+): ResumoDoFunil {
   const abertos = leads.filter((lead) => ESTAGIOS_ABERTOS.includes(lead.stage as EstagioId));
   const ganhos = leads.filter(
     (lead) => lead.stage === "ganho" && dentroDoMes(lead.closed_at, periodo),
@@ -561,9 +572,11 @@ export function resumoDoFunil(leads: Lead[], periodo: string, hojeIso: string): 
     ganhosNoMes: ganhos.length,
     perdidosNoMes: perdidos.length,
     taxaDeGanho: fechados > 0 ? ganhos.length / fechados : null,
-    semProximoPasso: abertos.filter((lead) => !lead.next_action_at).length,
+    semProximoPasso: abertos.filter(
+      (lead) => agendaDoLead(atividades, lead.id, agoraIso).abertas === 0,
+    ).length,
     atrasados: abertos.filter(
-      (lead) => lead.next_action_at != null && lead.next_action_at < hojeIso,
+      (lead) => agendaDoLead(atividades, lead.id, agoraIso).atrasadas > 0,
     ).length,
   };
 }
@@ -574,3 +587,202 @@ export const dinheiro = (valor: number) =>
     currency: "BRL",
     maximumFractionDigits: 0,
   });
+
+/* ────────────────────────────── Atividades ──────────────────────────────── */
+
+/**
+ * O que um comercial faz entre uma coluna e outra.
+ *
+ * O lead tinha um único `next_action` em texto livre, e um comercial não tem
+ * "um próximo passo": tem a ligação de terça, a reunião de quinta e a
+ * proposta para sexta. Com um campo só, marcar a ligação como feita apagava
+ * a reunião.
+ */
+export const TIPOS_DE_ATIVIDADE = [
+  { id: "ligacao", label: "Ligação" },
+  { id: "reuniao", label: "Reunião" },
+  { id: "whatsapp", label: "WhatsApp" },
+  { id: "email", label: "E-mail" },
+  { id: "proposta", label: "Proposta" },
+  { id: "tarefa", label: "Tarefa" },
+] as const;
+
+export const rotuloDaAtividade = (id: string) =>
+  TIPOS_DE_ATIVIDADE.find((t) => t.id === id)?.label || id;
+
+export interface Atividade {
+  id: string;
+  lead_id: string;
+  kind: string;
+  title: string;
+  due_at: string;
+  done_at: string | null;
+  owner_id: string | null;
+  notes: string | null;
+}
+
+/** Todas as atividades abertas, de todos os leads: a agenda do comercial. */
+export async function listarAtividades(): Promise<Atividade[]> {
+  const { data, error } = await supabase
+    .from("commercial_activities")
+    .select("id, lead_id, kind, title, due_at, done_at, owner_id, notes")
+    .order("due_at", { ascending: true })
+    .limit(500);
+  if (error || !data) return [];
+  return data as unknown as Atividade[];
+}
+
+export async function salvarAtividade(input: {
+  id?: string;
+  leadId: string;
+  kind: string;
+  title: string;
+  dueAt: string;
+  ownerId?: string | null;
+  notes?: string | null;
+}): Promise<boolean> {
+  const titulo = input.title.trim();
+  if (titulo.length < 2 || !input.dueAt) return false;
+  const { data: sessao } = await supabase.auth.getUser();
+  const corpo = {
+    lead_id: input.leadId,
+    kind: input.kind || "tarefa",
+    title: titulo.slice(0, 200),
+    due_at: new Date(input.dueAt).toISOString(),
+    owner_id: input.ownerId || null,
+    notes: input.notes?.trim() || null,
+  };
+  if (input.id) {
+    const { error } = await supabase
+      .from("commercial_activities")
+      .update(corpo as never)
+      .eq("id", input.id);
+    return !error;
+  }
+  const { error } = await supabase
+    .from("commercial_activities")
+    .insert({ ...corpo, created_by: sessao?.user?.id || null } as never);
+  return !error;
+}
+
+/**
+ * Concluir e reabrir.
+ *
+ * Concluir também registra na história do lead: a atividade feita é o que
+ * aconteceu de verdade, e é ela que responde "o que já foi tentado aqui"
+ * quando alguém pega o lead na semana seguinte.
+ */
+export async function concluirAtividade(
+  atividade: Atividade,
+  concluir: boolean,
+): Promise<boolean> {
+  const { data: sessao } = await supabase.auth.getUser();
+  const { error } = await supabase
+    .from("commercial_activities")
+    .update({ done_at: concluir ? new Date().toISOString() : null } as never)
+    .eq("id", atividade.id);
+  if (error) return false;
+  if (concluir) {
+    await supabase.from("commercial_lead_events").insert({
+      lead_id: atividade.lead_id,
+      kind: "atividade",
+      note: `${rotuloDaAtividade(atividade.kind)}: ${atividade.title}`,
+      created_by: sessao?.user?.id || null,
+    } as never);
+  }
+  return true;
+}
+
+export async function apagarAtividade(id: string): Promise<boolean> {
+  const { error } = await supabase.from("commercial_activities").delete().eq("id", id);
+  return !error;
+}
+
+export interface AgendaDoLead {
+  proxima: Atividade | null;
+  atrasadas: number;
+  abertas: number;
+}
+
+/**
+ * O estado da agenda de um lead, para o cartão do funil.
+ *
+ * Substitui o `next_action` de texto livre: a próxima atividade em aberto é
+ * um fato com data, não uma anotação que ninguém atualiza.
+ */
+export function agendaDoLead(
+  atividades: Atividade[],
+  leadId: string,
+  agoraIso: string,
+): AgendaDoLead {
+  const abertas = atividades
+    .filter((a) => a.lead_id === leadId && !a.done_at)
+    .sort((a, b) => a.due_at.localeCompare(b.due_at));
+  return {
+    proxima: abertas[0] || null,
+    atrasadas: abertas.filter((a) => a.due_at < agoraIso).length,
+    abertas: abertas.length,
+  };
+}
+
+/* ─────────────────────────── Previsão de receita ────────────────────────── */
+
+/**
+ * A chance de fechar, por estágio.
+ *
+ * Números da casa, não de manual: servem para ordenar a previsão, e é por
+ * isso que existem. Uma previsão que trata proposta enviada e primeiro
+ * contato como a mesma coisa não é previsão — é soma.
+ */
+export const CHANCE_POR_ESTAGIO: Record<string, number> = {
+  novo: 0.1,
+  contato: 0.2,
+  diagnostico: 0.4,
+  proposta: 0.6,
+  negociacao: 0.8,
+  ganho: 1,
+  perdido: 0,
+};
+
+/** O valor de um lead no primeiro ano: mensalidade × 12 + entrada. */
+export const valorDoLead = (lead: Lead) => lead.monthly_value * 12 + lead.one_off_value;
+
+export interface Previsao {
+  /** Soma bruta do que tem data de fechamento no mês. */
+  bruto: number;
+  /** A mesma soma, cada lead pesado pela chance do estágio dele. */
+  ponderado: number;
+  /** Quantos leads entram na conta. */
+  leads: number;
+  /** Em aberto sem data prevista — o que a previsão NÃO consegue ver. */
+  semData: number;
+}
+
+/**
+ * Quanto deve entrar no mês, e o que a conta não enxerga.
+ *
+ * `semData` é tão importante quanto o número: previsão feita só sobre quem
+ * tem data parece precisa e esconde metade do funil. Dizer quantos ficaram
+ * de fora é o que impede a conta de virar promessa.
+ */
+export function previsaoDoMes(leads: Lead[], periodo: string): Previsao {
+  const fim = proximoMes(periodo);
+  const abertos = leads.filter((lead) =>
+    ESTAGIOS_ABERTOS.includes(lead.stage as EstagioId),
+  );
+  const noMes = abertos.filter(
+    (lead) =>
+      lead.expected_close_date != null &&
+      lead.expected_close_date >= periodo &&
+      lead.expected_close_date < fim,
+  );
+  return {
+    bruto: noMes.reduce((soma, lead) => soma + valorDoLead(lead), 0),
+    ponderado: noMes.reduce(
+      (soma, lead) => soma + valorDoLead(lead) * (CHANCE_POR_ESTAGIO[lead.stage] ?? 0),
+      0,
+    ),
+    leads: noMes.length,
+    semData: abertos.filter((lead) => !lead.expected_close_date).length,
+  };
+}

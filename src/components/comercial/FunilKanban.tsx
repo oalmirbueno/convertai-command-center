@@ -32,10 +32,14 @@ import {
 import {
   ESTAGIOS,
   ESTAGIOS_ABERTOS,
+  type AgendaDoLead,
+  type Atividade,
   type EstagioId,
   type Lead,
+  agendaDoLead,
   dinheiro,
   moverLead,
+  rotuloDaAtividade,
   rotuloDoEstagio,
 } from "@/lib/comercial";
 
@@ -58,6 +62,7 @@ import {
 
 interface Props {
   leads: Lead[];
+  atividades: Atividade[];
   carregando: boolean;
   clientes: Array<{ id: string; nome: string }>;
   onAbrir: (lead: Lead) => void;
@@ -67,14 +72,18 @@ interface Props {
   onMovido: () => Promise<unknown>;
 }
 
-const hojeIso = () => new Date().toISOString().slice(0, 10);
-
-/** O que decide se um lead está esquecido, num lugar só. */
-const estaAtrasado = (lead: Lead, hoje: string) =>
-  lead.next_action_at != null && lead.next_action_at < hoje;
+/**
+ * O que decide se um lead está esquecido, num lugar só.
+ *
+ * Passou a olhar a AGENDA em vez do antigo `next_action_at`: o campo de
+ * texto livre era uma anotação que ninguém atualizava, e a atividade é um
+ * compromisso com data que alguém precisa concluir.
+ */
+const estaAtrasado = (agenda: AgendaDoLead) => agenda.atrasadas > 0;
 
 export default function FunilKanban({
   leads,
+  atividades,
   carregando,
   clientes,
   onAbrir,
@@ -99,8 +108,9 @@ export default function FunilKanban({
     useSensor(KeyboardSensor),
   );
 
-  const hoje = hojeIso();
+  const agoraIso = new Date().toISOString();
   const termo = busca.trim().toLowerCase();
+  const agendaDe = (lead: Lead) => agendaDoLead(atividades, lead.id, agoraIso);
 
   const porEstagio = useMemo(() => {
     const mapa = new Map<string, Lead[]>();
@@ -119,14 +129,20 @@ export default function FunilKanban({
     // parado, não escondê-lo no fim da coluna.
     for (const lista of mapa.values()) {
       lista.sort((a, b) => {
-        const atrasoA = estaAtrasado(a, hoje) ? 0 : 1;
-        const atrasoB = estaAtrasado(b, hoje) ? 0 : 1;
+        const agendaA = agendaDoLead(atividades, a.id, agoraIso);
+        const agendaB = agendaDoLead(atividades, b.id, agoraIso);
+        const atrasoA = estaAtrasado(agendaA) ? 0 : 1;
+        const atrasoB = estaAtrasado(agendaB) ? 0 : 1;
         if (atrasoA !== atrasoB) return atrasoA - atrasoB;
-        return (a.next_action_at || "9999").localeCompare(b.next_action_at || "9999");
+        // Sem compromisso marcado vai para o fim: é o lead que ninguém
+        // agendou, e o quadro precisa deixar isso visível.
+        return (agendaA.proxima?.due_at || "9999").localeCompare(
+          agendaB.proxima?.due_at || "9999",
+        );
       });
     }
     return mapa;
-  }, [leads, termo, hoje]);
+  }, [leads, termo, atividades, agoraIso]);
 
   /**
    * Move na tela primeiro, grava depois.
@@ -259,7 +275,7 @@ export default function FunilKanban({
                 key={estagio}
                 estagio={estagio}
                 leads={porEstagio.get(estagio) || []}
-                hoje={hoje}
+                agendaDe={agendaDe}
                 arrastandoAlgo={Boolean(arrastando)}
                 onAbrir={(lead) => {
                   if (acabouDeArrastar.current) return;
@@ -313,13 +329,13 @@ export default function FunilKanban({
 function Coluna({
   estagio,
   leads,
-  hoje,
+  agendaDe,
   arrastandoAlgo,
   onAbrir,
 }: {
   estagio: EstagioId;
   leads: Lead[];
-  hoje: string;
+  agendaDe: (lead: Lead) => AgendaDoLead;
   arrastandoAlgo: boolean;
   onAbrir: (lead: Lead) => void;
 }) {
@@ -358,7 +374,12 @@ function Coluna({
 
       <div className="mt-2 space-y-1.5">
         {leads.map((lead) => (
-          <Cartao key={lead.id} lead={lead} hoje={hoje} onAbrir={onAbrir} />
+          <Cartao
+            key={lead.id}
+            lead={lead}
+            agenda={agendaDe(lead)}
+            onAbrir={onAbrir}
+          />
         ))}
         <div
           className={`rounded-xl border border-dashed px-2 py-4 text-center text-[10px] transition-colors ${
@@ -378,18 +399,18 @@ function Coluna({
 
 function Cartao({
   lead,
-  hoje,
+  agenda,
   onAbrir,
 }: {
   lead: Lead;
-  hoje: string;
+  agenda: AgendaDoLead;
   onAbrir: (lead: Lead) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `lead:${lead.id}`,
     data: { lead },
   });
-  const atrasado = estaAtrasado(lead, hoje);
+  const atrasado = estaAtrasado(agenda);
 
   return (
     <div
@@ -425,14 +446,20 @@ function Cartao({
             {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
             {lead.monthly_value === 0 && lead.one_off_value === 0 && "sem valor definido"}
           </p>
-          {lead.next_action && (
+          {/* O compromisso marcado, não uma anotação: é o que diz se este
+              lead tem alguém cuidando dele. */}
+          {agenda.proxima ? (
             <p
               className={`mt-1 truncate text-[10px] ${
                 atrasado ? "font-semibold text-warning" : "text-muted-foreground"
               }`}
             >
-              {atrasado ? "Atrasado: " : "Próximo: "}
-              {lead.next_action}
+              {atrasado ? "Atrasado: " : `${rotuloDaAtividade(agenda.proxima.kind)}: `}
+              {agenda.proxima.title}
+            </p>
+          ) : (
+            <p className="mt-1 text-[10px] italic text-muted-foreground/70">
+              sem próximo passo
             </p>
           )}
         </div>

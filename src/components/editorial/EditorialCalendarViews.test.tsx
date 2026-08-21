@@ -39,6 +39,8 @@ const scheduledPost: EditorialPostBundle = {
   internal: null,
   primaryFile: null,
   publicationSetComplete: true,
+  temPlanoVivoGlobal: false,
+  publicadoGlobal: false,
   publications: [
     {
       publication: {

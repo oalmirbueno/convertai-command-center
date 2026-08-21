@@ -1,11 +1,14 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Briefcase, Megaphone, Plus, Target, TrendingUp, X } from "lucide-react";
+import { ArrowRight, Briefcase, CalendarClock, Megaphone, Plus, Target, TrendingUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClients } from "@/hooks/useSupabaseData";
 import FunilKanban from "@/components/comercial/FunilKanban";
+import AgendaComercial from "@/components/comercial/AgendaComercial";
+import AtividadesDoLead from "@/components/comercial/AtividadesDoLead";
+import { useTeamMembers } from "@/hooks/useSupabaseData";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -32,10 +35,12 @@ import {
   historicoDoLead,
   importarLeadsDoQuiz,
   kpisDaCampanha,
+  listarAtividades,
   listarCampanhas,
   listarLeads,
   listarMetas,
   moverLead,
+  previsaoDoMes,
   primeiroDiaDoMes,
   realizadoDoMes,
   receitaDoMes,
@@ -59,7 +64,7 @@ import {
  * número que o financeiro não reconhece.
  */
 
-type Aba = "funil" | "metas" | "marketing";
+type Aba = "funil" | "agenda" | "metas" | "marketing";
 
 const hojeIso = () => new Date().toISOString().slice(0, 10);
 
@@ -77,7 +82,7 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
-const ABAS_VALIDAS: Aba[] = ["funil", "metas", "marketing"];
+const ABAS_VALIDAS: Aba[] = ["funil", "agenda", "metas", "marketing"];
 
 export default function AdminComercial() {
   const queryClient = useQueryClient();
@@ -117,6 +122,22 @@ export default function AdminComercial() {
     [clientesBrutos],
   );
 
+  const { data: atividades = [] } = useQuery({
+    queryKey: ["comercial-atividades"],
+    queryFn: listarAtividades,
+  });
+  // Quem pode ser dono de um lead: funil de time sem dono é funil de
+  // ninguém — dois ligam para o mesmo lead, ou nenhum liga.
+  const { data: equipeBruta } = useTeamMembers();
+  const equipe = useMemo(
+    () =>
+      ((equipeBruta || []) as Array<Record<string, unknown>>).map((m) => ({
+        id: String(m.id),
+        nome: String(m.full_name || m.email || "Sem nome"),
+      })),
+    [equipeBruta],
+  );
+
   const { data: campanhas = [] } = useQuery({
     queryKey: ["comercial-campanhas"],
     queryFn: listarCampanhas,
@@ -136,12 +157,18 @@ export default function AdminComercial() {
       queryClient.invalidateQueries({ queryKey: ["comercial-leads"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-campanhas"] }),
       queryClient.invalidateQueries({ queryKey: ["comercial-metas"] }),
+      queryClient.invalidateQueries({ queryKey: ["comercial-atividades"] }),
     ]);
 
   const resumo = useMemo(
-    () => resumoDoFunil(leads, periodo, hojeIso()),
-    [leads, periodo],
+    () => resumoDoFunil(leads, periodo, new Date().toISOString(), atividades),
+    [leads, periodo, atividades],
   );
+  const previsao = useMemo(() => previsaoDoMes(leads, periodo), [leads, periodo]);
+  const atrasadasAgora = useMemo(() => {
+    const agora = new Date().toISOString();
+    return atividades.filter((a) => !a.done_at && a.due_at < agora).length;
+  }, [atividades]);
 
   const importar = useMutation({
     mutationFn: importarLeadsDoQuiz,
@@ -197,8 +224,16 @@ export default function AdminComercial() {
           </div>
         </div>
 
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <Tile titulo="Em aberto" valor={String(resumo.abertos)} apoio="leads no funil" />
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+          <Tile
+            titulo="Em aberto"
+            valor={String(resumo.abertos)}
+            apoio={
+              atrasadasAgora > 0
+                ? `${atrasadasAgora} atividade${atrasadasAgora === 1 ? "" : "s"} atrasada${atrasadasAgora === 1 ? "" : "s"}`
+                : "leads no funil"
+            }
+          />
           <Tile
             titulo="Em jogo"
             valor={dinheiro(resumo.valorEmJogo)}
@@ -217,6 +252,18 @@ export default function AdminComercial() {
             titulo="Receita do mês"
             valor={dinheiro(receita)}
             apoio="lida do Financeiro"
+          />
+          <Tile
+            titulo="Previsão"
+            valor={dinheiro(previsao.ponderado)}
+            /* Previsão feita só sobre quem tem data parece precisa e esconde
+               metade do funil; dizer quantos ficaram de fora impede a conta
+               de virar promessa. */
+            apoio={
+              previsao.semData > 0
+                ? `${previsao.leads} com data · ${previsao.semData} sem`
+                : `${previsao.leads} com data prevista`
+            }
           />
         </div>
 
@@ -243,6 +290,7 @@ export default function AdminComercial() {
           {(
             [
               { id: "funil", label: "Funil", icone: TrendingUp },
+              { id: "agenda", label: "Agenda", icone: CalendarClock },
               { id: "metas", label: "Metas", icone: Target },
               { id: "marketing", label: "Marketing", icone: Megaphone },
             ] as const
@@ -267,6 +315,7 @@ export default function AdminComercial() {
       {aba === "funil" && (
         <FunilKanban
           leads={leads}
+          atividades={atividades}
           carregando={carregandoLeads}
           clientes={clientes}
           onAbrir={setLeadAberto}
@@ -274,6 +323,15 @@ export default function AdminComercial() {
           onImportar={() => importar.mutate()}
           importando={importar.isPending}
           onMovido={recarregar}
+        />
+      )}
+
+      {aba === "agenda" && (
+        <AgendaComercial
+          atividades={atividades}
+          leads={leads}
+          onAbrirLead={setLeadAberto}
+          onMudou={recarregar}
         />
       )}
 
@@ -305,6 +363,7 @@ export default function AdminComercial() {
         <EditorDeLead
           lead={leadAberto}
           campanhas={campanhas}
+          equipe={equipe}
           onFechar={() => {
             setLeadAberto(null);
             setNovoLead(false);
@@ -574,11 +633,13 @@ function Kpi({ rotulo, valor }: { rotulo: string; valor: string }) {
 function EditorDeLead({
   lead,
   campanhas,
+  equipe,
   onFechar,
   onSalvo,
 }: {
   lead: Lead | null;
   campanhas: Campanha[];
+  equipe: Array<{ id: string; nome: string }>;
   onFechar: () => void;
   onSalvo: () => Promise<unknown>;
 }) {
@@ -591,8 +652,8 @@ function EditorDeLead({
     campaign_id: lead?.campaign_id || "",
     monthly_value: String(lead?.monthly_value || ""),
     one_off_value: String(lead?.one_off_value || ""),
-    next_action: lead?.next_action || "",
-    next_action_at: lead?.next_action_at || "",
+    expected_close_date: lead?.expected_close_date || "",
+    owner_id: lead?.owner_id || "",
     notes: lead?.notes || "",
   });
   const [salvando, setSalvando] = useState(false);
@@ -622,8 +683,8 @@ function EditorDeLead({
       stage: lead?.stage || "novo",
       monthly_value: Number(form.monthly_value) || 0,
       one_off_value: Number(form.one_off_value) || 0,
-      next_action: form.next_action,
-      next_action_at: form.next_action_at || null,
+      expected_close_date: form.expected_close_date || null,
+      owner_id: form.owner_id || null,
       notes: form.notes,
     } as never);
     setSalvando(false);
@@ -754,20 +815,37 @@ function EditorDeLead({
             </Campo>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Campo rotulo="Próximo passo">
-              <Input
-                value={form.next_action}
-                onChange={(e) => setForm({ ...form, next_action: e.target.value })}
-                placeholder="Ligar, enviar proposta, cobrar retorno…"
-                className="h-10"
-              />
+          <div className="grid gap-3 sm:grid-cols-2">
+            {/* Dono e data prevista: sem o primeiro, dois ligam para o mesmo
+                lead ou nenhum liga; sem o segundo, não existe previsão — só
+                a soma do funil inteiro, inclusive o que fecha ano que vem. */}
+            <Campo rotulo="Dono">
+              <Select
+                value={form.owner_id || "ninguem"}
+                onValueChange={(v) =>
+                  setForm({ ...form, owner_id: v === "ninguem" ? "" : v })
+                }
+              >
+                <SelectTrigger className="h-10">
+                  <SelectValue placeholder="Sem dono" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="ninguem">Sem dono</SelectItem>
+                  {equipe.map((pessoa) => (
+                    <SelectItem key={pessoa.id} value={pessoa.id}>
+                      {pessoa.nome}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Campo>
-            <Campo rotulo="Quando">
+            <Campo rotulo="Previsão de fechamento">
               <Input
                 type="date"
-                value={form.next_action_at}
-                onChange={(e) => setForm({ ...form, next_action_at: e.target.value })}
+                value={form.expected_close_date}
+                onChange={(e) =>
+                  setForm({ ...form, expected_close_date: e.target.value })
+                }
                 className="h-10"
               />
             </Campo>
@@ -841,6 +919,12 @@ function EditorDeLead({
                   className="mt-2 h-10"
                 />
               </div>
+
+              <AtividadesDoLead
+                leadId={lead.id}
+                donoPadrao={lead.owner_id}
+                onMudou={() => void onSalvo()}
+              />
 
               <div className="border-t border-border pt-3">
                 <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">

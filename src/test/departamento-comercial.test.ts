@@ -40,6 +40,7 @@ const lead = (parcial: Partial<Lead>): Lead => ({
   won_client_id: null,
   closed_at: null,
   created_at: "2026-08-10T12:00:00Z",
+  expected_close_date: null,
   ...parcial,
 });
 
@@ -150,17 +151,21 @@ describe("o funil sabe o que está em risco", () => {
   });
 
   it("conta lead esquecido — é disso que funil morre", () => {
+    // A fonte mudou de `next_action_at` (texto livre) para a AGENDA quando o
+    // CRM entrou: sem nenhuma atividade marcada, TODO lead aberto está sem
+    // próximo passo — que é exatamente o que a tela precisa gritar. O caso
+    // com atividades vive em crm-atividades-e-previsao.test.ts.
     const resumo = resumoDoFunil(
       [
-        lead({ id: "a", stage: "contato", next_action_at: "2026-08-01" }),
-        lead({ id: "b", stage: "contato", next_action_at: "2026-08-30" }),
-        lead({ id: "c", stage: "contato" }),
+        lead({ id: "a", stage: "contato" }),
+        lead({ id: "b", stage: "contato" }),
+        lead({ id: "c", stage: "ganho", closed_at: "2026-08-10T00:00:00Z" }),
       ],
       "2026-08-01",
-      "2026-08-21",
+      "2026-08-21T12:00:00Z",
     );
-    expect(resumo.atrasados).toBe(1);
-    expect(resumo.semProximoPasso).toBe(1);
+    expect(resumo.semProximoPasso).toBe(2);
+    expect(resumo.atrasados).toBe(0);
   });
 
   it("aproveitamento é nulo enquanto nada fechou, não zero", () => {
@@ -298,8 +303,12 @@ describe("o funil é um kanban de arrastar, não uma lista", () => {
   });
 
   it("o lead atrasado sobe na coluna", () => {
-    // O quadro tem que empurrar para a mão o que está parado.
-    expect(kanban).toContain("const atrasoA = estaAtrasado(a, hoje) ? 0 : 1;");
+    // O quadro tem que empurrar para a mão o que está parado. O atraso passou
+    // a sair da AGENDA quando o CRM entrou — antes vinha de um campo de texto
+    // que ninguém atualizava.
+    expect(kanban).toContain("const atrasoA = estaAtrasado(agendaA) ? 0 : 1;");
+    // E quem não tem compromisso nenhum vai para o fim da coluna.
+    expect(kanban).toContain('agendaA.proxima?.due_at || "9999"');
   });
 
   it("dá para procurar dentro do funil", () => {
