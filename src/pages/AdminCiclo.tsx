@@ -12,7 +12,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useClients } from "@/hooks/useSupabaseData";
 import { hasService, isInternalClient } from "@/lib/clientFlags";
-import { servicosDoCliente } from "@/lib/servicosCliente";
+import { etapasDoServico, servicosDoCliente } from "@/lib/servicosCliente";
+import { entregaConcluida, listEtapasDeVarios, marcarEtapa } from "@/lib/entregaAvulsa";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { extraAreas, inCycle, setCycleExtra } from "@/lib/cycleExtras";
 import { recordMemory } from "@/lib/clientMemory";
@@ -171,6 +172,9 @@ export default function AdminCiclo() {
         if ((client.plan_status || "active") !== "active") return false;
         if (avulsosAbertos) {
           if (!ehAvulso(client)) return false;
+          // Entrega dada por concluida sai da lista de trabalho: ela vive no
+          // historico do cliente e na gaveta de concluidos em Clientes.
+          if (entregaConcluida(client)) return false;
           // Cliente avulso costuma ter mais de um serviço (site e design, por
           // exemplo), então ele aparece em cada um deles — não é uma gaveta só.
           return !servicoAvulso || servicosDoCliente(client).includes(servicoAvulso);
@@ -289,6 +293,43 @@ export default function AdminCiclo() {
     return map;
   }, [rows]);
 
+  /**
+   * As etapas de entrega dos avulsos, numa consulta só.
+   *
+   * O card contava exclusivamente de `weekly_cycle_progress`, e entrega
+   * avulsa não mora lá — mora em `project_memory`, porque "site construído"
+   * acontece uma vez, não toda segunda. O efeito era o relato do dono:
+   * marcava a etapa na folha, voltava, e o card seguia dizendo 0/6. Nenhum
+   * avulso tem uma linha sequer na tabela semanal — o contador nunca teve
+   * como se mexer.
+   */
+  const idsAvulsos = useMemo(
+    () =>
+      ((clients || []) as any[])
+        .filter(
+          (client) =>
+            (client.plan_status || "active") === "active" &&
+            (client.client_type || "recurring") === "one_off",
+        )
+        .map((client) => String(client.id))
+        .sort(),
+    [clients],
+  );
+
+  const { data: etapasAvulsas } = useQuery({
+    queryKey: ["entrega-etapas-lista", idsAvulsos],
+    queryFn: () => listEtapasDeVarios(idsAvulsos),
+    enabled: idsAvulsos.length > 0,
+    staleTime: 10_000,
+  });
+
+  /** O serviço que o card mostra: o filtrado na fila, ou o primeiro do cliente. */
+  const servicoDoCard = (client: any) =>
+    servicoAvulso || servicosDoCliente(client)[0] || null;
+
+  const etapasFeitasDe = (client: any, servico: string | null) =>
+    (servico && etapasAvulsas?.get(`${client.id}:${servico}`)) || new Set<number>();
+
   const { data: historyRows } = useQuery({
     queryKey: ["weekly-cycle-history", area, localIso(realMonday)],
     queryFn: async () => {
@@ -380,14 +421,41 @@ export default function AdminCiclo() {
 
   const phaseOf = (client: any) =>
     phaseForClient(stepOptionsFor(client).phaseInput!);
-  const totalFor = (client: any) =>
-    totalSteps + (isOnboarding(client) ? ONBOARDING_STEPS.length : 0);
+  const totalFor = (client: any) => {
+    // Avulso conta as etapas da entrega dele, não as seis da rotina semanal.
+    if (ehAvulso(client)) {
+      const servico = servicoDoCard(client);
+      return servico ? etapasDoServico(servico).length : 0;
+    }
+    return totalSteps + (isOnboarding(client) ? ONBOARDING_STEPS.length : 0);
+  };
   const doneCountFor = (client: any) => {
+    if (ehAvulso(client)) {
+      const feitas = etapasFeitasDe(client, servicoDoCard(client));
+      const total = totalFor(client);
+      let count = 0;
+      // Conta só o que existe hoje: etapa marcada num desenho antigo do
+      // serviço não pode inflar o contador acima do total.
+      for (let step = 1; step <= total; step += 1) if (feitas.has(step)) count += 1;
+      return count;
+    }
     let count = 0;
     for (let step = 1; step <= totalFor(client); step += 1) {
       if (doneMap.has(`${client.id}:${area}:${step}`)) count += 1;
     }
     return count;
+  };
+
+  /**
+   * Fechado e ter cumprido tudo que existia para cumprir.
+   *
+   * O `total > 0` importa para o avulso: servico sem etapas desenhadas tem
+   * total zero, e "0 de 0" passaria por completo — o cliente cairia na
+   * gaveta de fechados sem ninguem ter feito nada.
+   */
+  const estaFechado = (client: any) => {
+    const total = totalFor(client);
+    return total > 0 && doneCountFor(client) >= total;
   };
 
   // Ordem congelada: recalcula ao trocar de frente, de semana ou quando a
@@ -401,11 +469,23 @@ export default function AdminCiclo() {
   const orderRef = useRef<{ key: string; open: string[]; closed: string[] }>({
     key: "", open: [], closed: [],
   });
-  // A ordem só congela depois que a semana chegou do banco: congelar antes
-  // deixaria quem já fechou ocupando a lista de trabalho até trocar de aba.
-  const orderKey = rows === undefined
+  /**
+   * A ordem só congela depois que os dados chegaram do banco: congelar antes
+   * deixaria quem já fechou ocupando a lista de trabalho até trocar de aba.
+   * Na aba de avulsos quem manda é `etapasAvulsas` — congelar esperando só a
+   * semana jogaria todo avulso completo de volta para "em andamento".
+   *
+   * A chave carrega a aba e o serviço filtrado porque o tamanho da lista não
+   * basta: duas listas diferentes com a mesma quantidade de clientes reusavam
+   * a ordem uma da outra, e como os ids não batem, a tela ficava vazia.
+   */
+  const listaPronta = rows !== undefined
+    && (!avulsosAbertos || idsAvulsos.length === 0 || etapasAvulsas !== undefined);
+  const orderKey = !listaPronta
     ? ""
-    : `${area}:${weekKey}:${activeClients.length}`;
+    : `${area}:${weekKey}:${
+        avulsosAbertos ? `avulsos:${servicoAvulso || "todos"}` : "ciclo"
+      }:${activeClients.length}`;
   if (orderRef.current.key !== orderKey) {
     const sorted = [...activeClients].sort((a, b) => {
       const aDone = doneCountFor(a), bDone = doneCountFor(b);
@@ -416,8 +496,8 @@ export default function AdminCiclo() {
     });
     orderRef.current = {
       key: orderKey,
-      open: sorted.filter((c) => doneCountFor(c) < totalFor(c)).map((c) => c.id),
-      closed: sorted.filter((c) => doneCountFor(c) >= totalFor(c)).map((c) => c.id),
+      open: sorted.filter((c) => !estaFechado(c)).map((c) => c.id),
+      closed: sorted.filter(estaFechado).map((c) => c.id),
     };
   }
   const openClients = orderRef.current.open.map((id) => clientsById.get(id)).filter(Boolean);
@@ -430,8 +510,10 @@ export default function AdminCiclo() {
       done += doneCountFor(client);
     }
     return { done, total, pct: total > 0 ? done / total : 0 };
+    // etapasAvulsas entra aqui porque na aba de avulsos a conta sai dele:
+    // sem a dependência, marcar etapa não mexia a barra do topo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeClients, doneMap, area]);
+  }, [activeClients, doneMap, area, etapasAvulsas, servicoAvulso]);
 
   const otherArea: CycleArea = area === "social" ? "trafego" : "social";
   const otherAreaTotals = useMemo(() => {
@@ -498,7 +580,7 @@ export default function AdminCiclo() {
   }, [rows]);
 
   const nextUp = useMemo(() => {
-    const client = openClients.find((c) => doneCountFor(c) < totalFor(c));
+    const client = openClients.find((c) => !estaFechado(c));
     if (!client) return null;
     const step = Array.from({ length: totalFor(client) }, (_, i) => i + 1).find(
       (candidate) => !doneMap.has(`${client.id}:${area}:${candidate}`),
@@ -678,26 +760,70 @@ export default function AdminCiclo() {
   }
 
   // Cada cliente tem a sua semana: três etapas fixas e três que giram.
-  const stepLabelOf = (client: any, step: number) =>
-    step <= totalSteps
+  const stepLabelOf = (client: any, step: number) => {
+    if (ehAvulso(client)) {
+      const servico = servicoDoCard(client);
+      return servico ? etapasDoServico(servico)[step - 1] || "" : "";
+    }
+    return step <= totalSteps
       ? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client))
       : ONBOARDING_STEPS[step - totalSteps - 1];
+  };
+
+  const etapaFeita = (client: any, step: number) =>
+    ehAvulso(client)
+      ? etapasFeitasDe(client, servicoDoCard(client)).has(step)
+      : doneMap.has(`${client.id}:${area}:${step}`);
 
   const nextStepOf = (client: any) =>
     Array.from({ length: totalFor(client) }, (_, i) => i + 1).find(
-      (step) => !doneMap.has(`${client.id}:${area}:${step}`),
+      (step) => !etapaFeita(client, step),
     ) || null;
+
+  /**
+   * Marcar a etapa da entrega direto do card.
+   *
+   * Antes o card do avulso trazia os seis botoes do ciclo semanal, que
+   * gravam em `weekly_cycle_progress` — tabela que a entrega avulsa nao usa.
+   * Tocar ali nao mexia no que a folha mostra, e o contador seguia parado.
+   */
+  const marcarEtapaAvulsa = async (client: any, step: number) => {
+    if (!canWrite) return;
+    const servico = servicoDoCard(client);
+    if (!servico) return;
+    const chave = `${client.id}:avulso:${step}`;
+    if (pendingKey === chave) return;
+    setPendingKey(chave);
+    const feito = !etapaFeita(client, step);
+    const ok = await marcarEtapa({
+      clientId: client.id,
+      servico,
+      step,
+      rotulo: etapasDoServico(servico)[step - 1] || `Etapa ${step}`,
+      feito,
+    });
+    setPendingKey(null);
+    if (!ok) {
+      toast.error("Nao foi possivel marcar.");
+      return;
+    }
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["entrega-etapas-lista"] }),
+      queryClient.invalidateQueries({ queryKey: ["entrega-etapas", client.id, servico] }),
+    ]);
+  };
 
   const renderClientCard = (client: any) => {
     const onboarding = isOnboarding(client);
+    const avulso = ehAvulso(client);
     const clientTotal = totalFor(client);
     const doneCount = doneCountFor(client);
-    const complete = doneCount >= clientTotal;
+    const complete = estaFechado(client);
     const nextStep = complete ? null : nextStepOf(client);
 
     const stepButton = (step: number, onboardingTrack: boolean) => {
-      const key = `${client.id}:${area}:${step}`;
-      const done = doneMap.has(key);
+      const key = avulso ? `${client.id}:avulso:${step}` : `${client.id}:${area}:${step}`;
+      const done = etapaFeita(client, step);
       const isNext = step === nextStep;
       return (
         <button
@@ -705,7 +831,9 @@ export default function AdminCiclo() {
           type="button"
           title={stepLabelOf(client, step)}
           disabled={!canWrite || pendingKey === key}
-          onClick={() => void toggle(client, step)}
+          onClick={() =>
+            void (avulso ? marcarEtapaAvulsa(client, step) : toggle(client, step))
+          }
           className={`flex h-11 items-center justify-center rounded-lg border text-[13px] font-bold tabular-nums transition-colors active:scale-95 ${
             done
               ? onboardingTrack
@@ -740,7 +868,14 @@ export default function AdminCiclo() {
           <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-foreground">
             {client.company_name || client.full_name}
           </span>
-          {onboarding ? (
+          {avulso ? (
+            <span
+              title="Entrega avulsa: as etapas sao as do servico contratado"
+              className="shrink-0 truncate rounded bg-secondary px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-muted-foreground"
+            >
+              {SERVICE_LABELS[servicoDoCard(client) || ""] || "avulso"}
+            </span>
+          ) : onboarding ? (
             <span
               title="Em onboarding: 6 etapas do ciclo + 4 de entrada"
               className="shrink-0 rounded bg-info/15 px-1.5 py-0.5 text-[9px] font-bold uppercase leading-none text-info"
@@ -767,8 +902,8 @@ export default function AdminCiclo() {
             <span
               key={index}
               className={`flex-1 rounded-full ${
-                doneMap.has(`${client.id}:${area}:${index + 1}`)
-                  ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
+                etapaFeita(client, index + 1)
+                  ? !avulso && index + 1 > totalSteps ? "bg-info" : "bg-primary"
                   : "bg-secondary"
               }`}
             />
@@ -776,9 +911,12 @@ export default function AdminCiclo() {
         </div>
 
         <div className="grid grid-cols-6 gap-1.5">
-          {cycle.steps.map((_, index) => stepButton(index + 1, false))}
+          {(avulso
+            ? Array.from({ length: clientTotal }, (_, i) => i)
+            : cycle.steps.map((_, i) => i)
+          ).map((index) => stepButton(index + 1, false))}
         </div>
-        {onboarding && (
+        {onboarding && !avulso && (
           <div className="mt-1.5 grid grid-cols-6 gap-1.5">
             {ONBOARDING_STEPS.map((_, index) => stepButton(totalSteps + index + 1, true))}
             <span className="col-span-2" />
@@ -788,7 +926,9 @@ export default function AdminCiclo() {
         {/* Linha de estado: altura reservada, nunca muda o tamanho do card */}
         <p className="mt-2 flex h-4 items-center truncate text-[11.5px]">
           {complete ? (
-            <span className="font-semibold text-success">Semana fechada</span>
+            <span className="font-semibold text-success">
+              {avulso ? "Entrega completa" : "Semana fechada"}
+            </span>
           ) : nextStep ? (
             <>
               <span className="font-semibold text-foreground">Agora:</span>
@@ -802,12 +942,30 @@ export default function AdminCiclo() {
     );
   };
 
-  /** Os clientes avulsos ativos, contados para a aba mesmo quando ela está fechada. */
+  /**
+   * Os avulsos EM ANDAMENTO, contados para a aba mesmo quando ela está
+   * fechada. O concluído sai da conta junto com o card: um número que não
+   * bate com a lista faz procurar um cliente que já não está lá.
+   */
   const totalAvulsos = useMemo(
     () =>
       ((clients || []) as any[]).filter(
         (client) =>
-          (client.plan_status || "active") === "active" && ehAvulso(client),
+          (client.plan_status || "active") === "active" &&
+          ehAvulso(client) &&
+          !entregaConcluida(client),
+      ).length,
+    [clients],
+  );
+
+  /** Quantos já foram entregues — a linha que diz para onde eles foram. */
+  const avulsosConcluidos = useMemo(
+    () =>
+      ((clients || []) as any[]).filter(
+        (client) =>
+          (client.plan_status || "active") === "active" &&
+          ehAvulso(client) &&
+          entregaConcluida(client),
       ).length,
     [clients],
   );
@@ -1078,6 +1236,18 @@ export default function AdminCiclo() {
                   : `A lista usa o serviço marcado no cadastro. Marque "${area === "social" ? "Social" : "Tráfego"}" em Clientes, ou use "Incluir cliente nesta frente" aqui embaixo.`}
               </p>
             </div>
+          )}
+
+          {/* Sumiu da lista? Foi concluído. Dizer para onde foi evita a
+              procura por um cliente que ninguém tirou do ar. */}
+          {avulsosAbertos && avulsosConcluidos > 0 && (
+            <p className="px-1 pt-1 text-center text-[10.5px] text-muted-foreground">
+              {avulsosConcluidos}{" "}
+              {avulsosConcluidos === 1 ? "projeto concluído" : "projetos concluídos"} —{" "}
+              <Link to="/clientes" className="font-semibold text-primary hover:underline">
+                no histórico, em Clientes
+              </Link>
+            </p>
           )}
 
           {closedClients.length > 0 && (

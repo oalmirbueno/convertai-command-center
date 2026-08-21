@@ -612,7 +612,12 @@ export default function ClientCycleSheet({
 
               {/* Avulso troca o checklist semanal pela entrega do serviço dele. */}
               {servicoAvulso ? (
-                <EtapasDaEntrega client={client} servico={servicoAvulso} canWrite={canWrite} />
+                <EtapasDaEntrega
+                  client={client}
+                  servico={servicoAvulso}
+                  canWrite={canWrite}
+                  onConcluido={onClose}
+                />
               ) : (
                 <>
                 {heranca !== null && (

@@ -93,3 +93,104 @@ export async function marcarEtapa(input: {
     return false;
   }
 }
+
+/**
+ * As etapas feitas de VÁRIOS clientes de uma vez.
+ *
+ * A lista do Ciclo mostra os avulsos lado a lado; consultar cliente por
+ * cliente traria uma ida ao banco por card. Aqui é uma consulta só, e o
+ * resultado vem na chave "cliente:servico" que a tela usa para contar.
+ */
+export async function listEtapasDeVarios(
+  clientIds: string[],
+): Promise<Map<string, Set<number>>> {
+  const mapa = new Map<string, Set<number>>();
+  if (clientIds.length === 0) return mapa;
+  const { data, error } = await supabase
+    .from("project_memory")
+    .select("client_id, metadata")
+    .eq("kind", KIND)
+    .in("client_id", clientIds);
+  if (error || !data) return mapa;
+  for (const linha of data as Array<{
+    client_id: string;
+    metadata: { step?: number; servico?: string; done?: boolean } | null;
+  }>) {
+    const step = Number(linha.metadata?.step);
+    const servico = linha.metadata?.servico;
+    if (linha.metadata?.done !== true || !servico || !Number.isFinite(step)) continue;
+    const chave = `${linha.client_id}:${servico}`;
+    const atual = mapa.get(chave) || new Set<number>();
+    atual.add(step);
+    mapa.set(chave, atual);
+  }
+  return mapa;
+}
+
+/**
+ * Conclui (ou reabre) a entrega de um cliente avulso.
+ *
+ * Usa a MESMA bandeira que a tela de Clientes já usa —
+ * `services_config.one_off_done` —, em vez de inventar uma segunda marca de
+ * concluído. Duas marcas para o mesmo fato divergem no primeiro conserto: a
+ * tela de Clientes mostraria entregue e a do Ciclo, em andamento.
+ *
+ * Registra também uma linha na história do cliente, porque concluir é um
+ * acontecimento: é o que a Central, o dossiê e o agente externo leem para
+ * saber que aquele trabalho terminou — e é o que faz o projeto continuar
+ * existindo no histórico depois de sair da lista viva.
+ */
+export async function concluirEntrega(input: {
+  clientId: string;
+  servicesConfig: Record<string, unknown> | null;
+  resumo: string;
+  concluir: boolean;
+}): Promise<boolean> {
+  const { clientId, servicesConfig, resumo, concluir } = input;
+  try {
+    const proximo = { ...(servicesConfig || {}), one_off_done: concluir };
+    const { error } = await supabase
+      .from("profiles")
+      .update({ services_config: proximo } as never)
+      .eq("id", clientId);
+    if (error) return false;
+
+    const { data: session } = await supabase.auth.getUser();
+    // Reabrir apaga o marco em vez de gravar "não concluído": um registro
+    // dizendo que algo desaconteceu é ruído na história que a IA lê.
+    if (!concluir) {
+      await supabase
+        .from("project_memory")
+        .delete()
+        .eq("client_id", clientId)
+        .eq("kind", "marco")
+        .eq("metadata->>tipo", "entrega_concluida");
+      return true;
+    }
+
+    await supabase.from("project_memory").insert({
+      client_id: clientId,
+      kind: "marco",
+      title: "Projeto concluído",
+      content: resumo,
+      source: "ciclo",
+      tags: ["entrega", "avulso", "concluido"],
+      metadata: {
+        tipo: "entrega_concluida",
+        done_at: new Date().toISOString(),
+        client_visible: false,
+      },
+      created_by: session?.user?.id || null,
+    } as never);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** A entrega deste cliente já foi dada por concluída? */
+export function entregaConcluida(client: unknown): boolean {
+  const config = (client as { services_config?: Record<string, unknown> } | null)
+    ?.services_config;
+  return Boolean(config && (config as Record<string, unknown>).one_off_done === true);
+}
