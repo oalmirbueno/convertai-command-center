@@ -417,6 +417,14 @@
       "remote_name": "mover_arquivo",
       "remote_statements_sha256": "9af2966b4c2720a239b025a2f65efc6476f3e30dbe37072a928dd6982bdfdbe0",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260821170000",
+      "path": "supabase/migrations/20260821170000_aviso_de_post_no_ar.sql",
+      "local_sha256": "3530f37c8fba50c01f9e2554f7ca81b07d6a13b0474d84058f04e66d7193eeb7",
+      "remote_name": "aviso_de_post_no_ar",
+      "remote_statements_sha256": "5564ed5ecfa9f143243bd5ac82072a473964f071fd2e08090713805b01ecfb50",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

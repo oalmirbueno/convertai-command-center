@@ -1,11 +1,11 @@
 import { useState } from "react";
 import { useNotifications } from "@/hooks/useSupabaseData";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { Bell, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, ArrowLeft } from "lucide-react";
+import { Bell, CreditCard, Package, CheckCircle, BarChart3, FolderOpen, ListChecks, ArrowLeft, Instagram } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { safeInternalPath } from "@/lib/internalNavigation";
+import { safeInternalPath, safePublicPostUrl } from "@/lib/internalNavigation";
 import { toast } from "sonner";
 
 function getNotifIcon(type: string) {
@@ -16,12 +16,17 @@ function getNotifIcon(type: string) {
     case "billing": return { icon: <CreditCard className="w-4 h-4" />, bg: "bg-warning/10 text-warning" };
     case "task": return { icon: <ListChecks className="w-4 h-4" />, bg: "bg-info/10 text-info" };
     case "report": return { icon: <BarChart3 className="w-4 h-4" />, bg: "bg-accent/50 text-accent-foreground" };
+    // Post no ar: o aviso que leva para fora do painel merece cara própria.
+    case "publication": return { icon: <Instagram className="w-4 h-4" />, bg: "bg-success/10 text-success" };
     default: return { icon: <Bell className="w-4 h-4" />, bg: "bg-secondary text-muted-foreground" };
   }
 }
 
 function getLinkLabel(notif: any): string {
   if (!notif.link) return "Abrir";
+  // O link do post publicado sai do painel — dizer para onde evita o clique
+  // às cegas, e é o que o dono e o cliente querem: ver a peça no ar.
+  if (safePublicPostUrl(notif.link)) return "Ver publicação no Instagram";
   if (notif.link.includes("/aprovacoes")) return "Ver Arquivo";
   if (notif.link.includes("/projetos") || notif.link.includes("/dashboard")) return "Ver Projeto";
   if (notif.link.includes("/relatorios")) return "Ver Relatório";
@@ -88,6 +93,14 @@ export default function NotificationsPanel({ open, onOpenChange }: Props) {
     const destination = safeInternalPath(n.link);
     if (destination) {
       navigate(destination);
+      onOpenChange(false);
+      return;
+    }
+    // Publicação no ar: abre o post em outra aba. noopener/noreferrer para
+    // que a página aberta não ganhe referência à janela do painel.
+    const publicPost = safePublicPostUrl(n.link);
+    if (publicPost) {
+      window.open(publicPost, "_blank", "noopener,noreferrer");
       onOpenChange(false);
     }
   };
