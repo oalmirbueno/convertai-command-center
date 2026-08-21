@@ -425,6 +425,14 @@
       "remote_name": "aviso_de_post_no_ar",
       "remote_statements_sha256": "5564ed5ecfa9f143243bd5ac82072a473964f071fd2e08090713805b01ecfb50",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260821190000",
+      "path": "supabase/migrations/20260821190000_departamento_comercial.sql",
+      "local_sha256": "97ec5528eb968dbf9027b3ba05caae83879036f0a45c75b8dda0f0a769892ac9",
+      "remote_name": "departamento_comercial",
+      "remote_statements_sha256": "557658b2f08c64911d04a126d65d07e14fb6c1390bf13556f095688039dad4c1",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

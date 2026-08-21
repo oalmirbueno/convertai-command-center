@@ -29,6 +29,7 @@ const QuizPublicPage = lazy(() => import("@/pages/QuizPublicPage"));
 const AdminBriefings = lazy(() => import("@/pages/AdminBriefings"));
 const Projects = lazy(() => import("@/pages/Projects"));
 const AdminFinanceiro = lazy(() => import("@/pages/AdminFinanceiro"));
+const AdminComercial = lazy(() => import("@/pages/AdminComercial"));
 const AdminProjection = lazy(() => import("@/pages/AdminProjection"));
 const AdminMetricas = lazy(() => import("@/pages/AdminMetricas"));
 const AdminAds = lazy(() => import("@/pages/AdminAds"));
@@ -130,6 +131,24 @@ function StaffRoute({ children }: { children: ReactNode }) {
   return <>{children}</>;
 }
 
+/**
+ * Rota do Departamento Comercial.
+ *
+ * Mais estreita que StaffRoute de propósito: design e tráfego são equipe,
+ * mas operam entrega — funil, metas e investimento de marketing são gestão.
+ * Esta é a ÚNICA régua de quem entra no comercial no lado do app; o RLS das
+ * tabelas repete a mesma no banco, que é quem de fato protege o dado. Se um
+ * dia existir um papel "comercial", ele se soma aqui e na política, e em
+ * mais lugar nenhum.
+ */
+function ComercialRoute({ children }: { children: ReactNode }) {
+  const { profile, loading } = useAuth();
+  if (loading) return <LoadingScreen />;
+  const podeVer = profile?.role === "admin" || profile?.role === "manager";
+  if (!podeVer) return <Navigate to="/dashboard" replace />;
+  return <>{children}</>;
+}
+
 function AppRoutes() {
   const { user, profile, loading } = useAuth();
   if (loading) return <LoadingScreen />;
@@ -179,6 +198,7 @@ function AppRoutes() {
       <Route path="/timeline" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <TimelinePage /> : <Navigate to="/dashboard" replace />}</AppLayout></ProtectedRoute>} />
       <Route path="/ver-como-cliente" element={<ProtectedRoute><StaffRoute><AppLayout><AdminViewAsClient /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
+      <Route path="/comercial" element={<ProtectedRoute><ComercialRoute><AppLayout><AdminComercial /></AppLayout></ComercialRoute></ProtectedRoute>} />
       <Route path="/financeiro/projecao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminProjection /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/api-docs" element={<ProtectedRoute><StaffRoute><AppLayout><ApiDocs /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/admin/quiz" element={<ProtectedRoute><StaffRoute><AppLayout><AdminQuizSubmissions /></AppLayout></StaffRoute></ProtectedRoute>} />

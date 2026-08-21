@@ -15,7 +15,7 @@ import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone,
+  HeartPulse, Megaphone, Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -27,6 +27,8 @@ interface NavItem {
   title: string;
   url: string;
   icon: React.FC<{ className?: string }>;
+  /** Item de gestão: só admin e manager enxergam. */
+  soGestao?: boolean;
 }
 
 const adminMainNav: NavItem[] = [
@@ -67,6 +69,9 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     items: [
       { title: "Equipe", url: "/equipe", icon: UsersRound },
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
+      // Só admin e manager: design e tráfego são equipe, mas operam entrega.
+      // Funil, meta e investimento de marketing são gestão da casa.
+      { title: "Comercial", url: "/comercial", icon: Briefcase, soGestao: true },
       { title: "Arquivos", url: "/arquivos", icon: FileArchive },
       { title: "Workspace", url: "/workspace", icon: HardDrive },
       { title: "Cofre", url: "/cofre", icon: KeyRound },
@@ -82,8 +87,22 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
-// A lista plana continua existindo: o menu do celular percorre tudo de uma vez.
-const adminMoreNav: NavItem[] = adminMoreGroups.flatMap((group) => group.items);
+/**
+ * O menu conforme o papel.
+ *
+ * A peneira mora aqui, num lugar só, porque o menu tem duas saídas — os
+ * grupos do desktop e a lista corrida do celular. Filtrar em cada uma
+ * deixaria o item aparecendo em uma delas no primeiro conserto distraído.
+ * A trava de verdade é a rota e o RLS; isto é para não oferecer porta que
+ * não abre.
+ */
+const gruposPorPapel = (podeGestao: boolean) =>
+  adminMoreGroups
+    .map((grupo) => ({
+      ...grupo,
+      items: grupo.items.filter((item) => podeGestao || !item.soGestao),
+    }))
+    .filter((grupo) => grupo.items.length > 0);
 
 const clientMainNav: NavItem[] = [
   { title: "Dashboard", url: "/dashboard", icon: LayoutDashboard },
@@ -121,8 +140,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const isAdmin = role === "admin";
   const isTeam = ["design", "traffic", "manager"].includes(role);
   const isAdminOrTeam = isAdmin || isTeam;
+  const podeGestao = isAdmin || role === "manager";
+  const gruposDoMenu = gruposPorPapel(podeGestao);
   const mainNav = isAdminOrTeam ? adminMainNav : clientMainNav;
-  const moreNav = isAdminOrTeam ? adminMoreNav : clientMoreNav;
+  const moreNav = isAdminOrTeam
+    ? gruposDoMenu.flatMap((grupo) => grupo.items)
+    : clientMoreNav;
   const { data: notifData } = useNotifications();
   const unreadCount = (notifData || []).filter((n: any) => !n.read).length;
 
@@ -234,7 +257,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
               >
                 {/* Cliente não tem grupos: a lista dele é curta e direta. */}
                 {isAdminOrTeam ? (
-                  adminMoreGroups.map((group) => (
+                  gruposDoMenu.map((group) => (
                     <div key={group.label} className="mb-1 last:mb-0">
                       <p className="px-3 pb-0.5 pt-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
                         {group.label}
