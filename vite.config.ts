@@ -3,6 +3,7 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { readFileSync } from "fs";
 import { chunkPara, PISO_DE_TAMANHO } from "./config/chunk-strategy";
+import { pluginCsp } from "./config/csp";
 
 const PUBLIC_ENV_KEYS = [
   "VITE_SUPABASE_URL",
@@ -117,6 +118,7 @@ export default defineConfig(({ command, mode }) => {
     },
     plugins: [
       react(),
+      pluginCsp(),
       {
         name: "aceleriq-emit-version",
         apply: "build" as const,

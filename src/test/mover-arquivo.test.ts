@@ -120,35 +120,52 @@ describe("selo honesto no diálogo de agendar", () => {
   });
 });
 
-describe("CSP cobre exatamente os dois scripts inline", () => {
-  it("a meta existe e libera os dois por hash", () => {
-    expect(indexHtml).toContain('http-equiv="Content-Security-Policy"');
-    // Hash 1: o truque do manifest /ciclo. Hash 2: a tela de carregamento.
-    // Se qualquer um dos scripts mudar, o build quebra este teste? Não — o
-    // teste seguinte confere o conteúdo real contra o hash declarado.
-    expect(indexHtml).toContain("'sha256-FZoK0LH5u342WeKcUReCZliwHoSlyRewd8+FMkrbIi0='");
-    expect(indexHtml).toContain("'sha256-tlCwAKfqEy7+wdGMuN73mbzCuFfzYWn1s4ekekOifP0='");
+describe("CSP: so no build, com hash calculado na hora", () => {
+  it("o index.html NAO carrega CSP fixa — ela derrubava o preview", () => {
+    // O servidor de desenvolvimento do Vite injeta scripts inline proprios
+    // (React Refresh, HMR) que nenhum hash fixo cobre. Com a meta no HTML, a
+    // CSP os bloqueava, o app nunca montava e o preview do Lovable ficava na
+    // tela de "demorando para abrir" para sempre. No site publicado
+    // funcionava, o que escondeu o defeito por um dia.
+    expect(indexHtml).not.toContain('http-equiv="Content-Security-Policy" content=');
   });
 
-  it("os hashes batem com o conteúdo real dos scripts inline", async () => {
-    // A CSP por hash é frágil por natureza: mudar UMA vírgula num script
-    // inline sem recalcular o hash derruba o PWA do /ciclo ou a tela de
-    // carregamento em produção, silenciosamente. Este teste transforma o
-    // esquecimento em vermelho no CI.
+  it("o plugin existe, e so entra no build", () => {
+    const vite = ler("vite.config.ts");
+    const csp = ler("config/csp.ts");
+    expect(vite).toContain("pluginCsp()");
+    expect(csp).toContain('apply: "build"');
+    // 'post': depois de o Vite injetar os proprios <script src>, para os
+    // hashes serem calculados sobre o HTML FINAL.
+    expect(csp).toContain('order: "post"');
+  });
+
+  it("os hashes saem do HTML real, cobrindo cada script inline", async () => {
+    // Antes eram escritos a mao: mudar uma virgula no script com o hash
+    // velho quebrava o PWA em producao em silencio. Calculado na hora, a
+    // categoria inteira do erro deixa de existir.
     const { createHash } = await import("node:crypto");
-    const inlines = [...indexHtml.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) =>
-      m[1].replace(/\r\n/g, "\n"),
+    const { hashesDosScriptsInline, montarCsp, injetarCsp } = await import(
+      "../../config/csp"
     );
+    const inlines = [...indexHtml.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)];
     expect(inlines.length).toBe(2);
-    for (const corpo of inlines) {
-      const hash = createHash("sha256").update(corpo).digest("base64");
-      expect(indexHtml).toContain(`'sha256-${hash}'`);
-    }
+    const esperados = inlines.map((m) => createHash("sha256").update(m[1]).digest("base64"));
+    expect(hashesDosScriptsInline(indexHtml)).toEqual(esperados);
+    const csp = montarCsp(indexHtml);
+    for (const h of esperados) expect(csp).toContain(`'sha256-${h}'`);
+    // Injeta uma vez so, e dentro do <head>.
+    const injetado = injetarCsp(indexHtml);
+    expect(injetado.split('http-equiv="Content-Security-Policy"').length - 1).toBe(1);
+    expect(injetarCsp(injetado)).toBe(injetado);
   });
 
-  it("supabase liberado em connect (https e wss), o resto fechado", () => {
-    expect(indexHtml).toContain("connect-src 'self' https://*.supabase.co wss://*.supabase.co");
-    expect(indexHtml).toContain("object-src 'none'");
-    expect(indexHtml).toContain("base-uri 'self'");
+  it("supabase liberado em connect (https e wss), o resto fechado", async () => {
+    const { montarCsp } = await import("../../config/csp");
+    const csp = montarCsp(indexHtml);
+    expect(csp).toContain("connect-src 'self' https://*.supabase.co wss://*.supabase.co");
+    expect(csp).toContain("object-src 'none'");
+    expect(csp).toContain("base-uri 'self'");
+    expect(csp).not.toContain("script-src 'self' 'unsafe-inline'");
   });
 });
