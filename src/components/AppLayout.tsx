@@ -15,7 +15,7 @@ import {
   LayoutDashboard, FolderOpen, Columns3, Users, UsersRound, CheckSquare,
   BarChart3, GitBranch, DollarSign, FileArchive, Settings,
   Eye, ShoppingBag, FileText, UserCircle, ClipboardList, KeyRound, FileSignature, HardDrive, CalendarDays,
-  HeartPulse, Megaphone, Briefcase,
+  HeartPulse, Megaphone, Briefcase, TrendingUp, Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import aceleriqLogo from "@/assets/logo-aceleriq.png";
@@ -65,13 +65,22 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     ],
   },
   {
+    // Área própria, e não um item dentro de Gestão: o comercial conversa com
+    // o financeiro e o completa, mas é outro departamento — quem procura o
+    // funil não procura em "Gestão". Só admin e manager entram: design e
+    // tráfego são equipe, mas operam entrega.
+    label: "Comercial",
+    items: [
+      { title: "Funil", url: "/comercial", icon: TrendingUp, soGestao: true },
+      { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
+      { title: "Marketing", url: "/comercial/marketing", icon: Megaphone, soGestao: true },
+    ],
+  },
+  {
     label: "Gestão",
     items: [
       { title: "Equipe", url: "/equipe", icon: UsersRound },
       { title: "Financeiro", url: "/financeiro", icon: DollarSign },
-      // Só admin e manager: design e tráfego são equipe, mas operam entrega.
-      // Funil, meta e investimento de marketing são gestão da casa.
-      { title: "Comercial", url: "/comercial", icon: Briefcase, soGestao: true },
       { title: "Arquivos", url: "/arquivos", icon: FileArchive },
       { title: "Workspace", url: "/workspace", icon: HardDrive },
       { title: "Cofre", url: "/cofre", icon: KeyRound },

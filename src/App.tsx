@@ -199,6 +199,10 @@ function AppRoutes() {
       <Route path="/ver-como-cliente" element={<ProtectedRoute><StaffRoute><AppLayout><AdminViewAsClient /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/financeiro" element={<ProtectedRoute><AppLayout>{profile?.role === "admin" || ["design", "traffic", "manager"].includes(profile?.role || "") ? <AdminFinanceiro /> : <ClientFinanceiro />}</AppLayout></ProtectedRoute>} />
       <Route path="/comercial" element={<ProtectedRoute><ComercialRoute><AppLayout><AdminComercial /></AppLayout></ComercialRoute></ProtectedRoute>} />
+      {/* Cada area do departamento tem endereco proprio: o menu aponta
+          direto para ela, o voltar do navegador funciona e o link pode
+          ser mandado para alguem. */}
+      <Route path="/comercial/:aba" element={<ProtectedRoute><ComercialRoute><AppLayout><AdminComercial /></AppLayout></ComercialRoute></ProtectedRoute>} />
       <Route path="/financeiro/projecao" element={<ProtectedRoute><StaffRoute><AppLayout><AdminProjection /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/api-docs" element={<ProtectedRoute><StaffRoute><AppLayout><ApiDocs /></AppLayout></StaffRoute></ProtectedRoute>} />
       <Route path="/admin/quiz" element={<ProtectedRoute><StaffRoute><AppLayout><AdminQuizSubmissions /></AppLayout></StaffRoute></ProtectedRoute>} />

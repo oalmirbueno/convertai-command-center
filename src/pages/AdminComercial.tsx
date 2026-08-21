@@ -1,17 +1,11 @@
 import { useMemo, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ArrowRight,
-  Briefcase,
-  Download,
-  Megaphone,
-  Plus,
-  Target,
-  TrendingUp,
-  X,
-} from "lucide-react";
+import { ArrowRight, Briefcase, Megaphone, Plus, Target, TrendingUp, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useClients } from "@/hooks/useSupabaseData";
+import FunilKanban from "@/components/comercial/FunilKanban";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -83,9 +77,23 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
+const ABAS_VALIDAS: Aba[] = ["funil", "metas", "marketing"];
+
 export default function AdminComercial() {
   const queryClient = useQueryClient();
-  const [aba, setAba] = useState<Aba>("funil");
+  const navigate = useNavigate();
+  /**
+   * A aba mora na URL, não no estado.
+   *
+   * O menu tem uma entrada para cada área do departamento, e entrada de menu
+   * que cai sempre na mesma tela não é área — é enfeite. Com a aba na rota,
+   * "Metas" abre em Metas, o voltar do navegador funciona e o link pode ser
+   * mandado para alguém.
+   */
+  const { aba: abaDaUrl } = useParams<{ aba?: string }>();
+  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "funil";
+  const setAba = (proxima: Aba) =>
+    navigate(proxima === "funil" ? "/comercial" : `/comercial/${proxima}`);
   const [periodo, setPeriodo] = useState(() => primeiroDiaDoMes(new Date()));
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
   const [novoLead, setNovoLead] = useState(false);
@@ -95,6 +103,20 @@ export default function AdminComercial() {
     queryKey: ["comercial-leads"],
     queryFn: listarLeads,
   });
+  // Só para o diálogo de ganho: ligar o lead ao cadastro é a ponte que deixa
+  // o financeiro responder depois quanto aquele lead virou.
+  const { data: clientesBrutos } = useClients();
+  const clientes = useMemo(
+    () =>
+      ((clientesBrutos || []) as Array<Record<string, unknown>>)
+        .map((c) => ({
+          id: String(c.id),
+          nome: String(c.company_name || c.full_name || "Cliente"),
+        }))
+        .sort((a, b) => a.nome.localeCompare(b.nome, "pt-BR")),
+    [clientesBrutos],
+  );
+
   const { data: campanhas = [] } = useQuery({
     queryKey: ["comercial-campanhas"],
     queryFn: listarCampanhas,
@@ -243,13 +265,15 @@ export default function AdminComercial() {
       </header>
 
       {aba === "funil" && (
-        <Funil
+        <FunilKanban
           leads={leads}
           carregando={carregandoLeads}
+          clientes={clientes}
           onAbrir={setLeadAberto}
           onNovo={() => setNovoLead(true)}
           onImportar={() => importar.mutate()}
           importando={importar.isPending}
+          onMovido={recarregar}
         />
       )}
 
@@ -322,150 +346,6 @@ function Tile({ titulo, valor, apoio }: { titulo: string; valor: string; apoio: 
       </p>
       <p className="truncate text-[10px] text-muted-foreground">{apoio}</p>
     </div>
-  );
-}
-
-/* ──────────────────────────────── Funil ─────────────────────────────────── */
-
-function Funil({
-  leads,
-  carregando,
-  onAbrir,
-  onNovo,
-  onImportar,
-  importando,
-}: {
-  leads: Lead[];
-  carregando: boolean;
-  onAbrir: (lead: Lead) => void;
-  onNovo: () => void;
-  onImportar: () => void;
-  importando: boolean;
-}) {
-  const hoje = hojeIso();
-  const porEstagio = useMemo(() => {
-    const mapa = new Map<string, Lead[]>();
-    for (const estagio of ESTAGIOS_ABERTOS) mapa.set(estagio, []);
-    for (const lead of leads) {
-      if (!mapa.has(lead.stage)) continue;
-      mapa.get(lead.stage)!.push(lead);
-    }
-    return mapa;
-  }, [leads]);
-
-  return (
-    <>
-      <div className="flex gap-2">
-        <button
-          type="button"
-          onClick={onNovo}
-          className="flex h-10 flex-1 items-center justify-center gap-1.5 rounded-xl bg-primary text-[12.5px] font-semibold text-primary-foreground"
-        >
-          <Plus className="h-4 w-4" />
-          Novo lead
-        </button>
-        {/* O diagnóstico já trazia gente qualificada e o painel só sabia
-            listá-la. Recadastrar na mão é onde o dado se perde. */}
-        <button
-          type="button"
-          onClick={onImportar}
-          disabled={importando}
-          className="flex h-10 items-center justify-center gap-1.5 rounded-xl border border-border bg-card px-3.5 text-[12px] font-semibold text-muted-foreground transition-colors hover:text-foreground disabled:opacity-50"
-        >
-          <Download className="h-3.5 w-3.5" />
-          Trazer do diagnóstico
-        </button>
-      </div>
-
-      {carregando ? (
-        <p className="py-10 text-center text-sm text-muted-foreground">Carregando o funil…</p>
-      ) : leads.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-border p-8 text-center">
-          <p className="text-sm font-medium text-foreground">O funil está vazio</p>
-          <p className="mx-auto mt-1 max-w-md text-[11.5px] leading-relaxed text-muted-foreground">
-            Cadastre quem já está em conversa, ou traga de uma vez quem preencheu o
-            diagnóstico. Cada lead guarda o valor proposto separado em mensalidade e
-            entrada — é o que faz a meta de mensalidade nova bater no fim do mês.
-          </p>
-        </div>
-      ) : (
-        // Colunas com rolagem lateral: é o desenho que o comercial conhece, e
-        // no celular vira um deslizar em vez de uma lista de cem itens.
-        <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-2">
-          {ESTAGIOS_ABERTOS.map((estagio) => {
-            const doEstagio = porEstagio.get(estagio) || [];
-            const emJogo = doEstagio.reduce(
-              (soma, lead) => soma + lead.monthly_value * 12 + lead.one_off_value,
-              0,
-            );
-            return (
-              <div
-                key={estagio}
-                className="w-[240px] shrink-0 rounded-2xl border border-border bg-card/60 p-2.5"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <p className="truncate text-[11px] font-bold uppercase tracking-wide text-foreground">
-                    {rotuloDoEstagio(estagio)}
-                  </p>
-                  <span className="shrink-0 rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-muted-foreground">
-                    {doEstagio.length}
-                  </span>
-                </div>
-                <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
-                  {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "—"}
-                </p>
-                <div className="mt-2 space-y-1.5">
-                  {doEstagio.map((lead) => {
-                    const atrasado =
-                      lead.next_action_at != null && lead.next_action_at < hoje;
-                    return (
-                      <button
-                        key={lead.id}
-                        type="button"
-                        onClick={() => onAbrir(lead)}
-                        className={`w-full rounded-xl border p-2.5 text-left transition-colors hover:border-primary/40 ${
-                          atrasado ? "border-warning/40 bg-warning/[0.05]" : "border-border bg-background"
-                        }`}
-                      >
-                        <p className="truncate text-[12.5px] font-semibold text-foreground">
-                          {lead.name}
-                        </p>
-                        {lead.company && (
-                          <p className="truncate text-[10.5px] text-muted-foreground">
-                            {lead.company}
-                          </p>
-                        )}
-                        <p className="mt-1 text-[10.5px] font-semibold tabular-nums text-primary">
-                          {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
-                          {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}
-                          {lead.one_off_value > 0 && `${dinheiro(lead.one_off_value)} entrada`}
-                          {lead.monthly_value === 0 && lead.one_off_value === 0 && "sem valor definido"}
-                        </p>
-                        {lead.next_action && (
-                          <p
-                            className={`mt-1 truncate text-[10px] ${
-                              atrasado ? "font-semibold text-warning" : "text-muted-foreground"
-                            }`}
-                          >
-                            {atrasado ? "Atrasado: " : "Próximo: "}
-                            {lead.next_action}
-                          </p>
-                        )}
-                      </button>
-                    );
-                  })}
-                  {doEstagio.length === 0 && (
-                    <p className="rounded-xl border border-dashed border-border px-2 py-4 text-center text-[10px] text-muted-foreground">
-                      vazio
-                    </p>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </>
   );
 }
 

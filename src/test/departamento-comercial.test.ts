@@ -254,3 +254,84 @@ describe("o dado do funil não duplica nem se perde", () => {
     expect(lib).toContain("from_stage: lead.stage");
   });
 });
+
+const kanban = ler("src/components/comercial/FunilKanban.tsx");
+const pagina = ler("src/pages/AdminComercial.tsx");
+
+describe("o funil é um kanban de arrastar, não uma lista", () => {
+  it("o cartão é arrastável e a coluna recebe", () => {
+    expect(kanban).toContain("useDraggable({");
+    expect(kanban).toContain("useDroppable({ id: estagio })");
+  });
+
+  it("mouse e toque são sensores separados — senão o celular perde a rolagem", () => {
+    // O cartão inteiro é arrastável: um sensor de ponteiro único capturaria
+    // o toque e mataria o scroll da coluna.
+    expect(kanban).toContain("useSensor(MouseSensor, { activationConstraint: { distance: 3 } })");
+    expect(kanban).toContain("delay: 150, tolerance: 8");
+  });
+
+  it("o cartão sai do lugar antes da ida ao banco", () => {
+    // Esperar a resposta faz o arrasto parecer quebrado, e quem arrasta
+    // tenta de novo — criando duas gravações.
+    expect(kanban).toContain("const moverNaTela = (leadId: string, destino: EstagioId)");
+    expect(kanban).toContain('queryClient.setQueryData<Lead[]>(["comercial-leads"]');
+  });
+
+  it("soltar no mesmo lugar não abre o lead", () => {
+    // O clique de soltar chega logo depois do fim do arrasto.
+    expect(kanban).toContain("acabouDeArrastar");
+  });
+
+  it("ganho e perdido são faixa, não coluna", () => {
+    // Coluna de fechado incha para sempre e empurra o trabalho de hoje para
+    // fora da tela.
+    expect(kanban).toContain("{arrastando && (");
+    expect(kanban).toContain('id="ganho"');
+    expect(kanban).toContain('id="perdido"');
+  });
+
+  it("fechar pede contexto antes de gravar", () => {
+    expect(kanban).toContain("setFechamento({ lead, destino })");
+    expect(kanban).toContain("Confirmar ganho");
+    expect(kanban).toContain("motivo.trim().length < 3");
+  });
+
+  it("o lead atrasado sobe na coluna", () => {
+    // O quadro tem que empurrar para a mão o que está parado.
+    expect(kanban).toContain("const atrasoA = estaAtrasado(a, hoje) ? 0 : 1;");
+  });
+
+  it("dá para procurar dentro do funil", () => {
+    expect(kanban).toContain("Buscar por nome ou empresa");
+  });
+});
+
+describe("Comercial é área própria, não item de Gestão", () => {
+  it("tem grupo próprio no menu, antes de Gestão", () => {
+    expect(layout).toContain('label: "Comercial"');
+    expect(layout.indexOf('label: "Comercial"')).toBeLessThan(
+      layout.indexOf('label: "Gestão"'),
+    );
+  });
+
+  it("cada área do departamento tem endereço próprio", () => {
+    // Entrada de menu que cai sempre na mesma tela não é área.
+    expect(layout).toContain('url: "/comercial/metas"');
+    expect(layout).toContain('url: "/comercial/marketing"');
+    expect(app).toContain('path="/comercial/:aba"');
+  });
+
+  it("as três entradas continuam restritas", () => {
+    const grupo = layout.slice(
+      layout.indexOf('label: "Comercial"'),
+      layout.indexOf('label: "Gestão"'),
+    );
+    expect(grupo.split("soGestao: true").length - 1).toBe(3);
+  });
+
+  it("a aba sai da URL, então o voltar do navegador funciona", () => {
+    expect(pagina).toContain("useParams<{ aba?: string }>()");
+    expect(pagina).toContain('navigate(proxima === "funil" ? "/comercial" : `/comercial/${proxima}`)');
+  });
+});
