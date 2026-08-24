@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Briefcase, Building2, CalendarClock, KanbanSquare, Megaphone, Plus, Sparkles, Target, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, Briefcase, Building2, CalendarClock, KanbanSquare, Megaphone, Plus, Sparkles, Target, X } from "lucide-react";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useClients } from "@/hooks/useSupabaseData";
@@ -229,10 +229,29 @@ export default function AdminComercial() {
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
             <h1 className="flex items-center gap-2 text-lg font-bold text-foreground">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                <Briefcase className="h-4 w-4" />
-              </span>
+              {/* Dentro de uma área, o caminho de volta fica à mão — sem
+                  depender do menu lateral nem do botão do navegador. */}
+              {aba !== "visao" ? (
+                <button
+                  type="button"
+                  onClick={() => setAba("visao")}
+                  aria-label="Voltar para a visão geral do Comercial"
+                  className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary transition-colors hover:bg-primary/20"
+                >
+                  <ArrowLeft className="h-4 w-4" />
+                </button>
+              ) : (
+                <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Briefcase className="h-4 w-4" />
+                </span>
+              )}
               Comercial
+              {aba !== "visao" && (
+                <span className="text-muted-foreground">
+                  {" · "}
+                  {aba === "crm" ? "CRM" : aba === "agenda" ? "Agenda" : aba === "metas" ? "Metas" : aba === "campanhas" ? "Campanhas" : "Marketing"}
+                </span>
+              )}
             </h1>
             <p className="mt-1 text-[11.5px] leading-relaxed text-muted-foreground">
               {TITULO_DA_ABA[aba]}
