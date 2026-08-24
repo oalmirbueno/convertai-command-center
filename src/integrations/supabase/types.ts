@@ -5143,6 +5143,15 @@ export type Database = {
           id: string
         }[]
       }
+      audit_referencias_orfas: {
+        Args: never
+        Returns: {
+          client_id_orfao: string
+          criado_em: string
+          id: string
+          tabela: string
+        }[]
+      }
       briefing_public_get: {
         Args: { _token: string }
         Returns: {
