@@ -641,6 +641,113 @@ export async function createReportDraft(input: CreateReportDraftInput, ctx: Writ
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }
 
+// ─── archive/restore project e reopen_task ────────────────────
+// A regra da casa: operação destrutiva vira ARQUIVAMENTO, e todo
+// arquivamento tem o seu par de restauração. Nada de exclusão definitiva
+// pelo MCP — o que sai da vista continua no banco, com data de saída.
+export const archiveProjectSchema = z.object({
+  project_id: UUID,
+  reason: z.string().trim().min(3).max(400),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type ArchiveProjectInput = z.infer<typeof archiveProjectSchema>;
+
+export async function archiveProject(input: ArchiveProjectInput, ctx: WriteCtx) {
+  const { data: existing, error: fetchErr } = await db()
+    .from('projects').select('id, client_id, name, deleted_at').eq('id', input.project_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing) throw new WriteError('not_found', 'project_id not found');
+  assertWriteClientScope(ctx, String((existing as { client_id: string }).client_id));
+  if ((existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('conflict', 'project is already archived');
+  }
+
+  const replay = await replayIdempotent(
+    'aceleriq_archive_project', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle()).data,
+    priorInput => requirePriorResource(priorInput, 'project_id', input.project_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as { id: string }).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
+  const { data, error } = await db()
+    .from('projects')
+    .update({ deleted_at: new Date().toISOString() })
+    .eq('id', input.project_id)
+    .select(PROJECT_SELECT)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId, reason: input.reason };
+}
+
+export const restoreProjectSchema = z.object({
+  project_id: UUID,
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type RestoreProjectInput = z.infer<typeof restoreProjectSchema>;
+
+export async function restoreProject(input: RestoreProjectInput, ctx: WriteCtx) {
+  const { data: existing, error: fetchErr } = await db()
+    .from('projects').select('id, client_id, deleted_at').eq('id', input.project_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing) throw new WriteError('not_found', 'project_id not found');
+  assertWriteClientScope(ctx, String((existing as { client_id: string }).client_id));
+  if (!(existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('conflict', 'project is not archived');
+  }
+
+  const { data, error } = await db()
+    .from('projects')
+    .update({ deleted_at: null })
+    .eq('id', input.project_id)
+    .select(PROJECT_SELECT)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId };
+}
+
+// O par de complete_task: sem reabrir, uma conclusão equivocada só se
+// desfazia pelo painel, e o agente ficava sem caminho de volta.
+export const reopenTaskSchema = z.object({
+  task_id: UUID,
+  status: z.enum(['backlog', 'todo', 'doing', 'review']).optional(),
+  reason: z.string().trim().min(3).max(400),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type ReopenTaskInput = z.infer<typeof reopenTaskSchema>;
+
+const TASK_SELECT_REOPEN = 'id, project_id, title, status, kanban_status, priority, delivery_type, assigned_to, due_date, updated_at';
+
+export async function reopenTask(input: ReopenTaskInput, ctx: WriteCtx) {
+  const { data: existing, error: fetchErr } = await db()
+    .from('tasks').select('id, project_id, status, deleted_at').eq('id', input.task_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing || (existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'task_id not found');
+  }
+  await getWritableProject(String((existing as { project_id: string }).project_id), ctx);
+  if ((existing as { status: string }).status !== 'done') {
+    throw new WriteError('conflict', 'task is not done; nothing to reopen');
+  }
+
+  // status E kanban_status juntos: o Kanban lê o segundo, e mexer só no
+  // primeiro esconderia a reabertura da tela.
+  const destino = input.status ?? 'doing';
+  const { data, error } = await db()
+    .from('tasks')
+    .update({ status: destino, kanban_status: destino })
+    .eq('id', input.task_id)
+    .select(TASK_SELECT_REOPEN)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId, reason: input.reason };
+}
+
 // ─── upsert_current_dossier ───────────────────────────────────
 // O dossiê em duas camadas: project_memory segue como história cumulativa;
 // o ESTADO ATUAL vive em client_dossiers, com um único is_current por

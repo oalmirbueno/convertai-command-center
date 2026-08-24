@@ -46,10 +46,16 @@ import {
 import {
   completeTask,
   completeTaskSchema,
+  archiveProject,
+  archiveProjectSchema,
   createEditorialItem,
   createEditorialItemSchema,
   createProject,
   createProjectSchema,
+  reopenTask,
+  reopenTaskSchema,
+  restoreProject,
+  restoreProjectSchema,
   createReportDraft,
   createReportDraftSchema,
   createTask,
@@ -196,6 +202,9 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_project: 'projects:read',
   aceleriq_create_project: 'projects:write',
   aceleriq_update_project: 'projects:write',
+  aceleriq_archive_project: 'projects:write',
+  aceleriq_restore_project: 'projects:write',
+  aceleriq_reopen_task: 'tasks:write',
   aceleriq_list_tasks: 'tasks:read',
   aceleriq_list_editorial_calendar: 'editorial:read',
   aceleriq_create_editorial_item: 'editorial:write',
@@ -233,7 +242,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.16.0',
+  version: '1.17.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1305,6 +1314,85 @@ const getClientDossierTool: ToolDefinition = {
   },
 };
 
+// ─── Arquivar / restaurar / reabrir ───────────────────────────
+// Exclusão definitiva não existe no MCP: o destrutivo vira arquivamento,
+// e todo arquivamento tem par de restauração. reason obrigatório nos dois
+// sentidos que tiram algo da vista.
+const archiveProjectTool: ToolDefinition = {
+  name: 'aceleriq_archive_project',
+  title: 'Arquivar projeto',
+  description:
+    'Arquiva um projeto (deleted_at), tirando-o das listas sem apagar nada: tarefas, arquivos e histórico continuam no banco e voltam com aceleriq_restore_project. NÃO exclui definitivamente. Recusa projeto já arquivado. reason é obrigatório.',
+  scopes: WRITE,
+  annotations: { ...WRITE_ANNOTATIONS, destructiveHint: true },
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      reason: { type: 'string', minLength: 3, maxLength: 400 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'reason', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = archiveProjectSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await archiveProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const restoreProjectTool: ToolDefinition = {
+  name: 'aceleriq_restore_project',
+  title: 'Restaurar projeto',
+  description:
+    'Traz de volta um projeto arquivado (deleted_at volta a nulo), com tudo que estava pendurado nele. Recusa projeto que não está arquivado.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      project_id: { type: 'string', format: 'uuid' },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['project_id', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = restoreProjectSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await restoreProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const reopenTaskTool: ToolDefinition = {
+  name: 'aceleriq_reopen_task',
+  title: 'Reabrir tarefa',
+  description:
+    'Reabre uma tarefa concluída, devolvendo-a ao fluxo (padrão: doing; aceita backlog, todo, doing ou review). É o par de aceleriq_complete_task: sem ele, uma conclusão equivocada só se desfazia pelo painel. Recusa tarefa que não está concluída. reason é obrigatório.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      task_id: { type: 'string', format: 'uuid' },
+      status: { type: 'string', enum: ['backlog', 'todo', 'doing', 'review'] },
+      reason: { type: 'string', minLength: 3, maxLength: 400 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['task_id', 'reason', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = reopenTaskSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await reopenTask(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 // ─── Dossiê com estado atual canônico ──────────────────────────
 // Duas camadas: project_memory segue como HISTÓRIA cumulativa;
 // client_dossiers guarda o ESTADO ATUAL com um único is_current por
@@ -1848,6 +1936,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   createReportDraftTool,
   createProjectTool,
   updateProjectTool,
+  archiveProjectTool,
+  restoreProjectTool,
+  reopenTaskTool,
   upsertCurrentDossierTool,
   getCurrentDossierTool,
   auditIntegrityTool,

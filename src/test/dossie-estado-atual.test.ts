@@ -143,6 +143,45 @@ describe("as ferramentas do MCP rico", () => {
   });
 });
 
+describe("arquivar em vez de apagar, e todo arquivamento tem volta", () => {
+  it("não existe exclusão definitiva de projeto ou tarefa no MCP", () => {
+    // A regra da governança: o destrutivo vira arquivamento. O que sai da
+    // vista continua no banco, com data de saída e caminho de retorno.
+    const trecho = writeServices.slice(
+      writeServices.indexOf("export async function archiveProject"),
+      writeServices.indexOf("// ─── upsert_current_dossier"),
+    );
+    expect(trecho).not.toContain(".delete()");
+    expect(trecho).toContain("deleted_at: new Date().toISOString()");
+    expect(trecho).toContain("deleted_at: null");
+  });
+
+  it("arquivar e restaurar recusam o estado que já vale", () => {
+    // Sem isso, arquivar duas vezes sobrescreveria a data original e a
+    // história de quando o projeto saiu de vista se perderia.
+    expect(writeServices).toContain("'project is already archived'");
+    expect(writeServices).toContain("'project is not archived'");
+    expect(writeServices).toContain("'task is not done; nothing to reopen'");
+  });
+
+  it("reabrir move status e kanban_status juntos", () => {
+    const trecho = writeServices.slice(writeServices.indexOf("export async function reopenTask"));
+    expect(trecho).toContain("{ status: destino, kanban_status: destino }");
+  });
+
+  it("as três ferramentas existem com escopo e motivo obrigatório", () => {
+    for (const nome of ["aceleriq_archive_project", "aceleriq_restore_project", "aceleriq_reopen_task"]) {
+      expect(tools).toContain(`name: '${nome}'`);
+    }
+    expect(tools).toContain("aceleriq_archive_project: 'projects:write'");
+    expect(tools).toContain("aceleriq_reopen_task: 'tasks:write'");
+    // Arquivar é o único que se anuncia destrutivo — restaurar e reabrir
+    // devolvem coisas, não tiram.
+    expect(tools).toContain("{ ...WRITE_ANNOTATIONS, destructiveHint: true }");
+    expect(writeServices).toContain("reason: z.string().trim().min(3).max(400),");
+  });
+});
+
 describe("o card do painel lê a chave canônica", () => {
   it("consulta client_dossiers com is_current antes de qualquer heurística", () => {
     const posCanonica = card.indexOf('from("client_dossiers")');
