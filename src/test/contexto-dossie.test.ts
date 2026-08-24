@@ -115,7 +115,10 @@ describe("a Central passou a mostrar o dossiê", () => {
   });
 
   it("mostra o corpo do dossiê, não só o título", () => {
-    expect(painel).toContain("dossie.content");
+    // O corpo agora vem da chave canônica (client_dossiers, is_current) com
+    // a heurística antiga só como transição — dossie-estado-atual.test.ts
+    // guarda essa ordem; aqui só importa que o CORPO chega à tela inteiro.
+    expect(painel).toContain("atual?.content ?? legado?.content");
     expect(painel).toContain("Ler o dossiê inteiro");
   });
 
