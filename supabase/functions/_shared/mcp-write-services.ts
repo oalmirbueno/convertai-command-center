@@ -641,6 +641,67 @@ export async function createReportDraft(input: CreateReportDraftInput, ctx: Writ
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }
 
+// ─── upsert_current_dossier ───────────────────────────────────
+// O dossiê em duas camadas: project_memory segue como história cumulativa;
+// o ESTADO ATUAL vive em client_dossiers, com um único is_current por
+// (cliente, projeto, tipo). A transação inteira (supersede + versão nova +
+// bloqueio de regressão por expected_version) mora no RPC do banco — aqui
+// só se valida entrada, escopo e idempotência de borda.
+export const upsertCurrentDossierSchema = z.object({
+  client_id: UUID,
+  project_id: UUID.optional(),
+  dossier_type: z.string().trim().min(1).max(60).default('contexto'),
+  content: z.string().trim().min(3).max(60000),
+  summary: z.string().trim().max(400).optional(),
+  change_reason: z.string().trim().min(3).max(400),
+  source: z.string().trim().max(60).optional(),
+  tags: z.array(z.string().max(40)).max(20).optional(),
+  metadata: z.record(z.unknown()).optional(),
+  expected_version: z.number().int().min(0).optional(),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type UpsertCurrentDossierInput = z.infer<typeof upsertCurrentDossierSchema>;
+
+export async function upsertCurrentDossier(input: UpsertCurrentDossierInput, ctx: WriteCtx) {
+  assertWriteClientScope(ctx, input.client_id);
+
+  const { data, error } = await db().rpc('upsert_current_dossier', {
+    _client_id: input.client_id,
+    _content: input.content,
+    _dossier_type: input.dossier_type,
+    _project_id: input.project_id ?? null,
+    _summary: input.summary ?? null,
+    _change_reason: input.change_reason,
+    _source: input.source ?? ctx.origin ?? 'mcp',
+    _actor: ctx.keyId,
+    _tags: input.tags ?? [],
+    _metadata: { ...(input.metadata ?? {}), origin: ctx.origin, key_id: ctx.keyId, correlation_id: ctx.correlationId },
+    _correlation_id: ctx.correlationId,
+    _idempotency_key: input.idempotency_key,
+    _expected_version: input.expected_version ?? null,
+  });
+  if (error) {
+    const msg = String(error.message ?? '');
+    // O conflito de versão é RESPOSTA, não acidente: é como o chamador
+    // descobre que leu um mundo que já mudou — ele relê e tenta de novo.
+    if (msg.includes('version_conflict')) throw new WriteError('conflict', msg);
+    if (msg.includes('not_found')) throw new WriteError('not_found', msg);
+    if (msg.includes('not_allowed')) throw new WriteError('forbidden', msg);
+    throw new WriteError('validation', msg);
+  }
+  const registro = data as Record<string, unknown>;
+  if (ctx.resultRefHolder && registro?.id) ctx.resultRefHolder.value = String(registro.id);
+  return {
+    current_record: registro,
+    version: registro?.version ?? null,
+    updated_at: registro?.updated_at ?? null,
+    // O RPC devolve o registro JÁ GRAVADO quando a idempotency_key repete;
+    // o correlation_id de origem diferente é como o replay se denuncia.
+    replayed: Boolean(registro?.correlation_id) && registro.correlation_id !== ctx.correlationId,
+    correlation_id: ctx.correlationId,
+  };
+}
+
 // ─── update_project ───────────────────────────────────────────
 // Allows correcting deadline, status, progress and other operational fields.
 // Never touches client_id, brand, billing_mode, total_value, created_by or

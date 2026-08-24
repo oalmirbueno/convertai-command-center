@@ -90,7 +90,12 @@ describe("criar projeto tem fronteira de dinheiro nos dois servidores", () => {
     expect(toolsRico).toContain("aceleriq_create_project: 'projects:write'");
     expect(toolsRico).toContain("name: 'aceleriq_create_project'");
     expect(toolsRico.replace(/\r\n/g, "\n")).toContain("  createProjectTool,\n  updateProjectTool,");
-    expect(toolsRico).toContain("version: '1.15.0'");
+    // Piso, não número exato: pinar a versão faria este teste quebrar em
+    // toda entrega legítima seguinte (o alinhamento entre as duas pontas
+    // fica com painel-conversa.test.ts).
+    const versao = toolsRico.match(/version: '(\d+)\.(\d+)\.\d+'/);
+    expect(versao).toBeTruthy();
+    expect(Number(versao![2])).toBeGreaterThanOrEqual(15);
   });
 });
 

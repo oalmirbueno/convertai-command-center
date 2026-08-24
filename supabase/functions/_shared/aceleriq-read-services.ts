@@ -1410,6 +1410,15 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
       .eq('client_id', id).limit(5)),
   ]);
 
+  // O estado atual canônico — o MESMO registro que o card do painel exibe.
+  // Vem fora do Promise.all para a tabela poder não existir ainda
+  // (migração pendente) sem derrubar o dossiê inteiro.
+  const dossieAtual = await withTimeout(db().from('client_dossiers')
+    .select('dossier_type, version, content, summary, change_reason, source, effective_at, updated_at')
+    .eq('client_id', id).eq('is_current', true).limit(10))
+    .then((r) => r.data ?? [])
+    .catch(() => []);
+
   const linhas = <T,>(res: { data: T[] | null }) => res.data ?? [];
   const cicloRows = linhas(ciclo) as Array<{ area: string; week_start: string; step: number }>;
 
@@ -1444,6 +1453,9 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
 
   return {
     client: perfilData,
+    // O estado atual canônico do dossiê (client_dossiers, is_current=true) —
+    // leia isto como "onde o cliente está"; a `memory` abaixo é a história.
+    current_dossiers: dossieAtual,
     // Serviços contratados: o que o cliente paga, para a mensagem falar de
     // todas as frentes e não só da que teve movimento.
     contracted_services: Object.entries(servicos)
@@ -1501,5 +1513,170 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
       return 'executar';
     })(),
     generated_at: agora.toISOString(),
+  };
+}
+
+// ─── Dossiê com estado atual canônico ──────────────────────────────────────
+// A leitura par do upsert_current_dossier: devolve o registro is_current da
+// chave pedida — nunca "o mais novo de uma lista de tipos", que era a
+// heurística que exibia dossiê velho como atual. O histórico vem junto,
+// enxuto (sem o corpo das versões antigas); o corpo de uma versão
+// específica sai passando `version`.
+const DOSSIER_ATUAL_SELECT =
+  'id, client_id, project_id, dossier_type, version, content, summary, change_reason, actor, source, tags, correlation_id, effective_at, created_at, updated_at';
+const DOSSIER_HISTORICO_SELECT =
+  'id, version, summary, change_reason, actor, source, correlation_id, is_current, superseded_at, superseded_by, created_at';
+
+export async function getCurrentDossier(
+  opts: { client_id: string; project_id?: string; dossier_type?: string; version?: number },
+  ctx: AuthContext,
+) {
+  if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+  assertClientAccess(ctx, opts.client_id);
+  const tipo = opts.dossier_type ?? 'contexto';
+
+  let qbAtual = db().from('client_dossiers').select(DOSSIER_ATUAL_SELECT)
+    .eq('client_id', opts.client_id).eq('dossier_type', tipo).eq('is_current', true);
+  qbAtual = opts.project_id ? qbAtual.eq('project_id', opts.project_id) : qbAtual.is('project_id', null);
+  const atual = await withTimeout(qbAtual.maybeSingle());
+  if (atual.error) throw new Error(atual.error.message);
+
+  let qbHist = db().from('client_dossiers').select(DOSSIER_HISTORICO_SELECT)
+    .eq('client_id', opts.client_id).eq('dossier_type', tipo)
+    .order('version', { ascending: false }).limit(50);
+  qbHist = opts.project_id ? qbHist.eq('project_id', opts.project_id) : qbHist.is('project_id', null);
+  const historico = await withTimeout(qbHist);
+
+  let versao_pedida: unknown = null;
+  if (typeof opts.version === 'number') {
+    let qbV = db().from('client_dossiers').select(DOSSIER_ATUAL_SELECT)
+      .eq('client_id', opts.client_id).eq('dossier_type', tipo).eq('version', opts.version);
+    qbV = opts.project_id ? qbV.eq('project_id', opts.project_id) : qbV.is('project_id', null);
+    const v = await withTimeout(qbV.maybeSingle());
+    versao_pedida = v.data ?? null;
+  }
+
+  return {
+    current: atual.data ?? null,
+    current_version: (atual.data as { version?: number } | null)?.version ?? 0,
+    history: historico.data ?? [],
+    requested_version: versao_pedida,
+    aviso: atual.data
+      ? null
+      : 'Sem dossie atual para esta chave. Grave um com aceleriq_upsert_current_dossier (expected_version=0).',
+  };
+}
+
+// ─── Auditoria global de integridade ───────────────────────────────────────
+// Uma varredura de TODOS os clientes, medindo o que dá para medir por
+// consulta: estado atual duplicado ou ausente, vínculos quebrados, órfãos.
+// É leitura pura — repara-se com as ferramentas de escrita, com auditoria
+// própria, nunca por efeito colateral daqui.
+export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthContext) {
+  if (!ctx.dataScope.unrestricted) {
+    throw new Error('audit requires an unrestricted principal');
+  }
+
+  const problemas: Array<{
+    verificacao: string;
+    problema: string;
+    gravidade: 'alta' | 'media' | 'baixa';
+    quantidade: number;
+    amostra: string[];
+  }> = [];
+  const anotar = (
+    verificacao: string,
+    problema: string,
+    gravidade: 'alta' | 'media' | 'baixa',
+    linhas: Array<{ id?: string | null }> | null,
+  ) => {
+    const lista = linhas ?? [];
+    if (lista.length === 0) return;
+    problemas.push({
+      verificacao, problema, gravidade,
+      quantidade: lista.length,
+      amostra: lista.slice(0, 5).map((r) => String(r.id ?? '?')),
+    });
+  };
+
+  const [duplicados, clientesSemDossie, tarefasOrfas, arquivosSemCliente, relatoriosSemCliente, projetosDeNaoCliente, memoriaSemCliente] =
+    await Promise.all([
+      // Dois "atuais" na mesma chave: o índice único impede novos, mas a
+      // auditoria confere que o mundo já gravado obedece.
+      withTimeout(db().rpc('audit_dossies_duplicados')),
+      withTimeout(db().from('profiles')
+        .select('id, user_roles!inner(role)')
+        .eq('user_roles.role', 'client')
+        .is('deleted_at', null)),
+      withTimeout(db().from('tasks')
+        .select('id, project_id, projects!inner(deleted_at)')
+        .is('deleted_at', null)
+        .not('projects.deleted_at', 'is', null)
+        .limit(200)),
+      withTimeout(db().from('files')
+        .select('id, client_id')
+        .is('client_id', null)
+        .is('archived_at', null)
+        .limit(200)),
+      withTimeout(db().from('reports')
+        .select('id, client_id')
+        .is('client_id', null)
+        .limit(200)),
+      withTimeout(db().from('projects')
+        .select('id, client_id')
+        .is('deleted_at', null)
+        .limit(1000)),
+      withTimeout(db().from('project_memory')
+        .select('id')
+        .is('client_id', null)
+        .limit(200)),
+    ]);
+
+  anotar('dossie_atual_duplicado',
+    'mais de um registro is_current na mesma chave (cliente, projeto, tipo)',
+    'alta', (duplicados.data ?? null) as Array<{ id?: string }> | null);
+
+  // Clientes vivos sem estado atual de dossiê: não é defeito de dado, é
+  // trabalho pendente — gravidade baixa, mas listado para ninguém esquecer.
+  if (!clientesSemDossie.error) {
+    const ids = ((clientesSemDossie.data ?? []) as Array<{ id: string }>).map((c) => c.id);
+    if (ids.length > 0) {
+      const comDossie = await withTimeout(db().from('client_dossiers')
+        .select('client_id').eq('is_current', true).in('client_id', ids));
+      const tem = new Set(((comDossie.data ?? []) as Array<{ client_id: string }>).map((d) => d.client_id));
+      anotar('cliente_sem_dossie_atual', 'cliente ativo sem dossie de contexto atual', 'baixa',
+        ids.filter((id) => !tem.has(id)).map((id) => ({ id })));
+    }
+  }
+
+  anotar('tarefa_de_projeto_apagado', 'tarefa viva apontando para projeto removido', 'alta',
+    (tarefasOrfas.data ?? null) as Array<{ id: string }> | null);
+  anotar('arquivo_sem_cliente', 'arquivo ativo sem cliente', 'media',
+    (arquivosSemCliente.data ?? null) as Array<{ id: string }> | null);
+  anotar('relatorio_sem_cliente', 'relatorio sem cliente', 'media',
+    (relatoriosSemCliente.data ?? null) as Array<{ id: string }> | null);
+  anotar('memoria_sem_cliente', 'registro de memoria sem cliente', 'media',
+    (memoriaSemCliente.data ?? null) as Array<{ id: string }> | null);
+
+  // Projeto pendurado em profile que não é cliente: aparece em lugar nenhum.
+  if (!projetosDeNaoCliente.error) {
+    const rows = (projetosDeNaoCliente.data ?? []) as Array<{ id: string; client_id: string }>;
+    const clientIds = [...new Set(rows.map((r) => r.client_id))];
+    if (clientIds.length > 0) {
+      const papeis = await withTimeout(db().from('user_roles')
+        .select('user_id').eq('role', 'client').in('user_id', clientIds));
+      const ehCliente = new Set(((papeis.data ?? []) as Array<{ user_id: string }>).map((r) => r.user_id));
+      anotar('projeto_sem_cliente_valido', 'projeto vivo cujo dono nao tem papel de cliente', 'alta',
+        rows.filter((r) => !ehCliente.has(r.client_id)));
+    }
+  }
+
+  return {
+    gerado_em: new Date().toISOString(),
+    verificacoes_executadas: 7,
+    problemas,
+    resumo: problemas.length === 0
+      ? 'Nenhum problema encontrado nas verificacoes executadas.'
+      : problemas.map((p) => `${p.verificacao}: ${p.quantidade}`).join('; '),
   };
 }

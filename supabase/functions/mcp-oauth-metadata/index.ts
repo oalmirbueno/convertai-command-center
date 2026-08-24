@@ -19,14 +19,14 @@ const {
   authorizationServerMetadataUrl: AUTH_SERVER_METADATA,
 } = getMcpRuntimeConfig();
 
-const MCP_VERSION = '1.15.0';
+const MCP_VERSION = '1.16.0';
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];
 const INTERNAL_MCP_SCOPES = [
   'aceleriq:read', 'aceleriq:write', 'aceleriq:finance',
   // Granular
-  'clients:read',
+  'clients:read', 'clients:write',
   'projects:read', 'projects:write',
   'tasks:read', 'tasks:write',
   'editorial:read', 'editorial:write',

@@ -27,6 +27,8 @@ import {
   listWorkspaceNodes,
   PUBLISHABLE_DELIVERY_TYPES,
   search,
+  getCurrentDossier,
+  auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
   bridgeStatus,
@@ -58,6 +60,8 @@ import {
   updateProjectSchema,
   updateTask,
   updateTaskSchema,
+  upsertCurrentDossier,
+  upsertCurrentDossierSchema,
   WriteError,
 } from './mcp-write-services.ts';
 import {
@@ -80,6 +84,7 @@ export type ToolScope =
   | 'aceleriq:finance'
   // Granular per-resource scopes (Bloco D).
   | 'clients:read'
+  | 'clients:write'
   | 'projects:read'
   | 'projects:write'
   | 'tasks:read'
@@ -105,6 +110,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'aceleriq:write',
   'aceleriq:finance',
   'clients:read',
+  'clients:write',
   'projects:read',
   'projects:write',
   'tasks:read',
@@ -132,6 +138,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'aceleriq:write': { title: 'Escrita operacional', description: 'Criar/atualizar tarefas, rascunhos de relatórios e ajustes de projetos.', sensitive: true },
   'aceleriq:finance': { title: 'Financeiro', description: 'Acessar informações financeiras agregadas.', sensitive: true },
   'clients:read': { title: 'Clientes — leitura', description: 'Listar e visualizar contextos de clientes.' },
+  'clients:write': { title: 'Clientes — dossiê', description: 'Atualizar o dossiê de contexto do cliente com versão e histórico. Não cria nem apaga clientes.', sensitive: true },
   'projects:read': { title: 'Projetos — leitura', description: 'Listar e detalhar projetos.' },
   'projects:write': { title: 'Projetos — escrita', description: 'Atualizar prazo, status, progresso, escopo e objetivos de projetos.', sensitive: true },
   'tasks:read': { title: 'Tarefas — leitura', description: 'Listar tarefas do Kanban.' },
@@ -164,7 +171,7 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
   ],
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
-    'editorial:write',
+    'editorial:write', 'clients:write',
   ],
 };
 
@@ -183,6 +190,8 @@ export function expandScopes(granted: readonly string[]): Set<string> {
 export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_list_clients: 'clients:read',
   aceleriq_get_client_context: 'clients:read',
+  aceleriq_get_current_dossier: 'clients:read',
+  aceleriq_upsert_current_dossier: 'clients:write',
   aceleriq_list_projects: 'projects:read',
   aceleriq_get_project: 'projects:read',
   aceleriq_create_project: 'projects:write',
@@ -224,7 +233,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.15.0',
+  version: '1.16.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1296,6 +1305,87 @@ const getClientDossierTool: ToolDefinition = {
   },
 };
 
+// ─── Dossiê com estado atual canônico ──────────────────────────
+// Duas camadas: project_memory segue como HISTÓRIA cumulativa;
+// client_dossiers guarda o ESTADO ATUAL com um único is_current por
+// (cliente, projeto, tipo), versão sequencial e bloqueio de regressão.
+const upsertCurrentDossierTool: ToolDefinition = {
+  name: 'aceleriq_upsert_current_dossier',
+  title: 'Dossiê — atualizar estado atual',
+  description:
+    'Atualiza o dossiê de contexto de um cliente de forma TRANSACIONAL e versionada: a versão anterior vira histórico (superseded, nunca apagada) e a nova vira o único estado atual da chave (client_id, project_id, dossier_type). expected_version bloqueia regressão: passe a versão que você LEU (0 se não existia); se o mundo mudou desde então, a chamada retorna conflito e você relê antes de regravar. change_reason é obrigatório: toda mudança carrega o porquê. Idempotente por idempotency_key. Para o painel, o registro retornado É o que o card exibe. Use aceleriq_upsert_project_memory apenas para eventos históricos avulsos — ele não mantém estado atual.',
+  scopes: ['clients:write'] as const,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      dossier_type: { type: 'string', maxLength: 60, default: 'contexto' },
+      content: { type: 'string', minLength: 3, maxLength: 60000 },
+      summary: { type: 'string', maxLength: 400 },
+      change_reason: { type: 'string', minLength: 3, maxLength: 400 },
+      source: { type: 'string', maxLength: 60 },
+      tags: { type: 'array', items: { type: 'string', maxLength: 40 }, maxItems: 20 },
+      metadata: { type: 'object' },
+      expected_version: { type: 'integer', minimum: 0 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['client_id', 'content', 'change_reason', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = upsertCurrentDossierSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await upsertCurrentDossier(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
+const getCurrentDossierTool: ToolDefinition = {
+  name: 'aceleriq_get_current_dossier',
+  title: 'Dossiê — estado atual e histórico',
+  description:
+    'Devolve o dossiê ATUAL de um cliente pela chave canônica (client_id, project_id, dossier_type) — o mesmo registro que o painel exibe — mais o histórico de versões (resumos, sem o corpo). Passe version para ler o corpo de uma versão antiga. Leia SEMPRE antes de atualizar: current_version é o expected_version da sua próxima gravação.',
+  scopes: ['clients:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      project_id: { type: 'string', format: 'uuid' },
+      dossier_type: { type: 'string', maxLength: 60, default: 'contexto' },
+      version: { type: 'integer', minimum: 1 },
+    },
+    required: ['client_id'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const schema = z.object({
+      client_id: z.string().uuid(),
+      project_id: z.string().uuid().optional(),
+      dossier_type: z.string().max(60).optional(),
+      version: z.number().int().min(1).optional(),
+    }).strict();
+    const parsed = schema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
+    return await getCurrentDossier(parsed.data, ctx);
+  },
+};
+
+const auditIntegrityTool: ToolDefinition = {
+  name: 'aceleriq_audit_integrity',
+  title: 'Auditoria global de integridade',
+  description:
+    'Varre TODOS os clientes e devolve um relatório de inconsistências mensuráveis: dossiês atuais duplicados, clientes sem dossiê atual, tarefas apontando para projeto removido, arquivos e relatórios sem cliente, projetos cujo dono não é cliente, memória sem vínculo. É leitura pura — nada é alterado; repare com as ferramentas de escrita, que auditam cada mudança. Exige credencial sem restrição de clientes.',
+  scopes: ['clients:read'] as const,
+  annotations: READ_ANNOTATIONS,
+  inputSchema: { type: 'object', properties: {}, additionalProperties: false },
+  handler: async (_input, ctx) => {
+    return await auditIntegrity({}, ctx);
+  },
+};
+
 // ─── Ciclo semanal de operação (o bastidor por cliente) ────────────────────
 const getWeeklyCycleTool: ToolDefinition = {
   name: 'aceleriq_get_weekly_cycle',
@@ -1471,7 +1561,7 @@ const getProjectMemoryTool: ToolDefinition = {
 const upsertProjectMemoryTool: ToolDefinition = {
   name: 'aceleriq_upsert_project_memory',
   title: 'Memória do projeto — gravar',
-  description: 'Adiciona um registro persistente à memória de um cliente/projeto (nota, resumo, decisão, fato). Cumulativo — nunca sobrescreve. Ideal para o ChatGPT/Codex/Hermes registrarem contexto vindo de fora do painel.',
+  description: 'Adiciona um registro persistente à memória de um cliente/projeto (nota, resumo, decisão, fato). Cumulativo — nunca sobrescreve. Ideal para o ChatGPT/Codex/Hermes registrarem EVENTOS vindos de fora do painel. NÃO mantém o estado atual do dossiê: o card do painel lê a chave canônica de aceleriq_upsert_current_dossier — gravar só aqui deixa o painel desatualizado.',
   scopes: ['projects:write'] as const,
   annotations: { ...WRITE_ANNOTATIONS, idempotentHint: false },
   inputSchema: {
@@ -1758,6 +1848,9 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   createReportDraftTool,
   createProjectTool,
   updateProjectTool,
+  upsertCurrentDossierTool,
+  getCurrentDossierTool,
+  auditIntegrityTool,
   // Contracts (Bloco B) — read + scope-gated write
   listContractsTool,
   getContractTool,
