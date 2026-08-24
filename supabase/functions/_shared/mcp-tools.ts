@@ -56,6 +56,8 @@ import {
   reopenTaskSchema,
   restoreProject,
   restoreProjectSchema,
+  updateClient,
+  updateClientSchema,
   createReportDraft,
   createReportDraftSchema,
   createTask,
@@ -198,6 +200,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_client_context: 'clients:read',
   aceleriq_get_current_dossier: 'clients:read',
   aceleriq_upsert_current_dossier: 'clients:write',
+  aceleriq_update_client: 'clients:write',
   aceleriq_list_projects: 'projects:read',
   aceleriq_get_project: 'projects:read',
   aceleriq_create_project: 'projects:write',
@@ -242,7 +245,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.17.0',
+  version: '1.18.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1314,6 +1317,37 @@ const getClientDossierTool: ToolDefinition = {
   },
 };
 
+const updateClientTool: ToolDefinition = {
+  name: 'aceleriq_update_client',
+  title: 'Atualizar cadastro do cliente',
+  description:
+    'Atualiza cadastro e situação de um cliente: full_name, company_name, phone, plan_status (onboarding/active/standby/inactive), client_type, brand. É assim que se ATIVA, PAUSA (standby) ou DESATIVA um cliente — nenhum cadastro é apagado, muda-se a situação. NÃO altera e-mail (é a credencial de login), nem plano/valor/renovação (o Financeiro é a fonte), nem os serviços contratados (isso é contrato, decisão de painel). change_reason é obrigatório.',
+  scopes: ['clients:write'] as const,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      full_name: { type: 'string', minLength: 1, maxLength: 200 },
+      company_name: { type: ['string', 'null'], maxLength: 200 },
+      phone: { type: ['string', 'null'], maxLength: 40 },
+      plan_status: { type: 'string', enum: ['onboarding', 'active', 'standby', 'inactive'] },
+      client_type: { type: 'string', maxLength: 40 },
+      brand: { type: ['string', 'null'], maxLength: 80 },
+      change_reason: { type: 'string', minLength: 3, maxLength: 400 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['client_id', 'change_reason', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = updateClientSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await updateClient(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 // ─── Arquivar / restaurar / reabrir ───────────────────────────
 // Exclusão definitiva não existe no MCP: o destrutivo vira arquivamento,
 // e todo arquivamento tem par de restauração. reason obrigatório nos dois
@@ -1936,6 +1970,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   createReportDraftTool,
   createProjectTool,
   updateProjectTool,
+  updateClientTool,
   archiveProjectTool,
   restoreProjectTool,
   reopenTaskTool,

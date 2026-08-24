@@ -143,6 +143,38 @@ describe("as ferramentas do MCP rico", () => {
   });
 });
 
+describe("atualizar cliente sem alcançar login nem dinheiro", () => {
+  it("ativar/pausar/desativar é plan_status — nenhum cadastro é apagado", () => {
+    expect(tools).toContain("name: 'aceleriq_update_client'");
+    expect(writeServices).toContain(
+      "z.enum(['onboarding', 'active', 'standby', 'inactive'])",
+    );
+    const trecho = writeServices.slice(
+      writeServices.indexOf("export const updateClientSchema"),
+      writeServices.indexOf("// ─── archive/restore project"),
+    );
+    expect(trecho).not.toContain(".delete()");
+  });
+
+  it("a lista branca não alcança e-mail, plano nem serviços contratados", () => {
+    // e-mail é a credencial de login (trocar trancaria o cliente para
+    // fora); plano/valor vêm do Financeiro; serviços são contrato.
+    const lista = writeServices.slice(
+      writeServices.indexOf("for (const k of ['full_name'"),
+      writeServices.indexOf("] as const) {", writeServices.indexOf("for (const k of ['full_name'")),
+    );
+    for (const proibido of ["email", "plan_name", "plan_value", "plan_renewal_date", "services_config"]) {
+      expect(lista).not.toContain(`'${proibido}'`);
+    }
+  });
+
+  it("recusa editar quem não é cliente", () => {
+    // Sem isso, o MCP editaria o perfil de um membro da equipe.
+    const trecho = writeServices.slice(writeServices.indexOf("export async function updateClient"));
+    expect(trecho.slice(0, 1200)).toContain("client_id must be a client");
+  });
+});
+
 describe("arquivar em vez de apagar, e todo arquivamento tem volta", () => {
   it("não existe exclusão definitiva de projeto ou tarefa no MCP", () => {
     // A regra da governança: o destrutivo vira arquivamento. O que sai da

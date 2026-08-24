@@ -641,6 +641,80 @@ export async function createReportDraft(input: CreateReportDraftInput, ctx: Writ
   return { record: data, replayed: false, correlation_id: ctx.correlationId };
 }
 
+// ─── update_client ────────────────────────────────────────────
+// Cadastro e situação do cliente — NUNCA a conta de acesso nem o dinheiro.
+// Fora da lista de propósito: email (é a credencial de login; trocar por
+// aqui trancaria o cliente para fora), plan_name/plan_value/renewal (o
+// Financeiro é a fonte deles) e services_config (o que o cliente vê e paga
+// muda contrato, e isso é decisão de painel com gente olhando).
+// "Ativar/pausar/arquivar cliente" da especificação é plan_status: nenhum
+// cadastro é apagado, muda-se a situação.
+const CLIENT_STATUS = z.enum(['onboarding', 'active', 'standby', 'inactive']);
+
+export const updateClientSchema = z.object({
+  client_id: UUID,
+  full_name: z.string().trim().min(1).max(200).optional(),
+  company_name: z.string().trim().max(200).nullable().optional(),
+  phone: z.string().trim().max(40).nullable().optional(),
+  plan_status: CLIENT_STATUS.optional(),
+  client_type: z.string().trim().max(40).optional(),
+  brand: z.string().trim().max(80).nullable().optional(),
+  change_reason: z.string().trim().min(3).max(400),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict().refine(
+  (v) => ['full_name', 'company_name', 'phone', 'plan_status', 'client_type', 'brand']
+    .some((k) => k in v),
+  { message: 'at least one updatable field is required' },
+);
+export type UpdateClientInput = z.infer<typeof updateClientSchema>;
+
+const CLIENT_SELECT =
+  'id, full_name, company_name, phone, plan_status, client_type, brand, updated_at';
+
+export async function updateClient(input: UpdateClientInput, ctx: WriteCtx) {
+  assertWriteClientScope(ctx, input.client_id);
+
+  // Precisa ser um cliente de verdade: sem esta checagem o MCP editaria o
+  // perfil de um membro da equipe achando que é cliente.
+  const { data: papeis, error: papelErr } = await db()
+    .from('user_roles').select('role').eq('user_id', input.client_id);
+  if (papelErr) throw new WriteError('validation', papelErr.message);
+  if (!(papeis ?? []).some((r: { role: string }) => r.role === 'client')) {
+    throw new WriteError('validation', 'client_id must be a client');
+  }
+  const { data: existing, error: fetchErr } = await db()
+    .from('profiles').select('id, deleted_at').eq('id', input.client_id).maybeSingle();
+  if (fetchErr) throw new WriteError('validation', fetchErr.message);
+  if (!existing || (existing as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'client_id not found or unavailable');
+  }
+
+  const replay = await replayIdempotent(
+    'aceleriq_update_client', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('profiles').select(CLIENT_SELECT).eq('id', id).maybeSingle()).data,
+    priorInput => requirePriorResource(priorInput, 'client_id', input.client_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as { id: string }).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
+  const patch: Record<string, unknown> = {};
+  for (const k of ['full_name', 'company_name', 'phone', 'plan_status', 'client_type', 'brand'] as const) {
+    if (k in input) (patch as Record<string, unknown>)[k] = (input as Record<string, unknown>)[k];
+  }
+
+  const { data, error } = await db()
+    .from('profiles')
+    .update(patch)
+    .eq('id', input.client_id)
+    .select(CLIENT_SELECT)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId, change_reason: input.change_reason };
+}
+
 // ─── archive/restore project e reopen_task ────────────────────
 // A regra da casa: operação destrutiva vira ARQUIVAMENTO, e todo
 // arquivamento tem o seu par de restauração. Nada de exclusão definitiva
