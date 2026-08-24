@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
@@ -28,6 +28,17 @@ export default function OAuthConsent() {
   const [details, setDetails] = useState<AuthorizationDetails | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * Qual authorization_id já foi buscado.
+   *
+   * `getAuthorizationDetails` é de uso único: a segunda chamada com o mesmo
+   * id volta "authorization request cannot be processed". E o efeito abaixo
+   * depende de `user`, que ganha identidade NOVA a cada evento de sessão do
+   * Supabase (INITIAL_SESSION, TOKEN_REFRESHED) — então ele reexecutava
+   * sozinho e queimava a autorização, com a tela de erro no lugar do
+   * consentimento. Este ref prende a busca a uma vez por id.
+   */
+  const buscado = useRef<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -40,6 +51,8 @@ export default function OAuthConsent() {
       window.location.href = "/login?next=" + encodeURIComponent(next);
       return;
     }
+    if (buscado.current === authorizationId) return;
+    buscado.current = authorizationId;
     let active = true;
     (async () => {
       try {
@@ -100,6 +113,15 @@ export default function OAuthConsent() {
           <X className="h-8 w-8 mx-auto text-destructive" />
           <h1 className="text-lg font-semibold">Autorização indisponível</h1>
           <p className="text-sm text-muted-foreground">{error}</p>
+          {/* Sem isto a tela era um beco sem saída: o pedido de autorização
+              vale uma vez só e expira, e quem chega aqui precisa recomeçar
+              pelo aplicativo, não recarregar esta página. */}
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Cada pedido de conexão vale uma vez e expira depois de alguns
+            minutos. Volte ao aplicativo que está conectando (ChatGPT, Claude
+            ou outro) e comece a conexão de novo. Recarregar esta página não
+            resolve, porque o pedido antigo já foi usado.
+          </p>
         </div>
       </div>
     );
