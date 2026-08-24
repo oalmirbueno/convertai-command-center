@@ -465,6 +465,14 @@
       "remote_name": "dossie_estado_atual",
       "remote_statements_sha256": "dc795497455405d91615fbdb2e740d906d2ccf76860e61230436b4ac03eef2c7",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260824160000",
+      "path": "supabase/migrations/20260824160000_auditoria_referencias_orfas.sql",
+      "local_sha256": "b736901e1f422296ada1e1a35a57ac3bdae786e0aa3c2ff21641255325f73dbb",
+      "remote_name": "auditoria_referencias_orfas",
+      "remote_statements_sha256": "1979f94ddd9fadc0dde0624049b72b788ae74c4656f4369affe6021c21ac58df",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

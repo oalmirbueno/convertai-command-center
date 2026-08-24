@@ -245,7 +245,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.18.0',
+  version: '1.19.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────

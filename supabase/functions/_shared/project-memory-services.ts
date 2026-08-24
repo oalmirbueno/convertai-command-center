@@ -59,6 +59,23 @@ export async function upsertMemory(input: {
   created_by?: string | null;
 }) {
   const sb = admin();
+
+  // O cliente precisa existir. project_memory tem client_id NOT NULL mas
+  // NENHUMA chave estrangeira, entao ate hoje qualquer uuid era aceito e
+  // virava registro orfao: o agente recebia "gravado com sucesso" e o dado
+  // nao aparecia em lugar nenhum do painel. Foi exatamente o que aconteceu
+  // com a Verzelo — a memoria "salvou", o dossie (que valida) recusou, e a
+  // divergencia entre os dois foi lida como defeito do dossie.
+  const { data: perfil, error: perfilErr } = await sb
+    .from('profiles').select('id, deleted_at').eq('id', input.client_id).maybeSingle();
+  if (perfilErr) throw new Error(perfilErr.message);
+  if (!perfil || (perfil as { deleted_at: string | null }).deleted_at) {
+    throw new Error(
+      `client_id ${input.client_id} nao corresponde a nenhum cliente ativo. `
+      + 'Confira o id com aceleriq_list_clients antes de gravar.',
+    );
+  }
+
   const row = {
     client_id: input.client_id,
     project_id: input.project_id ?? null,

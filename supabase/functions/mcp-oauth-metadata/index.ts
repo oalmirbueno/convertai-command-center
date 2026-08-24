@@ -19,7 +19,7 @@ const {
   authorizationServerMetadataUrl: AUTH_SERVER_METADATA,
 } = getMcpRuntimeConfig();
 
-const MCP_VERSION = '1.18.0';
+const MCP_VERSION = '1.19.0';
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];

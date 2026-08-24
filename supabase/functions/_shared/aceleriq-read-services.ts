@@ -1599,7 +1599,7 @@ export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthCont
     });
   };
 
-  const [duplicados, clientesSemDossie, tarefasOrfas, arquivosSemCliente, relatoriosSemCliente, projetosDeNaoCliente, memoriaSemCliente] =
+  const [duplicados, clientesSemDossie, tarefasOrfas, arquivosSemCliente, relatoriosSemCliente, projetosDeNaoCliente, referenciasOrfas] =
     await Promise.all([
       // Dois "atuais" na mesma chave: o índice único impede novos, mas a
       // auditoria confere que o mundo já gravado obedece.
@@ -1626,10 +1626,11 @@ export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthCont
         .select('id, client_id')
         .is('deleted_at', null)
         .limit(1000)),
-      withTimeout(db().from('project_memory')
-        .select('id')
-        .is('client_id', null)
-        .limit(200)),
+      // Referencias orfas: client_id preenchido apontando para ninguem.
+      // A verificacao antiga procurava `client_id IS NULL` numa coluna
+      // NOT NULL — impossivel, passava sempre. Era uma verificacao morta,
+      // e foi por ela que a memoria orfa da Verzelo nao apareceu.
+      withTimeout(db().rpc('audit_referencias_orfas')),
     ]);
 
   anotar('dossie_atual_duplicado',
@@ -1655,8 +1656,17 @@ export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthCont
     (arquivosSemCliente.data ?? null) as Array<{ id: string }> | null);
   anotar('relatorio_sem_cliente', 'relatorio sem cliente', 'media',
     (relatoriosSemCliente.data ?? null) as Array<{ id: string }> | null);
-  anotar('memoria_sem_cliente', 'registro de memoria sem cliente', 'media',
-    (memoriaSemCliente.data ?? null) as Array<{ id: string }> | null);
+  // Orfas por tabela, para o relatorio dizer ONDE está e nao so quantas.
+  const orfas = (referenciasOrfas.data ?? []) as Array<{ tabela: string; id: string; client_id_orfao: string }>;
+  for (const tabela of [...new Set(orfas.map((o) => o.tabela))]) {
+    const doGrupo = orfas.filter((o) => o.tabela === tabela);
+    anotar(
+      `referencia_orfa_${tabela}`,
+      `${tabela}: client_id preenchido que nao corresponde a nenhum cliente (ids orfaos: ${[...new Set(doGrupo.map((o) => o.client_id_orfao))].slice(0, 3).join(', ')})`,
+      'alta',
+      doGrupo,
+    );
+  }
 
   // Projeto pendurado em profile que não é cliente: aparece em lugar nenhum.
   if (!projetosDeNaoCliente.error) {
@@ -1673,7 +1683,7 @@ export async function auditIntegrity(_opts: Record<string, never>, ctx: AuthCont
 
   return {
     gerado_em: new Date().toISOString(),
-    verificacoes_executadas: 7,
+    verificacoes_executadas: 9,
     problemas,
     resumo: problemas.length === 0
       ? 'Nenhum problema encontrado nas verificacoes executadas.'
