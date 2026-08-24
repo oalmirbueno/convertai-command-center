@@ -391,6 +391,107 @@ export type Database = {
           },
         ]
       }
+      client_dossiers: {
+        Row: {
+          actor: string | null
+          change_reason: string | null
+          client_id: string
+          content: string
+          correlation_id: string | null
+          created_at: string
+          dossier_type: string
+          effective_at: string
+          id: string
+          idempotency_key: string | null
+          is_current: boolean
+          metadata: Json
+          prior_version_id: string | null
+          project_id: string | null
+          source: string | null
+          summary: string | null
+          superseded_at: string | null
+          superseded_by: string | null
+          tags: string[]
+          updated_at: string
+          version: number
+        }
+        Insert: {
+          actor?: string | null
+          change_reason?: string | null
+          client_id: string
+          content: string
+          correlation_id?: string | null
+          created_at?: string
+          dossier_type?: string
+          effective_at?: string
+          id?: string
+          idempotency_key?: string | null
+          is_current?: boolean
+          metadata?: Json
+          prior_version_id?: string | null
+          project_id?: string | null
+          source?: string | null
+          summary?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          tags?: string[]
+          updated_at?: string
+          version?: number
+        }
+        Update: {
+          actor?: string | null
+          change_reason?: string | null
+          client_id?: string
+          content?: string
+          correlation_id?: string | null
+          created_at?: string
+          dossier_type?: string
+          effective_at?: string
+          id?: string
+          idempotency_key?: string | null
+          is_current?: boolean
+          metadata?: Json
+          prior_version_id?: string | null
+          project_id?: string | null
+          source?: string | null
+          summary?: string | null
+          superseded_at?: string | null
+          superseded_by?: string | null
+          tags?: string[]
+          updated_at?: string
+          version?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_dossiers_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_dossiers_prior_version_id_fkey"
+            columns: ["prior_version_id"]
+            isOneToOne: false
+            referencedRelation: "client_dossiers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_dossiers_project_id_fkey"
+            columns: ["project_id"]
+            isOneToOne: false
+            referencedRelation: "projects"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_dossiers_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "client_dossiers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       client_onboarding_items: {
         Row: {
           client_id: string
@@ -697,59 +798,6 @@ export type Database = {
           },
         ]
       }
-      commercial_organizations: {
-        Row: {
-          archived_at: string | null
-          city: string | null
-          client_id: string | null
-          created_at: string
-          created_by: string | null
-          id: string
-          name: string
-          notes: string | null
-          owner_id: string | null
-          segment: string | null
-          site: string | null
-          updated_at: string
-        }
-        Insert: {
-          archived_at?: string | null
-          city?: string | null
-          client_id?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name: string
-          notes?: string | null
-          owner_id?: string | null
-          segment?: string | null
-          site?: string | null
-          updated_at?: string
-        }
-        Update: {
-          archived_at?: string | null
-          city?: string | null
-          client_id?: string | null
-          created_at?: string
-          created_by?: string | null
-          id?: string
-          name?: string
-          notes?: string | null
-          owner_id?: string | null
-          segment?: string | null
-          site?: string | null
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "commercial_organizations_client_id_fkey"
-            columns: ["client_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       commercial_goals: {
         Row: {
           created_at: string
@@ -830,10 +878,10 @@ export type Database = {
           campaign_id: string | null
           closed_at: string | null
           company: string | null
+          contact_id: string | null
           created_at: string
           created_by: string | null
           email: string | null
-          contact_id: string | null
           expected_close_date: string | null
           id: string
           lost_reason: string | null
@@ -857,10 +905,10 @@ export type Database = {
           campaign_id?: string | null
           closed_at?: string | null
           company?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null
-          contact_id?: string | null
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
@@ -884,10 +932,10 @@ export type Database = {
           campaign_id?: string | null
           closed_at?: string | null
           company?: string | null
+          contact_id?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null
-          contact_id?: string | null
           expected_close_date?: string | null
           id?: string
           lost_reason?: string | null
@@ -915,6 +963,20 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "commercial_leads_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "commercial_leads_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "commercial_organizations"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "commercial_leads_quiz_submission_id_fkey"
             columns: ["quiz_submission_id"]
             isOneToOne: false
@@ -924,6 +986,59 @@ export type Database = {
           {
             foreignKeyName: "commercial_leads_won_client_id_fkey"
             columns: ["won_client_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      commercial_organizations: {
+        Row: {
+          archived_at: string | null
+          city: string | null
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          notes: string | null
+          owner_id: string | null
+          segment: string | null
+          site: string | null
+          updated_at: string
+        }
+        Insert: {
+          archived_at?: string | null
+          city?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          notes?: string | null
+          owner_id?: string | null
+          segment?: string | null
+          site?: string | null
+          updated_at?: string
+        }
+        Update: {
+          archived_at?: string | null
+          city?: string | null
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          notes?: string | null
+          owner_id?: string | null
+          segment?: string | null
+          site?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "commercial_organizations_client_id_fkey"
+            columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -5022,6 +5137,12 @@ export type Database = {
         Args: { p_expected_version: number; p_post_id: string }
         Returns: Json
       }
+      audit_dossies_duplicados: {
+        Args: never
+        Returns: {
+          id: string
+        }[]
+      }
       briefing_public_get: {
         Args: { _token: string }
         Returns: {
@@ -5067,6 +5188,7 @@ export type Database = {
       claim_notification_dispatch: { Args: never; Returns: boolean }
       collect_ads_metrics_now: { Args: never; Returns: Json }
       collect_social_metrics_now: { Args: never; Returns: Json }
+      commercial_activity_reminders: { Args: never; Returns: number }
       complete_contract_signature: {
         Args: {
           p_signature_ip: string
@@ -5493,6 +5615,63 @@ export type Database = {
         Returns: Json
       }
       meta_ads_connection_status: { Args: never; Returns: Json }
+      move_file: {
+        Args: { _file_id: string; _folder?: string; _project_id?: string }
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       move_to_dlq: {
         Args: {
           dlq_name: string
@@ -5579,6 +5758,63 @@ export type Database = {
       release_first_access_claim: {
         Args: { p_claim_id: string }
         Returns: boolean
+      }
+      rename_file: {
+        Args: { _file_id: string; _new_name: string }
+        Returns: {
+          agency_approval_status: string
+          agency_feedback: string | null
+          agency_reviewed_at: string | null
+          agency_reviewed_by: string | null
+          approval_requested_at: string | null
+          approval_status: string
+          archived_at: string | null
+          caption: string | null
+          carousel_text: string | null
+          client_decided_at: string | null
+          client_decided_by: string | null
+          client_id: string
+          created_at: string
+          description: string | null
+          extension: string | null
+          extracted_metadata: Json | null
+          extraction_error: string | null
+          extraction_status: string | null
+          feedback: string | null
+          file_name: string
+          file_type: string | null
+          file_url: string
+          folder: string | null
+          id: string
+          idempotency_key: string | null
+          locked_at: string | null
+          mime_type: string | null
+          page_count: number | null
+          parent_file_id: string | null
+          project_id: string | null
+          requires_approval: boolean | null
+          revision_of_file_id: string | null
+          sensitivity: string | null
+          sha256: string | null
+          sheet_count: number | null
+          size_bytes: number | null
+          slide_count: number | null
+          source: string | null
+          status: string | null
+          storage_bucket: string | null
+          storage_path: string | null
+          tags: string[] | null
+          updated_at: string | null
+          uploaded_by: string
+          version: number | null
+          visibility: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "files"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       replace_managed_user_role: {
         Args: {
@@ -5832,6 +6068,52 @@ export type Database = {
         Returns: Json
       }
       try_uuid: { Args: { _value: string }; Returns: string }
+      upsert_current_dossier: {
+        Args: {
+          _actor?: string
+          _change_reason?: string
+          _client_id: string
+          _content: string
+          _correlation_id?: string
+          _dossier_type?: string
+          _expected_version?: number
+          _idempotency_key?: string
+          _metadata?: Json
+          _project_id?: string
+          _source?: string
+          _summary?: string
+          _tags?: string[]
+        }
+        Returns: {
+          actor: string | null
+          change_reason: string | null
+          client_id: string
+          content: string
+          correlation_id: string | null
+          created_at: string
+          dossier_type: string
+          effective_at: string
+          id: string
+          idempotency_key: string | null
+          is_current: boolean
+          metadata: Json
+          prior_version_id: string | null
+          project_id: string | null
+          source: string | null
+          summary: string | null
+          superseded_at: string | null
+          superseded_by: string | null
+          tags: string[]
+          updated_at: string
+          version: number
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_dossiers"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       user_owns_project: {
         Args: { _project_id: string; _user_id: string }
         Returns: boolean
