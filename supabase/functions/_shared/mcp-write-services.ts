@@ -648,6 +648,81 @@ export async function createReportDraft(input: CreateReportDraftInput, ctx: Writ
 const PROJECT_STATUS = z.enum(['active', 'done', 'paused', 'standby', 'cancelled']);
 const PROJECT_TYPE = z.enum(['recurring', 'individual', 'internal']).or(z.string().max(64));
 
+// ─── create_project ───────────────────────────────────────────
+// A escrita que faltava por inteiro: os agentes liam e corrigiam projetos
+// mas não podiam abrir um. Cria SÓ o operacional — cobrança (billing_mode,
+// total_value) e brand ficam de fora de propósito: dinheiro entra pelo
+// painel, onde o plano financeiro nasce junto e é conferido por gente.
+export const createProjectSchema = z.object({
+  client_id: UUID,
+  name: z.string().trim().min(1).max(200),
+  project_type: PROJECT_TYPE,
+  start_date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  deadline: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  description: z.string().trim().max(8000).optional(),
+  scope: z.string().trim().max(8000).optional(),
+  objectives: z.string().trim().max(8000).optional(),
+  idempotency_key: IDEMPOTENCY_KEY,
+}).strict();
+export type CreateProjectInput = z.infer<typeof createProjectSchema>;
+
+export async function createProject(input: CreateProjectInput, ctx: WriteCtx) {
+  assertWriteClientScope(ctx, input.client_id);
+
+  // O client_id precisa ser um cliente vivo de verdade: FK aceita qualquer
+  // profile, e um projeto pendurado num membro da equipe apareceria em
+  // lugar nenhum do painel.
+  const { data: papeis, error: papelErr } = await db()
+    .from('user_roles').select('role').eq('user_id', input.client_id);
+  if (papelErr) throw new WriteError('validation', papelErr.message);
+  if (!(papeis ?? []).some((r: { role: string }) => r.role === 'client')) {
+    throw new WriteError('validation', 'client_id must be a client');
+  }
+  const { data: perfil, error: perfilErr } = await db()
+    .from('profiles').select('id, deleted_at').eq('id', input.client_id).maybeSingle();
+  if (perfilErr) throw new WriteError('validation', perfilErr.message);
+  if (!perfil || (perfil as { deleted_at: string | null }).deleted_at) {
+    throw new WriteError('not_found', 'client_id not found or unavailable');
+  }
+
+  if (input.deadline < input.start_date) {
+    throw new WriteError('validation', 'deadline must be >= start_date');
+  }
+
+  const replay = await replayIdempotent(
+    'aceleriq_create_project', ctx.keyId, input.idempotency_key,
+    async (id) => (await db().from('projects').select(PROJECT_SELECT).eq('id', id).maybeSingle()).data,
+    priorInput => requirePriorResource(priorInput, 'client_id', input.client_id),
+  );
+  if (replay) {
+    if (ctx.resultRefHolder && replay.record) ctx.resultRefHolder.value = (replay.record as { id: string }).id;
+    return { ...replay, correlation_id: ctx.correlationId, idempotency_replay_of: replay.correlation_id };
+  }
+
+  // Allowlist explícita — cobrança, brand e propriedade nunca passam.
+  const row = {
+    client_id: input.client_id,
+    name: input.name,
+    description: input.description ?? null,
+    project_type: input.project_type,
+    status: 'planning',
+    progress: 0,
+    start_date: input.start_date,
+    deadline: input.deadline,
+    scope: input.scope ?? null,
+    objectives: input.objectives ?? null,
+  };
+
+  const { data, error } = await db()
+    .from('projects')
+    .insert(row)
+    .select(PROJECT_SELECT)
+    .single();
+  if (error) throw new WriteError('validation', error.message);
+  if (ctx.resultRefHolder) ctx.resultRefHolder.value = data.id;
+  return { record: data, replayed: false, correlation_id: ctx.correlationId };
+}
+
 export const updateProjectSchema = z.object({
   project_id: UUID,
   name: z.string().trim().min(1).max(200).optional(),

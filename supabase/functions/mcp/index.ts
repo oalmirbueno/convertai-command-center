@@ -1435,14 +1435,203 @@ var get_client_metrics_default = defineToolMetrics({
   }
 });
 
+// src/lib/mcp/tools/create-project.ts
+import { defineTool as defineToolCp } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zCp } from "npm:zod@^3.25.76";
+var create_project_default = defineToolCp({
+  name: "create_project",
+  title: "Criar projeto",
+  description: "Cria um projeto para um cliente (respeita RLS do usuario autenticado). Campos operacionais apenas: nome, tipo, datas, escopo e objetivos. NAO define cobranca nem valores - isso e feito no painel, onde o plano financeiro nasce junto.",
+  inputSchema: {
+    client_id: zCp.string().uuid().describe("Cliente dono do projeto."),
+    name: zCp.string().min(1).max(200).describe("Nome do projeto."),
+    project_type: zCp.string().min(1).max(64).describe("Tipo (ex.: social_media, site, automacao, evento)."),
+    start_date: zCp.string().describe("Inicio, ISO (YYYY-MM-DD)."),
+    deadline: zCp.string().describe("Prazo, ISO (YYYY-MM-DD)."),
+    description: zCp.string().max(8000).optional(),
+    scope: zCp.string().max(8000).optional(),
+    objectives: zCp.string().max(8000).optional()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    if (!isValidIsoDate(input.start_date) || !isValidIsoDate(input.deadline)) {
+      return { content: [{ type: "text", text: "start_date e deadline precisam ser datas ISO reais (YYYY-MM-DD)." }], isError: true };
+    }
+    if (input.deadline < input.start_date) {
+      return { content: [{ type: "text", text: "deadline nao pode ser antes de start_date." }], isError: true };
+    }
+    const actorId = ctx.getUserId();
+    const scopeResult = await resolveMcpClientScope(sb, actorId);
+    if (scopeResult.error) {
+      return { content: [{ type: "text", text: "Nao foi possivel resolver o acesso a clientes." }], isError: true };
+    }
+    if (!mcpScopeAllowsClient(scopeResult.scope, input.client_id)) {
+      return { content: [{ type: "text", text: "Cliente nao encontrado no seu acesso atual." }], isError: true };
+    }
+    const { data, error } = await sb.from("projects").insert({
+      client_id: input.client_id,
+      name: input.name,
+      description: input.description ?? null,
+      project_type: input.project_type,
+      status: "planning",
+      progress: 0,
+      start_date: input.start_date,
+      deadline: input.deadline,
+      scope: input.scope ?? null,
+      objectives: input.objectives ?? null,
+      created_by: actorId
+    }).select("id, client_id, name, project_type, status, start_date, deadline").single();
+    if (error) return { content: [{ type: "text", text: `Nao foi possivel criar: ${error.message}` }], isError: true };
+    return {
+      content: [{ type: "text", text: `Projeto criado: ${data.name} (${data.id}). Cobranca e valores, se houver, configure no painel.` }],
+      structuredContent: { project: data }
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-project.ts
+import { defineTool as defineToolUp } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zUp } from "npm:zod@^3.25.76";
+var CAMPOS_UPDATE_PROJECT = ["name", "description", "status", "project_type", "start_date", "deadline", "progress", "scope", "objectives"];
+var update_project_default = defineToolUp({
+  name: "update_project",
+  title: "Atualizar projeto",
+  description: "Atualiza campos operacionais de um projeto: name, description, status (planning/active/done/paused/standby/cancelled), project_type, start_date, deadline, progress 0-100, scope, objectives. Nao altera cliente, cobranca nem valores.",
+  inputSchema: {
+    project_id: zUp.string().uuid(),
+    name: zUp.string().min(1).max(200).optional(),
+    description: zUp.string().max(8000).nullable().optional(),
+    status: zUp.enum(["planning", "active", "done", "paused", "standby", "cancelled"]).optional(),
+    project_type: zUp.string().min(1).max(64).optional(),
+    start_date: zUp.string().optional(),
+    deadline: zUp.string().optional(),
+    progress: zUp.number().int().min(0).max(100).optional(),
+    scope: zUp.string().max(8000).nullable().optional(),
+    objectives: zUp.string().max(8000).nullable().optional()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    for (const campo of ["start_date", "deadline"]) {
+      const valor = input[campo];
+      if (valor !== void 0 && !isValidIsoDate(valor)) {
+        return { content: [{ type: "text", text: `${campo} precisa ser data ISO real (YYYY-MM-DD).` }], isError: true };
+      }
+    }
+    const patch = {};
+    for (const campo of CAMPOS_UPDATE_PROJECT) {
+      if (input[campo] !== void 0) patch[campo] = input[campo];
+    }
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text", text: "Informe ao menos um campo para atualizar." }], isError: true };
+    }
+    const { data: existente } = await sb.from("projects").select("id, deleted_at").eq("id", input.project_id).maybeSingle();
+    if (!existente || existente.deleted_at) {
+      return { content: [{ type: "text", text: "Projeto nao encontrado no seu acesso atual." }], isError: true };
+    }
+    const { data, error } = await sb.from("projects").update(patch).eq("id", input.project_id).select("id, client_id, name, project_type, status, progress, start_date, deadline").single();
+    if (error) return { content: [{ type: "text", text: `Nao foi possivel atualizar: ${error.message}` }], isError: true };
+    return {
+      content: [{ type: "text", text: `Projeto atualizado: ${data.name}.` }],
+      structuredContent: { project: data }
+    };
+  }
+});
+
+// src/lib/mcp/tools/update-task.ts
+import { defineTool as defineToolUt } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zUt } from "npm:zod@^3.25.76";
+var update_task_default = defineToolUt({
+  name: "update_task",
+  title: "Atualizar tarefa",
+  description: "Atualiza campos de uma tarefa existente: title, description, status, priority, delivery_type, due_date, assigned_to. Nao troca a tarefa de projeto.",
+  inputSchema: {
+    task_id: zUt.string().uuid(),
+    title: zUt.string().min(1).max(200).optional(),
+    description: zUt.string().max(4000).nullable().optional(),
+    status: zUt.enum(TASK_STATUS_VALUES).optional(),
+    priority: zUt.enum(["low", "medium", "high", "urgent"]).optional(),
+    delivery_type: zUt.enum(TASK_DELIVERY_TYPE_VALUES).optional(),
+    due_date: zUt.string().nullable().optional().describe("ISO date (YYYY-MM-DD) ou null para limpar."),
+    assigned_to: zUt.string().uuid().nullable().optional()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  handler: async (input, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    if (typeof input.due_date === "string" && !isValidIsoDate(input.due_date)) {
+      return { content: [{ type: "text", text: "due_date precisa ser data ISO real (YYYY-MM-DD) ou null." }], isError: true };
+    }
+    const patch = {};
+    for (const campo of ["title", "description", "priority", "delivery_type", "due_date", "assigned_to"]) {
+      if (input[campo] !== void 0) patch[campo] = input[campo];
+    }
+    if (input.status !== void 0) {
+      const status = normalizeTaskStatus(input.status);
+      patch.status = status;
+      patch.kanban_status = status;
+    }
+    if (Object.keys(patch).length === 0) {
+      return { content: [{ type: "text", text: "Informe ao menos um campo para atualizar." }], isError: true };
+    }
+    const { data: existente } = await sb.from("tasks").select("id, deleted_at").eq("id", input.task_id).maybeSingle();
+    if (!existente || existente.deleted_at) {
+      return { content: [{ type: "text", text: "Tarefa nao encontrada no seu acesso atual." }], isError: true };
+    }
+    const { data, error } = await sb.from("tasks").update(patch).eq("id", input.task_id).select("id, project_id, title, status, kanban_status, priority, delivery_type, due_date, assigned_to").single();
+    if (error) return { content: [{ type: "text", text: `Nao foi possivel atualizar: ${error.message}` }], isError: true };
+    return {
+      content: [{ type: "text", text: `Tarefa atualizada: ${data.title}.` }],
+      structuredContent: { task: data }
+    };
+  }
+});
+
+// src/lib/mcp/tools/complete-task.ts
+import { defineTool as defineToolCt } from "npm:@lovable.dev/mcp-js@0.23.0";
+import { z as zCt } from "npm:zod@^3.25.76";
+var complete_task_default = defineToolCt({
+  name: "complete_task",
+  title: "Concluir tarefa",
+  description: "Marca uma tarefa como concluida (status=done). Recusa tarefa ja concluida. Sem outros efeitos.",
+  inputSchema: {
+    task_id: zCt.string().uuid()
+  },
+  annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false },
+  handler: async ({ task_id }, ctx) => {
+    const guard = requireAuth(ctx);
+    if (guard) return guard;
+    const sb = supabaseForUser(ctx);
+    const { data: existente } = await sb.from("tasks").select("id, title, status, deleted_at").eq("id", task_id).maybeSingle();
+    if (!existente || existente.deleted_at) {
+      return { content: [{ type: "text", text: "Tarefa nao encontrada no seu acesso atual." }], isError: true };
+    }
+    if (existente.status === "done") {
+      return { content: [{ type: "text", text: `"${existente.title}" ja esta concluida.` }], isError: true };
+    }
+    const { data, error } = await sb.from("tasks").update({ status: "done", kanban_status: "done" }).eq("id", task_id).select("id, project_id, title, status, kanban_status").single();
+    if (error) return { content: [{ type: "text", text: `Nao foi possivel concluir: ${error.message}` }], isError: true };
+    return {
+      content: [{ type: "text", text: `Concluida: ${data.title}.` }],
+      structuredContent: { task: data }
+    };
+  }
+});
+
 // src/lib/mcp/index.ts
 var supabaseUrl = String("https://gicbrgagstyvbaaumprj.supabase.co").replace(/\/$/, "");
 var authIssuer = `${supabaseUrl}/auth/v1`;
 var mcp_default = defineMcp({
   name: "aceleriq-os",
   title: "Aceleriq OS",
-  version: "1.4.0",
-  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `get_client_metrics` para as METRICAS REAIS do Instagram do cliente (semanas com seguidores, alcance e interacoes + desempenho por publicacao) sempre que for analisar resultados ou dar direcionamento - cite os numeros e a variacao, nunca invente, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban. Use `get_client_journal` para puxar o contexto vivo de um cliente e `register_client_update` para registrar no Diario do Trabalho o que foi feito (o cliente ve a acao em tempo real). ORGANIZACAO DE ARQUIVOS: toda pasta do cliente e uma destas: materiais (artes das redes), criativos (pecas de anuncio), identidade (logo, manual da marca, fontes), base (fotos e videos brutos do cliente), entregas, estrategicos, operacionais, relatorios, contratos. Dentro da pasta o tipo e um destes: carrossel, post, story, video, logo, foto, documento, contrato, relatorio, estrategico, briefing, outro. Sempre escolha a pasta E o tipo corretos ao arquivar algo, porque o cliente filtra por eles na tela dele. ESCRITA VOLTADA AO CLIENTE: qualquer texto que o cliente le deve ser em portugues claro, sem jargao e SEM TRAVESSAO (use ' - ' ou ' . ').",
+  version: "1.5.0",
+  instructions: "Servidor MCP oficial do Aceleriq Performance OS. Ferramentas de leitura e escrita operam como o usu\xE1rio autenticado (RLS aplicado). Use `health` para verificar conectividade, `list_clients`/`list_projects`/`list_tasks`/`list_contracts` para contexto, `get_client_metrics` para as METRICAS REAIS do Instagram do cliente (semanas com seguidores, alcance e interacoes + desempenho por publicacao) sempre que for analisar resultados ou dar direcionamento - cite os numeros e a variacao, nunca invente, `list_editorial_calendar` para o calend\xE1rio filtrado de artes, carross\xE9is e v\xEDdeos e `create_editorial_item` para adicionar uma pauta editorial sem aprovar, agendar ou publicar. Use `create_task` somente para trabalho operacional geral do Kanban, `update_task` para corrigir e `complete_task` ao terminar. Use `create_project` para abrir projeto operacional (cobranca e valores so no painel) e `update_project` para status, datas, progresso e escopo. Use `get_client_journal` para puxar o contexto vivo de um cliente e `register_client_update` para registrar no Diario do Trabalho o que foi feito (o cliente ve a acao em tempo real). ORGANIZACAO DE ARQUIVOS: toda pasta do cliente e uma destas: materiais (artes das redes), criativos (pecas de anuncio), identidade (logo, manual da marca, fontes), base (fotos e videos brutos do cliente), entregas, estrategicos, operacionais, relatorios, contratos. Dentro da pasta o tipo e um destes: carrossel, post, story, video, logo, foto, documento, contrato, relatorio, estrategico, briefing, outro. Sempre escolha a pasta E o tipo corretos ao arquivar algo, porque o cliente filtra por eles na tela dele. ESCRITA VOLTADA AO CLIENTE: qualquer texto que o cliente le deve ser em portugues claro, sem jargao e SEM TRAVESSAO (use ' - ' ou ' . ').",
   auth: auth.oauth.issuer({
     issuer: authIssuer,
     acceptedAudiences: "authenticated"
@@ -1458,7 +1647,11 @@ var mcp_default = defineMcp({
     create_task_default,
     create_editorial_item_default,
     register_client_update_default,
-    get_client_journal_default
+    get_client_journal_default,
+    create_project_default,
+    update_project_default,
+    update_task_default,
+    complete_task_default
   ]
 });
 

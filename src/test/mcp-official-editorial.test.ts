@@ -146,10 +146,12 @@ describe("official MCP editorial helpers", () => {
 
 describe("official MCP editorial contract", () => {
   it("registers both editorial tools and documents their non-publishing boundary", () => {
-    // Versao fixada de proposito: subir exige decisao consciente. 1.4.0
-    // adiciona get_client_metrics (metricas reais do Instagram, leitura) e
-    // instrui os agentes a citarem numeros verdadeiros com variacao.
-    expect(index).toContain('version: "1.4.0"');
+    // Versao fixada de proposito: subir exige decisao consciente. 1.5.0
+    // completa o poder de escrita (create_project, update_project,
+    // update_task, complete_task) e traz para a FONTE as duas ferramentas
+    // de diario que so existiam no bundle - mcp-poder-total.test.ts guarda
+    // a paridade fonte/bundle dali em diante.
+    expect(index).toContain('version: "1.5.0"');
     expect(index).toContain("getClientMetricsTool");
     expect(index).toContain("listEditorialCalendarTool");
     expect(index).toContain("createEditorialItemTool");

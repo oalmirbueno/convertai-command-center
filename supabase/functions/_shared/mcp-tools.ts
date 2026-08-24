@@ -46,6 +46,8 @@ import {
   completeTaskSchema,
   createEditorialItem,
   createEditorialItemSchema,
+  createProject,
+  createProjectSchema,
   createReportDraft,
   createReportDraftSchema,
   createTask,
@@ -183,6 +185,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_get_client_context: 'clients:read',
   aceleriq_list_projects: 'projects:read',
   aceleriq_get_project: 'projects:read',
+  aceleriq_create_project: 'projects:write',
   aceleriq_update_project: 'projects:write',
   aceleriq_list_tasks: 'tasks:read',
   aceleriq_list_editorial_calendar: 'editorial:read',
@@ -221,7 +224,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.14.0',
+  version: '1.15.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -1076,6 +1079,37 @@ const createReportDraftTool: ToolDefinition = {
   },
 };
 
+const createProjectTool: ToolDefinition = {
+  name: 'aceleriq_create_project',
+  title: 'Criar projeto',
+  description:
+    'Cria um projeto operacional para um cliente existente: name, project_type, start_date, deadline, description, scope, objectives. NÃO define cobrança, valores nem brand — isso é feito no painel, onde o plano financeiro nasce junto. Requer idempotency_key.',
+  scopes: WRITE,
+  annotations: WRITE_ANNOTATIONS,
+  inputSchema: {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', format: 'uuid' },
+      name: { type: 'string', minLength: 1, maxLength: 200 },
+      project_type: { type: 'string', maxLength: 64 },
+      start_date: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      deadline: { type: 'string', pattern: '^\\d{4}-\\d{2}-\\d{2}$' },
+      description: { type: 'string', maxLength: 8000 },
+      scope: { type: 'string', maxLength: 8000 },
+      objectives: { type: 'string', maxLength: 8000 },
+      idempotency_key: { type: 'string', minLength: 8, maxLength: 128 },
+    },
+    required: ['client_id', 'name', 'project_type', 'start_date', 'deadline', 'idempotency_key'],
+    additionalProperties: false,
+  },
+  handler: async (input, ctx) => {
+    const parsed = createProjectSchema.safeParse(input ?? {});
+    if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+    try { return await createProject(parsed.data, ensureWriteCtx(ctx)); }
+    catch (e) { throw writeError(e); }
+  },
+};
+
 const updateProjectTool: ToolDefinition = {
   name: 'aceleriq_update_project',
   title: 'Atualizar projeto',
@@ -1722,6 +1756,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   updateTaskTool,
   completeTaskTool,
   createReportDraftTool,
+  createProjectTool,
   updateProjectTool,
   // Contracts (Bloco B) — read + scope-gated write
   listContractsTool,
