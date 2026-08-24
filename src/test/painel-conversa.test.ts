@@ -133,8 +133,17 @@ describe("o dossiê do MCP entrega resultado, não só trabalho", () => {
     expect(mcp).toContain("NÚMEROS REAIS do Instagram");
   });
 
-  it("a versão subiu nos dois lugares", () => {
-    expect(mcp).toMatch(/version: '1\.14\.\d+'/);
-    expect(ler("supabase/functions/mcp-oauth-metadata/index.ts")).toMatch(/1\.14\.\d+/);
+  it("a versão subiu nos dois lugares e não regrediu", () => {
+    // Pinar a série exata (1.14.x) fazia este teste quebrar em toda entrega
+    // legítima seguinte, sem defeito por trás — o mesmo aprendizado dos
+    // contratos do ciclo e do editorial. O que importa: as duas pontas
+    // anunciarem a MESMA versão, e nunca abaixo da que trouxe o dossiê.
+    const naFerramenta = mcp.match(/version: '(\d+)\.(\d+)\.(\d+)'/);
+    const noMetadata = ler("supabase/functions/mcp-oauth-metadata/index.ts")
+      .match(/MCP_VERSION = '(\d+\.\d+\.\d+)'/);
+    expect(naFerramenta).toBeTruthy();
+    expect(noMetadata).toBeTruthy();
+    expect(`${naFerramenta![1]}.${naFerramenta![2]}.${naFerramenta![3]}`).toBe(noMetadata![1]);
+    expect(Number(naFerramenta![2])).toBeGreaterThanOrEqual(14);
   });
 });
