@@ -29,6 +29,9 @@ interface NavItem {
   icon: React.FC<{ className?: string }>;
   /** Item de gestão: só admin e manager enxergam. */
   soGestao?: boolean;
+  /** Acende só na rota exata. Sem isto, a entrada "/comercial" ficaria
+      acesa em todas as áreas do departamento ao mesmo tempo. */
+  fimExato?: boolean;
 }
 
 const adminMainNav: NavItem[] = [
@@ -71,7 +74,8 @@ const adminMoreGroups: Array<{ label: string; items: NavItem[] }> = [
     // tráfego são equipe, mas operam entrega.
     label: "Comercial",
     items: [
-      { title: "CRM", url: "/comercial", icon: KanbanSquare, soGestao: true },
+      { title: "Visão geral", url: "/comercial", icon: Briefcase, soGestao: true, fimExato: true },
+      { title: "CRM", url: "/comercial/crm", icon: KanbanSquare, soGestao: true },
       { title: "Agenda", url: "/comercial/agenda", icon: CalendarClock, soGestao: true },
       { title: "Metas", url: "/comercial/metas", icon: Target, soGestao: true },
       { title: "Campanhas", url: "/comercial/campanhas", icon: Megaphone, soGestao: true },
@@ -277,6 +281,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
                         <NavLink
                           key={item.url}
                           to={item.url}
+                          end={item.fimExato}
                           onClick={() => setMoreOpen(false)}
                           className={({ isActive }) => cn(
                             "flex items-center gap-2.5 px-3 py-1.5 rounded-lg text-[13px] transition-colors",

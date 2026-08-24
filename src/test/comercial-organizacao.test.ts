@@ -23,33 +23,54 @@ const migration = ler(
  */
 
 describe("cada aba é uma área, com nome que diz o que é", () => {
-  it("a aba se chama CRM", () => {
-    expect(pagina).toContain('{ id: "crm", label: "CRM"');
+  it("a visão geral é a porta de entrada, e as áreas têm endereço próprio", () => {
     expect(pagina).toContain(
-      'const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "campanhas", "marketing"]',
+      'const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"]',
     );
+    expect(pagina).toContain(': "visao";');
   });
 
-  it("o menu leva direto para CRM e para Agenda", () => {
-    expect(layout).toContain('{ title: "CRM", url: "/comercial"');
+  it("a página não tem fileira de abas: o menu lateral é a única navegação", () => {
+    // Duas navegações para o mesmo lugar era o que fazia a tela parecer
+    // desorganizada. O cabeçalho guarda identidade; o conteúdo, a tela toda.
+    expect(pagina).not.toContain('{ id: "crm", label: "CRM"');
+    expect(pagina).not.toContain("setAba(item.id)");
+  });
+
+  it("o menu leva à visão geral, ao CRM e à Agenda", () => {
+    expect(layout).toContain('{ title: "Visão geral", url: "/comercial"');
+    expect(layout).toContain('{ title: "CRM", url: "/comercial/crm"');
     expect(layout).toContain('{ title: "Agenda", url: "/comercial/agenda"');
+    // Sem o fim exato, "Visão geral" ficaria acesa em todas as áreas.
+    expect(layout).toContain("fimExato: true");
+    expect(layout).toContain("end={item.fimExato}");
   });
 
   it("cada aba explica a si mesma, em vez da frase genérica do módulo", () => {
     // Quem abre Metas quer saber o que Metas faz, não o que o departamento faz.
     expect(pagina).toContain("const TITULO_DA_ABA: Record<Aba, string>");
-    for (const aba of ["crm:", "agenda:", "metas:", "marketing:"]) {
+    for (const aba of ["visao:", "crm:", "agenda:", "metas:", "marketing:"]) {
       expect(pagina.slice(pagina.indexOf("TITULO_DA_ABA"))).toContain(aba);
     }
   });
 
   it("o seletor de mês só aparece onde o mês manda", () => {
-    // CRM e agenda vivem no presente; metas, campanhas e marketing olham um
-    // mês fechado.
+    // CRM e agenda vivem no presente; a visão geral, metas, campanhas e
+    // marketing olham um mês fechado.
     expect(pagina).toContain(
-      '{(aba === "metas" || aba === "campanhas" || aba === "marketing") && (',
+      '{(aba === "visao" || aba === "metas" || aba === "campanhas" || aba === "marketing") && (',
     );
     expect(pagina).not.toContain('{(aba === "crm"');
+  });
+
+  it("a visão geral resume as áreas com os dados delas e leva até elas", () => {
+    // Sumário executivo, não outra fonte de números: recebe resumo, receita
+    // e metas já calculados — nada é buscado de novo nem digitado ali.
+    expect(pagina).toContain('{aba === "visao" && (');
+    expect(pagina).toContain("function VisaoGeral(");
+    for (const destino of ['onIr("crm")', 'onIr("agenda")', 'onIr("metas")', 'onIr("campanhas")', 'onIr("marketing")']) {
+      expect(pagina).toContain(destino);
+    }
   });
 
   it("as cinco áreas existem, cada uma com seu endereço", () => {

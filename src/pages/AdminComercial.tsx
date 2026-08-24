@@ -27,6 +27,7 @@ import {
   ESTAGIOS_ABERTOS,
   METRICAS,
   ORIGENS,
+  type Atividade,
   type Campanha,
   type EstagioId,
   type Lead,
@@ -68,7 +69,7 @@ import {
  * número que o financeiro não reconhece.
  */
 
-type Aba = "crm" | "agenda" | "metas" | "campanhas" | "marketing";
+type Aba = "visao" | "crm" | "agenda" | "metas" | "campanhas" | "marketing";
 
 /**
  * O que cada aba e, dita na propria tela.
@@ -78,6 +79,7 @@ type Aba = "crm" | "agenda" | "metas" | "campanhas" | "marketing";
  * que o departamento faz.
  */
 const TITULO_DA_ABA: Record<Aba, string> = {
+  visao: "O departamento num relance: funil, semana, metas e campanhas. Cada bloco abre a sua área.",
   crm: "Empresas, pessoas e negócios. Arraste o cartão para mover de etapa; a ficha da empresa guarda o histórico.",
   agenda: "Sua semana: reuniões, ligações e blocos de trabalho. O que vencer chega no sininho às 8h.",
   metas: "O alvo do mês e quanto já saiu. A receita vem do Financeiro, não é digitada aqui.",
@@ -101,7 +103,7 @@ const somarMeses = (periodo: string, passo: number) => {
   return primeiroDiaDoMes(data);
 };
 
-const ABAS_VALIDAS: Aba[] = ["crm", "agenda", "metas", "campanhas", "marketing"];
+const ABAS_VALIDAS: Aba[] = ["visao", "crm", "agenda", "metas", "campanhas", "marketing"];
 
 export default function AdminComercial() {
   const queryClient = useQueryClient();
@@ -115,9 +117,11 @@ export default function AdminComercial() {
    * mandado para alguém.
    */
   const { aba: abaDaUrl } = useParams<{ aba?: string }>();
-  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "crm";
+  // A porta de entrada é a visão geral: quem clica em "Comercial" quer o
+  // estado do departamento, não uma das áreas escolhida por ele.
+  const aba: Aba = ABAS_VALIDAS.includes(abaDaUrl as Aba) ? (abaDaUrl as Aba) : "visao";
   const setAba = (proxima: Aba) =>
-    navigate(proxima === "crm" ? "/comercial" : `/comercial/${proxima}`);
+    navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`);
   const [periodo, setPeriodo] = useState(() => primeiroDiaDoMes(new Date()));
   const [leadAberto, setLeadAberto] = useState<Lead | null>(null);
   const [novoLead, setNovoLead] = useState(false);
@@ -234,9 +238,9 @@ export default function AdminComercial() {
               {TITULO_DA_ABA[aba]}
             </p>
           </div>
-          {/* O mes so aparece onde ele manda: metas e marketing olham para um
-              mes fechado; CRM e agenda vivem no presente. */}
-          {(aba === "metas" || aba === "campanhas" || aba === "marketing") && (
+          {/* O mes so aparece onde ele manda: visão geral, metas e marketing
+              olham para um mes fechado; CRM e agenda vivem no presente. */}
+          {(aba === "visao" || aba === "metas" || aba === "campanhas" || aba === "marketing") && (
             <div className="flex items-center gap-1 rounded-xl border border-border bg-background p-1">
               <button
                 type="button"
@@ -261,32 +265,25 @@ export default function AdminComercial() {
           )}
         </div>
 
-        <div className="mt-3 flex gap-1.5 overflow-x-auto">
-          {(
-            [
-              { id: "crm", label: "CRM", icone: KanbanSquare },
-              { id: "agenda", label: "Agenda", icone: CalendarClock },
-              { id: "metas", label: "Metas", icone: Target },
-              { id: "campanhas", label: "Campanhas", icone: Megaphone },
-              { id: "marketing", label: "Marketing", icone: Sparkles },
-            ] as const
-          ).map((item) => (
-            <button
-              key={item.id}
-              type="button"
-              onClick={() => setAba(item.id)}
-              className={`flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-[12px] font-semibold transition-colors ${
-                aba === item.id
-                  ? "border-primary bg-primary text-primary-foreground"
-                  : "border-border bg-transparent text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              <item.icone className="h-3.5 w-3.5" />
-              {item.label}
-            </button>
-          ))}
-        </div>
+        {/* Sem fileira de abas aqui: o menu lateral do painel ja lista as
+            areas do departamento. Duas navegacoes para o mesmo lugar e o
+            que fazia a tela parecer desorganizada: o cabecalho guarda so
+            identidade, e o conteudo fica com a tela inteira. */}
       </header>
+
+      {aba === "visao" && (
+        <VisaoGeral
+          resumo={resumo}
+          previsao={previsao}
+          receita={receita}
+          metas={metas}
+          leads={leads}
+          atividades={atividades}
+          campanhas={campanhas}
+          periodo={periodo}
+          onIr={setAba}
+        />
+      )}
 
       {aba === "crm" && (
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -495,6 +492,221 @@ function Tile({ titulo, valor, apoio }: { titulo: string; valor: string; apoio: 
       </p>
       <p className="truncate text-[10px] text-muted-foreground">{apoio}</p>
     </div>
+  );
+}
+
+/* ───────────────────────────── Visão geral ─────────────────────────────── */
+
+/**
+ * A capa do departamento. Não inventa número nenhum: cada bloco resume a
+ * área com os MESMOS dados que ela usa e leva até ela num toque. O menu
+ * lateral é o índice; isto aqui é o sumário executivo.
+ */
+function VisaoGeral({
+  resumo,
+  previsao,
+  receita,
+  metas,
+  leads,
+  atividades,
+  campanhas,
+  periodo,
+  onIr,
+}: {
+  resumo: ReturnType<typeof resumoDoFunil>;
+  previsao: ReturnType<typeof previsaoDoMes>;
+  receita: number;
+  metas: Array<{ id: string; metric: string; target: number }>;
+  leads: Lead[];
+  atividades: Atividade[];
+  campanhas: Campanha[];
+  periodo: string;
+  onIr: (aba: Aba) => void;
+}) {
+  const proximos = useMemo(() => {
+    const agora = Date.now();
+    return atividades
+      .filter((a) => !a.done_at && a.due_at && new Date(a.due_at).getTime() >= agora)
+      .sort((a, b) => (a.due_at < b.due_at ? -1 : 1))
+      .slice(0, 4);
+  }, [atividades]);
+
+  const nomeDoLead = (id: string | null) =>
+    id ? leads.find((l) => l.id === id)?.name || null : null;
+
+  const quando = (iso: string) => {
+    const d = new Date(iso);
+    return `${d.toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit" })} · ${d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  };
+
+  const mes = periodo.slice(0, 7);
+  const ativas = campanhas.filter((c) => c.status === "ativa").length;
+  const leadsDeCampanhaNoMes = leads.filter(
+    (l) => l.campaign_id && (l.created_at || "").slice(0, 7) === mes,
+  ).length;
+
+  const linhasDeMeta = METRICAS.map((metrica) => {
+    const alvo = metas.find((m) => m.metric === metrica.id)?.target || 0;
+    const feito = realizadoDoMes({
+      metrica: metrica.id,
+      leads,
+      periodo,
+      receitaFinanceiro: receita,
+    });
+    return { ...metrica, alvo, feito };
+  });
+  const mostrar = (linha: (typeof linhasDeMeta)[number], v: number) =>
+    linha.dinheiro ? dinheiro(v) : String(Math.round(v));
+
+  return (
+    <div className="space-y-3">
+      {/* Os quatro números que resumem o mês do departamento. */}
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <Tile
+          titulo="Em conversa"
+          valor={String(resumo.abertos)}
+          apoio={resumo.abertos === 1 ? "lead aberto no funil" : "leads abertos no funil"}
+        />
+        <Tile titulo="Em jogo" valor={dinheiro(resumo.valorEmJogo)} apoio="mensalidade x 12 + entrada" />
+        <Tile
+          titulo="Previsão do mês"
+          valor={dinheiro(previsao.ponderado)}
+          apoio={
+            previsao.semData > 0
+              ? `${previsao.leads} com data, ${previsao.semData} sem`
+              : `${previsao.leads} com data prevista`
+          }
+        />
+        <Tile titulo="Receita do mês" valor={dinheiro(receita)} apoio="lida do Financeiro" />
+      </div>
+
+      <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+        <Bloco titulo="CRM" icone={KanbanSquare} onClick={() => onIr("crm")}>
+          <Linha
+            forte={`${resumo.abertos} ${resumo.abertos === 1 ? "negócio aberto" : "negócios abertos"}`}
+            fraca={`${resumo.ganhosNoMes} ${resumo.ganhosNoMes === 1 ? "ganho" : "ganhos"} no mês`}
+          />
+          {resumo.atrasados > 0 || resumo.semProximoPasso > 0 ? (
+            <span className="block text-[11px] leading-relaxed text-warning">
+              {resumo.atrasados > 0 && `${resumo.atrasados} com compromisso atrasado`}
+              {resumo.atrasados > 0 && resumo.semProximoPasso > 0 && " · "}
+              {resumo.semProximoPasso > 0 && `${resumo.semProximoPasso} sem próximo passo`}
+            </span>
+          ) : (
+            <span className="block text-[11px] text-muted-foreground">
+              Todo negócio aberto tem um próximo passo marcado.
+            </span>
+          )}
+        </Bloco>
+
+        <Bloco titulo="Agenda" icone={CalendarClock} onClick={() => onIr("agenda")}>
+          {proximos.length === 0 ? (
+            <span className="block text-[11px] text-muted-foreground">
+              Nada marcado daqui para a frente. Toque para abrir o calendário.
+            </span>
+          ) : (
+            proximos.map((a) => (
+              <span key={a.id} className="flex items-baseline justify-between gap-2">
+                <span className="min-w-0 truncate text-[11.5px] text-foreground">
+                  {a.title}
+                  {nomeDoLead(a.lead_id) ? (
+                    <span className="text-muted-foreground"> · {nomeDoLead(a.lead_id)}</span>
+                  ) : null}
+                </span>
+                <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                  {quando(a.due_at)}
+                </span>
+              </span>
+            ))
+          )}
+        </Bloco>
+
+        <Bloco titulo="Metas" icone={Target} onClick={() => onIr("metas")}>
+          {linhasDeMeta.map((linha) => (
+            <span key={linha.id} className="block">
+              <span className="flex items-baseline justify-between gap-2 text-[11px]">
+                <span className="min-w-0 truncate text-muted-foreground">{linha.label}</span>
+                <span className="shrink-0 tabular-nums text-foreground">
+                  {mostrar(linha, linha.feito)}
+                  {linha.alvo > 0 ? (
+                    <span className="text-muted-foreground"> de {mostrar(linha, linha.alvo)}</span>
+                  ) : (
+                    <span className="text-muted-foreground"> · sem meta</span>
+                  )}
+                </span>
+              </span>
+              {linha.alvo > 0 && (
+                <span className="mt-1 block h-1 overflow-hidden rounded-full bg-secondary">
+                  <span
+                    className={`block h-full rounded-full ${linha.feito >= linha.alvo ? "bg-success" : "bg-primary"}`}
+                    style={{ width: `${Math.round(Math.min(linha.feito / linha.alvo, 1) * 100)}%` }}
+                  />
+                </span>
+              )}
+            </span>
+          ))}
+        </Bloco>
+
+        <Bloco titulo="Campanhas" icone={Megaphone} onClick={() => onIr("campanhas")}>
+          <Linha
+            forte={`${ativas} ${ativas === 1 ? "campanha ativa" : "campanhas ativas"}`}
+            fraca={
+              leadsDeCampanhaNoMes > 0
+                ? `${leadsDeCampanhaNoMes} ${leadsDeCampanhaNoMes === 1 ? "lead trazido" : "leads trazidos"} no mês`
+                : "nenhum lead de campanha no mês"
+            }
+          />
+          <span className="block text-[11px] text-muted-foreground">
+            Investimento, custo por lead e por cliente vivem lá dentro.
+          </span>
+        </Bloco>
+
+        <Bloco titulo="Marketing" icone={Sparkles} onClick={() => onIr("marketing")}>
+          <span className="block text-[11px] leading-relaxed text-muted-foreground">
+            A presença da própria casa: o que está no ar, o que vem por aí e o
+            que o diagnóstico está trazendo.
+          </span>
+        </Bloco>
+      </div>
+    </div>
+  );
+}
+
+function Bloco({
+  titulo,
+  icone: Icone,
+  onClick,
+  children,
+}: {
+  titulo: string;
+  icone: React.ComponentType<{ className?: string }>;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="group flex min-h-[132px] flex-col rounded-2xl border border-border bg-card p-3.5 text-left transition-colors hover:border-primary/40"
+    >
+      <span className="flex w-full items-center justify-between">
+        <span className="flex items-center gap-2 text-[12.5px] font-bold text-foreground">
+          <Icone className="h-4 w-4 text-primary" />
+          {titulo}
+        </span>
+        <ArrowRight className="h-3.5 w-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+      </span>
+      <span className="mt-2.5 block w-full flex-1 space-y-1.5">{children}</span>
+    </button>
+  );
+}
+
+function Linha({ forte, fraca }: { forte: string; fraca: string }) {
+  return (
+    <span className="flex items-baseline justify-between gap-2">
+      <span className="text-[12.5px] font-semibold text-foreground">{forte}</span>
+      <span className="shrink-0 text-[10.5px] text-muted-foreground">{fraca}</span>
+    </span>
   );
 }
 

@@ -348,6 +348,6 @@ describe("Comercial é área própria, não item de Gestão", () => {
 
   it("a aba sai da URL, então o voltar do navegador funciona", () => {
     expect(pagina).toContain("useParams<{ aba?: string }>()");
-    expect(pagina).toContain('navigate(proxima === "crm" ? "/comercial" : `/comercial/${proxima}`)');
+    expect(pagina).toContain('navigate(proxima === "visao" ? "/comercial" : `/comercial/${proxima}`)');
   });
 });
