@@ -457,6 +457,14 @@
       "remote_name": "crm_empresas_e_contatos",
       "remote_statements_sha256": "2537b840e08d3f587708084cf0b3b77348199566e76c67fea9f95ec32b734858",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260824120000",
+      "path": "supabase/migrations/20260824120000_dossie_estado_atual.sql",
+      "local_sha256": "da6c450bef42c158312ca2e8eb16b7619e21182d0f6182d9284f69e3d0b47be7",
+      "remote_name": "dossie_estado_atual",
+      "remote_statements_sha256": "dc795497455405d91615fbdb2e740d906d2ccf76860e61230436b4ac03eef2c7",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [
