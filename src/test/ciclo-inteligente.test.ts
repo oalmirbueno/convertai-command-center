@@ -602,8 +602,13 @@ describe("tres frentes, cada uma uma fila sequencial", () => {
     for (const frente of ["Produção", "Painel", "Publicação"]) {
       expect(defs).toContain(`nome: "${frente}"`);
     }
-    // A folha destaca a proxima de cada fila e convida a concluir.
-    expect(folha).toContain("agora: toque para concluir");
+    // Na folha, LER e MARCAR sao gestos separados: tocar no item abre o
+    // contexto (a etapa nao e so uma frase); Feito e botao proprio. O
+    // concluido SAI da fila e desce para o historico, onde toque desfaz.
+    expect(folha).toContain("toque para ver o contexto");
+    expect(folha).toContain("Concluidas · {feitas.length}");
+    expect(folha).toContain("toque para desfazer");
+    expect(folha).toContain("criarTarefaDaPendencia");
     // Cada fila destaca a primeira etapa ABERTA dela - concluiu, a
     // proxima da mesma fila assume.
     expect(pagina).toContain("frente.steps.find((s) => !etapaFeita(client, s))");

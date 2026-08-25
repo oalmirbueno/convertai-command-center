@@ -63,6 +63,28 @@ export const FRENTES_DA_SEMANA: Array<{ nome: string; steps: number[] }> = [
   { nome: "Publicação", steps: [5, 6] },
 ];
 
+/**
+ * O contexto de cada etapa fixa: o que fazer, dito por extenso.
+ *
+ * As etapas que giram carregam o contexto da pendência que as gerou; as
+ * fixas precisavam do próprio, senão tocar nelas abria o vazio — e "a
+ * etapa não pode ser só uma frase" foi pedido literal.
+ */
+export const DICA_DA_ETAPA: Record<string, string> = {
+  "Conteúdo da semana criado (artes e legendas)":
+    "Produzir as peças e legendas da semana e subir na pasta certa do cliente. É o insumo de tudo: sem peça, não há aprovação nem agenda.",
+  "Painel atualizado (arquivos, agenda e diário)":
+    "Conferir arquivos e agenda e escrever no diário o que aconteceu. É o que o cliente vê quando abre o painel — painel parado passa sensação de trabalho parado.",
+  "Posts agendados (publicação automática armada)":
+    "Deixar os posts da semana programados com a publicação automática ligada. Agenda armada é semana que sai sozinha.",
+  "Criativos da semana prontos":
+    "Produzir ou renovar os criativos que as campanhas vão usar. Criativo parado satura e encarece o lead.",
+  "Painel atualizado (registro e leitura para o cliente)":
+    "Registrar no painel a leitura da semana: o que os números dizem e o que foi decidido. É a prova de gestão que o cliente consegue ler.",
+  "Anúncios no ar ou programados":
+    "Conferir que as campanhas da semana estão rodando ou programadas, com verba certa. Anúncio parado é semana sem lead.",
+};
+
 /** Trilho de entrada, só para quem ainda não concluiu o onboarding. */
 export const ONBOARDING_STEPS = [
   "Acessos e briefing completos",

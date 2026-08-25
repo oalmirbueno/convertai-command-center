@@ -12,13 +12,15 @@ import {
 } from "@/components/ui/sheet";
 import EtapasDaEntrega from "@/components/ciclo/EtapasDaEntrega";
 import {
-  CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS,
+  CYCLES, DICA_DA_ETAPA, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS,
+  SERVICE_LABELS,
   type CycleArea, weekSummaryText,
 } from "@/lib/cycleDefs";
 import {
   PHASE_LABELS, PHASE_PURPOSE, phaseForClient, stepLabelForWeek,
   type StepsOptions,
 } from "@/lib/cycleTasks";
+import { textoDaEtapa } from "@/lib/cycleSuggest";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
@@ -122,7 +124,57 @@ export default function ClientCycleSheet({
   const [bulkRunning, setBulkRunning] = useState(false);
   // Qual semana está sendo editada aqui dentro. A tela continua na semana
   // atual; só esta folha volta uma semana para acertar o que ficou faltando.
-  const [editandoAnterior, setEditandoAnterior] = useState(false);
+  const [editandoAnterior, setEditandoAnterior] = useState(false);
+  /** Qual etapa esta com o contexto aberto — "a etapa nao e so uma frase". */
+  const [etapaAberta, setEtapaAberta] = useState<number | null>(null);
+  const [criandoTarefa, setCriandoTarefa] = useState<string | null>(null);
+
+  /**
+   * O contexto de cada rotulo que veio de pendencia: por que a etapa
+   * existe, quais os itens e onde se resolve. As etapas do plano usam o
+   * MESMO texto de acao da pendencia, entao o rotulo e a chave.
+   */
+  const contextoPorRotulo = useMemo(() => {
+    const mapa = new Map<string, { texto: string; detalhes?: string[]; rota?: string }>();
+    for (const p of pendencias || []) {
+      mapa.set(textoDaEtapa(p as Parameters<typeof textoDaEtapa>[0]), p);
+    }
+    return mapa;
+  }, [pendencias]);
+
+  /**
+   * Cria uma tarefa no Kanban a partir de uma pendencia — "para nao ficar
+   * perdido": o aviso vira trabalho rastreavel com um toque.
+   */
+  const criarTarefaDaPendencia = async (p: {
+    chave: string; texto: string; gravidade: string; detalhes?: string[];
+  }) => {
+    if (!client || criandoTarefa) return;
+    setCriandoTarefa(p.chave);
+    try {
+      const { data: projeto } = await (supabase as any)
+        .from("projects").select("id").eq("client_id", client.id)
+        .is("deleted_at", null).order("updated_at", { ascending: false })
+        .limit(1).maybeSingle();
+      if (!projeto) {
+        toast.error("Este cliente nao tem projeto vivo para receber a tarefa.");
+        return;
+      }
+      const { error } = await (supabase as any).from("tasks").insert({
+        project_id: projeto.id,
+        title: textoDaEtapa(p as Parameters<typeof textoDaEtapa>[0]),
+        description: [p.texto, ...(p.detalhes || []).map((d) => `- ${d}`)].join("\n"),
+        status: "backlog",
+        kanban_status: "backlog",
+        priority: p.gravidade === "urgente" ? "high" : "medium",
+        source: "ciclo",
+      });
+      if (error) toast.error("Nao foi possivel criar a tarefa.");
+      else toast.success("Tarefa criada no Kanban.");
+    } finally {
+      setCriandoTarefa(null);
+    }
+  };
   const [novaNota, setNovaNota] = useState("");
   const [salvandoNota, setSalvandoNota] = useState(false);
   const [pedidoChecklist, setPedidoChecklist] = useState("");
@@ -590,6 +642,17 @@ export default function ClientCycleSheet({
                                 Abrir
                               </a>
                             )}
+                            {canWrite && (
+                              <button
+                                type="button"
+                                disabled={criandoTarefa === p.chave}
+                                onClick={() => void criarTarefaDaPendencia(p)}
+                                title="Criar uma tarefa no Kanban a partir desta pendencia"
+                                className="shrink-0 rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary disabled:opacity-50"
+                              >
+                                + Tarefa
+                              </button>
+                            )}
                           </p>
                           {/* Os itens pelo NOME: "8 atrasadas" sem dizer
                               quais obriga a caçar — o alvo vem junto. */}
@@ -789,106 +852,242 @@ export default function ClientCycleSheet({
 
                 <div className="mt-2 space-y-2.5">
                   {(() => {
-                  // A mesma dinâmica do card, aqui dentro: as etapas em
-                  // TRÊS FRENTES sequenciais, com a próxima de cada fila
-                  // destacada. A folha continua sendo o lugar de corrigir
-                  // (todo passo tem toggle), agora com a mesma leitura.
-                  const grupos: Array<{ nome: string | null; steps: number[] }> =
-                    servicoAvulso
-                      ? [{ nome: null, steps: Array.from({ length: clientTotal }, (_, i) => i + 1) }]
-                      : [
-                          ...FRENTES_DA_SEMANA,
-                          ...(clientTotal > totalSteps
-                            ? [{
-                                nome: "Entrada",
-                                steps: Array.from(
-                                  { length: clientTotal - totalSteps },
-                                  (_, i) => totalSteps + i + 1,
-                                ),
-                              }]
-                            : []),
-                        ];
-                  return grupos.map((grupo) => {
-                    const atualDaFila = editandoAnterior
-                      ? null
-                      : grupo.steps.find((s) => !marcacaoDe(s)) ?? null;
-                    const feitasNaFila = grupo.steps.filter((s) => marcacaoDe(s)).length;
-                    return (
-                      <div key={grupo.nome ?? "entrega"}>
-                        {grupo.nome && (
-                          <p className="mb-1 flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                            {grupo.nome}
-                            {feitasNaFila >= grupo.steps.length ? (
-                              <span className="text-success">✓ fechada</span>
-                            ) : (
-                              <span>· {feitasNaFila} de {grupo.steps.length}</span>
-                            )}
-                          </p>
-                        )}
-                        <div className="space-y-1.5">
-                  {grupo.steps.map((step) => {
-                    const key = `${client.id}:${area}:${step}${editandoAnterior ? ":anterior" : ""}`;
-                    const row = marcacaoDe(step);
-                    const done = !!row;
-                    const atual = step === atualDaFila;
-                    const onboardingTrack = step > totalSteps && !servicoAvulso;
-                    const who = row?.done_by
-                      ? row.done_by === currentUserId ? "você" : doneByNames?.[row.done_by] || "equipe"
+                  // A dinamica do jogo, inteira: cada fila mostra SO o que
+                  // falta. Concluiu, o item SAI da fila para o historico de
+                  // concluidas la embaixo, e o proximo assume o lugar.
+                  // Tocar no item abre o CONTEXTO (por que existe, quais os
+                  // itens, onde resolver) — etapa nao e so uma frase. O
+                  // Feito e botao proprio, para ler sem marcar sem querer.
+                  // A semana anterior segue com a lista completa: la e
+                  // correcao, nao fila.
+                  const grupos: Array<{ nome: string | null; steps: number[] }> = [
+                    ...FRENTES_DA_SEMANA,
+                    ...(clientTotal > totalSteps
+                      ? [{
+                          nome: "Entrada",
+                          steps: Array.from(
+                            { length: clientTotal - totalSteps },
+                            (_, i) => totalSteps + i + 1,
+                          ),
+                        }]
+                      : []),
+                  ];
+                  const rotuloDe = (step: number): string =>
+                    step <= totalSteps
+                      ? ((!editandoAnterior && rotuloDaEtapa?.(step))
+                        || stepLabelForWeek(
+                          area, client.id,
+                          editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
+                          step, opcoesEtapa,
+                        ))
+                      : ONBOARDING_STEPS[step - totalSteps - 1];
+                  const contextoDe = (step: number) => {
+                    const rotulo = rotuloDe(step);
+                    return contextoPorRotulo.get(rotulo)
+                      ?? (DICA_DA_ETAPA[rotulo] ? { texto: DICA_DA_ETAPA[rotulo] } : null);
+                  };
+                  const quemFez = (row: { done_by?: string | null } | undefined) =>
+                    row?.done_by
+                      ? row.done_by === currentUserId ? "voce" : doneByNames?.[row.done_by] || "equipe"
                       : null;
+
+                  if (editandoAnterior) {
+                    // Correcao da semana passada: tudo visivel, toque alterna.
                     return (
-                      <button
-                        key={key}
-                        type="button"
-                        disabled={!canWrite || pendingKey === key || bulkRunning}
-                        onClick={() => void onToggle(client, step, editandoAnterior ? pastWeekKey : undefined)}
-                        className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
-                          done
-                            ? "border-primary/30 bg-primary/[0.06]"
-                            : atual
-                              ? "border-primary/50 bg-primary/[0.04] ring-1 ring-primary/30"
-                              : "border-border bg-card"
-                        } ${pendingKey === key ? "opacity-50" : ""}`}
-                      >
-                        <span
-                          className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
-                            done
-                              ? onboardingTrack ? "bg-info text-white" : "bg-primary text-primary-foreground"
-                              : "bg-secondary text-muted-foreground"
-                          }`}
-                        >
-                          {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
-                        </span>
-                        <span className="min-w-0 flex-1">
-                          <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
-                            {step <= totalSteps
-                              // O plano congelado vale para a semana ATUAL;
-                              // editando a anterior, o rótulo é o daquela
-                              // semana, pelo caminho de sempre.
-                              ? (!editandoAnterior && rotuloDaEtapa?.(step))
-                                || stepLabelForWeek(
-                                  area,
-                                  client.id,
-                                  editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),
-                                  step,
-                                  opcoesEtapa,
-                                )
-                              : ONBOARDING_STEPS[step - totalSteps - 1]}
-                          </span>
-                          <span className="mt-0.5 block text-[10px] text-muted-foreground">
-                            {done && row?.done_at
-                              ? `feito ${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} às ${hourOf(row.done_at)}${who ? ` por ${who}` : ""}`
-                              : atual
-                                ? "agora: toque para concluir"
-                                : onboardingTrack ? "onboarding" : "na fila"}
-                          </span>
-                        </span>
-                      </button>
-                    );
-                  })}
-                        </div>
+                      <div className="space-y-1.5">
+                        {grupos.flatMap((g) => g.steps).map((step) => {
+                          const key = `${client.id}:${area}:${step}:anterior`;
+                          const row = marcacaoDe(step);
+                          const done = !!row;
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              disabled={!canWrite || pendingKey === key || bulkRunning}
+                              onClick={() => void onToggle(client, step, pastWeekKey)}
+                              className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
+                                done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
+                              } ${pendingKey === key ? "opacity-50" : ""}`}
+                            >
+                              <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
+                                done ? "bg-primary text-primary-foreground" : "bg-secondary text-muted-foreground"
+                              }`}>
+                                {done ? <Check className="h-3.5 w-3.5" strokeWidth={3} /> : step}
+                              </span>
+                              <span className="min-w-0 flex-1">
+                                <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
+                                  {rotuloDe(step)}
+                                </span>
+                                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                  {done ? "feita naquela semana" : "ficou sem marcar"}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
                       </div>
                     );
-                  });
+                  }
+
+                  const feitas = grupos
+                    .flatMap((g) => g.steps)
+                    .filter((step) => marcacaoDe(step))
+                    .sort((a, b) => {
+                      const ra = marcacaoDe(a)?.done_at || "";
+                      const rb = marcacaoDe(b)?.done_at || "";
+                      return rb.localeCompare(ra);
+                    });
+
+                  return (
+                    <>
+                      {grupos.map((grupo) => {
+                        const pendentes = grupo.steps.filter((s2) => !marcacaoDe(s2));
+                        const atualDaFila = pendentes[0] ?? null;
+                        return (
+                          <div key={grupo.nome ?? "fila"}>
+                            {grupo.nome && (
+                              <p className="mb-1 flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                                {grupo.nome}
+                                {pendentes.length === 0 ? (
+                                  <span className="text-success">fechada ✓</span>
+                                ) : (
+                                  <span>· faltam {pendentes.length}</span>
+                                )}
+                              </p>
+                            )}
+                            {pendentes.length === 0 ? (
+                              <div className="flex h-9 items-center gap-2 rounded-xl border border-success/25 bg-success/[0.05] px-2.5">
+                                <Check className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
+                                <span className="text-[11.5px] font-semibold text-success">
+                                  Frente completa — tudo desta fila esta no historico abaixo
+                                </span>
+                              </div>
+                            ) : (
+                              <div className="space-y-1.5">
+                                {pendentes.map((step) => {
+                                  const key = `${client.id}:${area}:${step}`;
+                                  const atual = step === atualDaFila;
+                                  const aberta = etapaAberta === step;
+                                  const ctx = contextoDe(step);
+                                  return (
+                                    <div
+                                      key={key}
+                                      className={`rounded-xl border transition-colors ${
+                                        atual
+                                          ? "border-primary/50 bg-primary/[0.04] ring-1 ring-primary/30"
+                                          : "border-border bg-card"
+                                      } ${pendingKey === key ? "opacity-50" : ""}`}
+                                    >
+                                      <div className="flex items-center gap-2.5 p-2.5">
+                                        <button
+                                          type="button"
+                                          onClick={() => setEtapaAberta(aberta ? null : step)}
+                                          className="flex min-w-0 flex-1 items-start gap-2.5 text-left"
+                                        >
+                                          <span className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md text-[11px] font-bold tabular-nums ${
+                                            atual ? "bg-primary/15 text-primary" : "bg-secondary text-muted-foreground"
+                                          }`}>
+                                            {step}
+                                          </span>
+                                          <span className="min-w-0 flex-1">
+                                            <span className={`block text-[12.5px] leading-snug ${atual ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+                                              {rotuloDe(step)}
+                                            </span>
+                                            <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                                              {atual ? "agora" : "na fila"}
+                                              {ctx ? " · toque para ver o contexto" : ""}
+                                            </span>
+                                          </span>
+                                        </button>
+                                        <button
+                                          type="button"
+                                          disabled={!canWrite || pendingKey === key || bulkRunning}
+                                          onClick={() => void onToggle(client, step)}
+                                          className={`flex h-8 shrink-0 items-center gap-1 rounded-lg px-2.5 text-[11.5px] font-bold transition-transform active:scale-95 disabled:opacity-50 ${
+                                            atual
+                                              ? "bg-primary text-primary-foreground"
+                                              : "border border-border bg-card text-muted-foreground"
+                                          }`}
+                                        >
+                                          <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                                          Feito
+                                        </button>
+                                      </div>
+                                      {aberta && ctx && (
+                                        <div className="border-t border-border/60 px-3 pb-2.5 pt-2">
+                                          <p className="text-[11px] leading-relaxed text-muted-foreground">
+                                            {ctx.texto}
+                                          </p>
+                                          {(ctx.detalhes?.length ?? 0) > 0 && (
+                                            <div className="mt-1 space-y-0.5">
+                                              {ctx.detalhes!.map((nome) => (
+                                                <p key={nome} className="truncate text-[10.5px] text-muted-foreground">
+                                                  · {nome}
+                                                </p>
+                                              ))}
+                                            </div>
+                                          )}
+                                          {ctx.rota && (
+                                            <a
+                                              href={ctx.rota}
+                                              className="mt-1.5 inline-block rounded border border-border px-2 py-0.5 text-[10.5px] font-semibold text-foreground no-underline"
+                                            >
+                                              Abrir onde se resolve
+                                            </a>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+
+                      {/* O historico da semana: o que ja saiu da fila, do
+                          mais recente para tras. Toque desfaz — corrigir
+                          continua a um toque. */}
+                      {feitas.length > 0 && (
+                        <div>
+                          <p className="mb-1 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                            Concluidas · {feitas.length}
+                          </p>
+                          <div className="space-y-1">
+                            {feitas.map((step) => {
+                              const key = `${client.id}:${area}:${step}`;
+                              const row = marcacaoDe(step);
+                              const who = quemFez(row);
+                              return (
+                                <button
+                                  key={key}
+                                  type="button"
+                                  disabled={!canWrite || pendingKey === key || bulkRunning}
+                                  onClick={() => void onToggle(client, step)}
+                                  className={`flex w-full items-start gap-2 rounded-lg border border-success/20 bg-success/[0.04] px-2.5 py-1.5 text-left ${
+                                    pendingKey === key ? "opacity-50" : ""
+                                  }`}
+                                >
+                                  <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="block truncate text-[11.5px] text-foreground/80">
+                                      {rotuloDe(step)}
+                                    </span>
+                                    <span className="block text-[9.5px] text-muted-foreground">
+                                      {row?.done_at
+                                        ? `${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} as ${hourOf(row.done_at)}${who ? ` por ${who}` : ""} · toque para desfazer`
+                                        : "toque para desfazer"}
+                                    </span>
+                                  </span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  );
                   })()}
                 </div>
 
