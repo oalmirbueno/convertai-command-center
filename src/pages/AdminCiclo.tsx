@@ -44,7 +44,7 @@ import {
 } from "@/components/ui/sheet";
 import ClientCycleSheet from "@/components/ciclo/ClientCycleSheet";
 import {
-  CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
+  CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, type CycleArea,
 } from "@/lib/cycleDefs";
 import {
   WEEKDAY_INITIALS, addDays, closedStreak, isSameDay, localIso, mondayOf,
@@ -63,20 +63,8 @@ import {
 
 const AREA_STORAGE_KEY = "aceleriq-ciclo-area";
 
-/**
- * As três frentes da semana, na ordem em que o trabalho flui.
- *
- * Os seis passos persistidos continuam os mesmos (a marcação guarda o
- * número); o que muda é a APRESENTAÇÃO: três filas sequenciais em vez de
- * seis botões. Cada fila junta o passo fixo da frente com o passo que
- * gira (escolhido da realidade): produzir (1→2), manter o painel vivo
- * (3→4), colocar na rua (5→6).
- */
-const FRENTES_DA_SEMANA: Array<{ nome: string; steps: number[] }> = [
-  { nome: "Produção", steps: [1, 2] },
-  { nome: "Painel", steps: [3, 4] },
-  { nome: "Publicação", steps: [5, 6] },
-];
+// As três frentes moram em cycleDefs: card e folha mostram as MESMAS
+// filas, e em dois lugares uma divergiria da outra no primeiro conserto.
 
 const MENU_LINKS = [
   { title: "Painel", url: "/dashboard", icon: LayoutDashboard },

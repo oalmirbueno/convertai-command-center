@@ -591,10 +591,19 @@ describe("tres frentes, cada uma uma fila sequencial", () => {
     const raiz = resolve(__dirname, "../..");
     const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
 
+    // As frentes moram em cycleDefs: card e folha mostram as MESMAS
+    // filas, e em dois lugares uma divergiria no primeiro conserto.
+    const defs = readFileSync(resolve(raiz, "src/lib/cycleDefs.ts"), "utf8");
+    const folha = readFileSync(
+      resolve(raiz, "src/components/ciclo/ClientCycleSheet.tsx"), "utf8",
+    );
     expect(pagina).toContain("FRENTES_DA_SEMANA");
+    expect(folha).toContain("FRENTES_DA_SEMANA");
     for (const frente of ["Produção", "Painel", "Publicação"]) {
-      expect(pagina).toContain(`nome: "${frente}"`);
+      expect(defs).toContain(`nome: "${frente}"`);
     }
+    // A folha destaca a proxima de cada fila e convida a concluir.
+    expect(folha).toContain("agora: toque para concluir");
     // Cada fila destaca a primeira etapa ABERTA dela - concluiu, a
     // proxima da mesma fila assume.
     expect(pagina).toContain("frente.steps.find((s) => !etapaFeita(client, s))");
@@ -604,9 +613,9 @@ describe("tres frentes, cada uma uma fila sequencial", () => {
     // O Feito marca a etapa real, pelo mesmo caminho de sempre.
     expect(pagina).toContain("void toggle(client, aberta)");
     // As frentes cobrem exatamente os 6 passos persistidos, sem buraco.
-    expect(pagina).toContain("steps: [1, 2]");
-    expect(pagina).toContain("steps: [3, 4]");
-    expect(pagina).toContain("steps: [5, 6]");
+    expect(defs).toContain("steps: [1, 2]");
+    expect(defs).toContain("steps: [3, 4]");
+    expect(defs).toContain("steps: [5, 6]");
   });
 
   it("avulso segue com o holofote unico: uma entrega, uma fila", async () => {

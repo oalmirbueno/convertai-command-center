@@ -12,8 +12,8 @@ import {
 } from "@/components/ui/sheet";
 import EtapasDaEntrega from "@/components/ciclo/EtapasDaEntrega";
 import {
-  CYCLES, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS, type CycleArea,
-  weekSummaryText,
+  CYCLES, FRENTES_DA_SEMANA, HISTORY_WEEKS, ONBOARDING_STEPS, SERVICE_LABELS,
+  type CycleArea, weekSummaryText,
 } from "@/lib/cycleDefs";
 import {
   PHASE_LABELS, PHASE_PURPOSE, phaseForClient, stepLabelForWeek,
@@ -769,12 +769,51 @@ export default function ClientCycleSheet({
                     . Serve para registrar o que já tinha sido feito e ficou sem marcar.
                   </p>
                 )}
-                <div className="mt-2 space-y-1.5">
-                  {Array.from({ length: clientTotal }, (_, index) => index + 1).map((step) => {
+                <div className="mt-2 space-y-2.5">
+                  {(() => {
+                  // A mesma dinâmica do card, aqui dentro: as etapas em
+                  // TRÊS FRENTES sequenciais, com a próxima de cada fila
+                  // destacada. A folha continua sendo o lugar de corrigir
+                  // (todo passo tem toggle), agora com a mesma leitura.
+                  const grupos: Array<{ nome: string | null; steps: number[] }> =
+                    servicoAvulso
+                      ? [{ nome: null, steps: Array.from({ length: clientTotal }, (_, i) => i + 1) }]
+                      : [
+                          ...FRENTES_DA_SEMANA,
+                          ...(clientTotal > totalSteps
+                            ? [{
+                                nome: "Entrada",
+                                steps: Array.from(
+                                  { length: clientTotal - totalSteps },
+                                  (_, i) => totalSteps + i + 1,
+                                ),
+                              }]
+                            : []),
+                        ];
+                  return grupos.map((grupo) => {
+                    const atualDaFila = editandoAnterior
+                      ? null
+                      : grupo.steps.find((s) => !marcacaoDe(s)) ?? null;
+                    const feitasNaFila = grupo.steps.filter((s) => marcacaoDe(s)).length;
+                    return (
+                      <div key={grupo.nome ?? "entrega"}>
+                        {grupo.nome && (
+                          <p className="mb-1 flex items-center gap-1.5 text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                            {grupo.nome}
+                            {feitasNaFila >= grupo.steps.length ? (
+                              <span className="text-success">✓ fechada</span>
+                            ) : (
+                              <span>· {feitasNaFila} de {grupo.steps.length}</span>
+                            )}
+                          </p>
+                        )}
+                        <div className="space-y-1.5">
+                  {grupo.steps.map((step) => {
                     const key = `${client.id}:${area}:${step}${editandoAnterior ? ":anterior" : ""}`;
                     const row = marcacaoDe(step);
                     const done = !!row;
-                    const onboardingTrack = step > totalSteps;
+                    const atual = step === atualDaFila;
+                    const onboardingTrack = step > totalSteps && !servicoAvulso;
                     const who = row?.done_by
                       ? row.done_by === currentUserId ? "você" : doneByNames?.[row.done_by] || "equipe"
                       : null;
@@ -785,7 +824,11 @@ export default function ClientCycleSheet({
                         disabled={!canWrite || pendingKey === key || bulkRunning}
                         onClick={() => void onToggle(client, step, editandoAnterior ? pastWeekKey : undefined)}
                         className={`flex w-full items-start gap-2.5 rounded-xl border p-2.5 text-left transition-colors ${
-                          done ? "border-primary/30 bg-primary/[0.06]" : "border-border bg-card"
+                          done
+                            ? "border-primary/30 bg-primary/[0.06]"
+                            : atual
+                              ? "border-primary/50 bg-primary/[0.04] ring-1 ring-primary/30"
+                              : "border-border bg-card"
                         } ${pendingKey === key ? "opacity-50" : ""}`}
                       >
                         <span
@@ -816,12 +859,19 @@ export default function ClientCycleSheet({
                           <span className="mt-0.5 block text-[10px] text-muted-foreground">
                             {done && row?.done_at
                               ? `feito ${new Date(row.done_at).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit" })} às ${hourOf(row.done_at)}${who ? ` por ${who}` : ""}`
-                              : onboardingTrack ? "onboarding" : "pendente"}
+                              : atual
+                                ? "agora: toque para concluir"
+                                : onboardingTrack ? "onboarding" : "na fila"}
                           </span>
                         </span>
                       </button>
                     );
                   })}
+                        </div>
+                      </div>
+                    );
+                  });
+                  })()}
                 </div>
 
                 </>

@@ -47,6 +47,22 @@ export const CYCLES: Record<CycleArea, CycleDefinition> = {
   },
 };
 
+/**
+ * As três frentes da semana, na ordem em que o trabalho flui.
+ *
+ * Os seis passos persistidos continuam os mesmos (a marcação guarda o
+ * número); as frentes são a APRESENTAÇÃO: três filas sequenciais em vez
+ * de seis botões. Cada fila junta o passo fixo da frente com o que gira:
+ * produzir (1→2), manter o painel vivo (3→4), colocar na rua (5→6).
+ * Vivem aqui porque card e folha mostram as MESMAS frentes — em dois
+ * lugares, uma divergiria da outra no primeiro conserto.
+ */
+export const FRENTES_DA_SEMANA: Array<{ nome: string; steps: number[] }> = [
+  { nome: "Produção", steps: [1, 2] },
+  { nome: "Painel", steps: [3, 4] },
+  { nome: "Publicação", steps: [5, 6] },
+];
+
 /** Trilho de entrada, só para quem ainda não concluiu o onboarding. */
 export const ONBOARDING_STEPS = [
   "Acessos e briefing completos",
