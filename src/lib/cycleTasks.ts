@@ -187,7 +187,7 @@ const CATALOG: Record<CycleArea, CycleTask[]> = {
 };
 
 /** Posições que giram, na ordem em que aparecem no ciclo. */
-const ROTATING_SLOTS = [2, 3, 5];
+export const ROTATING_SLOTS = [2, 3, 5];
 
 export interface ClientPhaseInput {
   /** Onboarding aberto significa cliente entrando na casa. */

@@ -32,6 +32,11 @@ export interface Pendencia {
   gravidade: Gravidade;
   /** Vira etapa do checklist, ou é só aviso de leitura. */
   viraEtapa: boolean;
+  /** Os itens por NOME: "8 tarefas atrasadas" sem dizer quais obriga a
+      caçar. A pendência traz o alvo junto. */
+  detalhes?: string[];
+  /** A tela onde se resolve, para o aviso virar ação num toque. */
+  rota?: string;
 }
 
 /** Quantos dias uma aprovação pode ficar parada antes de virar urgência. */
@@ -168,6 +173,8 @@ function pendenciasDoKanban(s: SituacaoDoCliente): Pendencia[] {
         : `${s.tarefasAtrasadas} tarefas passaram do prazo no Kanban`,
       gravidade: "urgente",
       viraEtapa: true,
+      detalhes: s.tarefasAtrasadasNomes,
+      rota: "/kanban",
     });
   }
   // Tarefa sem dono é a que ninguém faz: não some, não atrasa, só fica.
@@ -271,7 +278,15 @@ function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
     });
   }
 
-  if (situacao.artesProntas === 0 && situacao.aguardandoAprovacao === 0) {
+  // Só reclama de arte quando a AGENDA precisa dela. Cliente com posts
+  // agendados ou publicados obviamente teve arte — acusar "nenhuma arte
+  // pronta" ali é a mentira que faz o cockpit perder a confiança.
+  if (
+    situacao.artesProntas === 0
+    && situacao.aguardandoAprovacao === 0
+    && situacao.agendados === 0
+    && situacao.publicadosNaSemana === 0
+  ) {
     lista.push({
       chave: "sem-arte",
       texto: "Nenhuma arte pronta nem em aprovação",
@@ -311,6 +326,8 @@ function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
         : `${situacao.pautasSemArte} pautas no calendário ainda sem arte anexada`,
       gravidade: situacao.pautasSemArte >= 3 ? "urgente" : "atencao",
       viraEtapa: true,
+      detalhes: situacao.pautasSemArteNomes,
+      rota: "/calendario",
     });
   }
 

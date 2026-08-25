@@ -44,10 +44,15 @@ export interface SituacaoDoCliente {
   tarefasAbertas: number;
   /** Abertas com prazo já vencido. */
   tarefasAtrasadas: number;
+  /** Os nomes das vencidas (até 3): "8 atrasadas" sem dizer QUAIS obriga
+      a caçar no Kanban — a pendência tem que trazer o alvo. */
+  tarefasAtrasadasNomes: string[];
   /** Abertas sem ninguém responsável. */
   tarefasSemDono: number;
   /** Pauta no calendário editorial ainda sem arte anexada. */
   pautasSemArte: number;
+  /** Os títulos das pautas sem arte (até 3). */
+  pautasSemArteNomes: string[];
 
   /* ── Tráfego ── */
   /** Campanhas que a Meta reporta como no ar. */
@@ -106,8 +111,10 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     ultimoDiario: null,
     tarefasAbertas: 0,
     tarefasAtrasadas: 0,
+    tarefasAtrasadasNomes: [],
     tarefasSemDono: 0,
     pautasSemArte: 0,
+    pautasSemArteNomes: [],
     campanhasAtivas: 0,
     campanhasTotal: 0,
     saldoVerba: null,
@@ -220,7 +227,7 @@ export async function lerSituacoes(
     // engole, e a contagem ficaria sempre zero sem ninguem perceber.
     (supabase as any)
       .from("projects")
-      .select("id, client_id, tasks(status, due_date, assigned_to)")
+      .select("id, client_id, tasks(status, due_date, assigned_to, title)")
       .in("client_id", clientIds)
       .is("deleted_at", null),
     // Pauta no calendario sem arte: primary_file_id nulo. E o buraco entre
@@ -228,7 +235,7 @@ export async function lerSituacoes(
     // cheio e nao ha o que publicar.
     (supabase as any)
       .from("editorial_posts")
-      .select("client_id, primary_file_id, production_status")
+      .select("client_id, primary_file_id, production_status, title")
       .in("client_id", clientIds)
       .is("archived_at", null)
       .is("primary_file_id", null),
@@ -326,14 +333,21 @@ export async function lerSituacoes(
     for (const t of lista) {
       if (!ABERTAS.has(String(t.status ?? ""))) continue;
       s.tarefasAbertas += 1;
-      if (typeof t.due_date === "string" && t.due_date < hoje) s.tarefasAtrasadas += 1;
+      if (typeof t.due_date === "string" && t.due_date < hoje) {
+        s.tarefasAtrasadas += 1;
+        const nome = String((t as { title?: unknown }).title ?? "").trim();
+        if (nome && s.tarefasAtrasadasNomes.length < 3) s.tarefasAtrasadasNomes.push(nome);
+      }
       if (!t.assigned_to) s.tarefasSemDono += 1;
     }
   }
 
   for (const linha of (pautas.data ?? []) as Array<Record<string, unknown>>) {
     const s = mapa.get(String(linha.client_id));
-    if (s) s.pautasSemArte += 1;
+    if (!s) continue;
+    s.pautasSemArte += 1;
+    const nome = String(linha.title ?? "").trim();
+    if (nome && s.pautasSemArteNomes.length < 3) s.pautasSemArteNomes.push(nome);
   }
 
   for (const linha of (campanhas.data ?? []) as Array<Record<string, unknown>>) {

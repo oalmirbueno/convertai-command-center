@@ -70,7 +70,15 @@ export interface ClientCycleSheetProps {
    * O card de fora mostra as duas piores; quem abriu a folha veio ver
    * tudo, e a folha sem isso parecia a mesma tela de antes.
    */
-  pendencias?: Array<{ chave: string; texto: string; gravidade: "urgente" | "atencao" | "tranquilo" }>;
+  pendencias?: Array<{
+    chave: string;
+    texto: string;
+    gravidade: "urgente" | "atencao" | "tranquilo";
+    detalhes?: string[];
+    rota?: string;
+  }>;
+  /** O rótulo real de cada etapa (plano congelado da semana). */
+  rotuloDaEtapa?: (step: number) => string;
   /** A entrada do cliente novo, quando ainda está entrando. */
   jornada?: Array<{ chave: string; titulo: string; comoFecha: string; feita: boolean; atual?: boolean }> | null;
   weekStart: Date;
@@ -106,7 +114,7 @@ function monthsSince(iso?: string | null): string | null {
 }
 
 export default function ClientCycleSheet({
-  client, area, servicoAvulso, fatosDoPainel, pendencias, jornada,
+  client, area, servicoAvulso, fatosDoPainel, pendencias, jornada, rotuloDaEtapa,
   weekStart, realMonday, historyWeekKeys, historySets, doneMap,
   pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
   onToggle, onClose,
@@ -432,7 +440,8 @@ export default function ClientCycleSheet({
     totalSteps: clientTotal,
     stepNames: client
       ? Array.from({ length: totalSteps }, (_, i) =>
-          stepLabelForWeek(area, client.id, localIso(weekStart), i + 1, opcoesEtapa),
+          rotuloDaEtapa?.(i + 1)
+            ?? stepLabelForWeek(area, client.id, localIso(weekStart), i + 1, opcoesEtapa),
         )
       : undefined,
     avulsosFeitos: avulsos.filter((item) => item.done).map((item) => item.text),
@@ -563,17 +572,37 @@ export default function ClientCycleSheet({
                       Tudo em dia por aqui: nenhuma pendência neste cliente.
                     </p>
                   ) : (
-                    <div className="space-y-1">
+                    <div className="space-y-1.5">
                       {pendencias.map((p) => (
-                        <p
-                          key={p.chave}
-                          className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
-                            p.gravidade === "urgente" ? "text-destructive" : "text-warning"
-                          }`}
-                        >
-                          <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-current" />
-                          <span className="min-w-0">{p.texto}</span>
-                        </p>
+                        <div key={p.chave}>
+                          <p
+                            className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
+                              p.gravidade === "urgente" ? "text-destructive" : "text-warning"
+                            }`}
+                          >
+                            <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-current" />
+                            <span className="min-w-0 flex-1">{p.texto}</span>
+                            {p.rota && (
+                              <a
+                                href={p.rota}
+                                className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] font-semibold text-foreground no-underline"
+                              >
+                                Abrir
+                              </a>
+                            )}
+                          </p>
+                          {/* Os itens pelo NOME: "8 atrasadas" sem dizer
+                              quais obriga a caçar — o alvo vem junto. */}
+                          {(p.detalhes?.length ?? 0) > 0 && (
+                            <div className="ml-3 mt-0.5 space-y-0.5">
+                              {p.detalhes!.map((nome) => (
+                                <p key={nome} className="truncate text-[10.5px] text-muted-foreground">
+                                  · {nome}
+                                </p>
+                              ))}
+                            </div>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}
@@ -771,7 +800,11 @@ export default function ClientCycleSheet({
                         <span className="min-w-0 flex-1">
                           <span className={`block text-[12.5px] leading-snug ${done ? "text-foreground" : "text-muted-foreground"}`}>
                             {step <= totalSteps
-                              ? stepLabelForWeek(
+                              // O plano congelado vale para a semana ATUAL;
+                              // editando a anterior, o rótulo é o daquela
+                              // semana, pelo caminho de sempre.
+                              ? (!editandoAnterior && rotuloDaEtapa?.(step))
+                                || stepLabelForWeek(
                                   area,
                                   client.id,
                                   editandoAnterior && pastWeekKey ? pastWeekKey : localIso(weekStart),

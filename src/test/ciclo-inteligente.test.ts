@@ -494,3 +494,57 @@ describe("post publicado NUNCA aparece como pendente", () => {
   });
 });
 
+describe("as etapas da semana saem da realidade, congeladas", () => {
+  it("a pendencia carrega o alvo pelo nome e a tela onde se resolve", () => {
+    const p = pendenciasDoCliente(situacao({
+      tarefasAtrasadas: 8,
+      tarefasAtrasadasNomes: ["Arte do lancamento", "Legenda da promo", "Reel de terca"],
+      agendados: 3, artesProntas: 1, ultimoDiario: new Date().toISOString(),
+    }), "social");
+    const item = p.find((x) => x.chave === "tarefa-atrasada")!;
+    // "8 atrasadas" sem dizer QUAIS obriga a cacar no Kanban.
+    expect(item.detalhes).toEqual(["Arte do lancamento", "Legenda da promo", "Reel de terca"]);
+    expect(item.rota).toBe("/kanban");
+  });
+
+  it("com posts agendados ou publicados, 'nenhuma arte' NAO aparece", () => {
+    // O relato do dono, literal: "fala nenhuma arte pronta sendo que ja
+    // esta ate agendado". Cliente com agenda armada obviamente teve arte;
+    // acusar ali e a mentira que faz o cockpit perder a confianca.
+    const agendado = pendenciasDoCliente(situacao({
+      artesProntas: 0, aguardandoAprovacao: 0, agendados: 4,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    expect(agendado.map((x) => x.chave)).not.toContain("sem-arte");
+
+    const publicou = pendenciasDoCliente(situacao({
+      artesProntas: 0, aguardandoAprovacao: 0, agendados: 0, publicadosNaSemana: 2,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    expect(publicou.map((x) => x.chave)).not.toContain("sem-arte");
+
+    // Sem arte E sem agenda E sem publicacao: ai sim, de verdade.
+    const vazio = pendenciasDoCliente(situacao({
+      artesProntas: 0, aguardandoAprovacao: 0, agendados: 0, publicadosNaSemana: 0,
+    }), "social");
+    expect(vazio.map((x) => x.chave)).toContain("sem-arte");
+  });
+
+  it("o plano da semana existe como modulo congelavel", async () => {
+    // A peca que faltava: o motor de pendencias existia e as etapas do
+    // checklist continuavam saindo do sorteio antigo. O plano nasce da
+    // realidade e CONGELA, porque a marcacao guarda so o numero da etapa
+    // e rotulo que muda no meio da semana faria o historico mentir.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const plano = readFileSync(resolve(raiz, "src/lib/cycleWeekPlan.ts"), "utf8");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+    expect(plano).toContain('"ciclo_semana"');
+    expect(pagina).toContain("congelarPlano(");
+    expect(pagina).toContain("rotuloDoPlano(");
+    // O rotulo do plano manda; o sorteio vira reserva.
+    expect(pagina).toMatch(/rotuloDoPlano\(String\(client.id\), step\)[\s\S]{0,80}\?\? stepLabelForWeek/);
+  });
+});
+

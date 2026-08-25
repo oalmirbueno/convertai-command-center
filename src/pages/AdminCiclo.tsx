@@ -26,6 +26,9 @@ import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cyc
 import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
 import { fatosDoPainel } from "@/lib/cycleRitual";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
+import { congelarPlano, lerPlanoAnterior, lerPlanosDaSemana } from "@/lib/cycleWeekPlan";
+import { etapasQueGiram } from "@/lib/cycleSuggest";
+import { ROTATING_SLOTS, stepsForWeek as etapasDoSorteio } from "@/lib/cycleTasks";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
@@ -246,6 +249,23 @@ export default function AdminCiclo() {
     setSalvandoVenda(null);
   };
 
+  /**
+   * O plano congelado da semana: as três etapas que giram, escolhidas da
+   * REALIDADE no momento em que a semana começa a ser trabalhada.
+   * Congeladas porque a marcação guarda só o número da etapa — rótulo que
+   * muda no meio da semana faria o histórico mentir.
+   */
+  const { data: planos } = useQuery({
+    queryKey: ["ciclo-planos", idsNoCiclo.join(","), area, weekKey],
+    queryFn: () => lerPlanosDaSemana(idsNoCiclo, area, weekKey),
+    enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
+  });
+  const { data: planosAnteriores } = useQuery({
+    queryKey: ["ciclo-planos-anteriores", idsNoCiclo.join(","), area, weekKey],
+    queryFn: () => lerPlanoAnterior(idsNoCiclo, area, localIso(addDays(weekStart, -7))),
+    enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
+  });
+
   const pendenciasPorCliente = useMemo(() => {
     const mapa = new Map<string, Pendencia[]>();
     if (!situacoes) return mapa;
@@ -277,6 +297,52 @@ export default function AdminCiclo() {
         trafego: servicos.trafego === true,
       },
     );
+  };
+
+  /**
+   * Congela o plano de quem ainda não tem, uma vez por sessão.
+   *
+   * A pendência real ocupa a etapa; o acervo (o sorteio antigo) só
+   * preenche o que sobrar, sem repetir a semana anterior. É a ligação que
+   * faltava: o motor de contexto existia e o checklist seguia cego.
+   */
+  const congeladosRef = useRef(new Set<string>());
+  useEffect(() => {
+    if (!situacoes || !planos || !planosAnteriores || avulsosAbertos) return;
+    (async () => {
+      let algum = false;
+      for (const client of activeClients as any[]) {
+        const id = String(client.id);
+        const chave = `${id}:${area}:${weekKey}`;
+        if (planos.has(id) || congeladosRef.current.has(chave)) continue;
+        const pend = pendenciasPorCliente.get(id);
+        if (!pend) continue;
+        congeladosRef.current.add(chave);
+        const acervo = etapasDoSorteio(area, id, weekKey, stepOptionsFor(client))
+          .filter((slot) => !slot.fixed)
+          .map((slot) => slot.label);
+        const etapas = etapasQueGiram({
+          pendencias: pend,
+          acervo,
+          usadasAntes: planosAnteriores.get(id) || [],
+          quantidade: ROTATING_SLOTS.length,
+        });
+        if (await congelarPlano({ clientId: id, area, weekStart: weekKey, etapas })) {
+          algum = true;
+        }
+      }
+      if (algum) {
+        await queryClient.invalidateQueries({ queryKey: ["ciclo-planos"] });
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [situacoes, planos, planosAnteriores, avulsosAbertos, area, weekKey]);
+
+  /** O rótulo de uma etapa que gira, vindo do plano congelado. */
+  const rotuloDoPlano = (clientId: string, step: number): string | null => {
+    const indice = ROTATING_SLOTS.indexOf(step);
+    if (indice < 0) return null;
+    return planos?.get(clientId)?.etapas[indice] ?? null;
   };
 
   const leitura = useMemo(
@@ -887,9 +953,11 @@ export default function AdminCiclo() {
       const servico = servicoDoCard(client);
       return servico ? etapasDoServico(servico)[step - 1] || "" : "";
     }
-    return step <= totalSteps
-      ? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client))
-      : ONBOARDING_STEPS[step - totalSteps - 1];
+    if (step > totalSteps) return ONBOARDING_STEPS[step - totalSteps - 1];
+    // O plano congelado (escolhido da realidade) manda nas etapas que
+    // giram; o sorteio antigo fica só de reserva para semana sem plano.
+    return rotuloDoPlano(String(client.id), step)
+      ?? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client));
   };
 
   const etapaFeita = (client: any, step: number) =>
@@ -1700,6 +1768,11 @@ export default function AdminCiclo() {
         jornada={
           detailClient && !avulsosAbertos && isOnboarding(detailClient)
             ? jornadaDe(detailClient)
+            : undefined
+        }
+        rotuloDaEtapa={
+          detailClient && !avulsosAbertos
+            ? (step: number) => stepLabelOf(detailClient, step)
             : undefined
         }
         /* Os fatos desta semana e deste cliente, lidos do painel: são o
