@@ -449,6 +449,74 @@ describe("clicar no card revela mais do que o card mostrava", () => {
   });
 });
 
+describe("fechar a semana GUARDA na historia e a folha atualiza", () => {
+  it("a conta do fechamento le o cache, nao o doneMap congelado do render", async () => {
+    // O relato: "quando fecho nao esta guardando na historia". O Fechar
+    // semana marca as etapas num laco com um fechamento so; contar pelo
+    // doneMap do render fazia a ultima marcacao nao enxergar as anteriores,
+    // a conta nunca chegava no total e o registro de semana fechada nao
+    // nascia. A conta tem que sair do cache vivo da consulta.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+
+    const fechamento = pagina.slice(
+      pagina.indexOf("Semana fechada vira registro"),
+      pagina.indexOf("semana-fechada"),
+    );
+    expect(fechamento).toContain('getQueryData<CycleRow[]>(["weekly-cycle"');
+    expect(fechamento).not.toContain("doneMap.has(");
+    // O registro e aguardado e a historia da folha e invalidada: sem isso,
+    // mesmo gravando, o registro so aparecia ao fechar e reabrir o cliente.
+    expect(fechamento).toContain("await recordMemory({");
+    const aposRegistro = pagina.slice(pagina.indexOf("await recordMemory({"));
+    expect(aposRegistro).toContain('invalidateQueries({ queryKey: ["memoria-cliente"] })');
+    // E o proprio existing tambem le o cache: o mapa congelado deixaria o
+    // laco inserir a mesma etapa duas vezes.
+    const marcacao = pagina.slice(
+      pagina.indexOf("const existing = daSemanaAtual"),
+      pagina.indexOf("if (daSemanaAtual) queryClient.setQueryData"),
+    );
+    expect(marcacao).toContain('getQueryData<CycleRow[]>(["weekly-cycle"');
+  });
+
+  it("CADA acao marcada entra na historia na hora, e desfazer apaga o rastro", async () => {
+    // O complemento do dono: "cada tarefa, cada acao feita tem que atualizar
+    // o historico completo, nao so a semana". Marcar grava um registro de
+    // etapa com o rotulo real; desmarcar apaga exatamente aquele rastro (e o
+    // fechamento da semana, se havia) - historia que mantem o que foi
+    // desfeito e falso positivo.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+
+    expect(pagina).toContain("Etapa concluída: ");
+    expect(pagina).toContain('registro: "etapa"');
+    const inicioDesfazer = pagina.indexOf('.from("weekly_cycle_progress").delete()');
+    const desfazer = pagina.slice(
+      inicioDesfazer,
+      pagina.indexOf("} else {", inicioDesfazer),
+    );
+    expect(desfazer).toContain("apagarRegistroDoCiclo");
+    expect(desfazer).toContain('registro: "fechamento"');
+    // E a invalidacao da historia acontece no ciclo de TODA marcacao, nao
+    // apenas dentro do bloco de fechamento.
+    const invalidacoes = pagina.slice(
+      pagina.indexOf('invalidateQueries({ queryKey: ["weekly-cycle"] })'),
+      pagina.indexOf("Semana fechada vira registro"),
+    );
+    expect(invalidacoes).toContain('["memoria-cliente"]');
+
+    // O apagador existe de verdade e filtra pelo rastro exato.
+    const memoria = readFileSync(resolve(raiz, "src/lib/clientMemory.ts"), "utf8");
+    expect(memoria).toContain("export async function apagarRegistroDoCiclo");
+    expect(memoria).toContain('.eq("kind", "ciclo")');
+    expect(memoria).toContain('.contains("metadata"');
+  });
+});
+
 describe("post publicado NUNCA aparece como pendente", () => {
   const agora = new Date("2026-08-25T12:00:00Z").getTime();
   const seteDias = agora - 7 * 86_400_000;

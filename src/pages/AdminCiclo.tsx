@@ -16,7 +16,7 @@ import { etapasDoServico, servicosDoCliente } from "@/lib/servicosCliente";
 import { entregaConcluida, listEtapasDeVarios, marcarEtapa } from "@/lib/entregaAvulsa";
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { extraAreas, inCycle, setCycleExtra } from "@/lib/cycleExtras";
-import { recordMemory } from "@/lib/clientMemory";
+import { apagarRegistroDoCiclo, recordMemory } from "@/lib/clientMemory";
 import {
   PHASE_LABELS, phaseForClient, stepLabelForWeek, stepLabelsForWeek, stepsForWeek,
   type StepsOptions,
@@ -900,8 +900,15 @@ export default function AdminCiclo() {
     const key = `${client.id}:${area}:${step}${daSemanaAtual ? "" : `:${alvoSemana}`}`;
     if (pendingKey === key) return;
     setPendingKey(key);
+    // O cache é a fonte, não o doneMap do render: dentro do laço do "Fechar
+    // semana" o render fica para trás, e o mapa congelado deixaria inserir a
+    // mesma etapa duas vezes.
     const existing = daSemanaAtual
-      ? doneMap.get(key)
+      ? (
+          queryClient.getQueryData<CycleRow[]>(["weekly-cycle", user?.id, weekKey]) || []
+        ).find(
+          (row) => row.client_id === client.id && row.area === area && row.step === step,
+        ) ?? doneMap.get(key)
       : (pastRows || []).find(
           (row) => row.client_id === client.id && row.area === area
             && row.step === step && row.week_start === alvoSemana,
@@ -922,11 +929,42 @@ export default function AdminCiclo() {
         const { error } = await (supabase as any)
           .from("weekly_cycle_progress").delete().eq("id", existing.id);
         if (error) throw error;
+        // Desfazer conserta a história também: o rastro da etapa sai, e o
+        // fechamento da semana (se havia) deixa de valer — registro de coisa
+        // desmarcada é a história mentindo.
+        await apagarRegistroDoCiclo({
+          clientId: client.id,
+          metadata: { week_start: alvoSemana, area, step, registro: "etapa" },
+        });
+        await apagarRegistroDoCiclo({
+          clientId: client.id,
+          metadata: { week_start: alvoSemana, area, registro: "fechamento" },
+        });
       } else {
         const { error } = await (supabase as any)
           .from("weekly_cycle_progress")
           .insert({ client_id: client.id, area, week_start: alvoSemana, step, done_by: user?.id || null });
         if (error) throw error;
+
+        // Cada ação feita entra na história NA HORA, não só a semana
+        // fechada: o histórico completo do cliente é a linha do tempo de
+        // marcações, e uma ação sem rastro é ação que a história perde.
+        const rotuloDaAcao = daSemanaAtual
+          ? stepLabelOf(client, step)
+          : step > totalSteps
+            ? ONBOARDING_STEPS[step - totalSteps - 1] || `Etapa ${step}`
+            : stepLabelForWeek(area, client.id, alvoSemana, step, stepOptionsFor(client));
+        await recordMemory({
+          clientId: client.id,
+          kind: "ciclo",
+          title: `Etapa concluída: ${rotuloDaAcao || `Etapa ${step}`}`,
+          content:
+            `A etapa "${rotuloDaAcao || step}" de ${cycle.label} foi concluída ` +
+            `na semana de ${alvoSemana}.`,
+          source: "ciclo",
+          tags: [area, "etapa"],
+          metadata: { week_start: alvoSemana, area, step, registro: "etapa" },
+        });
 
         if (isOnboarding(client) && step === totalSteps + ONBOARDING_STEPS.length) {
           const { error: graduateError } = await supabase
@@ -940,16 +978,31 @@ export default function AdminCiclo() {
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle"] });
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-history"] });
       await queryClient.invalidateQueries({ queryKey: ["weekly-cycle-past"] });
+      // A história da folha acompanha CADA ação (gravada ou desfeita), não
+      // só o fechamento da semana.
+      await queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
 
       // Semana fechada vira registro na história do cliente: o trabalho de
       // bastidor deixa de existir só como seis quadradinhos marcados.
       if (daSemanaAtual && !existing) {
         const total = totalFor(client);
-        const feitas = Array.from({ length: total }, (_, i) => i + 1).filter(
-          (s) => s === step || doneMap.has(`${client.id}:${area}:${s}`),
+        // A conta sai do CACHE, não do doneMap do render: o "Fechar semana"
+        // da folha marca as etapas num laço com um fechamento só, e o mapa
+        // congelado nunca via as marcações recém-feitas. A conta parava em
+        // menos que o total e a semana fechava sem deixar registro nenhum.
+        const linhasDaSemana =
+          queryClient.getQueryData<CycleRow[]>(["weekly-cycle", user?.id, weekKey]) || [];
+        const marcadas = new Set(
+          linhasDaSemana
+            .filter((row) => row.client_id === client.id && row.area === area)
+            .map((row) => row.step),
+        );
+        marcadas.add(step);
+        const feitas = Array.from({ length: total }, (_, i) => i + 1).filter((s) =>
+          marcadas.has(s),
         ).length;
         if (feitas >= total) {
-          void recordMemory({
+          await recordMemory({
             clientId: client.id,
             kind: "ciclo",
             title: `Semana de ${cycle.label} fechada`,
@@ -958,8 +1011,11 @@ export default function AdminCiclo() {
               `na semana de ${weekLabel(weekStart)}: ${stepLabelsForWeek(area, client.id, weekKey, stepOptionsFor(client)).join("; ")}.`,
             source: "ciclo",
             tags: [area, "semana-fechada"],
-            metadata: { week_start: alvoSemana, area, etapas: total },
+            metadata: { week_start: alvoSemana, area, etapas: total, registro: "fechamento" },
           });
+          // A folha aberta lê a história desta consulta; sem invalidar, o
+          // registro só apareceria ao fechar e reabrir o cliente.
+          await queryClient.invalidateQueries({ queryKey: ["memoria-cliente"] });
         }
       }
     } catch (error: unknown) {

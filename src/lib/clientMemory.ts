@@ -91,6 +91,36 @@ export async function recordMemory(input: MemoryInput): Promise<boolean> {
   }
 }
 
+/**
+ * Apaga um registro do ciclo quando a AÇÃO que o gerou foi desfeita.
+ *
+ * A história é imutável para o que aconteceu de verdade; desmarcar uma
+ * etapa diz que aquilo NÃO aconteceu, e manter o registro seria a história
+ * mentindo. O filtro casa pelo metadata (semana, área, etapa e o marcador
+ * `registro`), então só sai exatamente o rastro da ação desfeita.
+ */
+export async function apagarRegistroDoCiclo(input: {
+  clientId: string;
+  metadata: Record<string, unknown>;
+}): Promise<boolean> {
+  try {
+    const { error } = await supabase
+      .from("project_memory")
+      .delete()
+      .eq("client_id", input.clientId)
+      .eq("kind", "ciclo")
+      .contains("metadata", input.metadata as any);
+    if (error) {
+      console.warn("[memória] não foi possível apagar o registro:", error.message);
+      return false;
+    }
+    return true;
+  } catch (error) {
+    console.warn("[memória] falha inesperada ao apagar:", error);
+    return false;
+  }
+}
+
 /** A história do cliente, do mais recente para o mais antigo. */
 export async function readMemory(
   clientId: string,
