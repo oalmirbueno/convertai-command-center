@@ -580,3 +580,41 @@ describe("o holofote: uma acao por vez, como num jogo", () => {
   });
 });
 
+describe("tres frentes, cada uma uma fila sequencial", () => {
+  it("o card mostra 3 filas no lugar de 6 botoes, e cada Feito avanca a fila", async () => {
+    // O pedido: "ao inves de 6 opcoes deixe 3; cada fila e uma frente da
+    // semana; preencheu a primeira tarefa, segue para a segunda". O
+    // avanco e REAL: cada Feito marca a etapa persistida de verdade -
+    // nada simulado, nada de achismo.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+
+    expect(pagina).toContain("FRENTES_DA_SEMANA");
+    for (const frente of ["Produção", "Painel", "Publicação"]) {
+      expect(pagina).toContain(`nome: "${frente}"`);
+    }
+    // Cada fila destaca a primeira etapa ABERTA dela - concluiu, a
+    // proxima da mesma fila assume.
+    expect(pagina).toContain("frente.steps.find((s) => !etapaFeita(client, s))");
+    // Fila completa vira selo, nao some da vista: fechar frente e
+    // conquista visivel.
+    expect(pagina).toContain("fechada");
+    // O Feito marca a etapa real, pelo mesmo caminho de sempre.
+    expect(pagina).toContain("void toggle(client, aberta)");
+    // As frentes cobrem exatamente os 6 passos persistidos, sem buraco.
+    expect(pagina).toContain("steps: [1, 2]");
+    expect(pagina).toContain("steps: [3, 4]");
+    expect(pagina).toContain("steps: [5, 6]");
+  });
+
+  it("avulso segue com o holofote unico: uma entrega, uma fila", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+    expect(pagina).toContain("avulso && nextStep &&");
+  });
+});
+

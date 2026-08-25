@@ -63,6 +63,21 @@ import {
 
 const AREA_STORAGE_KEY = "aceleriq-ciclo-area";
 
+/**
+ * As três frentes da semana, na ordem em que o trabalho flui.
+ *
+ * Os seis passos persistidos continuam os mesmos (a marcação guarda o
+ * número); o que muda é a APRESENTAÇÃO: três filas sequenciais em vez de
+ * seis botões. Cada fila junta o passo fixo da frente com o passo que
+ * gira (escolhido da realidade): produzir (1→2), manter o painel vivo
+ * (3→4), colocar na rua (5→6).
+ */
+const FRENTES_DA_SEMANA: Array<{ nome: string; steps: number[] }> = [
+  { nome: "Produção", steps: [1, 2] },
+  { nome: "Painel", steps: [3, 4] },
+  { nome: "Publicação", steps: [5, 6] },
+];
+
 const MENU_LINKS = [
   { title: "Painel", url: "/dashboard", icon: LayoutDashboard },
   { title: "Kanban", url: "/kanban", icon: Columns3 },
@@ -1205,12 +1220,8 @@ export default function AdminCiclo() {
           ))}
         </div>
 
-        {/* O HOLOFOTE: uma ação por vez, como num jogo. Concluiu, a
-            próxima da mesma leva assume o lugar na hora — sensação de
-            avanço que é avanço de verdade, porque marca a etapa real.
-            A trilha numerada continua embaixo para pular ou corrigir:
-            a sequência guia, não prende. */}
-        {nextStep && (
+        {/* Avulso: uma entrega, uma fila — o holofote sequencial. */}
+        {avulso && nextStep && (
           <div className="mb-1.5 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.06] p-2.5">
             <div className="min-w-0 flex-1">
               <p className="text-[9.5px] font-bold uppercase tracking-wider text-primary">
@@ -1239,12 +1250,65 @@ export default function AdminCiclo() {
           </p>
         )}
 
-        <div className="grid grid-cols-6 gap-1.5">
-          {(avulso
-            ? Array.from({ length: clientTotal }, (_, i) => i)
-            : cycle.steps.map((_, i) => i)
-          ).map((index) => stepButton(index + 1, false))}
-        </div>
+        {/* AS TRÊS FRENTES DA SEMANA. O pedido do dono, na íntegra: "ao
+            invés de 6 opções deixe 3; cada fila é uma frente da semana;
+            preencheu a primeira tarefa, segue para a segunda" — o avanço
+            de jogo, REAL: cada Feito marca a etapa de verdade no
+            histórico. Corrigir uma marcação é na folha (toque no nome). */}
+        {!avulso ? (
+          <div className="space-y-1.5">
+            {FRENTES_DA_SEMANA.map((frente) => {
+              const aberta = frente.steps.find((s) => !etapaFeita(client, s)) ?? null;
+              const feitasNaFila = frente.steps.filter((s) => etapaFeita(client, s)).length;
+              if (!aberta) {
+                return (
+                  <div
+                    key={frente.nome}
+                    className="flex h-8 items-center gap-2 rounded-lg border border-success/25 bg-success/[0.05] px-2.5"
+                  >
+                    <Check className="h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
+                    <span className="text-[11px] font-semibold text-success">
+                      {frente.nome} fechada
+                    </span>
+                  </div>
+                );
+              }
+              const chaveBotao = `${client.id}:${area}:${aberta}`;
+              return (
+                <div
+                  key={frente.nome}
+                  className="flex items-center gap-2 rounded-xl border border-border bg-secondary/20 p-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                      {frente.nome} · {feitasNaFila + 1} de {frente.steps.length}
+                    </p>
+                    <p className="truncate text-[12px] font-semibold leading-snug text-foreground">
+                      {stepLabelOf(client, aberta)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={!canWrite || pendingKey === chaveBotao}
+                    onClick={() => void toggle(client, aberta)}
+                    className={`flex h-8 shrink-0 items-center gap-1 rounded-lg bg-primary px-2.5 text-[11.5px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50 ${
+                      pendingKey === chaveBotao ? "opacity-50" : ""
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" strokeWidth={3} />
+                    Feito
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="grid grid-cols-6 gap-1.5">
+            {Array.from({ length: clientTotal }, (_, i) => i).map((index) =>
+              stepButton(index + 1, false),
+            )}
+          </div>
+        )}
         {onboarding && !avulso && (
           <div className="mt-1.5 grid grid-cols-6 gap-1.5">
             {ONBOARDING_STEPS.map((_, index) => stepButton(totalSteps + index + 1, true))}
