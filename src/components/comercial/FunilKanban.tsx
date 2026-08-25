@@ -36,9 +36,12 @@ import {
   type Atividade,
   type EstagioId,
   type Lead,
+  CLASSES_DO_LEAD,
   agendaDoLead,
   dinheiro,
+  leadQualificado,
   moverLead,
+  rotuloDaClasse,
   rotuloDaAtividade,
   rotuloDoEstagio,
 } from "@/lib/comercial";
@@ -95,6 +98,9 @@ export default function FunilKanban({
   const queryClient = useQueryClient();
   const [arrastando, setArrastando] = useState<Lead | null>(null);
   const [busca, setBusca] = useState("");
+  // A visão separada por classe: cliente atual, upsell e novo prospect não
+  // podem se misturar na leitura, mesmo dividindo os mesmos estágios.
+  const [classe, setClasse] = useState<string>("todas");
   const [fechamento, setFechamento] = useState<{
     lead: Lead;
     destino: "ganho" | "perdido";
@@ -117,6 +123,9 @@ export default function FunilKanban({
     for (const estagio of ESTAGIOS_ABERTOS) mapa.set(estagio, []);
     for (const lead of leads) {
       if (!mapa.has(lead.stage)) continue;
+      if (classe === "sem" ? lead.classe !== null : classe !== "todas" && lead.classe !== classe) {
+        continue;
+      }
       if (
         termo &&
         !`${lead.name} ${lead.company || ""}`.toLowerCase().includes(termo)
@@ -142,7 +151,7 @@ export default function FunilKanban({
       });
     }
     return mapa;
-  }, [leads, termo, atividades, agoraIso]);
+  }, [leads, termo, classe, atividades, agoraIso]);
 
   /**
    * Move na tela primeiro, grava depois.
@@ -234,6 +243,39 @@ export default function FunilKanban({
             aria-label="Buscar no funil"
           />
         </div>
+      </div>
+
+      {/* A régua da visão: cada chip separa uma classe, e "sem classe" empurra
+          para a mão o que ainda não foi confirmado: não confirmado é estado
+          visível, não um buraco. */}
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        {[
+          { id: "todas", label: "Todas", total: leads.length },
+          ...CLASSES_DO_LEAD.map((c) => ({
+            id: c.id as string,
+            label: c.label,
+            total: leads.filter((lead) => lead.classe === c.id).length,
+          })),
+          {
+            id: "sem",
+            label: "Sem classe",
+            total: leads.filter((lead) => !lead.classe).length,
+          },
+        ].map((chip) => (
+          <button
+            key={chip.id}
+            type="button"
+            onClick={() => setClasse(chip.id)}
+            className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-[11px] font-semibold transition-colors ${
+              classe === chip.id
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border bg-card text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            {chip.label}
+            <span className="tabular-nums opacity-70">{chip.total}</span>
+          </button>
+        ))}
       </div>
 
       {carregando ? (
@@ -344,6 +386,12 @@ function Coluna({
     (soma, lead) => soma + lead.monthly_value * 12 + lead.one_off_value,
     0,
   );
+  // Qualificada = classe + dono + próximo passo agendado. O placar fica no
+  // topo da coluna porque "quantas dessas são de verdade" é a pergunta que
+  // se faz olhando o estágio, não abrindo lead por lead.
+  const qualificadas = leads.filter((lead) =>
+    leadQualificado(lead, Boolean(agendaDe(lead).proxima)),
+  ).length;
   const ajuda = ESTAGIOS.find((e) => e.id === estagio)?.ajuda;
 
   return (
@@ -370,6 +418,7 @@ function Coluna({
       </div>
       <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
         {emJogo > 0 ? `${dinheiro(emJogo)} em jogo` : "vazio"}
+        {leads.length > 0 && ` · ${qualificadas}/${leads.length} qualificadas`}
       </p>
 
       <div className="mt-2 space-y-1.5">
@@ -440,6 +489,13 @@ function Cartao({
           {lead.company && (
             <p className="truncate text-[10.5px] text-muted-foreground">{lead.company}</p>
           )}
+          <p
+            className={`mt-0.5 text-[9.5px] uppercase tracking-wide ${
+              lead.classe ? "text-muted-foreground" : "italic text-muted-foreground/60"
+            }`}
+          >
+            {rotuloDaClasse(lead.classe)}
+          </p>
           <p className="mt-1 text-[10.5px] font-semibold tabular-nums text-primary">
             {lead.monthly_value > 0 && `${dinheiro(lead.monthly_value)}/mês`}
             {lead.monthly_value > 0 && lead.one_off_value > 0 && " + "}

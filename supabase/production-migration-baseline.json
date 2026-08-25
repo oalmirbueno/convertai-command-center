@@ -481,6 +481,14 @@
       "remote_name": "notificacoes_confiaveis",
       "remote_statements_sha256": "e9c6059bc9038277d879445478a392be3f8ae94f0170e92e1de124f7c7ec41b6",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260825120000",
+      "path": "supabase/migrations/20260825120000_comercial_classe_qualificacao.sql",
+      "local_sha256": "4ffca8e38dfded4c2bcab46df3592044e8fecab3564ee916b36e4f93bcdbdc8c",
+      "remote_name": "comercial_classe_qualificacao",
+      "remote_statements_sha256": "e7962c4a247996a5f01f3c936f9f221ae315b0cf102f17eb69ffe58c05b38115",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

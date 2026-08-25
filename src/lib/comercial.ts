@@ -61,6 +61,102 @@ export const CANAIS = [
   "outro",
 ] as const;
 
+/* ───────────────────── Classe e qualificação ────────────────────────────── */
+
+/**
+ * As três classes de oportunidade — exatamente três, porque a primeira
+ * pergunta de qualquer negócio da casa é "com quem estamos falando": quem
+ * já paga, quem já paga e pode contratar mais, ou quem nunca comprou.
+ *
+ * `null` na coluna significa NÃO CONFIRMADO. Nunca se preenche em massa:
+ * classe chutada parece resposta e mente melhor que o campo em branco.
+ */
+export const CLASSES_DO_LEAD = [
+  {
+    id: "cliente_atual",
+    label: "Cliente atual",
+    ajuda: "Negócio novo com quem já é cliente da casa",
+  },
+  {
+    id: "upsell",
+    label: "Upsell",
+    ajuda: "Ampliar o que um cliente atual já contrata",
+  },
+  {
+    id: "novo_prospect",
+    label: "Novo prospect",
+    ajuda: "Nunca comprou. É daqui que a meta de recorrentes sai",
+  },
+] as const;
+
+export type ClasseDoLead = (typeof CLASSES_DO_LEAD)[number]["id"];
+
+export const rotuloDaClasse = (id: string | null) =>
+  CLASSES_DO_LEAD.find((c) => c.id === id)?.label || "não confirmado";
+
+/**
+ * Os campos de qualificação, na ordem em que se pergunta numa conversa.
+ *
+ * Moram num jsonb no lead: campo ausente é NÃO CONFIRMADO — nunca vira
+ * "zero" nem "não existe", porque não perguntado e respondido com "nada"
+ * são coisas diferentes e a segunda encerra conversa que nem começou.
+ */
+export const CAMPOS_DE_QUALIFICACAO = [
+  {
+    id: "aderencia_icp",
+    label: "Aderência ao ICP",
+    dica: "O quanto parece o cliente ideal, e por quê",
+  },
+  {
+    id: "problema",
+    label: "Problema identificado",
+    dica: "A dor, com as palavras do próprio lead",
+  },
+  {
+    id: "orcamento",
+    label: "Orçamento",
+    dica: "Quanto ele disse que pode investir por mês",
+  },
+  {
+    id: "autoridade",
+    label: "Autoridade",
+    dica: "Quem decide, e se é com quem estamos falando",
+  },
+  {
+    id: "urgencia",
+    label: "Urgência",
+    dica: "Para quando ele precisa disso resolvido",
+  },
+  {
+    id: "recorrencia",
+    label: "Potencial de recorrência",
+    dica: "Chance de virar mensalidade, e de quanto",
+  },
+  {
+    id: "aprovacao",
+    label: "Aprovação necessária",
+    dica: "O que precisa de aval do dono antes de seguir",
+  },
+] as const;
+
+/** Só o que foi escrito de verdade entra no jsonb; vazio fica ausente. */
+const qualificacaoLimpa = (valor: unknown): Record<string, string> => {
+  if (!valor || typeof valor !== "object" || Array.isArray(valor)) return {};
+  const limpo: Record<string, string> = {};
+  for (const [chave, texto] of Object.entries(valor as Record<string, unknown>)) {
+    if (typeof texto === "string" && texto.trim()) limpo[chave] = texto.trim();
+  }
+  return limpo;
+};
+
+/**
+ * Uma oportunidade conta como QUALIFICADA quando tem classe confirmada,
+ * dono único e um próximo passo agendado. É a régua da metrificação por
+ * etapa: sem essas três coisas o funil é só uma lista de nomes.
+ */
+export const leadQualificado = (lead: Lead, temProximoPasso: boolean) =>
+  Boolean(lead.classe) && Boolean(lead.owner_id) && temProximoPasso;
+
 export interface Lead {
   id: string;
   name: string;
@@ -86,6 +182,10 @@ export interface Lead {
   /** A ficha da empresa. O negócio termina; ela fica, com a história toda. */
   organization_id: string | null;
   contact_id: string | null;
+  /** Cliente atual, upsell ou novo prospect. `null` é não confirmado. */
+  classe: string | null;
+  /** Campos de qualificação preenchidos. Ausente = não confirmado. */
+  qualificacao: Record<string, string>;
 }
 
 export interface Campanha {
@@ -127,6 +227,8 @@ export async function listarLeads(): Promise<Lead[]> {
     ...(linha as unknown as Lead),
     monthly_value: numero(linha.monthly_value),
     one_off_value: numero(linha.one_off_value),
+    classe: typeof linha.classe === "string" ? linha.classe : null,
+    qualificacao: qualificacaoLimpa(linha.qualificacao),
   }));
 }
 
@@ -151,6 +253,8 @@ export async function salvarLead(
     organization_id: lead.organization_id || null,
     contact_id: lead.contact_id || null,
     notes: lead.notes?.trim() || null,
+    classe: lead.classe || null,
+    qualificacao: qualificacaoLimpa(lead.qualificacao),
   };
   if (lead.id) {
     const { error } = await supabase
@@ -329,6 +433,12 @@ export const METRICAS = [
     fonte: "CRM: leads criados no mês",
     dinheiro: false,
   },
+  {
+    id: "clientes_recorrentes",
+    label: "Clientes recorrentes ativos",
+    fonte: "Financeiro: clientes com mensalidade recorrente lançada no mês",
+    dinheiro: false,
+  },
 ] as const;
 
 export const primeiroDiaDoMes = (data: Date) =>
@@ -400,6 +510,29 @@ export async function receitaDoMes(periodo: string): Promise<number> {
   );
 }
 
+/**
+ * Quantos clientes têm mensalidade RECORRENTE lançada no mês, lido do
+ * Financeiro central. Conta cliente distinto com entrada gerada por regra
+ * de recorrência, competência no mês e não cancelada: é quem o Financeiro
+ * cobrou de verdade, não quem o comercial acha que é recorrente — a mesma
+ * régua de "alvo é dado próprio, realizado é lido do Financeiro".
+ */
+export async function clientesRecorrentesDoMes(periodo: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("financial_entries")
+    .select("client_id")
+    .eq("direction", "in")
+    .is("cancelled_at", null)
+    .not("recurring_rule_id", "is", null)
+    .not("client_id", "is", null)
+    .gte("competence", periodo)
+    .lt("competence", proximoMes(periodo));
+  if (error || !data) return 0;
+  return new Set(
+    (data as Array<{ client_id: unknown }>).map((linha) => String(linha.client_id)),
+  ).size;
+}
+
 export function proximoMes(periodo: string): string {
   const [ano, mes] = periodo.split("-").map(Number);
   return mes === 12
@@ -424,9 +557,12 @@ export function realizadoDoMes(input: {
   leads: Lead[];
   periodo: string;
   receitaFinanceiro: number;
+  /** Contagem já lida do Financeiro. Só a métrica de recorrentes usa. */
+  clientesRecorrentes?: number;
 }): number {
   const { metrica, leads, periodo, receitaFinanceiro } = input;
   if (metrica === "receita") return receitaFinanceiro;
+  if (metrica === "clientes_recorrentes") return input.clientesRecorrentes ?? 0;
   const ganhosDoMes = leads.filter(
     (lead) => lead.stage === "ganho" && dentroDoMes(lead.closed_at, periodo),
   );

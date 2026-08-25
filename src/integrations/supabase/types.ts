@@ -876,6 +876,7 @@ export type Database = {
         Row: {
           archived_at: string | null
           campaign_id: string | null
+          classe: string | null
           closed_at: string | null
           company: string | null
           contact_id: string | null
@@ -894,6 +895,7 @@ export type Database = {
           organization_id: string | null
           origin: string
           owner_id: string | null
+          qualificacao: Json
           quiz_submission_id: string | null
           stage: string
           updated_at: string
@@ -903,6 +905,7 @@ export type Database = {
         Insert: {
           archived_at?: string | null
           campaign_id?: string | null
+          classe?: string | null
           closed_at?: string | null
           company?: string | null
           contact_id?: string | null
@@ -921,6 +924,7 @@ export type Database = {
           organization_id?: string | null
           origin?: string
           owner_id?: string | null
+          qualificacao?: Json
           quiz_submission_id?: string | null
           stage?: string
           updated_at?: string
@@ -930,6 +934,7 @@ export type Database = {
         Update: {
           archived_at?: string | null
           campaign_id?: string | null
+          classe?: string | null
           closed_at?: string | null
           company?: string | null
           contact_id?: string | null
@@ -948,6 +953,7 @@ export type Database = {
           organization_id?: string | null
           origin?: string
           owner_id?: string | null
+          qualificacao?: Json
           quiz_submission_id?: string | null
           stage?: string
           updated_at?: string

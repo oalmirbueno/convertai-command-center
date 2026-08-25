@@ -43,6 +43,9 @@ import {
   listarContatos,
   listarEmpresas,
   listarLeads,
+  CAMPOS_DE_QUALIFICACAO,
+  CLASSES_DO_LEAD,
+  clientesRecorrentesDoMes,
   listarMetas,
   moverLead,
   previsaoDoMes,
@@ -183,6 +186,13 @@ export default function AdminComercial() {
   const { data: metas = [] } = useQuery({
     queryKey: ["comercial-metas", periodo],
     queryFn: () => listarMetas(periodo),
+  });
+
+  // O realizado da meta de recorrentes vem do Financeiro, não do funil:
+  // cliente recorrente é quem a regra de recorrência cobrou no mês.
+  const { data: clientesRecorrentes = 0 } = useQuery({
+    queryKey: ["comercial-clientes-recorrentes", periodo],
+    queryFn: () => clientesRecorrentesDoMes(periodo),
   });
   // A receita realizada vem do Financeiro central, nunca daqui.
   const { data: receita = 0 } = useQuery({
@@ -443,6 +453,7 @@ export default function AdminComercial() {
           metas={metas}
           leads={leads}
           receita={receita}
+          clientesRecorrentes={clientesRecorrentes}
           onSalvo={recarregar}
         />
       )}
@@ -736,12 +747,14 @@ function Metas({
   metas,
   leads,
   receita,
+  clientesRecorrentes,
   onSalvo,
 }: {
   periodo: string;
   metas: Array<{ id: string; metric: string; target: number }>;
   leads: Lead[];
   receita: number;
+  clientesRecorrentes: number;
   onSalvo: () => Promise<unknown>;
 }) {
   const [editando, setEditando] = useState<string | null>(null);
@@ -769,6 +782,7 @@ function Metas({
           leads,
           periodo,
           receitaFinanceiro: receita,
+          clientesRecorrentes,
         });
         const alvo = meta?.target || 0;
         const pct = alvo > 0 ? Math.min(feito / alvo, 1) : 0;
@@ -976,6 +990,8 @@ function EditorDeLead({
     expected_close_date: lead?.expected_close_date || "",
     owner_id: lead?.owner_id || "",
     notes: lead?.notes || "",
+    classe: lead?.classe || "",
+    qualificacao: { ...(lead?.qualificacao || {}) } as Record<string, string>,
   });
   const [salvando, setSalvando] = useState(false);
   const [nota, setNota] = useState("");
@@ -1007,6 +1023,8 @@ function EditorDeLead({
       expected_close_date: form.expected_close_date || null,
       owner_id: form.owner_id || null,
       notes: form.notes,
+      classe: form.classe || null,
+      qualificacao: form.qualificacao,
     } as never);
     setSalvando(false);
     if (!id) {
@@ -1170,6 +1188,56 @@ function EditorDeLead({
                 className="h-10"
               />
             </Campo>
+          </div>
+
+          {/* A classe é a primeira pergunta: com quem estamos falando. O
+              vazio é "não confirmado" de propósito, nunca preenchido por
+              padrão: classe chutada mente melhor que campo em branco. */}
+          <Campo rotulo="Classe da oportunidade">
+            <Select
+              value={form.classe || "nao_confirmado"}
+              onValueChange={(v) =>
+                setForm({ ...form, classe: v === "nao_confirmado" ? "" : v })
+              }
+            >
+              <SelectTrigger className="h-10">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="nao_confirmado">não confirmado</SelectItem>
+                {CLASSES_DO_LEAD.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Campo>
+
+          <div className="rounded-xl border border-border bg-background p-3">
+            <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+              Qualificação · vazio significa não confirmado
+            </p>
+            <div className="mt-2 grid gap-3 sm:grid-cols-2">
+              {CAMPOS_DE_QUALIFICACAO.map((campo) => (
+                <Campo key={campo.id} rotulo={campo.label}>
+                  <Input
+                    value={form.qualificacao[campo.id] || ""}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        qualificacao: {
+                          ...form.qualificacao,
+                          [campo.id]: e.target.value,
+                        },
+                      })
+                    }
+                    placeholder={campo.dica}
+                    className="h-10"
+                  />
+                </Campo>
+              ))}
+            </div>
           </div>
 
           <Campo rotulo="Notas">

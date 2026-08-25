@@ -38,6 +38,8 @@ const lead = (parcial: Partial<Lead>): Lead => ({
   notes: null,
   lost_reason: null,
   won_client_id: null,
+  classe: null,
+  qualificacao: {},
   closed_at: null,
   created_at: "2026-08-10T12:00:00Z",
   expected_close_date: null,
