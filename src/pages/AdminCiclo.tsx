@@ -23,6 +23,7 @@ import {
 } from "@/lib/cycleTasks";
 import { lerSituacoes } from "@/lib/cycleSituation";
 import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cycleVendas";
+import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
@@ -221,6 +222,7 @@ export default function AdminCiclo() {
     enabled: idsNoCiclo.length > 0 && area === "trafego" && !avulsosAbertos,
   });
   const [salvandoVenda, setSalvandoVenda] = useState<string | null>(null);
+
   const marcarCompra = async (clientId: string, delta: number) => {
     const atual = vendas?.get(clientId) ?? { id: null, compras: 0 };
     const proximo = Math.max(0, atual.compras + delta);
@@ -418,6 +420,14 @@ export default function AdminCiclo() {
     queryFn: () => listEtapasDeVarios(idsAvulsos),
     enabled: idsAvulsos.length > 0,
     staleTime: 10_000,
+  });
+
+  /** Entregas avulsas: última marcação e prazo, para acusar o que esfriou. */
+  const { data: situacaoAvulsos } = useQuery({
+    queryKey: ["ciclo-avulsos-situacao", idsAvulsos.join(",")],
+    queryFn: () => lerSituacaoDosAvulsos(idsAvulsos),
+    enabled: idsAvulsos.length > 0 && avulsosAbertos,
+    staleTime: 60_000,
   });
 
   /** O serviço que o card mostra: o filtrado na fila, ou o primeiro do cliente. */
@@ -1020,6 +1030,34 @@ export default function AdminCiclo() {
             ))}
           </div>
         )}
+
+        {/* Entrega avulsa: o que denuncia que ela travou — parado na mesma
+            etapa, prazo vencido — e o próximo passo pelo NOME, porque a
+            confusão de "por onde começar" não se resolve com número. */}
+        {avulso && situacaoAvulsos?.get(String(client.id)) && (() => {
+          const pend = pendenciasDoAvulso({
+            situacao: situacaoAvulsos.get(String(client.id))!,
+            feitas: doneCount,
+            total: clientTotal,
+            proximaEtapa: nextStep ? stepLabelOf(client, nextStep) : null,
+          });
+          if (pend.length === 0) return null;
+          return (
+            <div className="mb-2 space-y-0.5">
+              {pend.slice(0, 2).map((p) => (
+                <p
+                  key={p.chave}
+                  className={`flex items-start gap-1.5 text-[11px] leading-snug ${
+                    p.gravidade === "urgente" ? "text-destructive" : "text-warning"
+                  }`}
+                >
+                  <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-current" />
+                  <span className="min-w-0">{p.texto}</span>
+                </p>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Compras da semana: o número que fecha o funil, marcado à mão.
             Só no tráfego, porque é lá que o lead nasce e a pergunta "virou
