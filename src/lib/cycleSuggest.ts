@@ -151,6 +151,35 @@ function pendenciasDoKanban(s: SituacaoDoCliente): Pendencia[] {
 function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
   const lista: Pendencia[] = [];
 
+  // Conexão caída vem antes de tudo: com ela quebrada, o agendamento
+  // falha na hora de publicar e nada mais nesta lista adianta.
+  if (situacao.conexaoSocialCaida) {
+    lista.push({
+      chave: "conexao-caida",
+      texto: "A conexão da conta social caiu: o agendamento não vai publicar",
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  }
+
+  // Métrica parada é coleta quebrada, e sem número não há leitura de
+  // resultado para dar ao cliente.
+  if (situacao.semanasDeMetrica === 0 && situacao.contaSocialConectada) {
+    lista.push({
+      chave: "sem-metrica",
+      texto: "Conta conectada mas nenhuma métrica coletada ainda",
+      gravidade: "atencao",
+      viraEtapa: true,
+    });
+  } else if (situacao.diasSemMetrica != null && situacao.diasSemMetrica >= 10) {
+    lista.push({
+      chave: "metrica-parada",
+      texto: `Sem métrica nova há ${situacao.diasSemMetrica} dias`,
+      gravidade: "atencao",
+      viraEtapa: true,
+    });
+  }
+
   if (situacao.perderamAData > 0) {
     lista.push({
       chave: "perderam-data",
@@ -252,6 +281,33 @@ function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
   return lista;
 }
 
+/**
+ * A ordem da fila: quem pede ação sobe, quem está resolvido desce.
+ *
+ * O pedido do dono: "conforme eu vou completando, ele vai movendo, e os
+ * que ainda não estão concluídos vão subindo — para não dar confusão".
+ * Urgência manda mais que contagem de etapa: um cliente com 5 de 6 e a
+ * conexão caída importa mais hoje do que um com 1 de 6 e tudo em ordem.
+ */
+export function ordenarPelaUrgencia<T>(
+  itens: T[],
+  ler: (item: T) => { pendencias: Pendencia[]; feitas: number; nome: string },
+): T[] {
+  const peso = (item: T) => {
+    const { pendencias } = ler(item);
+    const urgentes = pendencias.filter((p) => p.gravidade === "urgente").length;
+    const atencao = pendencias.filter((p) => p.gravidade === "atencao").length;
+    return urgentes * 100 + atencao * 10;
+  };
+  return [...itens].sort((a, b) => {
+    const pesoB = peso(b), pesoA = peso(a);
+    if (pesoA !== pesoB) return pesoB - pesoA;            // mais urgente primeiro
+    const la = ler(a), lb = ler(b);
+    if (la.feitas !== lb.feitas) return la.feitas - lb.feitas;  // menos feito primeiro
+    return la.nome.localeCompare(lb.nome, "pt-BR");
+  });
+}
+
 /** O texto que a carteira mostra: "tudo certo" ou o que falta. */
 export function leituraDaCarteira(
   porCliente: Array<{ nome: string; pendencias: Pendencia[] }>,
@@ -329,6 +385,9 @@ export function textoDaEtapa(p: Pendencia): string {
     case "dado-parado": return "Conferir a coleta de dados das campanhas";
     case "tarefa-atrasada": return "Repactuar ou concluir as tarefas vencidas";
     case "tarefa-sem-dono": return "Definir responsável para as tarefas soltas";
+    case "conexao-caida": return "Reconectar a conta social no painel";
+    case "sem-metrica":
+    case "metrica-parada": return "Conferir a coleta de métricas";
     default: return p.texto;
   }
 }

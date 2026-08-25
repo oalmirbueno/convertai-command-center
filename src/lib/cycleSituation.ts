@@ -60,6 +60,22 @@ export interface SituacaoDoCliente {
   diasDesdeRecarga: number | null;
   /** Dias desde a última vez que os dados de campanha se moveram. */
   diasSemDadoDeCampanha: number | null;
+
+  /* ── Conexões, métricas e entrada ── */
+  /** Conta social ligada e sem erro. */
+  contaSocialConectada: boolean;
+  /** Conta social cadastrada mas com a conexão caída. */
+  conexaoSocialCaida: boolean;
+  /** Conta de anúncios ligada. */
+  contaAdsConectada: boolean;
+  /** Semanas de métrica já coletadas. */
+  semanasDeMetrica: number;
+  /** Dias desde a última coleta de métrica. */
+  diasSemMetrica: number | null;
+  /** O cliente respondeu o briefing. */
+  briefingRespondido: boolean;
+  /** Já existe dossiê de contexto escrito. */
+  temDossie: boolean;
 }
 
 export function situacaoVazia(clientId: string): SituacaoDoCliente {
@@ -83,6 +99,13 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     saldoVerba: null,
     diasDesdeRecarga: null,
     diasSemDadoDeCampanha: null,
+    contaSocialConectada: false,
+    conexaoSocialCaida: false,
+    contaAdsConectada: false,
+    semanasDeMetrica: 0,
+    diasSemMetrica: null,
+    briefingRespondido: false,
+    temDossie: false,
   };
 }
 
@@ -107,7 +130,10 @@ export async function lerSituacoes(
   const agora = agoraIso ? new Date(agoraIso).getTime() : Date.now();
   const seteDiasAtras = new Date(agora - 7 * 86_400_000).toISOString();
 
-  const [arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira] = await Promise.all([
+  const [
+    arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira,
+    conexoes, metricas, briefings, dossies,
+  ] = await Promise.all([
     supabase
       .from("files")
       .select("client_id, approval_status, agency_approval_status, visibility, locked_at, status, approval_requested_at")
@@ -149,6 +175,28 @@ export async function lerSituacoes(
       .from("ads_wallet")
       .select("client_id, balance, last_recharge_date")
       .in("client_id", clientIds),
+    // Conexões: o ciclo precisa saber se a conta está LIGADA, não só
+    // cadastrada. Conta cadastrada com conexão caída é o caso que faz o
+    // agendamento falhar em silêncio na hora de publicar.
+    (supabase as any)
+      .from("external_account_connections")
+      .select("client_id, provider, connection_status, disconnected_at, last_error_code")
+      .in("client_id", clientIds),
+    (supabase as any)
+      .from("social_metrics_weekly")
+      .select("client_id, week_start, captured_at")
+      .in("client_id", clientIds)
+      .order("week_start", { ascending: false }),
+    (supabase as any)
+      .from("briefings")
+      .select("client_id, submitted")
+      .in("client_id", clientIds)
+      .eq("submitted", true),
+    (supabase as any)
+      .from("client_dossiers")
+      .select("client_id")
+      .in("client_id", clientIds)
+      .eq("is_current", true),
   ]);
 
   for (const linha of (arquivos.data ?? []) as Array<Record<string, unknown>>) {
@@ -247,6 +295,45 @@ export async function lerSituacoes(
         ? dias
         : Math.min(s.diasSemDadoDeCampanha, dias);
     }
+  }
+
+  for (const linha of (conexoes.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (!s) continue;
+    const provedor = String(linha.provider ?? "").toLowerCase();
+    const viva = String(linha.connection_status ?? "").toLowerCase() === "connected"
+      && !linha.disconnected_at;
+    // Meta cobre as duas frentes: o mesmo login serve Instagram e anúncios.
+    const ehAds = provedor.includes("ads") || provedor.includes("meta");
+    const ehSocial = provedor.includes("instagram") || provedor.includes("meta")
+      || provedor.includes("facebook");
+    if (viva) {
+      if (ehSocial) s.contaSocialConectada = true;
+      if (ehAds) s.contaAdsConectada = true;
+    } else if (ehSocial) {
+      s.conexaoSocialCaida = true;
+    }
+  }
+
+  for (const linha of (metricas.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (!s) continue;
+    s.semanasDeMetrica += 1;
+    const quando = linha.captured_at ?? linha.week_start;
+    if (typeof quando === "string") {
+      const dias = diasEntre(quando, agora);
+      s.diasSemMetrica = s.diasSemMetrica == null ? dias : Math.min(s.diasSemMetrica, dias);
+    }
+  }
+
+  for (const linha of (briefings.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (s) s.briefingRespondido = true;
+  }
+
+  for (const linha of (dossies.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (s) s.temDossie = true;
   }
 
   for (const linha of (carteira.data ?? []) as Array<Record<string, unknown>>) {

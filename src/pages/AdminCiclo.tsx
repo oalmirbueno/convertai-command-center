@@ -23,7 +23,11 @@ import {
 } from "@/lib/cycleTasks";
 import { lerSituacoes } from "@/lib/cycleSituation";
 import {
-  leituraDaCarteira, pendenciasDoCliente, textoDaEtapa, type Pendencia,
+  evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
+} from "@/lib/cycleJourney";
+import {
+  leituraDaCarteira, ordenarPelaUrgencia, pendenciasDoCliente, textoDaEtapa,
+  type Pendencia,
 } from "@/lib/cycleSuggest";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
@@ -186,6 +190,68 @@ export default function AdminCiclo() {
         return !ehAvulso(client) && inCycle(client, area, hasService);
       }),
     [clients, area, avulsosAbertos, servicoAvulso],
+  );
+
+  /**
+   * A situação REAL de cada cliente, lida do painel.
+   *
+   * O ciclo era cego: sorteava tarefas sem saber se havia arte pronta,
+   * agenda vazia ou aprovação parada. Uma consulta por tabela para a
+   * carteira inteira — por cliente seriam dezenas de idas por abertura.
+   */
+  const idsNoCiclo = useMemo(
+    () => activeClients.map((c: any) => String(c.id)).sort(),
+    [activeClients],
+  );
+  const { data: situacoes } = useQuery({
+    queryKey: ["ciclo-situacao", idsNoCiclo.join(",")],
+    queryFn: () => lerSituacoes(idsNoCiclo),
+    enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
+    staleTime: 60_000,
+  });
+
+  const pendenciasPorCliente = useMemo(() => {
+    const mapa = new Map<string, Pendencia[]>();
+    if (!situacoes) return mapa;
+    for (const client of activeClients as any[]) {
+      const s = situacoes.get(String(client.id));
+      if (s) mapa.set(String(client.id), pendenciasDoCliente(s, area));
+    }
+    return mapa;
+  }, [situacoes, activeClients, area]);
+
+  /**
+   * A jornada de entrada, só para quem ainda está entrando. Sai da
+   * situação real e dos serviços contratados — nunca de caixinha marcada.
+   */
+  const jornadaDe = (client: any): EtapaDaJornada[] | null => {
+    const s = situacoes?.get(String(client.id));
+    if (!s) return null;
+    const servicos = client.services_config || {};
+    return jornadaDaEntrada(
+      evidenciasDe({
+        situacao: s,
+        briefingRespondido: s.briefingRespondido,
+        contaSocialConectada: s.contaSocialConectada,
+        contaAdsConectada: s.contaAdsConectada,
+        temDossie: s.temDossie,
+      }),
+      {
+        social: servicos.social === true || area === "social",
+        trafego: servicos.trafego === true,
+      },
+    );
+  };
+
+  const leitura = useMemo(
+    () =>
+      leituraDaCarteira(
+        (activeClients as any[]).map((client) => ({
+          nome: client.company_name || client.full_name || "Cliente",
+          pendencias: pendenciasPorCliente.get(String(client.id)) || [],
+        })),
+      ),
+    [activeClients, pendenciasPorCliente],
   );
 
   /**
@@ -489,15 +555,23 @@ export default function AdminCiclo() {
     ? ""
     : `${area}:${weekKey}:${
         avulsosAbertos ? `avulsos:${servicoAvulso || "todos"}` : "ciclo"
-      }:${activeClients.length}`;
+      }:${activeClients.length}:${
+        // Fechar um cliente reordena a fila: é o momento em que "vai
+        // movendo e os que faltam sobem" acontece. Entre uma marcação e
+        // outra a ordem fica quieta, senão o card foge do dedo.
+        (activeClients as any[]).filter(estaFechado).length
+      }:${situacoes ? "s" : "-"}`;
   if (orderRef.current.key !== orderKey) {
-    const sorted = [...activeClients].sort((a, b) => {
-      const aDone = doneCountFor(a), bDone = doneCountFor(b);
-      if (aDone !== bDone) return aDone - bDone;
-      return (a.company_name || a.full_name || "").localeCompare(
-        b.company_name || b.full_name || "", "pt-BR",
-      );
-    });
+    // Quem pede ação sobe. Urgência manda mais que contagem de etapa: um
+    // cliente com 5 de 6 e a conexão caída importa mais hoje do que um com
+    // 1 de 6 e tudo em ordem. A ordem só é recalculada quando a chave muda
+    // (semana, frente, alguém fechou) — recalcular a cada clique faria o
+    // card fugir do dedo no meio da marcação.
+    const sorted = ordenarPelaUrgencia(activeClients as any[], (client) => ({
+      pendencias: pendenciasPorCliente.get(String(client.id)) || [],
+      feitas: doneCountFor(client),
+      nome: client.company_name || client.full_name || "",
+    }));
     orderRef.current = {
       key: orderKey,
       open: sorted.filter((c) => !estaFechado(c)).map((c) => c.id),
@@ -518,45 +592,6 @@ export default function AdminCiclo() {
     // sem a dependência, marcar etapa não mexia a barra do topo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClients, doneMap, area, etapasAvulsas, servicoAvulso]);
-
-  /**
-   * A situação REAL de cada cliente, lida do painel.
-   *
-   * O ciclo era cego: sorteava tarefas sem saber se havia arte pronta,
-   * agenda vazia ou aprovação parada. Uma consulta por tabela para a
-   * carteira inteira — por cliente seriam dezenas de idas por abertura.
-   */
-  const idsNoCiclo = useMemo(
-    () => activeClients.map((c: any) => String(c.id)).sort(),
-    [activeClients],
-  );
-  const { data: situacoes } = useQuery({
-    queryKey: ["ciclo-situacao", idsNoCiclo.join(",")],
-    queryFn: () => lerSituacoes(idsNoCiclo),
-    enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
-    staleTime: 60_000,
-  });
-
-  const pendenciasPorCliente = useMemo(() => {
-    const mapa = new Map<string, Pendencia[]>();
-    if (!situacoes) return mapa;
-    for (const client of activeClients as any[]) {
-      const s = situacoes.get(String(client.id));
-      if (s) mapa.set(String(client.id), pendenciasDoCliente(s, area));
-    }
-    return mapa;
-  }, [situacoes, activeClients, area]);
-
-  const leitura = useMemo(
-    () =>
-      leituraDaCarteira(
-        (activeClients as any[]).map((client) => ({
-          nome: client.company_name || client.full_name || "Cliente",
-          pendencias: pendenciasPorCliente.get(String(client.id)) || [],
-        })),
-      ),
-    [activeClients, pendenciasPorCliente],
-  );
 
   const otherArea: CycleArea = area === "social" ? "trafego" : "social";
   const otherAreaTotals = useMemo(() => {
@@ -983,6 +1018,42 @@ export default function AdminCiclo() {
           <div className="mt-1.5 grid grid-cols-6 gap-1.5">
             {ONBOARDING_STEPS.map((_, index) => stepButton(totalSteps + index + 1, true))}
             <span className="col-span-2" />
+          </div>
+        )}
+
+        {/* A entrada do cliente, conferida no dado. Ninguém marca nada:
+            cada etapa fecha quando o fato aconteceu — o briefing voltou, a
+            conta conectou, a arte subiu. E a sequência sai do que ELE
+            contratou, então quem não tem tráfego nunca vê campanha. */}
+        {onboarding && !avulso && jornadaDe(client) && (
+          <div className="mt-2 space-y-1 rounded-xl border border-info/25 bg-info/[0.04] p-2">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-info">
+              Entrada do cliente · {ondeEstaNaEntrada(jornadaDe(client)!)}
+            </p>
+            {jornadaDe(client)!.map((etapa) => (
+              <p
+                key={etapa.chave}
+                className={`flex items-start gap-1.5 text-[11px] leading-snug ${
+                  etapa.feita
+                    ? "text-muted-foreground line-through decoration-muted-foreground/40"
+                    : etapa.atual
+                      ? "font-semibold text-foreground"
+                      : "text-muted-foreground/70"
+                }`}
+              >
+                <span className="mt-[3px] shrink-0">
+                  {etapa.feita ? <Check className="h-3 w-3 text-success" strokeWidth={3} /> : "○"}
+                </span>
+                <span className="min-w-0">
+                  {etapa.titulo}
+                  {etapa.atual && (
+                    <span className="block text-[10px] font-normal text-muted-foreground">
+                      {etapa.comoFecha}
+                    </span>
+                  )}
+                </span>
+              </p>
+            ))}
           </div>
         )}
 
