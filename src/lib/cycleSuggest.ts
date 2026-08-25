@@ -106,6 +106,42 @@ function pendenciasDeTrafego(s: SituacaoDoCliente): Pendencia[] {
     });
   }
 
+  // A régua do dono: a semana atual tem que ser melhor que a anterior.
+  // Se está pior, tem algo errado e é hora de otimizar. A comparação só
+  // vale com gasto real nas duas janelas — sem verba rodando, queda de
+  // lead é consequência, não sintoma.
+  const gastoRelevante = s.gasto7d > 0 && s.gastoAnterior > 0;
+  if (gastoRelevante && s.leadsAnterior > 0 && s.leads7d < s.leadsAnterior) {
+    const custoAtual = s.leads7d > 0 ? s.gasto7d / s.leads7d : null;
+    const custoAnterior = s.gastoAnterior / s.leadsAnterior;
+    lista.push({
+      chave: "semana-pior",
+      texto: custoAtual != null
+        ? `Semana pior que a anterior: ${s.leads7d} leads (antes ${s.leadsAnterior}), custo por lead R$${custoAtual.toFixed(0)} (antes R$${custoAnterior.toFixed(0)})`
+        : `Semana pior que a anterior: ${s.leads7d} leads contra ${s.leadsAnterior}, com verba rodando`,
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  } else if (gastoRelevante && s.leads7d === 0 && s.leadsAnterior === 0) {
+    lista.push({
+      chave: "verba-sem-lead",
+      texto: `R$${s.gasto7d.toFixed(0)} gastos em 7 dias sem nenhum lead registrado`,
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  }
+
+  // Frequência alta = o mesmo público viu o mesmo criativo vezes demais.
+  // A partir daí cada real rende menos, e o anúncio começa a irritar.
+  if (s.frequenciaMaxima != null && s.frequenciaMaxima >= 3.5) {
+    lista.push({
+      chave: "criativo-saturado",
+      texto: `"${s.campanhaSaturada}" está saturando: frequência ${s.frequenciaMaxima.toFixed(1)}`,
+      gravidade: "atencao",
+      viraEtapa: true,
+    });
+  }
+
   if (s.ultimoDiario) {
     const dias = Math.floor((Date.now() - new Date(s.ultimoDiario).getTime()) / 86_400_000);
     if (dias >= 7) {
@@ -386,6 +422,9 @@ export function textoDaEtapa(p: Pendencia): string {
     case "tarefa-atrasada": return "Repactuar ou concluir as tarefas vencidas";
     case "tarefa-sem-dono": return "Definir responsável para as tarefas soltas";
     case "conexao-caida": return "Reconectar a conta social no painel";
+    case "semana-pior": return "Otimizar as campanhas: a semana caiu";
+    case "verba-sem-lead": return "Revisar a campanha que gasta sem gerar lead";
+    case "criativo-saturado": return "Renovar o criativo que saturou";
     case "sem-metrica":
     case "metrica-parada": return "Conferir a coleta de métricas";
     default: return p.texto;

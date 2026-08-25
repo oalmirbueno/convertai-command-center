@@ -22,6 +22,7 @@ import {
   type StepsOptions,
 } from "@/lib/cycleTasks";
 import { lerSituacoes } from "@/lib/cycleSituation";
+import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cycleVendas";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
@@ -209,6 +210,32 @@ export default function AdminCiclo() {
     enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
     staleTime: 60_000,
   });
+
+  /**
+   * O número que fecha o funil não existe em API nenhuma: quem sabe se o
+   * lead virou venda é o dono, no WhatsApp. Aqui é onde ele marca.
+   */
+  const { data: vendas } = useQuery({
+    queryKey: ["ciclo-vendas", idsNoCiclo.join(","), weekKey],
+    queryFn: () => lerVendasDaSemana(idsNoCiclo, weekKey),
+    enabled: idsNoCiclo.length > 0 && area === "trafego" && !avulsosAbertos,
+  });
+  const [salvandoVenda, setSalvandoVenda] = useState<string | null>(null);
+  const marcarCompra = async (clientId: string, delta: number) => {
+    const atual = vendas?.get(clientId) ?? { id: null, compras: 0 };
+    const proximo = Math.max(0, atual.compras + delta);
+    if (proximo === atual.compras) return;
+    setSalvandoVenda(clientId);
+    const salvo = await registrarVendas({
+      clientId, weekStart: weekKey, compras: proximo, registroId: atual.id,
+    });
+    if (salvo) {
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-vendas"] });
+    } else {
+      toast.error("Não foi possível registrar a compra.");
+    }
+    setSalvandoVenda(null);
+  };
 
   const pendenciasPorCliente = useMemo(() => {
     const mapa = new Map<string, Pendencia[]>();
@@ -991,6 +1018,41 @@ export default function AdminCiclo() {
                 <span className="min-w-0">{p.texto}</span>
               </p>
             ))}
+          </div>
+        )}
+
+        {/* Compras da semana: o número que fecha o funil, marcado à mão.
+            Só no tráfego, porque é lá que o lead nasce e a pergunta "virou
+            venda?" pertence. */}
+        {!avulso && area === "trafego" && vendas && (
+          <div className="mb-2 flex h-7 items-center gap-2">
+            <span className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">
+              {leituraDasCompras(
+                vendas.get(String(client.id))?.compras ?? 0,
+                situacoes?.get(String(client.id))?.leads7d ?? 0,
+              )}
+            </span>
+            <button
+              type="button"
+              disabled={!canWrite || salvandoVenda === client.id}
+              onClick={() => void marcarCompra(String(client.id), -1)}
+              aria-label="Tirar uma compra"
+              className="h-6 w-6 rounded-md border border-border text-[13px] font-bold text-muted-foreground disabled:opacity-40"
+            >
+              −
+            </button>
+            <span className="w-5 text-center text-[13px] font-bold tabular-nums text-foreground">
+              {vendas.get(String(client.id))?.compras ?? 0}
+            </span>
+            <button
+              type="button"
+              disabled={!canWrite || salvandoVenda === client.id}
+              onClick={() => void marcarCompra(String(client.id), 1)}
+              aria-label="Marcar uma compra"
+              className="h-6 w-6 rounded-md border border-primary/40 bg-primary/10 text-[13px] font-bold text-primary disabled:opacity-40"
+            >
+              +
+            </button>
           </div>
         )}
 

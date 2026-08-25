@@ -166,6 +166,80 @@ describe("tráfego pago tem os buracos dele", () => {
   });
 });
 
+describe("a régua do dono: a semana atual tem que ser melhor", () => {
+  const emDia = {
+    campanhasTotal: 2, campanhasAtivas: 2, saldoVerba: 500,
+    diasSemDadoDeCampanha: 0, ultimoDiario: new Date().toISOString(),
+  };
+
+  it("menos leads que a semana anterior, com verba rodando, é urgente", () => {
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, gasto7d: 300, gastoAnterior: 300, leads7d: 4, leadsAnterior: 9,
+    }), "trafego");
+    const item = p.find((x) => x.chave === "semana-pior")!;
+    expect(item.gravidade).toBe("urgente");
+    expect(item.texto).toContain("4 leads (antes 9)");
+    expect(item.texto).toContain("custo por lead");
+  });
+
+  it("sem verba nas duas janelas, queda de lead não acusa", () => {
+    // Sem gasto, menos lead é consequência, não sintoma: acusar seria o
+    // falso positivo que faz o operador ignorar os avisos.
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, gasto7d: 0, gastoAnterior: 0, leads7d: 0, leadsAnterior: 8,
+    }), "trafego");
+    expect(p.map((x) => x.chave)).not.toContain("semana-pior");
+  });
+
+  it("gastar sem gerar lead nenhum é urgente por si só", () => {
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, gasto7d: 250, gastoAnterior: 200, leads7d: 0, leadsAnterior: 0,
+    }), "trafego");
+    expect(p.find((x) => x.chave === "verba-sem-lead")?.texto).toContain("R$250");
+  });
+
+  it("semana melhor não gera aviso nenhum", () => {
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, gasto7d: 300, gastoAnterior: 300, leads7d: 12, leadsAnterior: 8,
+    }), "trafego");
+    expect(p).toEqual([]);
+  });
+
+  it("criativo saturado aponta a campanha pelo nome", () => {
+    // "Renovar o criativo" sem dizer QUAL obriga a abrir o gerenciador
+    // para descobrir — o aviso já entrega o alvo.
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, frequenciaMaxima: 4.2, campanhaSaturada: "Promo Agosto",
+    }), "trafego");
+    const item = p.find((x) => x.chave === "criativo-saturado")!;
+    expect(item.texto).toContain("Promo Agosto");
+    expect(item.texto).toContain("4.2");
+  });
+
+  it("frequência saudável não acusa saturação", () => {
+    const p = pendenciasDoCliente(situacao({
+      ...emDia, frequenciaMaxima: 2.1, campanhaSaturada: "Promo",
+    }), "trafego");
+    expect(p.map((x) => x.chave)).not.toContain("criativo-saturado");
+  });
+});
+
+describe("as compras da semana têm a régua do dono", () => {
+  it("zero compra com lead chegando aponta a conversa, não o anúncio", async () => {
+    const { leituraDasCompras } = await import("@/lib/cycleVendas");
+    expect(leituraDasCompras(0, 7)).toContain("não está convertendo");
+    expect(leituraDasCompras(0, 0)).toBe("0 compras registradas nesta semana");
+  });
+
+  it("uma ou duas ainda é pouco; três já é resultado", async () => {
+    // A régua que ele ditou: 0 é ruim, 1-2 é pouco.
+    const { leituraDasCompras } = await import("@/lib/cycleVendas");
+    expect(leituraDasCompras(1, 5)).toContain("ainda pouco");
+    expect(leituraDasCompras(2, 5)).toContain("ainda pouco");
+    expect(leituraDasCompras(3, 5)).toBe("3 compras na semana");
+  });
+});
+
 describe("o Kanban denuncia nas duas frentes", () => {
   it("tarefa vencida é urgente, em social e em tráfego", () => {
     for (const area of ["social", "trafego"] as const) {

@@ -61,6 +61,20 @@ export interface SituacaoDoCliente {
   /** Dias desde a última vez que os dados de campanha se moveram. */
   diasSemDadoDeCampanha: number | null;
 
+  /* ── Tráfego: a semana contra a anterior ── */
+  /** Gasto dos últimos 7 dias. */
+  gasto7d: number;
+  /** Gasto dos 7 dias anteriores a esses. */
+  gastoAnterior: number;
+  /** Leads/contatos dos últimos 7 dias (lead + conversa iniciada). */
+  leads7d: number;
+  /** Leads dos 7 dias anteriores. */
+  leadsAnterior: number;
+  /** Maior frequência média entre as campanhas nos últimos 7 dias. */
+  frequenciaMaxima: number | null;
+  /** Nome da campanha mais saturada, para o aviso apontar o alvo. */
+  campanhaSaturada: string | null;
+
   /* ── Conexões, métricas e entrada ── */
   /** Conta social ligada e sem erro. */
   contaSocialConectada: boolean;
@@ -99,6 +113,12 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     saldoVerba: null,
     diasDesdeRecarga: null,
     diasSemDadoDeCampanha: null,
+    gasto7d: 0,
+    gastoAnterior: 0,
+    leads7d: 0,
+    leadsAnterior: 0,
+    frequenciaMaxima: null,
+    campanhaSaturada: null,
     contaSocialConectada: false,
     conexaoSocialCaida: false,
     contaAdsConectada: false,
@@ -132,7 +152,7 @@ export async function lerSituacoes(
 
   const [
     arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira,
-    conexoes, metricas, briefings, dossies,
+    conexoes, metricas, briefings, dossies, adsDiario,
   ] = await Promise.all([
     supabase
       .from("files")
@@ -197,6 +217,14 @@ export async function lerSituacoes(
       .select("client_id")
       .in("client_id", clientIds)
       .eq("is_current", true),
+    // Os últimos 14 dias por dia e campanha: 7 recentes contra os 7
+    // anteriores. Janela rolante de propósito — comparar semana cheia com
+    // semana pela metade sempre acusaria queda falsa na segunda-feira.
+    (supabase as any)
+      .from("ads_campaign_daily")
+      .select("client_id, campaign_name, day, spend, actions, frequency")
+      .in("client_id", clientIds)
+      .gte("day", new Date(agora - 14 * 86_400_000).toISOString().slice(0, 10)),
   ]);
 
   for (const linha of (arquivos.data ?? []) as Array<Record<string, unknown>>) {
@@ -347,6 +375,59 @@ export async function lerSituacoes(
       s.diasDesdeRecarga = s.diasDesdeRecarga == null
         ? dias
         : Math.min(s.diasDesdeRecarga, dias);
+    }
+  }
+
+  // Leads na leitura da Meta: o campo actions é uma lista de
+  // {action_type, value}. Contamos lead e conversa iniciada — os dois são
+  // "alguém levantou a mão", que é o que o dono acompanha.
+  const contarLeads = (actions: unknown): number => {
+    if (!Array.isArray(actions)) return 0;
+    let total = 0;
+    for (const a of actions as Array<{ action_type?: string; value?: unknown }>) {
+      const tipo = String(a?.action_type ?? "");
+      if (tipo.includes("lead") || tipo.includes("messaging_conversation_started")) {
+        const v = Number(a?.value ?? 0);
+        if (Number.isFinite(v)) total += v;
+      }
+    }
+    return total;
+  };
+
+  const corte7 = new Date(agora - 7 * 86_400_000).toISOString().slice(0, 10);
+  const freqPorCampanha = new Map<string, { soma: number; dias: number; nome: string; cliente: string }>();
+  for (const linha of (adsDiario.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (!s) continue;
+    const dia = String(linha.day ?? "");
+    const gasto = Number(linha.spend ?? 0);
+    const leads = contarLeads(linha.actions);
+    const recente = dia >= corte7;
+    if (recente) {
+      s.gasto7d += Number.isFinite(gasto) ? gasto : 0;
+      s.leads7d += leads;
+    } else {
+      s.gastoAnterior += Number.isFinite(gasto) ? gasto : 0;
+      s.leadsAnterior += leads;
+    }
+    const freq = Number(linha.frequency ?? 0);
+    if (recente && Number.isFinite(freq) && freq > 0) {
+      const chave = `${linha.client_id}:${linha.campaign_name}`;
+      const atual = freqPorCampanha.get(chave) ?? {
+        soma: 0, dias: 0, nome: String(linha.campaign_name ?? "campanha"), cliente: String(linha.client_id),
+      };
+      atual.soma += freq;
+      atual.dias += 1;
+      freqPorCampanha.set(chave, atual);
+    }
+  }
+  for (const agregado of freqPorCampanha.values()) {
+    const s = mapa.get(agregado.cliente);
+    if (!s || agregado.dias === 0) continue;
+    const media = agregado.soma / agregado.dias;
+    if (s.frequenciaMaxima == null || media > s.frequenciaMaxima) {
+      s.frequenciaMaxima = media;
+      s.campanhaSaturada = agregado.nome;
     }
   }
 
