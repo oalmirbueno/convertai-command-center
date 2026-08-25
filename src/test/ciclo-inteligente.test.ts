@@ -99,10 +99,125 @@ describe("cliente em dia não inventa pendência", () => {
     expect(p).toEqual([]);
   });
 
-  it("tráfego ainda não tem leitura própria, e não inventa uma", () => {
-    // Melhor não dizer nada do que dizer coisa de social no tráfego — foi
+  it("tráfego não herda pendência de social", () => {
+    // Agenda vazia é problema de conteúdo, não de anúncio. Herdar seria
     // exatamente a queixa de "algo nada a ver".
-    expect(pendenciasDoCliente(situacao({ agendados: 0 }), "trafego")).toEqual([]);
+    const p = pendenciasDoCliente(
+      situacao({ agendados: 0, artesProntas: 0, campanhasTotal: 2, campanhasAtivas: 2 }),
+      "trafego",
+    );
+    expect(p.map((x) => x.chave)).not.toContain("sem-agenda");
+    expect(p.map((x) => x.chave)).not.toContain("sem-arte");
+  });
+});
+
+describe("tráfego pago tem os buracos dele", () => {
+  it("sem campanha nenhuma no painel, desconfia da conexão", () => {
+    // Zero campanha quase nunca é "não fizemos": é conta desconectada.
+    const p = pendenciasDoCliente(situacao({ campanhasTotal: 0 }), "trafego");
+    expect(p[0].chave).toBe("sem-campanha-cadastrada");
+    expect(p[0].texto).toContain("não estar conectada");
+  });
+
+  it("campanhas cadastradas mas nenhuma no ar é urgente", () => {
+    const p = pendenciasDoCliente(
+      situacao({ campanhasTotal: 4, campanhasAtivas: 0 }),
+      "trafego",
+    );
+    const item = p.find((x) => x.chave === "nenhuma-ativa")!;
+    expect(item.gravidade).toBe("urgente");
+    expect(item.texto).toContain("4 campanhas");
+  });
+
+  it("verba zerada só alarma se houver campanha no ar", () => {
+    // Carteira vazia com tudo pausado é estado normal de quem parou.
+    const rodando = pendenciasDoCliente(
+      situacao({ campanhasTotal: 2, campanhasAtivas: 2, saldoVerba: 0 }),
+      "trafego",
+    );
+    expect(rodando.map((x) => x.chave)).toContain("verba-zerada");
+
+    const parado = pendenciasDoCliente(
+      situacao({ campanhasTotal: 2, campanhasAtivas: 0, saldoVerba: 0 }),
+      "trafego",
+    );
+    expect(parado.map((x) => x.chave)).not.toContain("verba-zerada");
+  });
+
+  it("dado de campanha parado há dias vira atenção", () => {
+    // Coleta quebrada envelhece os números sem avisar, e a decisão da
+    // semana sai de dado velho.
+    const p = pendenciasDoCliente(
+      situacao({ campanhasTotal: 2, campanhasAtivas: 2, diasSemDadoDeCampanha: 5 }),
+      "trafego",
+    );
+    expect(p.find((x) => x.chave === "dado-parado")?.texto).toContain("5 dias");
+  });
+
+  it("tráfego em dia não inventa pendência", () => {
+    const p = pendenciasDoCliente(
+      situacao({
+        campanhasTotal: 3, campanhasAtivas: 3, saldoVerba: 500,
+        diasSemDadoDeCampanha: 0, ultimoDiario: new Date().toISOString(),
+      }),
+      "trafego",
+    );
+    expect(p).toEqual([]);
+  });
+});
+
+describe("o Kanban denuncia nas duas frentes", () => {
+  it("tarefa vencida é urgente, em social e em tráfego", () => {
+    for (const area of ["social", "trafego"] as const) {
+      const p = pendenciasDoCliente(
+        situacao({
+          tarefasAtrasadas: 2, agendados: 3, artesProntas: 1,
+          campanhasTotal: 1, campanhasAtivas: 1,
+          ultimoDiario: new Date().toISOString(),
+        }),
+        area,
+      );
+      const item = p.find((x) => x.chave === "tarefa-atrasada")!;
+      expect(item.gravidade).toBe("urgente");
+      expect(item.texto).toContain("2 tarefas");
+    }
+  });
+
+  it("tarefa sem dono só ocupa etapa quando vira monte", () => {
+    // Uma tarefa solta é normal; três é sintoma de trabalho sem dono.
+    const uma = pendenciasDoCliente(situacao({
+      tarefasSemDono: 1, agendados: 3, artesProntas: 1,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    expect(uma.find((x) => x.chave === "tarefa-sem-dono")?.viraEtapa).toBe(false);
+
+    const tres = pendenciasDoCliente(situacao({
+      tarefasSemDono: 3, agendados: 3, artesProntas: 1,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    expect(tres.find((x) => x.chave === "tarefa-sem-dono")?.viraEtapa).toBe(true);
+  });
+});
+
+describe("pauta no calendário sem arte", () => {
+  it("é o buraco entre 'planejei' e 'existe conteúdo'", () => {
+    // O calendário parece cheio e não há o que publicar.
+    const p = pendenciasDoCliente(situacao({
+      pautasSemArte: 4, agendados: 3, artesProntas: 1,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    const item = p.find((x) => x.chave === "pauta-sem-arte")!;
+    expect(item.gravidade).toBe("urgente");
+    expect(item.texto).toContain("4 pautas");
+    expect(textoDaEtapa(item)).toContain("Anexar a arte");
+  });
+
+  it("uma ou duas é acompanhamento, não urgência", () => {
+    const p = pendenciasDoCliente(situacao({
+      pautasSemArte: 1, agendados: 3, artesProntas: 1,
+      ultimoDiario: new Date().toISOString(),
+    }), "social");
+    expect(p.find((x) => x.chave === "pauta-sem-arte")?.gravidade).toBe("atencao");
   });
 });
 
@@ -210,7 +325,7 @@ describe("tarefa se liga ao cliente pelo projeto, nunca direto", () => {
 
     const situacao = readFileSync(resolve(raiz, "src/lib/cycleSituation.ts"), "utf8");
     const trechoTarefas = situacao.slice(situacao.indexOf('.from("projects")'));
-    expect(trechoTarefas).toContain("tasks(status)");
+    expect(trechoTarefas).toMatch(/tasks\(status/);
     expect(situacao).not.toMatch(/from\("tasks"\)[\s\S]{0,160}in\("client_id"/);
 
     const dossie = readFileSync(

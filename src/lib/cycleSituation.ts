@@ -42,6 +42,24 @@ export interface SituacaoDoCliente {
   ultimoDiario: string | null;
   /** Tarefas de produção abertas no Kanban. */
   tarefasAbertas: number;
+  /** Abertas com prazo já vencido. */
+  tarefasAtrasadas: number;
+  /** Abertas sem ninguém responsável. */
+  tarefasSemDono: number;
+  /** Pauta no calendário editorial ainda sem arte anexada. */
+  pautasSemArte: number;
+
+  /* ── Tráfego ── */
+  /** Campanhas que a Meta reporta como no ar. */
+  campanhasAtivas: number;
+  /** Campanhas cadastradas, em qualquer estado. */
+  campanhasTotal: number;
+  /** Saldo da carteira de anúncios, quando existe. */
+  saldoVerba: number | null;
+  /** Dias desde a última recarga registrada. */
+  diasDesdeRecarga: number | null;
+  /** Dias desde a última vez que os dados de campanha se moveram. */
+  diasSemDadoDeCampanha: number | null;
 }
 
 export function situacaoVazia(clientId: string): SituacaoDoCliente {
@@ -57,6 +75,14 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     publicadosNaSemana: 0,
     ultimoDiario: null,
     tarefasAbertas: 0,
+    tarefasAtrasadas: 0,
+    tarefasSemDono: 0,
+    pautasSemArte: 0,
+    campanhasAtivas: 0,
+    campanhasTotal: 0,
+    saldoVerba: null,
+    diasDesdeRecarga: null,
+    diasSemDadoDeCampanha: null,
   };
 }
 
@@ -81,7 +107,7 @@ export async function lerSituacoes(
   const agora = agoraIso ? new Date(agoraIso).getTime() : Date.now();
   const seteDiasAtras = new Date(agora - 7 * 86_400_000).toISOString();
 
-  const [arquivos, publicacoes, diario, tarefas] = await Promise.all([
+  const [arquivos, publicacoes, diario, tarefas, pautas, campanhas, carteira] = await Promise.all([
     supabase
       .from("files")
       .select("client_id, approval_status, agency_approval_status, visibility, locked_at, status, approval_requested_at")
@@ -103,9 +129,26 @@ export async function lerSituacoes(
     // engole, e a contagem ficaria sempre zero sem ninguem perceber.
     (supabase as any)
       .from("projects")
-      .select("id, client_id, tasks(status)")
+      .select("id, client_id, tasks(status, due_date, assigned_to)")
       .in("client_id", clientIds)
       .is("deleted_at", null),
+    // Pauta no calendario sem arte: primary_file_id nulo. E o buraco entre
+    // "planejei o conteudo" e "existe conteudo" — o calendario parece
+    // cheio e nao ha o que publicar.
+    (supabase as any)
+      .from("editorial_posts")
+      .select("client_id, primary_file_id, production_status")
+      .in("client_id", clientIds)
+      .is("archived_at", null)
+      .is("primary_file_id", null),
+    (supabase as any)
+      .from("ads_campaigns")
+      .select("client_id, effective_status, status, updated_at")
+      .in("client_id", clientIds),
+    (supabase as any)
+      .from("ads_wallet")
+      .select("client_id, balance, last_recharge_date")
+      .in("client_id", clientIds),
   ]);
 
   for (const linha of (arquivos.data ?? []) as Array<Record<string, unknown>>) {
@@ -171,11 +214,53 @@ export async function lerSituacoes(
   }
 
   const ABERTAS = new Set(["backlog", "todo", "doing", "review"]);
+  const hoje = new Date(agora).toISOString().slice(0, 10);
   for (const projeto of (tarefas.data ?? []) as Array<Record<string, unknown>>) {
     const s = mapa.get(String(projeto.client_id));
     if (!s) continue;
-    const lista = (projeto.tasks ?? []) as Array<{ status?: string | null }>;
-    s.tarefasAbertas += lista.filter((t) => ABERTAS.has(String(t.status ?? ""))).length;
+    const lista = (projeto.tasks ?? []) as Array<{
+      status?: string | null; due_date?: string | null; assigned_to?: string | null;
+    }>;
+    for (const t of lista) {
+      if (!ABERTAS.has(String(t.status ?? ""))) continue;
+      s.tarefasAbertas += 1;
+      if (typeof t.due_date === "string" && t.due_date < hoje) s.tarefasAtrasadas += 1;
+      if (!t.assigned_to) s.tarefasSemDono += 1;
+    }
+  }
+
+  for (const linha of (pautas.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (s) s.pautasSemArte += 1;
+  }
+
+  for (const linha of (campanhas.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (!s) continue;
+    s.campanhasTotal += 1;
+    const estado = String(linha.effective_status ?? linha.status ?? "").toUpperCase();
+    if (estado === "ACTIVE") s.campanhasAtivas += 1;
+    const quando = linha.updated_at;
+    if (typeof quando === "string") {
+      const dias = diasEntre(quando, agora);
+      s.diasSemDadoDeCampanha = s.diasSemDadoDeCampanha == null
+        ? dias
+        : Math.min(s.diasSemDadoDeCampanha, dias);
+    }
+  }
+
+  for (const linha of (carteira.data ?? []) as Array<Record<string, unknown>>) {
+    const s = mapa.get(String(linha.client_id));
+    if (!s) continue;
+    const saldo = Number(linha.balance ?? 0);
+    s.saldoVerba = (s.saldoVerba ?? 0) + (Number.isFinite(saldo) ? saldo : 0);
+    const recarga = linha.last_recharge_date;
+    if (typeof recarga === "string") {
+      const dias = diasEntre(recarga, agora);
+      s.diasDesdeRecarga = s.diasDesdeRecarga == null
+        ? dias
+        : Math.min(s.diasDesdeRecarga, dias);
+    }
   }
 
   return mapa;

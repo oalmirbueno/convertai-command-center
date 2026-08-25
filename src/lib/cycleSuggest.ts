@@ -48,8 +48,108 @@ export function pendenciasDoCliente(
   situacao: SituacaoDoCliente,
   area: CycleArea,
 ): Pendencia[] {
+  const lista: Pendencia[] = [
+    ...(area === "social" ? pendenciasSociais(situacao) : pendenciasDeTrafego(situacao)),
+    // O Kanban vale nas duas frentes: prazo vencido e tarefa sem dono
+    // acontecem igual em conteúdo e em anúncio.
+    ...pendenciasDoKanban(situacao),
+  ];
+  const ordem: Record<Gravidade, number> = { urgente: 0, atencao: 1, tranquilo: 2 };
+  return lista.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade]);
+}
+
+/**
+ * Tráfego pago tem os próprios buracos, e nenhum se parece com os de
+ * conteúdo. Antes esta frente não tinha leitura nenhuma — o que era melhor
+ * do que herdar as de social, mas ainda deixava o operador no escuro.
+ */
+function pendenciasDeTrafego(s: SituacaoDoCliente): Pendencia[] {
   const lista: Pendencia[] = [];
-  if (area !== "social") return lista;
+
+  if (s.campanhasTotal === 0) {
+    lista.push({
+      chave: "sem-campanha-cadastrada",
+      texto: "Nenhuma campanha aparece no painel: a conta pode não estar conectada",
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+    return lista;
+  }
+
+  if (s.campanhasAtivas === 0) {
+    lista.push({
+      chave: "nenhuma-ativa",
+      texto: `Nenhuma das ${s.campanhasTotal} campanhas está no ar`,
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  }
+
+  // Verba zerada para a campanha sozinha, sem aviso nenhum.
+  if (s.saldoVerba != null && s.saldoVerba <= 0 && s.campanhasAtivas > 0) {
+    lista.push({
+      chave: "verba-zerada",
+      texto: "Campanha no ar com a carteira de anúncios zerada",
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  }
+
+  // Dado parado quer dizer coleta quebrada: os números da tela envelhecem
+  // sem ninguém perceber, e a decisão da semana sai de dado velho.
+  if (s.diasSemDadoDeCampanha != null && s.diasSemDadoDeCampanha >= 3) {
+    lista.push({
+      chave: "dado-parado",
+      texto: `Os dados de campanha não se movem há ${s.diasSemDadoDeCampanha} dias`,
+      gravidade: "atencao",
+      viraEtapa: true,
+    });
+  }
+
+  if (s.ultimoDiario) {
+    const dias = Math.floor((Date.now() - new Date(s.ultimoDiario).getTime()) / 86_400_000);
+    if (dias >= 7) {
+      lista.push({
+        chave: "diario-parado",
+        texto: `O cliente não vê leitura de resultado há ${dias} dias`,
+        gravidade: "atencao",
+        viraEtapa: true,
+      });
+    }
+  }
+
+  return lista;
+}
+
+/** O que o Kanban denuncia, em qualquer frente. */
+function pendenciasDoKanban(s: SituacaoDoCliente): Pendencia[] {
+  const lista: Pendencia[] = [];
+  if (s.tarefasAtrasadas > 0) {
+    lista.push({
+      chave: "tarefa-atrasada",
+      texto: s.tarefasAtrasadas === 1
+        ? "1 tarefa passou do prazo no Kanban"
+        : `${s.tarefasAtrasadas} tarefas passaram do prazo no Kanban`,
+      gravidade: "urgente",
+      viraEtapa: true,
+    });
+  }
+  // Tarefa sem dono é a que ninguém faz: não some, não atrasa, só fica.
+  if (s.tarefasSemDono > 0) {
+    lista.push({
+      chave: "tarefa-sem-dono",
+      texto: s.tarefasSemDono === 1
+        ? "1 tarefa aberta sem responsável"
+        : `${s.tarefasSemDono} tarefas abertas sem responsável`,
+      gravidade: "atencao",
+      viraEtapa: s.tarefasSemDono >= 3,
+    });
+  }
+  return lista;
+}
+
+function pendenciasSociais(situacao: SituacaoDoCliente): Pendencia[] {
+  const lista: Pendencia[] = [];
 
   if (situacao.perderamAData > 0) {
     lista.push({
@@ -136,8 +236,20 @@ export function pendenciasDoCliente(
     });
   }
 
-  const ordem: Record<Gravidade, number> = { urgente: 0, atencao: 1, tranquilo: 2 };
-  return lista.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade]);
+  // O buraco entre "planejei" e "existe": o calendário parece cheio e não
+  // há nada para publicar. Some sozinho no instante em que a arte sobe.
+  if (situacao.pautasSemArte > 0) {
+    lista.push({
+      chave: "pauta-sem-arte",
+      texto: situacao.pautasSemArte === 1
+        ? "1 pauta no calendário ainda sem arte anexada"
+        : `${situacao.pautasSemArte} pautas no calendário ainda sem arte anexada`,
+      gravidade: situacao.pautasSemArte >= 3 ? "urgente" : "atencao",
+      viraEtapa: true,
+    });
+  }
+
+  return lista;
 }
 
 /** O texto que a carteira mostra: "tudo certo" ou o que falta. */
@@ -210,6 +322,13 @@ export function textoDaEtapa(p: Pendencia): string {
     case "sem-arte": return "Criar as artes da semana";
     case "diario-parado":
     case "diario-vazio": return "Escrever no diário o que foi feito";
+    case "pauta-sem-arte": return "Anexar a arte das pautas que estão sem";
+    case "sem-campanha-cadastrada": return "Conectar a conta de anúncios ao painel";
+    case "nenhuma-ativa": return "Colocar a campanha da semana no ar";
+    case "verba-zerada": return "Recarregar a verba antes que a campanha pare";
+    case "dado-parado": return "Conferir a coleta de dados das campanhas";
+    case "tarefa-atrasada": return "Repactuar ou concluir as tarefas vencidas";
+    case "tarefa-sem-dono": return "Definir responsável para as tarefas soltas";
     default: return p.texto;
   }
 }
