@@ -344,6 +344,58 @@ export function ordenarPelaUrgencia<T>(
   });
 }
 
+export interface AcaoDoDia {
+  clientId: string;
+  nome: string;
+  acao: string;
+  gravidade: Gravidade;
+}
+
+/**
+ * As ações mais urgentes de toda a carteira, para a faixa de "hoje".
+ *
+ * O pedido: "gostei da alternativa, mas sem mudar o que já tem — preciso
+ * de clareza, sem ficar com aquela pulga na orelha de 'será que fiz'".
+ * A faixa vive em cima da lista de sempre e responde uma pergunta só:
+ * SE EU FIZER ISSO AGORA, O DIA ESTÁ SOB CONTROLE.
+ *
+ * No máximo uma ação por cliente na primeira rodada: um cliente
+ * incendiado não pode ocupar a faixa inteira e esconder o incêndio menor
+ * dos outros. Sobrando vaga, a segunda rodada volta ao mais grave.
+ */
+export function acoesDoDia(
+  entrada: Array<{ clientId: string; nome: string; pendencias: Pendencia[] }>,
+  limite = 5,
+): AcaoDoDia[] {
+  const ordem: Record<Gravidade, number> = { urgente: 0, atencao: 1, tranquilo: 2 };
+  const todas: AcaoDoDia[] = [];
+  for (const cliente of entrada) {
+    for (const p of cliente.pendencias) {
+      if (!p.viraEtapa) continue;   // aviso de leitura não é ação de hoje
+      todas.push({
+        clientId: cliente.clientId,
+        nome: cliente.nome,
+        acao: textoDaEtapa(p),
+        gravidade: p.gravidade,
+      });
+    }
+  }
+  todas.sort((a, b) => ordem[a.gravidade] - ordem[b.gravidade]);
+
+  const porCliente = new Map<string, number>();
+  const escolhidas: AcaoDoDia[] = [];
+  for (const rodada of [1, 2]) {
+    for (const acao of todas) {
+      if (escolhidas.length >= limite) return escolhidas;
+      if (escolhidas.includes(acao)) continue;
+      if ((porCliente.get(acao.clientId) ?? 0) >= rodada) continue;
+      escolhidas.push(acao);
+      porCliente.set(acao.clientId, (porCliente.get(acao.clientId) ?? 0) + 1);
+    }
+  }
+  return escolhidas;
+}
+
 /** O texto que a carteira mostra: "tudo certo" ou o que falta. */
 export function leituraDaCarteira(
   porCliente: Array<{ nome: string; pendencias: Pendencia[] }>,

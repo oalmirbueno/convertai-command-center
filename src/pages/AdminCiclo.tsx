@@ -28,7 +28,8 @@ import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
 import {
-  leituraDaCarteira, ordenarPelaUrgencia, pendenciasDoCliente, textoDaEtapa,
+  acoesDoDia, leituraDaCarteira, ordenarPelaUrgencia, pendenciasDoCliente,
+  textoDaEtapa,
   type Pendencia,
 } from "@/lib/cycleSuggest";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
@@ -1471,6 +1472,55 @@ export default function AdminCiclo() {
               ))}
             </div>
           )}
+
+          {/* A faixa de HOJE: as ações mais urgentes da carteira inteira,
+              em cima da lista de sempre — nada abaixo mudou. Responde "se
+              eu fizer isso agora, o dia está sob controle", e cada linha
+              leva ao card do cliente num toque. */}
+          {!avulsosAbertos && situacoes && (() => {
+            const acoes = acoesDoDia(
+              (activeClients as any[]).map((c) => ({
+                clientId: String(c.id),
+                nome: c.company_name || c.full_name || "Cliente",
+                pendencias: pendenciasPorCliente.get(String(c.id)) || [],
+              })),
+            );
+            if (acoes.length === 0) return null;
+            return (
+              <div className="mb-3 rounded-2xl border border-border bg-card p-3">
+                <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                  O que pede ação hoje
+                </p>
+                <div className="space-y-1">
+                  {acoes.map((acao, indice) => (
+                    <button
+                      key={`${acao.clientId}:${acao.acao}:${indice}`}
+                      type="button"
+                      onClick={() => {
+                        cardRefs.current[acao.clientId]?.scrollIntoView?.({
+                          behavior: "smooth", block: "center",
+                        });
+                        setHighlighted(acao.clientId);
+                      }}
+                      className="flex w-full items-start gap-2 rounded-lg px-1 py-0.5 text-left transition-colors hover:bg-secondary/50"
+                    >
+                      <span
+                        className={`mt-[6px] h-1.5 w-1.5 shrink-0 rounded-full ${
+                          acao.gravidade === "urgente" ? "bg-destructive" : "bg-warning"
+                        }`}
+                      />
+                      <span className="min-w-0 flex-1 truncate text-[12px] text-foreground">
+                        {acao.acao}
+                      </span>
+                      <span className="shrink-0 text-[10.5px] text-muted-foreground">
+                        {acao.nome}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {openClients.map(renderClientCard)}
 

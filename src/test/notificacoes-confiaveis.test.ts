@@ -79,3 +79,18 @@ describe("o aviso de post no ar é garantido, não presumido", () => {
     expect(migration).toContain("no ar no");
   });
 });
+
+describe("um fato, um remetente", () => {
+  it("o aviso de login mora so no AuthContext, preso ao SIGNED_IN", () => {
+    // Confirmado nos dados de producao: um login da cliente virou 16
+    // avisos em DOIS textos ("acessou o painel" e "acessou o portal"),
+    // porque dois lugares avisavam o mesmo fato - e o do AppLayout tinha
+    // trava por ABA (sessionStorage), disparando a cada aba nova e a cada
+    // reabertura do PWA, sem login novo nenhum.
+    const layout = ler("src/components/AppLayout.tsx");
+    const auth = ler("src/contexts/AuthContext.tsx");
+    expect(layout).not.toContain("acessou o painel");
+    expect(layout).not.toContain("notifyAdmin(");
+    expect(auth).toContain("acessou o portal");
+  });
+});

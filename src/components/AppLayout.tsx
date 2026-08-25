@@ -3,7 +3,6 @@ import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/AuthContext";
 import { useNotifications } from "@/hooks/useSupabaseData";
-import { notifyAdmin } from "@/lib/notifyHelpers";
 import NotificationsPanel from "@/components/NotificationsPanel";
 import OnboardingTour from "@/components/onboarding/OnboardingTour";
 import HelpButton from "@/components/onboarding/HelpButton";
@@ -179,24 +178,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, [profile]);
 
-  // Notify admin when a client or team member accesses the panel (once per session)
-  useEffect(() => {
-    if (!user || !profile || profile.role === "admin") return;
-    const key = `login_notified_${user.id}`;
-    if (sessionStorage.getItem(key)) return;
-    sessionStorage.setItem(key, "1");
-
-    const roleLabel = profile.role === "client" ? "Cliente" : "Equipe";
-    const name = profile.full_name || profile.email;
-    const company = profile.company_name ? ` (${profile.company_name})` : "";
-
-    // Use notifyAdmin edge fn (service role) so non-staff clients can notify admin (RLS-safe)
-    notifyAdmin(
-      `🔑 ${roleLabel} "${name}"${company} acessou o painel`,
-      "update",
-      profile.role === "client" ? "/clientes" : "/equipe"
-    );
-  }, [user, profile]);
+  // O aviso de "cliente acessou" mora SÓ no AuthContext, preso ao evento
+  // real de entrada (SIGNED_IN). O aviso que morava aqui era um segundo
+  // remetente para o mesmo fato, com trava por ABA (sessionStorage é por
+  // aba): cada aba nova, cada reabertura do PWA, disparava outro — foi
+  // assim que um login da cliente virou 16 avisos, em dois textos
+  // diferentes. Um fato, um remetente.
 
   const handleTourClose = useCallback(() => {
     setTourOpen(false);
