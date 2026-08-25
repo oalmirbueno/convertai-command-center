@@ -473,6 +473,14 @@
       "remote_name": "auditoria_referencias_orfas",
       "remote_statements_sha256": "1979f94ddd9fadc0dde0624049b72b788ae74c4656f4369affe6021c21ac58df",
       "remote_hash_mode": "supabase_cli_split"
+    },
+    {
+      "version": "20260824210000",
+      "path": "supabase/migrations/20260824210000_notificacoes_confiaveis.sql",
+      "local_sha256": "6957e6584dc8c15e977f49d8775d16af96b5e8ff80e928ea8d5233f9a6e26e8e",
+      "remote_name": "notificacoes_confiaveis",
+      "remote_statements_sha256": "e9c6059bc9038277d879445478a392be3f8ae94f0170e92e1de124f7c7ec41b6",
+      "remote_hash_mode": "supabase_cli_split"
     }
   ],
   "applied_forward_aliases": [

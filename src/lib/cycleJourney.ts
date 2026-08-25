@@ -43,6 +43,8 @@ export interface EvidenciasDaEntrada {
   primeiroAgendamento: boolean;
   /** Já tem campanha no ar. */
   campanhaNoAr: boolean;
+  /** Acompanhamento começou: primeira atualização escrita no diário. */
+  acompanhamentoComecou: boolean;
 }
 
 export interface ServicosContratados {
@@ -66,6 +68,15 @@ export function jornadaDaEntrada(
       titulo: "Briefing respondido pelo cliente",
       comoFecha: "Fecha sozinha quando ele enviar o formulário",
       feita: ev.briefingRespondido,
+    },
+    {
+      chave: "grupo-boas-vindas",
+      // O grupo em si vive no WhatsApp, fora do alcance do painel. A
+      // evidência que EXISTE é a primeira atualização no diário: é ela que
+      // prova que o acompanhamento começou de verdade, não só o convite.
+      titulo: "Grupo criado e acompanhamento começando",
+      comoFecha: "Fecha na primeira atualização escrita no diário do cliente",
+      feita: ev.acompanhamentoComecou,
     },
     {
       chave: "estrategia",
@@ -172,5 +183,6 @@ export function evidenciasDe(input: {
     primeirasArtes: s.artesProntas > 0 || s.aguardandoAprovacao > 0,
     primeiroAgendamento: s.agendados > 0 || s.publicadosNaSemana > 0,
     campanhaNoAr: s.campanhasAtivas > 0,
+    acompanhamentoComecou: s.ultimoDiario != null,
   };
 }

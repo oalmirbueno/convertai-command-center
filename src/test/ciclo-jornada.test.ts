@@ -28,6 +28,7 @@ const nada: EvidenciasDaEntrada = {
   primeirasArtes: false,
   primeiroAgendamento: false,
   campanhaNoAr: false,
+  acompanhamentoComecou: false,
 };
 
 describe("a sequência sai do que o cliente contratou", () => {
@@ -76,7 +77,9 @@ describe("cada etapa fecha por evidência, não por marcação", () => {
     );
     const atuais = etapas.filter((e) => e.atual);
     expect(atuais).toHaveLength(1);
-    expect(atuais[0].chave).toBe("estrategia");
+    // Depois do briefing, o próximo passo é o grupo com as boas-vindas —
+    // resposta direta do dono sobre a ordem real de trabalho.
+    expect(atuais[0].chave).toBe("grupo-boas-vindas");
     expect(atuais[0].comoFecha.length).toBeGreaterThan(10);
   });
 
@@ -84,7 +87,7 @@ describe("cada etapa fecha por evidência, não por marcação", () => {
     const tudo: EvidenciasDaEntrada = {
       briefingRespondido: true, contaSocialConectada: true, contaAdsConectada: true,
       estrategiaEscrita: true, calendarioMontado: true, primeirasArtes: true,
-      primeiroAgendamento: true, campanhaNoAr: true,
+      primeiroAgendamento: true, campanhaNoAr: true, acompanhamentoComecou: true,
     };
     const etapas = jornadaDaEntrada(tudo, { social: true, trafego: true });
     expect(etapas.some((e) => e.atual)).toBe(false);
