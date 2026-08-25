@@ -737,6 +737,15 @@ export default function ClientCycleSheet({
                 <div className="mt-4 flex items-center justify-between gap-2">
                   <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
                     Etapas {editandoAnterior ? "da semana passada" : "desta semana"}
+                    {/* O placar do que falta, sempre à vista: é ele que dá
+                        a pegada de fechamento — cada Feito o encolhe. */}
+                    {!editandoAnterior && (
+                      <span className={clientTotal - doneSteps.length === 0 ? "text-success" : "text-primary"}>
+                        {" "}· {clientTotal - doneSteps.length === 0
+                          ? "todas feitas"
+                          : `faltam ${clientTotal - doneSteps.length}`}
+                      </span>
+                    )}
                   </p>
                   {pastWeekKey && (
                     <div className="flex items-center gap-0.5 rounded-lg bg-secondary/60 p-0.5">
@@ -769,6 +778,15 @@ export default function ClientCycleSheet({
                     . Serve para registrar o que já tinha sido feito e ficou sem marcar.
                   </p>
                 )}
+                {/* Fechou tudo: a celebração aparece AQUI também, porque é
+                    aqui que a última marcação acontece — sem ela, o jogo
+                    termina em silêncio e a sensação de completar se perde. */}
+                {!editandoAnterior && complete && (
+                  <p className="mt-2 rounded-xl border border-success/30 bg-success/[0.08] p-2.5 text-center text-[12px] font-semibold text-success">
+                    Semana fechada 🎉 Todas as frentes deste cliente estão completas.
+                  </p>
+                )}
+
                 <div className="mt-2 space-y-2.5">
                   {(() => {
                   // A mesma dinâmica do card, aqui dentro: as etapas em

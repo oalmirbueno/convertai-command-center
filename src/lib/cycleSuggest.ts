@@ -472,6 +472,94 @@ export function etapasQueGiram(input: {
   return escolhidas.slice(0, input.quantidade);
 }
 
+/**
+ * A que FRENTE cada pendência pertence, pelo assunto dela.
+ *
+ * Sem isto, as pendências caíam nos slots por ordem de gravidade e
+ * "Agendar os posts" aparecia na fila Painel enquanto "Criar as artes"
+ * caía em Publicação — a etapa certa na fila errada lê como bagunça.
+ * Produção = slot 2, Painel = slot 3, Publicação = slot 5.
+ */
+const SLOT_POR_CHAVE: Record<string, number> = {
+  // Produção: fazer a peça existir.
+  "sem-arte": 2,
+  recusadas: 2,
+  "pauta-sem-arte": 2,
+  // Painel: contexto, conexões e casa arrumada.
+  "diario-parado": 3,
+  "diario-vazio": 3,
+  "aprovacao-parada": 3,
+  "conexao-caida": 3,
+  "sem-metrica": 3,
+  "metrica-parada": 3,
+  "tarefa-atrasada": 3,
+  "tarefa-sem-dono": 3,
+  "dado-parado": 3,
+  // Publicação: colocar e manter na rua.
+  "sem-agenda": 5,
+  "agenda-curta": 5,
+  "perderam-data": 5,
+  "sem-campanha-cadastrada": 5,
+  "nenhuma-ativa": 5,
+  "verba-zerada": 5,
+  "semana-pior": 5,
+  "verba-sem-lead": 5,
+  "criativo-saturado": 5,
+};
+
+/**
+ * Preenche os slots que giram com a pendência NA FILA CERTA.
+ *
+ * Cada pendência vai para o slot da frente dela; sobrando slot, o acervo
+ * daquele slot preenche (sem repetir a semana anterior). Devolve na ordem
+ * dos slots recebidos.
+ */
+export function etapasPorSlot(input: {
+  pendencias: Pendencia[];
+  /** O rótulo do sorteio para cada slot, como reserva. */
+  acervoPorSlot: Record<number, string>;
+  usadasAntes: string[];
+  slots: number[];
+}): string[] {
+  const ocupado = new Map<number, string>();
+
+  // 1ª passada: cada pendência no slot da frente dela.
+  for (const p of input.pendencias) {
+    if (!p.viraEtapa) continue;
+    const slot = SLOT_POR_CHAVE[p.chave];
+    if (slot == null || !input.slots.includes(slot) || ocupado.has(slot)) continue;
+    ocupado.set(slot, textoDaEtapa(p));
+  }
+
+  // 2ª passada: pendência sem casa (ou com a casa já ocupada) pega
+  // qualquer slot livre — melhor na fila imperfeita do que fora da semana.
+  for (const p of input.pendencias) {
+    if (!p.viraEtapa) continue;
+    const texto = textoDaEtapa(p);
+    if ([...ocupado.values()].includes(texto)) continue;
+    const livre = input.slots.find((s) => !ocupado.has(s));
+    if (livre == null) break;
+    ocupado.set(livre, texto);
+  }
+
+  // 3ª passada: o acervo fecha os buracos, sem repetir a semana anterior.
+  const recentes = new Set(input.usadasAntes);
+  for (const slot of input.slots) {
+    if (ocupado.has(slot)) continue;
+    const proprio = input.acervoPorSlot[slot];
+    if (proprio && !recentes.has(proprio) && ![...ocupado.values()].includes(proprio)) {
+      ocupado.set(slot, proprio);
+      continue;
+    }
+    const alternativa = Object.values(input.acervoPorSlot).find(
+      (rotulo) => rotulo && !recentes.has(rotulo) && ![...ocupado.values()].includes(rotulo),
+    ) ?? proprio ?? "";
+    ocupado.set(slot, alternativa);
+  }
+
+  return input.slots.map((slot) => ocupado.get(slot) ?? "");
+}
+
 /** A pendência dita como tarefa: o que fazer, não o que está errado. */
 export function textoDaEtapa(p: Pendencia): string {
   switch (p.chave) {

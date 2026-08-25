@@ -627,3 +627,67 @@ describe("tres frentes, cada uma uma fila sequencial", () => {
   });
 });
 
+describe("cada pendencia cai na fila da frente dela", () => {
+  it("agendar vai para Publicacao, arte para Producao, diario para Painel", async () => {
+    // As capturas do dono mostraram "Agendar os posts" na fila Painel e
+    // "Criar as artes" em Publicacao: a etapa certa na fila errada le
+    // como bagunca. O slot agora segue o ASSUNTO da pendencia.
+    const { etapasPorSlot } = await import("@/lib/cycleSuggest");
+    const etapas = etapasPorSlot({
+      pendencias: [
+        { chave: "sem-agenda", texto: "", gravidade: "urgente", viraEtapa: true },
+        { chave: "sem-arte", texto: "", gravidade: "urgente", viraEtapa: true },
+        { chave: "diario-parado", texto: "", gravidade: "atencao", viraEtapa: true },
+      ],
+      acervoPorSlot: { 2: "Acervo P", 3: "Acervo M", 5: "Acervo Pub" },
+      usadasAntes: [],
+      slots: [2, 3, 5],
+    });
+    // Ordem devolvida: [slot2, slot3, slot5].
+    expect(etapas[0]).toBe("Criar as artes da semana");
+    expect(etapas[1]).toBe("Escrever no diário o que foi feito");
+    expect(etapas[2]).toBe("Agendar os posts da semana");
+  });
+
+  it("pendencia sem casa pega slot livre; acervo fecha os buracos", async () => {
+    const { etapasPorSlot } = await import("@/lib/cycleSuggest");
+    const etapas = etapasPorSlot({
+      pendencias: [
+        // duas da mesma frente: a segunda nao cabe no slot 5 e vai ao livre
+        { chave: "sem-agenda", texto: "", gravidade: "urgente", viraEtapa: true },
+        { chave: "perderam-data", texto: "", gravidade: "urgente", viraEtapa: true },
+      ],
+      acervoPorSlot: { 2: "Acervo P", 3: "Acervo M", 5: "Acervo Pub" },
+      usadasAntes: [],
+      slots: [2, 3, 5],
+    });
+    expect(etapas[2]).toBe("Agendar os posts da semana");
+    expect(etapas).toContain("Reagendar os posts que perderam a data");
+    // O slot que sobrou vem do acervo, nao fica vazio.
+    expect(etapas.every((e) => e.length > 0)).toBe(true);
+  });
+
+  it("sem pendencia nenhuma, cada slot usa o proprio acervo", async () => {
+    const { etapasPorSlot } = await import("@/lib/cycleSuggest");
+    const etapas = etapasPorSlot({
+      pendencias: [],
+      acervoPorSlot: { 2: "Acervo P", 3: "Acervo M", 5: "Acervo Pub" },
+      usadasAntes: [],
+      slots: [2, 3, 5],
+    });
+    expect(etapas).toEqual(["Acervo P", "Acervo M", "Acervo Pub"]);
+  });
+
+  it("o placar do que falta e a celebracao vivem na folha", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const folha = readFileSync(
+      resolve(raiz, "src/components/ciclo/ClientCycleSheet.tsx"), "utf8",
+    );
+    expect(folha).toContain("faltam ${clientTotal - doneSteps.length}");
+    expect(folha).toContain("todas feitas");
+    expect(folha).toContain("Semana fechada 🎉 Todas as frentes");
+  });
+});
+

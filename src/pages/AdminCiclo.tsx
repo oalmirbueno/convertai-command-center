@@ -27,7 +27,7 @@ import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
 import { fatosDoPainel } from "@/lib/cycleRitual";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import { congelarPlano, lerPlanoAnterior, lerPlanosDaSemana, substituirPlano } from "@/lib/cycleWeekPlan";
-import { etapasQueGiram } from "@/lib/cycleSuggest";
+import { etapasPorSlot } from "@/lib/cycleSuggest";
 import { ROTATING_SLOTS, stepsForWeek as etapasDoSorteio } from "@/lib/cycleTasks";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
@@ -320,14 +320,18 @@ export default function AdminCiclo() {
         if (congeladosRef.current.has(chave)) continue;
         const pend = pendenciasPorCliente.get(id);
         if (!pend) continue;
-        const acervo = etapasDoSorteio(area, id, weekKey, stepOptionsFor(client))
-          .filter((slot) => !slot.fixed)
-          .map((slot) => slot.label);
-        const etapas = etapasQueGiram({
+        const acervoPorSlot: Record<number, string> = {};
+        for (const slot of etapasDoSorteio(area, id, weekKey, stepOptionsFor(client))) {
+          if (!slot.fixed) acervoPorSlot[slot.step] = slot.label;
+        }
+        // Cada pendência cai no slot da FRENTE dela: agendar em
+        // Publicação, arte em Produção, diário em Painel — a etapa certa
+        // na fila errada lia como bagunça.
+        const etapas = etapasPorSlot({
           pendencias: pend,
-          acervo,
+          acervoPorSlot,
           usadasAntes: planosAnteriores.get(id) || [],
-          quantidade: ROTATING_SLOTS.length,
+          slots: ROTATING_SLOTS,
         });
         const existente = planos.get(id);
         if (!existente) {
