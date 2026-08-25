@@ -60,6 +60,11 @@ export interface ClientCycleSheetProps {
    * trabalho que não é o dele.
    */
   servicoAvulso?: string | null;
+  /**
+   * Fatos do painel para a mensagem do grupo (posts no ar, agenda armada,
+   * contatos). São eles que tiram o ritual do genérico.
+   */
+  fatosDoPainel?: string[];
   weekStart: Date;
   realMonday: Date;
   historyWeekKeys: string[];
@@ -93,7 +98,7 @@ function monthsSince(iso?: string | null): string | null {
 }
 
 export default function ClientCycleSheet({
-  client, area, servicoAvulso, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
+  client, area, servicoAvulso, fatosDoPainel, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
   pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
   onToggle, onClose,
 }: ClientCycleSheetProps) {
@@ -424,6 +429,7 @@ export default function ClientCycleSheet({
     avulsosFeitos: avulsos.filter((item) => item.done).map((item) => item.text),
     sequencia: streak,
     phase: fase,
+    fatos: fatosDoPainel,
   });
 
   const copiarMensagemGrupo = async (momento: GroupMoment, rotulo: string) => {

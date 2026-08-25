@@ -35,6 +35,73 @@ export interface RitualInput {
   sequencia?: number;
   /** Onde o cliente está no método, para explicar o porquê. */
   phase?: MethodPhase;
+  /**
+   * Fatos lidos do painel na hora de montar a mensagem (posts no ar,
+   * agenda armada, contatos da semana). São eles que tiram a mensagem do
+   * genérico: a frase da fase é a mesma por semanas; o fato é desta.
+   */
+  fatos?: string[];
+}
+
+/**
+ * O que o painel sabe da semana, dito na língua do cliente.
+ *
+ * Regra dura: daqui só sai fato POSITIVO ou convite claro. Pendência,
+ * atraso e leitura interna ficam no Ciclo — o cliente nunca recebe a
+ * mecânica de dentro de casa.
+ */
+export function fatosDoPainel(input: {
+  area: CycleArea;
+  publicadosNaSemana: number;
+  agendados: number;
+  proximoAgendado: string | null;
+  aguardandoAprovacao: number;
+  leads7d: number;
+  compras?: number;
+}): string[] {
+  const fatos: string[] = [];
+  if (input.area === "social") {
+    if (input.publicadosNaSemana > 0) {
+      fatos.push(
+        input.publicadosNaSemana === 1
+          ? "1 publicação foi ao ar nos últimos dias"
+          : `${input.publicadosNaSemana} publicações foram ao ar nos últimos dias`,
+      );
+    }
+    if (input.agendados > 0 && input.proximoAgendado) {
+      const d = new Date(input.proximoAgendado);
+      const quando = d.toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit" });
+      fatos.push(
+        input.agendados === 1
+          ? `o próximo post já está agendado e sai ${quando}`
+          : `os próximos ${input.agendados} posts já estão agendados — o primeiro sai ${quando}`,
+      );
+    }
+    // Convite, não cobrança: aprovar é participação do cliente no fluxo.
+    if (input.aguardandoAprovacao > 0) {
+      fatos.push(
+        input.aguardandoAprovacao === 1
+          ? "tem 1 peça nova esperando o seu ok no painel"
+          : `tem ${input.aguardandoAprovacao} peças novas esperando o seu ok no painel`,
+      );
+    }
+  } else {
+    if (input.leads7d > 0) {
+      fatos.push(
+        input.leads7d === 1
+          ? "as campanhas trouxeram 1 contato novo nesta semana"
+          : `as campanhas trouxeram ${input.leads7d} contatos novos nesta semana`,
+      );
+      if ((input.compras ?? 0) > 0) {
+        fatos.push(
+          input.compras === 1
+            ? "e 1 já virou venda"
+            : `e ${input.compras} já viraram venda`,
+        );
+      }
+    }
+  }
+  return fatos;
 }
 
 /** O porquê da semana, pela fase em que o cliente está. */
@@ -101,6 +168,15 @@ export function weekRitualMessage(input: RitualInput): string {
 
   linhas.push("O que saiu esta semana:");
   for (const item of entregues) linhas.push(`· ${item}`);
+
+  // Os fatos do painel vêm ANTES do porquê da fase: o fato é desta
+  // semana e deste cliente; a frase da fase repete por semanas. A ordem
+  // é o que impede a mensagem de abrir com o texto que ele já leu.
+  const fatos = (input.fatos || []).filter(Boolean);
+  if (fatos.length > 0) {
+    linhas.push("", "Pelo painel:");
+    for (const fato of fatos) linhas.push(`· ${fato}`);
+  }
 
   if (input.phase) {
     linhas.push("", PORQUE[input.phase]);

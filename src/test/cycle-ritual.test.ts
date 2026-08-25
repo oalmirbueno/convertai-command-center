@@ -106,3 +106,54 @@ describe("a mensagem do ritual", () => {
     expect(texto).toContain("11 a 17 de agosto");
   });
 });
+
+describe("os fatos do painel tiram a mensagem do generico", () => {
+  it("social: posts no ar, agenda armada e o convite de aprovacao", async () => {
+    const { fatosDoPainel } = await import("@/lib/cycleRitual");
+    const fatos = fatosDoPainel({
+      area: "social", publicadosNaSemana: 2, agendados: 3,
+      proximoAgendado: "2026-08-27T18:00:00Z", aguardandoAprovacao: 1, leads7d: 0,
+    });
+    expect(fatos.some((f) => f.includes("2 publicações foram ao ar"))).toBe(true);
+    expect(fatos.some((f) => f.includes("3 posts já estão agendados"))).toBe(true);
+    // Convite, nao cobranca: aprovar e participacao do cliente.
+    expect(fatos.some((f) => f.includes("esperando o seu ok"))).toBe(true);
+  });
+
+  it("trafego: contatos e vendas, na lingua do negocio", async () => {
+    const { fatosDoPainel } = await import("@/lib/cycleRitual");
+    const fatos = fatosDoPainel({
+      area: "trafego", publicadosNaSemana: 0, agendados: 0,
+      proximoAgendado: null, aguardandoAprovacao: 0, leads7d: 7, compras: 2,
+    });
+    expect(fatos.some((f) => f.includes("7 contatos novos"))).toBe(true);
+    expect(fatos.some((f) => f.includes("2 já viraram venda"))).toBe(true);
+  });
+
+  it("sem fato positivo, nenhuma linha: o painel nao inventa", async () => {
+    // Pendencia e leitura interna ficam no Ciclo; o cliente nunca recebe
+    // a mecanica de dentro de casa.
+    const { fatosDoPainel } = await import("@/lib/cycleRitual");
+    expect(fatosDoPainel({
+      area: "social", publicadosNaSemana: 0, agendados: 0,
+      proximoAgendado: null, aguardandoAprovacao: 0, leads7d: 0,
+    })).toEqual([]);
+  });
+
+  it("na mensagem, o fato vem antes do porque da fase", async () => {
+    // O fato e desta semana; a frase da fase repete por semanas. A ordem
+    // impede a mensagem de abrir com o texto que o cliente ja leu.
+    const { weekRitualMessage } = await import("@/lib/cycleRitual");
+    const texto = weekRitualMessage({
+      clientName: "Padaria", area: "social", weekStart: "2026-08-24",
+      doneSteps: [1], totalSteps: 6, phase: "executar",
+      fatos: ["2 publicações foram ao ar nos últimos dias"],
+    });
+    const posFato = texto.indexOf("2 publicações foram ao ar");
+    const posFase = texto.indexOf("ritmo de operação");
+    expect(posFato).toBeGreaterThan(-1);
+    expect(posFase).toBeGreaterThan(posFato);
+    expect(texto).toContain("Pelo painel:");
+  });
+});
+

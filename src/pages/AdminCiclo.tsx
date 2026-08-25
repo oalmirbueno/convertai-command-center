@@ -24,6 +24,7 @@ import {
 import { lerSituacoes } from "@/lib/cycleSituation";
 import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cycleVendas";
 import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
+import { fatosDoPainel } from "@/lib/cycleRitual";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
@@ -1682,6 +1683,21 @@ export default function AdminCiclo() {
           avulsosAbertos && detailClient
             ? servicoAvulso || servicosDoCliente(detailClient)[0] || null
             : null
+        }
+        /* Os fatos desta semana e deste cliente, lidos do painel: são o
+           que tira a mensagem do grupo do texto genérico da fase. */
+        fatosDoPainel={
+          detailClient && situacoes?.get(String(detailClient.id))
+            ? fatosDoPainel({
+                area,
+                publicadosNaSemana: situacoes.get(String(detailClient.id))!.publicadosNaSemana,
+                agendados: situacoes.get(String(detailClient.id))!.agendados,
+                proximoAgendado: situacoes.get(String(detailClient.id))!.proximoAgendado,
+                aguardandoAprovacao: situacoes.get(String(detailClient.id))!.aguardandoAprovacao,
+                leads7d: situacoes.get(String(detailClient.id))!.leads7d,
+                compras: vendas?.get(String(detailClient.id))?.compras,
+              })
+            : undefined
         }
         weekStart={weekStart}
         realMonday={realMonday}
