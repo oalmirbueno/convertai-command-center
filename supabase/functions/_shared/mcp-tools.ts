@@ -18,6 +18,7 @@ import {
   getWorkspaceNode,
   listBriefings,
   listClients,
+  listOpportunities,
   listEditorialCalendar,
   listFiles,
   listProjects,
@@ -107,6 +108,7 @@ export type ToolScope =
   | 'files:sensitive:read'
   | 'files:archive'
   | 'workspace:read'
+  | 'commercial:read'
   | 'contracts:read'
   | 'contracts:write'
   | 'memory:read'
@@ -133,6 +135,7 @@ export const ALL_SCOPES: readonly ToolScope[] = [
   'files:sensitive:read',
   'files:archive',
   'workspace:read',
+  'commercial:read',
   'contracts:read',
   'contracts:write',
   'memory:read',
@@ -161,6 +164,7 @@ export const SCOPE_DESCRIPTIONS: Record<ToolScope, { title: string; description:
   'files:sensitive:read': { title: 'Arquivos sensíveis — leitura', description: 'Ler contratos, documentos societários e outros arquivos marcados como confidenciais ou restritos.', sensitive: true },
   'files:archive': { title: 'Arquivos — arquivar/restaurar', description: 'Arquivar e restaurar arquivos, mantendo o histórico.', sensitive: true },
   'workspace:read': { title: 'Workspace — leitura', description: 'Navegar pastas e nós do Workspace interno.' },
+  'commercial:read': { title: 'Comercial — leitura', description: 'Ler o funil comercial interno: oportunidades, classe, qualificação, responsável e prazos. Área da casa, nunca visível a cliente.' },
   'contracts:read': { title: 'Contratos — leitura', description: 'Listar e detalhar contratos e status de assinatura.' },
   'contracts:write': { title: 'Contratos — rascunhos', description: 'Criar, atualizar e cancelar somente rascunhos completamente não assinados e nunca enviados. Não permite assinar, aprovar, enviar ou publicar contratos.', sensitive: true },
   'memory:read': { title: 'Segundo Cérebro — leitura', description: 'Consultar contexto, arquivos e commits do repositório de memória.' },
@@ -176,6 +180,7 @@ export const SCOPE_EXPANSIONS: Partial<Record<ToolScope, ToolScope[]>> = {
     'clients:read', 'projects:read', 'tasks:read',
     'reports:read', 'briefings:read', 'files:read',
     'workspace:read', 'contracts:read', 'editorial:read',
+    'commercial:read',
   ],
   'aceleriq:write': [
     'projects:write', 'tasks:write', 'reports:write', 'files:write',
@@ -226,6 +231,7 @@ export const GRANULAR_SCOPE_BY_TOOL: Record<string, ToolScope> = {
   aceleriq_list_files: 'files:read',
   aceleriq_get_file: 'files:read',
   aceleriq_list_workspace_nodes: 'workspace:read',
+  aceleriq_list_opportunities: 'commercial:read',
   aceleriq_get_workspace_node: 'workspace:read',
 };
 
@@ -245,7 +251,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.20.0',
+  version: '1.21.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -371,6 +377,43 @@ const listClientsTool = makeRead(
     additionalProperties: false,
   },
   (input, ctx) => listClients(input, ctx),
+);
+
+const listOpportunitiesTool = makeRead(
+  'aceleriq_list_opportunities',
+  'Listar oportunidades comerciais',
+  'Lista as oportunidades do funil comercial interno (commercial_leads): classe (cliente_atual, upsell, novo_prospect ou sem_classe), etapa, responsável, próxima ação, prazo, valores propostos e qualificação. Campo vazio significa "não confirmado", nunca zero. Somente leitura de registros existentes; área interna da casa, vazia para chaves restritas a cliente.',
+  z.object({
+    classe: z.enum(['cliente_atual', 'upsell', 'novo_prospect', 'sem_classe']).optional(),
+    etapa: z.enum(['novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido']).optional(),
+    incluir_fechadas: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      classe: {
+        type: 'string',
+        enum: ['cliente_atual', 'upsell', 'novo_prospect', 'sem_classe'],
+        description: 'Filtra por classe; sem_classe devolve as ainda não confirmadas.',
+      },
+      etapa: {
+        type: 'string',
+        enum: ['novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido'],
+        description: 'Filtra pelo estágio do funil.',
+      },
+      incluir_fechadas: {
+        type: 'boolean',
+        default: false,
+        description: 'Inclui ganho e perdido; por padrão só o funil aberto.',
+      },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input, ctx) => listOpportunities(input, ctx),
 );
 
 const getClientContextTool = makeRead(
@@ -1941,6 +1984,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   searchTool,
   fetchTool,
   listClientsTool,
+  listOpportunitiesTool,
   getClientContextTool,
   listProjectsTool,
   getProjectTool,

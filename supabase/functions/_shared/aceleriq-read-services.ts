@@ -156,6 +156,77 @@ const F = {
 } as const;
 
 // ─── list_clients ────────────────────────────────────────────
+/**
+ * O funil comercial da casa, somente leitura.
+ *
+ * Área INTERNA: chave restrita a clientes não enxerga NADA daqui — o funil
+ * de vendas não é assunto de cliente nenhum. Campo vazio volta como
+ * "nao_confirmado", nunca zero nem "não existe": não perguntado e
+ * respondido com "nada" são coisas diferentes.
+ */
+export async function listOpportunities(
+  opts: {
+    classe?: string;
+    etapa?: string;
+    incluir_fechadas?: boolean;
+    limit?: number;
+    offset?: number;
+  },
+  ctx: AuthContext,
+) {
+  const limit = clampLimit(opts.limit);
+  const offset = clampOffset(opts.offset);
+  if (!ctx.dataScope.unrestricted) {
+    return { items: [], ...pageMeta(0, limit, offset) };
+  }
+
+  let qb = db()
+    .from('commercial_leads')
+    .select(
+      'id, name, company, stage, classe, origin, monthly_value, one_off_value, owner_id, next_action, next_action_at, expected_close_date, qualificacao, created_at',
+      { count: 'exact' },
+    )
+    .is('archived_at', null)
+    .order('created_at', { ascending: false });
+  if (!opts.incluir_fechadas) qb = qb.not('stage', 'in', '("ganho","perdido")');
+  if (opts.etapa) qb = qb.eq('stage', opts.etapa);
+  if (opts.classe === 'sem_classe') qb = qb.is('classe', null);
+  else if (opts.classe) qb = qb.eq('classe', opts.classe);
+
+  const { data, error, count } = await withTimeout(qb.range(offset, offset + limit - 1));
+  if (error) throw new Error(`commercial_leads: ${error.message}`);
+
+  const ownerIds = [...new Set((data ?? []).map((r) => r.owner_id).filter(isUuid))];
+  const nomes = new Map<string, string>();
+  if (ownerIds.length > 0) {
+    const { data: owners, error: ownersError } = await withTimeout(
+      db().from('profiles').select('id, full_name').in('id', ownerIds),
+    );
+    if (!ownersError) {
+      for (const o of owners ?? []) nomes.set(String(o.id), String(o.full_name ?? ''));
+    }
+  }
+
+  const items = (data ?? []).map((r) => ({
+    id: r.id,
+    nome: r.name,
+    empresa: r.company ?? null,
+    etapa: r.stage,
+    classe: r.classe ?? 'nao_confirmado',
+    origem: r.origin,
+    responsavel: r.owner_id
+      ? { id: r.owner_id, nome: nomes.get(String(r.owner_id)) || null }
+      : null,
+    proxima_acao: r.next_action ?? null,
+    prazo: r.next_action_at ?? r.expected_close_date ?? null,
+    mensalidade_proposta: Number(r.monthly_value) || 0,
+    entrada_proposta: Number(r.one_off_value) || 0,
+    qualificacao: r.qualificacao && typeof r.qualificacao === 'object' ? r.qualificacao : {},
+    criado_em: r.created_at,
+  }));
+  return { items, ...pageMeta(count ?? items.length, limit, offset) };
+}
+
 export async function listClients(
   opts: { query?: string; limit?: number; offset?: number },
   ctx: AuthContext,

@@ -19,7 +19,7 @@ const {
   authorizationServerMetadataUrl: AUTH_SERVER_METADATA,
 } = getMcpRuntimeConfig();
 
-const MCP_VERSION = '1.20.0';
+const MCP_VERSION = '1.21.0';
 const MCP_PROTOCOL = '2025-06-18';
 
 const OAUTH_SCOPES = ['openid', 'email', 'profile'];
@@ -34,6 +34,7 @@ const INTERNAL_MCP_SCOPES = [
   'briefings:read',
   'files:read', 'files:write', 'files:sensitive:read', 'files:archive',
   'workspace:read',
+  'commercial:read',
   'contracts:read', 'contracts:write',
   'memory:read', 'memory:propose',
   'admin',

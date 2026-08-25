@@ -110,6 +110,7 @@ export const OAUTH_STAFF_SCOPES = [
   'files:read',
   'files:write',
   'workspace:read',
+  'commercial:read',
   'contracts:read',
   'contracts:write',
   'memory:read',
