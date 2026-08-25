@@ -21,6 +21,10 @@ import {
   PHASE_LABELS, phaseForClient, stepLabelForWeek, stepLabelsForWeek, stepsForWeek,
   type StepsOptions,
 } from "@/lib/cycleTasks";
+import { lerSituacoes } from "@/lib/cycleSituation";
+import {
+  leituraDaCarteira, pendenciasDoCliente, textoDaEtapa, type Pendencia,
+} from "@/lib/cycleSuggest";
 import { usePwaProfile, useStandalone } from "@/hooks/usePwaProfile";
 import { useNow } from "@/hooks/useNow";
 import {
@@ -515,6 +519,45 @@ export default function AdminCiclo() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeClients, doneMap, area, etapasAvulsas, servicoAvulso]);
 
+  /**
+   * A situação REAL de cada cliente, lida do painel.
+   *
+   * O ciclo era cego: sorteava tarefas sem saber se havia arte pronta,
+   * agenda vazia ou aprovação parada. Uma consulta por tabela para a
+   * carteira inteira — por cliente seriam dezenas de idas por abertura.
+   */
+  const idsNoCiclo = useMemo(
+    () => activeClients.map((c: any) => String(c.id)).sort(),
+    [activeClients],
+  );
+  const { data: situacoes } = useQuery({
+    queryKey: ["ciclo-situacao", idsNoCiclo.join(",")],
+    queryFn: () => lerSituacoes(idsNoCiclo),
+    enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
+    staleTime: 60_000,
+  });
+
+  const pendenciasPorCliente = useMemo(() => {
+    const mapa = new Map<string, Pendencia[]>();
+    if (!situacoes) return mapa;
+    for (const client of activeClients as any[]) {
+      const s = situacoes.get(String(client.id));
+      if (s) mapa.set(String(client.id), pendenciasDoCliente(s, area));
+    }
+    return mapa;
+  }, [situacoes, activeClients, area]);
+
+  const leitura = useMemo(
+    () =>
+      leituraDaCarteira(
+        (activeClients as any[]).map((client) => ({
+          nome: client.company_name || client.full_name || "Cliente",
+          pendencias: pendenciasPorCliente.get(String(client.id)) || [],
+        })),
+      ),
+    [activeClients, pendenciasPorCliente],
+  );
+
   const otherArea: CycleArea = area === "social" ? "trafego" : "social";
   const otherAreaTotals = useMemo(() => {
     const list = ((clients || []) as any[]).filter(
@@ -896,6 +939,26 @@ export default function AdminCiclo() {
           <Caret className="h-4 w-4 shrink-0 text-muted-foreground" />
         </button>
 
+        {/* O que o painel está pedindo para este cliente AGORA.
+            Fica acima das etapas de propósito: é o que decide se marcar
+            a etapa faz sentido hoje. Só as duas mais graves — lista
+            longa vira ruído e ninguém lê. */}
+        {!avulso && (pendenciasPorCliente.get(String(client.id))?.length ?? 0) > 0 && (
+          <div className="mb-2 space-y-0.5">
+            {(pendenciasPorCliente.get(String(client.id)) || []).slice(0, 2).map((p) => (
+              <p
+                key={p.chave}
+                className={`flex items-start gap-1.5 text-[11px] leading-snug ${
+                  p.gravidade === "urgente" ? "text-destructive" : "text-warning"
+                }`}
+              >
+                <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-current" />
+                <span className="min-w-0">{p.texto}</span>
+              </p>
+            ))}
+          </div>
+        )}
+
         {/* Barra segmentada: um bloco por etapa, na mesma ordem dos botões */}
         <div className="mb-2 flex h-1 gap-[3px]">
           {Array.from({ length: clientTotal }, (_, index) => (
@@ -1121,6 +1184,27 @@ export default function AdminCiclo() {
             {weekTotals.done}/{weekTotals.total}
           </span>
         </div>
+
+        {/* A leitura da carteira: responde "está tudo certo?" antes de
+            alguém abrir cliente por cliente. A barra acima conta etapa
+            marcada, que é esforço; isto conta o que o painel está
+            pedindo, que é a realidade. */}
+        {!avulsosAbertos && situacoes && activeClients.length > 0 && (
+          <div className="flex h-7 items-center gap-1.5 px-3 pb-1">
+            <span
+              className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                leitura.urgentes > 0
+                  ? "bg-destructive"
+                  : leitura.emAtencao > 0
+                    ? "bg-warning"
+                    : "bg-success"
+              }`}
+            />
+            <span className="truncate text-[10.5px] text-muted-foreground">
+              {leitura.frase}
+            </span>
+          </div>
+        )}
       </header>
 
       {/* min-h-0 é o que faz a lista caber de verdade: sem isso o filho de um

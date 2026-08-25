@@ -1386,8 +1386,13 @@ export async function getClientDossier(opts: { client_id: string }, ctx: AuthCon
     withTimeout(db().from('profiles').select(F.client).eq('id', id).is('deleted_at', null).maybeSingle()),
     withTimeout(db().from('projects').select(F.project).eq('client_id', id).is('deleted_at', null)
       .order('updated_at', { ascending: false }).limit(30)),
-    withTimeout(db().from('tasks').select('id, title, status, priority, due_date, project_id')
-      .eq('client_id', id).is('deleted_at', null)
+    // Tarefa NAO tem client_id: o vinculo passa pelo projeto, e e assim
+    // que listTasks sempre fez. Aqui estava `.eq('client_id', id)` direto,
+    // que o PostgREST rejeita — e o withTimeout engolia o erro, entao
+    // tasks_open voltava SEMPRE VAZIO no dossie. Quem lia concluia que o
+    // cliente nao tinha tarefa aberta nenhuma.
+    withTimeout(db().from('tasks').select('id, title, status, priority, due_date, project_id, projects!inner(client_id)')
+      .eq('projects.client_id', id).is('deleted_at', null)
       .order('updated_at', { ascending: false }).limit(40)),
     withTimeout(db().from('weekly_cycle_progress').select('area, week_start, step, done_at')
       .eq('client_id', id).gte('week_start', seisSemanas.toISOString().slice(0, 10))
