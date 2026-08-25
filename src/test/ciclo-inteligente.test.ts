@@ -449,3 +449,48 @@ describe("clicar no card revela mais do que o card mostrava", () => {
   });
 });
 
+describe("post publicado NUNCA aparece como pendente", () => {
+  const agora = new Date("2026-08-25T12:00:00Z").getTime();
+  const seteDias = agora - 7 * 86_400_000;
+
+  it("status published sem published_at era o aviso eterno - o caso do dono", async () => {
+    // O relato: "tem post que foi postado mas no ciclo ainda parece
+    // pendente". A baixa antiga marcava status published sem preencher
+    // published_at; o contador julgava so pelas datas e acusava "perdeu a
+    // data" PARA SEMPRE. O status e a palavra final.
+    const { registrarPublicacao, situacaoVazia } = await import("@/lib/cycleSituation");
+    const s = situacaoVazia("c1");
+    registrarPublicacao(s, {
+      status: "published", published_at: null,
+      scheduled_at: "2026-08-24T10:00:00Z",
+    }, agora, seteDias);
+    expect(s.perderamAData).toBe(0);
+    expect(s.publicadosNaSemana).toBe(1);
+  });
+
+  it("publicado com data conta na semana; antigo nao conta mas nao acusa", async () => {
+    const { registrarPublicacao, situacaoVazia } = await import("@/lib/cycleSituation");
+    const s = situacaoVazia("c1");
+    registrarPublicacao(s, { status: "published", published_at: "2026-08-23T10:00:00Z", scheduled_at: null }, agora, seteDias);
+    registrarPublicacao(s, { status: "published", published_at: "2026-07-01T10:00:00Z", scheduled_at: null }, agora, seteDias);
+    expect(s.publicadosNaSemana).toBe(1);
+    expect(s.perderamAData).toBe(0);
+  });
+
+  it("agendado para o futuro conta na agenda com o proximo dia", async () => {
+    const { registrarPublicacao, situacaoVazia } = await import("@/lib/cycleSituation");
+    const s = situacaoVazia("c1");
+    registrarPublicacao(s, { status: "scheduled", published_at: null, scheduled_at: "2026-08-27T18:00:00Z" }, agora, seteDias);
+    registrarPublicacao(s, { status: "scheduled", published_at: null, scheduled_at: "2026-08-26T09:00:00Z" }, agora, seteDias);
+    expect(s.agendados).toBe(2);
+    expect(s.proximoAgendado).toBe("2026-08-26T09:00:00Z");
+  });
+
+  it("agendado para tras e SEM publicar e o unico que acusa", async () => {
+    const { registrarPublicacao, situacaoVazia } = await import("@/lib/cycleSituation");
+    const s = situacaoVazia("c1");
+    registrarPublicacao(s, { status: "scheduled", published_at: null, scheduled_at: "2026-08-23T10:00:00Z" }, agora, seteDias);
+    expect(s.perderamAData).toBe(1);
+  });
+});
+

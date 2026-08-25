@@ -133,6 +133,51 @@ const diasEntre = (iso: string, agora: number) =>
   Math.floor((agora - new Date(iso).getTime()) / 86_400_000);
 
 /**
+ * Classifica UMA publicação na situação do cliente.
+ *
+ * O STATUS é a palavra final, antes de qualquer data. A primeira versão
+ * julgava só pelos timestamps, e uma publicação com status 'published' mas
+ * published_at vazio (baixa antiga, marcação manual) caía em "perdeu a
+ * data" PARA SEMPRE: o post estava no ar e o cockpit seguia acusando —
+ * exatamente o aviso eterno que confunde em vez de avisar.
+ *
+ * Exportada para o teste bater em cada combinação de status e data.
+ */
+export function registrarPublicacao(
+  s: SituacaoDoCliente,
+  linha: Record<string, unknown>,
+  agoraMs: number,
+  seteDiasAtrasMs: number,
+) {
+  const estado = String(linha.status ?? "");
+  const publicado = linha.published_at;
+  const marcado = linha.scheduled_at;
+
+  if (estado === "published" || typeof publicado === "string") {
+    const quando = typeof publicado === "string"
+      ? publicado
+      : typeof marcado === "string" ? marcado : null;
+    if (quando && new Date(quando).getTime() >= seteDiasAtrasMs) {
+      s.publicadosNaSemana += 1;
+    }
+    return;
+  }
+
+  if (typeof marcado !== "string") return;
+  const quando = new Date(marcado).getTime();
+  if (quando >= agoraMs) {
+    s.agendados += 1;
+    if (!s.proximoAgendado || quando < new Date(s.proximoAgendado).getTime()) {
+      s.proximoAgendado = marcado;
+    }
+  } else {
+    // Programado para trás e sem publicar: é justamente o caso que
+    // ninguém percebe, porque some do futuro sem ir para o passado.
+    s.perderamAData += 1;
+  }
+}
+
+/**
  * Lê a situação de vários clientes de uma vez.
  *
  * `agoraIso` entra por parâmetro em vez de sair de `new Date()` aqui
@@ -261,26 +306,7 @@ export async function lerSituacoes(
   for (const linha of (publicacoes.data ?? []) as Array<Record<string, unknown>>) {
     const s = mapa.get(String(linha.client_id));
     if (!s) continue;
-    const publicado = linha.published_at;
-    const marcado = linha.scheduled_at;
-    if (typeof publicado === "string") {
-      if (new Date(publicado).getTime() >= new Date(seteDiasAtras).getTime()) {
-        s.publicadosNaSemana += 1;
-      }
-      continue;
-    }
-    if (typeof marcado !== "string") continue;
-    const quando = new Date(marcado).getTime();
-    if (quando >= agora) {
-      s.agendados += 1;
-      if (!s.proximoAgendado || quando < new Date(s.proximoAgendado).getTime()) {
-        s.proximoAgendado = marcado;
-      }
-    } else {
-      // Programado para trás e nunca publicou: é justamente o caso que
-      // ninguém percebe, porque some do futuro sem ir para o passado.
-      s.perderamAData += 1;
-    }
+    registrarPublicacao(s, linha, agora, new Date(seteDiasAtras).getTime());
   }
 
   for (const linha of (diario.data ?? []) as Array<Record<string, unknown>>) {

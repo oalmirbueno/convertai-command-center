@@ -25,6 +25,7 @@ import { lerSituacoes } from "@/lib/cycleSituation";
 import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cycleVendas";
 import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
 import { fatosDoPainel } from "@/lib/cycleRitual";
+import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
 import {
   evidenciasDe, jornadaDaEntrada, ondeEstaNaEntrada, type EtapaDaJornada,
 } from "@/lib/cycleJourney";
@@ -211,7 +212,11 @@ export default function AdminCiclo() {
     queryKey: ["ciclo-situacao", idsNoCiclo.join(",")],
     queryFn: () => lerSituacoes(idsNoCiclo),
     enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    // O Ciclo é cockpit: o mundo muda por fora (o robô publica, o cliente
+    // aprova) e a pendência tem que SUMIR sozinha quando o fato acontecer.
+    // Aviso que fica depois de resolvido ensina a ignorar avisos.
+    ...AO_VIVO_CALMO,
   });
 
   /**
