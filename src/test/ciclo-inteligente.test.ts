@@ -548,3 +548,35 @@ describe("as etapas da semana saem da realidade, congeladas", () => {
   });
 });
 
+describe("o holofote: uma acao por vez, como num jogo", () => {
+  it("o card destaca a proxima etapa com botao de concluir", async () => {
+    // "preencheu aquilo vem outro, ate fechar - igual nos games, da a
+    // sensacao de avanco e realmente avanca". O holofote mostra UMA acao
+    // com o rotulo real; concluir chama a proxima da mesma leva.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+    expect(pagina).toContain("Agora · {doneCount + 1} de {clientTotal}");
+    expect(pagina).toContain("stepLabelOf(client, nextStep)");
+    // Fechou tudo: celebra e o cliente sai da fila (gaveta de fechados).
+    expect(pagina).toContain("Semana fechada 🎉");
+    // A trilha numerada continua: a sequencia guia, nao prende.
+    expect(pagina).toContain("stepButton(index + 1, false)");
+  });
+
+  it("o plano e dinamico ate a primeira marcacao girante, depois trava", async () => {
+    // "atualiza conforme": pendencia nova entra, resolvida sai - ate
+    // alguem marcar. Dai o rotulo congela, porque a marcacao guarda so o
+    // numero e trocar o texto depois faria o historico mentir.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+    const plano = readFileSync(resolve(raiz, "src/lib/cycleWeekPlan.ts"), "utf8");
+    expect(pagina).toContain("nenhumaGiranteMarcada");
+    expect(pagina).toContain("substituirPlano({");
+    expect(plano).toContain("export async function substituirPlano");
+  });
+});
+

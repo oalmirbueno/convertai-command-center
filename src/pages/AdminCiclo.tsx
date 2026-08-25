@@ -26,7 +26,7 @@ import { lerVendasDaSemana, leituraDasCompras, registrarVendas } from "@/lib/cyc
 import { lerSituacaoDosAvulsos, pendenciasDoAvulso } from "@/lib/cycleAvulsos";
 import { fatosDoPainel } from "@/lib/cycleRitual";
 import { AO_VIVO_CALMO } from "@/lib/consultaAoVivo";
-import { congelarPlano, lerPlanoAnterior, lerPlanosDaSemana } from "@/lib/cycleWeekPlan";
+import { congelarPlano, lerPlanoAnterior, lerPlanosDaSemana, substituirPlano } from "@/lib/cycleWeekPlan";
 import { etapasQueGiram } from "@/lib/cycleSuggest";
 import { ROTATING_SLOTS, stepsForWeek as etapasDoSorteio } from "@/lib/cycleTasks";
 import {
@@ -314,10 +314,9 @@ export default function AdminCiclo() {
       for (const client of activeClients as any[]) {
         const id = String(client.id);
         const chave = `${id}:${area}:${weekKey}`;
-        if (planos.has(id) || congeladosRef.current.has(chave)) continue;
+        if (congeladosRef.current.has(chave)) continue;
         const pend = pendenciasPorCliente.get(id);
         if (!pend) continue;
-        congeladosRef.current.add(chave);
         const acervo = etapasDoSorteio(area, id, weekKey, stepOptionsFor(client))
           .filter((slot) => !slot.fixed)
           .map((slot) => slot.label);
@@ -327,8 +326,31 @@ export default function AdminCiclo() {
           usadasAntes: planosAnteriores.get(id) || [],
           quantidade: ROTATING_SLOTS.length,
         });
-        if (await congelarPlano({ clientId: id, area, weekStart: weekKey, etapas })) {
-          algum = true;
+        const existente = planos.get(id);
+        if (!existente) {
+          congeladosRef.current.add(chave);
+          if (await congelarPlano({ clientId: id, area, weekStart: weekKey, etapas })) {
+            algum = true;
+          }
+          continue;
+        }
+        // O plano é DINÂMICO enquanto nenhuma etapa girante foi marcada:
+        // pendência nova entra, resolvida sai — "atualiza conforme". A
+        // primeira marcação trava, porque ela guarda só o número e trocar
+        // o rótulo depois faria o histórico mentir.
+        const nenhumaGiranteMarcada = ROTATING_SLOTS.every(
+          (step) => !etapaFeita(client, step),
+        );
+        if (
+          nenhumaGiranteMarcada
+          && JSON.stringify(existente.etapas) !== JSON.stringify(etapas)
+        ) {
+          congeladosRef.current.add(chave);
+          if (await substituirPlano({
+            registroId: existente.id, area, weekStart: weekKey, etapas,
+          })) {
+            algum = true;
+          }
         }
       }
       if (algum) {
@@ -1024,7 +1046,7 @@ export default function AdminCiclo() {
           onClick={() =>
             void (avulso ? marcarEtapaAvulsa(client, step) : toggle(client, step))
           }
-          className={`flex h-11 items-center justify-center rounded-lg border text-[13px] font-bold tabular-nums transition-colors active:scale-95 ${
+          className={`flex h-8 items-center justify-center rounded-lg border text-[11.5px] font-bold tabular-nums transition-colors active:scale-95 ${
             done
               ? onboardingTrack
                 ? "border-info bg-info text-white"
@@ -1182,6 +1204,40 @@ export default function AdminCiclo() {
             />
           ))}
         </div>
+
+        {/* O HOLOFOTE: uma ação por vez, como num jogo. Concluiu, a
+            próxima da mesma leva assume o lugar na hora — sensação de
+            avanço que é avanço de verdade, porque marca a etapa real.
+            A trilha numerada continua embaixo para pular ou corrigir:
+            a sequência guia, não prende. */}
+        {nextStep && (
+          <div className="mb-1.5 flex items-center gap-2 rounded-xl border border-primary/30 bg-primary/[0.06] p-2.5">
+            <div className="min-w-0 flex-1">
+              <p className="text-[9.5px] font-bold uppercase tracking-wider text-primary">
+                Agora · {doneCount + 1} de {clientTotal}
+              </p>
+              <p className="truncate text-[12.5px] font-semibold leading-snug text-foreground">
+                {stepLabelOf(client, nextStep)}
+              </p>
+            </div>
+            <button
+              type="button"
+              disabled={!canWrite || pendingKey === (avulso ? `${client.id}:avulso:${nextStep}` : `${client.id}:${area}:${nextStep}`)}
+              onClick={() =>
+                void (avulso ? marcarEtapaAvulsa(client, nextStep) : toggle(client, nextStep))
+              }
+              className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-primary px-3 text-[12px] font-bold text-primary-foreground transition-transform active:scale-95 disabled:opacity-50"
+            >
+              <Check className="h-4 w-4" strokeWidth={3} />
+              Feito
+            </button>
+          </div>
+        )}
+        {complete && (
+          <p className="mb-1.5 rounded-xl border border-success/30 bg-success/[0.08] p-2 text-center text-[11.5px] font-semibold text-success">
+            {avulso ? "Entrega completa 🎉" : "Semana fechada 🎉 Cliente sai da fila."}
+          </p>
+        )}
 
         <div className="grid grid-cols-6 gap-1.5">
           {(avulso

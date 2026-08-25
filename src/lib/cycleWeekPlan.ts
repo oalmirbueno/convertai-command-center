@@ -25,6 +25,7 @@ import { supabase } from "@/integrations/supabase/client";
 const KIND = "ciclo_semana";
 
 export interface PlanoDaSemana {
+  id: string;
   etapas: string[];
 }
 
@@ -38,18 +39,52 @@ export async function lerPlanosDaSemana(
   if (clientIds.length === 0) return mapa;
   const { data } = await (supabase as any)
     .from("project_memory")
-    .select("client_id, metadata")
+    .select("id, client_id, metadata")
     .in("client_id", clientIds)
     .eq("kind", KIND)
     .eq("metadata->>area", area)
     .eq("metadata->>week_start", weekStart);
   for (const linha of (data ?? []) as Array<Record<string, unknown>>) {
     const etapas = (linha.metadata as { etapas?: unknown } | null)?.etapas;
-    if (Array.isArray(etapas) && etapas.length > 0) {
-      mapa.set(String(linha.client_id), { etapas: etapas.map(String) });
+    if (Array.isArray(etapas) && etapas.length > 0 && !mapa.has(String(linha.client_id))) {
+      mapa.set(String(linha.client_id), {
+        id: String(linha.id),
+        etapas: etapas.map(String),
+      });
     }
   }
   return mapa;
+}
+
+/**
+ * Substitui as etapas de um plano já congelado.
+ *
+ * Só é chamado enquanto NENHUMA etapa girante foi marcada: o plano é
+ * dinâmico no começo da semana (pendência nova entra, resolvida sai) e
+ * trava no instante em que a primeira marcação acontece — porque a
+ * marcação guarda só o número, e trocar o rótulo depois dela faria o
+ * histórico mentir.
+ */
+export async function substituirPlano(input: {
+  registroId: string;
+  area: string;
+  weekStart: string;
+  etapas: string[];
+}): Promise<boolean> {
+  if (input.etapas.length === 0) return false;
+  const { error } = await (supabase as any)
+    .from("project_memory")
+    .update({
+      content: `Etapas da semana, escolhidas do estado real do painel: ${input.etapas.join("; ")}.`,
+      metadata: {
+        area: input.area,
+        week_start: input.weekStart,
+        etapas: input.etapas,
+        client_visible: false,
+      },
+    })
+    .eq("id", input.registroId);
+  return !error;
 }
 
 /** Os rótulos da semana ANTERIOR, para o acervo não repetir. */
