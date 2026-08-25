@@ -422,3 +422,30 @@ describe("a pendência vira tarefa, não reclamação", () => {
     }
   });
 });
+
+describe("clicar no card revela mais do que o card mostrava", () => {
+  it("a folha recebe a lista COMPLETA de pendencias e a jornada", async () => {
+    // O relato: "ao clicar no card do cliente nao mudou nada". O card
+    // mostra as duas piores pendencias; a folha que abre mostrava a mesma
+    // tela de sempre. Quem clica veio ver TUDO.
+    const { readFileSync } = await import("node:fs");
+    const { resolve } = await import("node:path");
+    const raiz = resolve(__dirname, "../..");
+    const folha = readFileSync(
+      resolve(raiz, "src/components/ciclo/ClientCycleSheet.tsx"), "utf8",
+    );
+    const pagina = readFileSync(resolve(raiz, "src/pages/AdminCiclo.tsx"), "utf8");
+
+    expect(folha).toContain("O painel está pedindo");
+    // A lista da folha nao corta em duas como a do card.
+    expect(folha).toContain("pendencias.map((p) =>");
+    // Vazia diz "em dia" com todas as letras - a confirmacao que mata a
+    // pulga atras da orelha, em vez de sumir em silencio.
+    expect(folha).toContain("Tudo em dia por aqui");
+    expect(folha).toContain("Entrada do cliente");
+    // E a pagina realmente entrega os dados ao abrir a folha.
+    expect(pagina).toContain("pendencias={");
+    expect(pagina).toContain("jornada={");
+  });
+});
+

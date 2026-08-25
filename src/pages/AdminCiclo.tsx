@@ -1684,6 +1684,19 @@ export default function AdminCiclo() {
             ? servicoAvulso || servicosDoCliente(detailClient)[0] || null
             : null
         }
+        /* A situação completa entra na folha: o clique no card tem que
+           revelar mais do que o card já mostrava, senão parece que nada
+           aconteceu. */
+        pendencias={
+          detailClient && !avulsosAbertos
+            ? pendenciasPorCliente.get(String(detailClient.id)) ?? (situacoes ? [] : undefined)
+            : undefined
+        }
+        jornada={
+          detailClient && !avulsosAbertos && isOnboarding(detailClient)
+            ? jornadaDe(detailClient)
+            : undefined
+        }
         /* Os fatos desta semana e deste cliente, lidos do painel: são o
            que tira a mensagem do grupo do texto genérico da fase. */
         fatosDoPainel={

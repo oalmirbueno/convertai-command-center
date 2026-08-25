@@ -65,6 +65,14 @@ export interface ClientCycleSheetProps {
    * contatos). São eles que tiram o ritual do genérico.
    */
   fatosDoPainel?: string[];
+  /**
+   * O que o painel está pedindo para este cliente — a lista COMPLETA.
+   * O card de fora mostra as duas piores; quem abriu a folha veio ver
+   * tudo, e a folha sem isso parecia a mesma tela de antes.
+   */
+  pendencias?: Array<{ chave: string; texto: string; gravidade: "urgente" | "atencao" | "tranquilo" }>;
+  /** A entrada do cliente novo, quando ainda está entrando. */
+  jornada?: Array<{ chave: string; titulo: string; comoFecha: string; feita: boolean; atual?: boolean }> | null;
   weekStart: Date;
   realMonday: Date;
   historyWeekKeys: string[];
@@ -98,7 +106,8 @@ function monthsSince(iso?: string | null): string | null {
 }
 
 export default function ClientCycleSheet({
-  client, area, servicoAvulso, fatosDoPainel, weekStart, realMonday, historyWeekKeys, historySets, doneMap,
+  client, area, servicoAvulso, fatosDoPainel, pendencias, jornada,
+  weekStart, realMonday, historyWeekKeys, historySets, doneMap,
   pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
   onToggle, onClose,
 }: ClientCycleSheetProps) {
@@ -539,6 +548,69 @@ export default function ClientCycleSheet({
 
             {/* Corpo rolável */}
             <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+              {/* A situação REAL, antes de qualquer ferramenta: quem abriu a
+                  folha veio saber como este cliente está. Lista completa —
+                  o card de fora mostra só as duas piores. Vazia, diz "em
+                  dia" com todas as letras: é a confirmação que mata a pulga
+                  atrás da orelha do "será que fiz". */}
+              {!servicoAvulso && pendencias && (
+                <div className="mb-3 rounded-xl border border-border bg-secondary/20 p-3">
+                  <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">
+                    O painel está pedindo
+                  </p>
+                  {pendencias.length === 0 ? (
+                    <p className="text-[11.5px] font-semibold text-success">
+                      Tudo em dia por aqui: nenhuma pendência neste cliente.
+                    </p>
+                  ) : (
+                    <div className="space-y-1">
+                      {pendencias.map((p) => (
+                        <p
+                          key={p.chave}
+                          className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
+                            p.gravidade === "urgente" ? "text-destructive" : "text-warning"
+                          }`}
+                        >
+                          <span className="mt-[5px] h-1 w-1 shrink-0 rounded-full bg-current" />
+                          <span className="min-w-0">{p.texto}</span>
+                        </p>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* A entrada do cliente novo, conferida no dado. */}
+              {!servicoAvulso && jornada && jornada.length > 0 && (
+                <div className="mb-3 space-y-1 rounded-xl border border-info/25 bg-info/[0.04] p-3">
+                  <p className="text-[10px] font-semibold uppercase tracking-wider text-info">
+                    Entrada do cliente
+                  </p>
+                  {jornada.map((etapa) => (
+                    <p
+                      key={etapa.chave}
+                      className={`flex items-start gap-1.5 text-[11.5px] leading-snug ${
+                        etapa.feita
+                          ? "text-muted-foreground line-through decoration-muted-foreground/40"
+                          : etapa.atual
+                            ? "font-semibold text-foreground"
+                            : "text-muted-foreground/70"
+                      }`}
+                    >
+                      <span className="mt-[2px] shrink-0">{etapa.feita ? "✓" : "○"}</span>
+                      <span className="min-w-0">
+                        {etapa.titulo}
+                        {etapa.atual && (
+                          <span className="block text-[10px] font-normal text-muted-foreground">
+                            {etapa.comoFecha}
+                          </span>
+                        )}
+                      </span>
+                    </p>
+                  ))}
+                </div>
+              )}
+
               {/* Ferramentas do momento */}
               <div className="grid grid-cols-3 gap-2">
                 <button
