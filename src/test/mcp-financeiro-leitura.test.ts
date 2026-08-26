@@ -70,6 +70,78 @@ describe("o financeiro enxerga o mês inteiro", () => {
   });
 });
 
+describe("o painel financeiro inteiro, mes a mes", () => {
+  const painel = readFileSync(
+    resolve(raiz, "supabase/functions/_shared/aceleriq-finance-dashboard.ts"), "utf8",
+  );
+
+  it("RECEBIDO soma planos MAIS parcelas de projeto", () => {
+    // O print do dono: "RECEBIDO R$ 5.204,00 · Planos R$ 4.507,00 ·
+    // Projetos R$ 697,00". A primeira versao lia so a cobranca e devolvia
+    // 4.507 onde a tela mostra 5.204. Numero quase certo passa por verdade.
+    expect(painel).toContain("recebidoPlanos + recebidoProjetos");
+    expect(painel).toContain("recebido_planos");
+    expect(painel).toContain("recebido_projetos");
+    expect(painel).toContain("payment_installments");
+  });
+
+  it("o saldo em caixa usa a formula do Fluxo de Caixa", () => {
+    // base conciliada + tudo que entrou (cobrancas + parcelas) − tudo que
+    // saiu, fora despesa de investidor. Conferido: -14.853,36 + 22.863,00
+    // − 1.465,00 = 6.544,64, o mesmo do print.
+    expect(painel).toContain("opening_balance");
+    expect(painel).toContain("recebidoTodoTempo - pagoTodoTempo");
+    expect(painel).toContain("ehDespesaDeInvestidor");
+  });
+
+  it("a divisao automatica segue a escada do Plano Diretor", () => {
+    // 5.204,00 bruto → 312,24 de imposto (6%) → 4.891,76 operacional →
+    // 1.468,00 de pro-labore proporcional → 1.563,76 de reserva → 0,00 de
+    // lucro. Cada linha do print sai destas contas.
+    expect(painel).toContain("const ALIQUOTA_PADRAO = 0.06");
+    expect(painel).toContain("function proLaboreProporcional");
+    expect(painel).toContain("bruto - reservaTributaria");
+    expect(painel).toContain("receitaOperacional - custosFixos - proLabore");
+    expect(painel).toContain("Math.min(Math.max(depoisDaEstrutura, 0), alvoReservaClientes)");
+    // Ponto de equilibrio: fixos + pro-labore OFICIAL, e o bruto pela aliquota.
+    expect(painel).toContain("custosFixos + proLaboreOficial");
+    expect(painel).toContain("equilibrioOperacional / (1 - ALIQUOTA_PADRAO)");
+  });
+
+  it("a aliquota vem do plano de cada cliente, com 6% de reserva", () => {
+    // Cliente com plano de aliquota propria nao pode ser tributado pela
+    // taxa ilustrativa: o imposto reservado sairia errado no mes inteiro.
+    expect(painel).toContain("aliquotaDoCliente.get(it.clienteId)) ?? ALIQUOTA_PADRAO");
+  });
+
+  it("o pro-labore de despesa nao e descontado duas vezes", () => {
+    expect(painel).toContain("ehProLabore");
+    expect(painel).toContain("=== 'monthly' && !ehProLabore(e)");
+  });
+
+  it("entrega a serie do ano, a marca e os projetos - nao so o mes", () => {
+    // "preciso de acesso a outros meses e de forma completa".
+    expect(painel).toContain("serie_do_ano");
+    expect(painel).toContain("receita_por_marca");
+    expect(painel).toContain("projetos_individuais");
+    expect(painel).toContain("ads_wallet");
+    expect(painel).toContain("pendentes");
+    expect(painel).toContain("recebidos");
+    // E as tres ferramentas novas existem no catalogo.
+    for (const nome of [
+      "aceleriq_get_finance_dashboard",
+      "aceleriq_list_finance_expenses",
+      "aceleriq_list_finance_project_payments",
+    ]) {
+      expect(ferramentas).toContain(`'${nome}'`);
+    }
+  });
+
+  it("continua sendo so leitura, inclusive no painel completo", () => {
+    expect(painel).not.toMatch(/\.(insert|update|upsert|delete)\(/);
+  });
+});
+
 describe("o agente vê o MESMO que o dono vê na tela", () => {
   it("lê a cobrança real (billing), não só o módulo v2 vazio", () => {
     // O relato: "ele puxou tudo zerado, diferente do que aparece pra mim".

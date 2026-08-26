@@ -32,6 +32,11 @@ import {
   auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
+  getFinanceDashboard,
+  listFinanceExpenses,
+  listFinanceProjectPayments,
+} from './aceleriq-finance-dashboard.ts';
+import {
   getFinanceBilling,
   getFinanceOverview,
   listFinanceClientSummaries,
@@ -259,7 +264,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.24.0',
+  version: '1.25.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2165,6 +2170,76 @@ const financeBillingTool = makeFinanceRead(
   (input) => getFinanceBilling(input),
 );
 
+const financeDashboardTool = makeFinanceRead(
+  'aceleriq_get_finance_dashboard',
+  'Painel financeiro completo do mes',
+  'A TELA /financeiro inteira para um mes, com as MESMAS formulas dela. Indicadores: saldo em caixa, recebido (com a quebra planos + projetos), a receber, atrasado, receita esperada e projecao do proximo mes. Divisao automatica: bruto, reserva tributaria pela aliquota do plano de cada cliente, receita operacional, custos fixos, pro-labore proporcional pela escada do Plano Diretor, reserva de clientes/investimento, lucro do mes e ponto de equilibrio. Traz ainda a serie do ano mes a mes (recebido x pendente), a proporcao por marca (AcelerIQ, SiteBolt, junto), o resumo dos projetos individuais, o saldo das carteiras de anuncio e as listas de pendentes e recebidos do mes. Funciona para QUALQUER competencia, passada ou futura. SOMENTE LEITURA.',
+  z.object({
+    competence: COMPETENCIA.optional(),
+    incluir_listas: z.boolean().optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      competence: COMPETENCIA_JSON,
+      incluir_listas: {
+        type: 'boolean',
+        description: 'false devolve so os totais, sem as listas de pendentes e recebidos. Padrao: true.',
+      },
+    },
+    additionalProperties: false,
+  },
+  (input) => getFinanceDashboard(input),
+);
+
+const financeExpensesTool = makeFinanceRead(
+  'aceleriq_list_finance_expenses',
+  'Despesas e custos fixos',
+  'As saidas da casa: descricao, fornecedor, categoria, valor, situacao, recorrencia, vencimento e pagamento. O resumo separa o custo fixo mensal do que foi pago e do que falta pagar no mes. Sem isto o agente ve so o que entra, e dizer que o mes fechou bem ignora metade da conta. SOMENTE LEITURA.',
+  z.object({
+    competence: COMPETENCIA.optional(),
+    status: z.string().max(40).optional(),
+    recurrence: z.string().max(40).optional(),
+    category: z.string().max(60).optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      competence: COMPETENCIA_JSON,
+      status: { type: 'string', description: 'paid, pending...' },
+      recurrence: { type: 'string', description: 'monthly para os custos fixos.' },
+      category: { type: 'string', description: 'Categoria da despesa.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceExpenses(input),
+);
+
+const financeProjectPaymentsTool = makeFinanceRead(
+  'aceleriq_list_finance_project_payments',
+  'Projetos e parcelas',
+  'Cada projeto contratado com valor total, entrada, quanto ja foi recebido, quanto falta e quanto esta atrasado, com a lista de parcelas uma a uma (numero, valor, situacao, vencimento e pagamento). E o pedaco que faltava no recebido do mes: a tela soma planos + parcelas de projeto. SOMENTE LEITURA.',
+  z.object({
+    client_id: UUID.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', description: 'UUID do cliente.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceProjectPayments(input),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2187,8 +2262,11 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   listFilesTool,
   getFileTool,
   // Financeiro: acompanhar sem poder mexer
+  financeDashboardTool,
   financeOverviewTool,
   financeBillingTool,
+  financeExpensesTool,
+  financeProjectPaymentsTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,
