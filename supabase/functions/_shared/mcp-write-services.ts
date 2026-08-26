@@ -844,8 +844,27 @@ export const upsertCurrentDossierSchema = z.object({
 }).strict();
 export type UpsertCurrentDossierInput = z.infer<typeof upsertCurrentDossierSchema>;
 
+/**
+ * O tipo do dossie, normalizado antes de virar chave.
+ *
+ * O caso real: um agente gravou com o tipo "context" (ingles) e nasceu um
+ * balde PARALELO ao "contexto" — dois dossies gerais "atuais" para o mesmo
+ * cliente, cada um com a propria historia, e o mais novo invisivel para
+ * quem lia o outro. O tipo e chave de unicidade: grafia diferente e balde
+ * diferente, e balde por erro de digitacao e historia fragmentada.
+ *
+ * Normaliza caixa/espacos e dobra os sinonimos conhecidos do tipo padrao.
+ * Tipos legitimamente diferentes (estrategia, briefing...) passam intactos.
+ */
+export function normalizarTipoDeDossie(tipo: string): string {
+  const limpo = tipo.trim().toLowerCase();
+  if (['context', 'contexto geral', 'geral', 'general'].includes(limpo)) return 'contexto';
+  return limpo;
+}
+
 export async function upsertCurrentDossier(input: UpsertCurrentDossierInput, ctx: WriteCtx) {
   assertWriteClientScope(ctx, input.client_id);
+  const dossierType = normalizarTipoDeDossie(input.dossier_type);
 
   // O id fantasma e barrado ANTES do RPC, para a recusa vir com o conserto
   // junto. O RPC tambem valida (e continua sendo a ultima palavra), mas a
@@ -859,7 +878,7 @@ export async function upsertCurrentDossier(input: UpsertCurrentDossierInput, ctx
   const { data, error } = await db().rpc('upsert_current_dossier', {
     _client_id: input.client_id,
     _content: input.content,
-    _dossier_type: input.dossier_type,
+    _dossier_type: dossierType,
     _project_id: input.project_id ?? null,
     _summary: input.summary ?? null,
     _change_reason: input.change_reason,

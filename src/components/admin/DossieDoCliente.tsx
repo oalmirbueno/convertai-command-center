@@ -97,11 +97,41 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
     enabled: Boolean(clientId) && historicoAberto,
   });
 
+  /**
+   * Os OUTROS dossiês atuais do cliente (por projeto, ou de outro tipo).
+   *
+   * O caso do Mirante Luz: o dossiê geral parou dois dias atrás enquanto o
+   * do projeto era atualizado todo dia — e esta tela, olhando só o geral,
+   * jurava que o cliente estava desatualizado. O balde certo estava cheio;
+   * a tela é que não olhava para ele.
+   */
+  const { data: irmaos = [] } = useQuery({
+    queryKey: ["dossie-irmaos", clientId],
+    queryFn: async () => {
+      const { data: linhas, error } = await (supabase as any)
+        .from("client_dossiers")
+        .select("id, dossier_type, project_id, version, summary, updated_at, project:projects(name)")
+        .eq("client_id", clientId)
+        .eq("is_current", true)
+        .order("updated_at", { ascending: false });
+      if (error) return [];
+      return ((linhas || []) as Array<Record<string, unknown>>).filter(
+        (d) => !(d.dossier_type === "contexto" && d.project_id == null),
+      );
+    },
+    enabled: Boolean(clientId),
+    staleTime: 15_000,
+    ...AO_VIVO_CALMO,
+  });
+
   const atual = data?.atual ?? null;
   const legado = atual ? null : dossieMaisRecente(data?.legado || []);
   const corpo = String(atual?.content ?? legado?.content ?? "").trim();
   const quando = atual?.updated_at ?? atual?.effective_at ?? legado?.created_at ?? null;
   const idade = idadeEmPalavras(quando ?? undefined);
+  const irmaoMaisNovo = (irmaos as Array<Record<string, unknown>>).find(
+    (d) => typeof d.updated_at === "string" && (!quando || String(d.updated_at) > String(quando)),
+  );
 
   const atualizar = async () => {
     await queryClient.invalidateQueries({ queryKey: chave });
@@ -136,6 +166,17 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
           <RefreshCw className={`h-3 w-3 ${isFetching ? "animate-spin" : ""}`} />
         </button>
       </div>
+
+      {/* O aviso que mata o "há 2 dias" enganoso: quando existe dossiê mais
+          novo em outra chave, esta caixa diz isso com todas as letras em vez
+          de deixar o geral velho passar por retrato do cliente. */}
+      {irmaoMaisNovo && (
+        <p className="mt-1.5 rounded-lg border border-warning/30 bg-warning/[0.06] px-2.5 py-1.5 text-[10.5px] leading-relaxed text-warning">
+          O dossiê geral está de {quando ? new Date(quando).toLocaleDateString("pt-BR") : "antes"},
+          mas o {String(irmaoMaisNovo.project_id ? `do projeto ${(irmaoMaisNovo.project as { name?: string } | null)?.name ?? ""}` : `de tipo ${irmaoMaisNovo.dossier_type}`)} foi
+          atualizado em {new Date(String(irmaoMaisNovo.updated_at)).toLocaleDateString("pt-BR")} — veja abaixo.
+        </p>
+      )}
 
       {!corpo ? (
         <p className="mt-1.5 text-[11px] leading-relaxed text-muted-foreground">
@@ -206,6 +247,37 @@ export default function DossieDoCliente({ clientId, clientName }: Props) {
             </div>
           )}
         </>
+      )}
+
+      {/* Os outros dossiês atuais: por projeto, ou de outro tipo. Cada um é
+          um balde com o próprio "atual"; escondê-los era o que fazia o
+          trabalho de todo dia parecer parado. */}
+      {(irmaos as Array<Record<string, unknown>>).length > 0 && (
+        <div className="mt-3 border-t border-border pt-2">
+          <p className="text-[9.5px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">
+            Outros dossiês atuais
+          </p>
+          <div className="mt-1.5 space-y-1">
+            {(irmaos as Array<Record<string, unknown>>).map((d) => (
+              <div key={String(d.id)} className="flex items-baseline gap-2 text-[10.5px]">
+                <span className="shrink-0 font-semibold text-foreground/80">
+                  {d.project_id
+                    ? `Projeto: ${(d.project as { name?: string } | null)?.name ?? "(sem nome)"}`
+                    : `Tipo: ${String(d.dossier_type)}`}
+                </span>
+                <span className="shrink-0 rounded-full bg-primary/10 px-1.5 text-[9.5px] font-semibold text-primary">
+                  v{String(d.version)}
+                </span>
+                <span className="min-w-0 truncate text-muted-foreground">
+                  {String(d.summary ?? "")}
+                </span>
+                <span className="ml-auto shrink-0 tabular-nums text-muted-foreground">
+                  {new Date(String(d.updated_at)).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
       )}
     </div>
   );

@@ -1609,7 +1609,15 @@ export async function getCurrentDossier(
 ) {
   if (!isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
   assertClientAccess(ctx, opts.client_id);
-  const tipo = opts.dossier_type ?? 'contexto';
+  // A MESMA normalizacao da escrita (normalizarTipoDeDossie, em
+  // mcp-write-services): quem escreveu "context" gravou em "contexto", e a
+  // leitura precisa achar. Um teste de contrato mantem as duas listas
+  // identicas — se divergirem, escrita e leitura passam a falar de baldes
+  // diferentes e o dossie "some".
+  const tipoBruto = (opts.dossier_type ?? 'contexto').trim().toLowerCase();
+  const tipo = ['context', 'contexto geral', 'geral', 'general'].includes(tipoBruto)
+    ? 'contexto'
+    : tipoBruto;
 
   let qbAtual = db().from('client_dossiers').select(DOSSIER_ATUAL_SELECT)
     .eq('client_id', opts.client_id).eq('dossier_type', tipo).eq('is_current', true);
@@ -1632,14 +1640,55 @@ export async function getCurrentDossier(
     versao_pedida = v.data ?? null;
   }
 
+  // TODOS os dossies atuais do cliente, de qualquer tipo e projeto.
+  //
+  // O caso real que pediu isto: o dossie GERAL do Mirante Luz parou dois
+  // dias atras enquanto os agentes atualizavam o dossie DO PROJETO todo
+  // dia — cada balde tem o proprio "atual", e quem lia o geral via o velho
+  // sem saber que o novo existia na porta ao lado. Ler um balde sem
+  // enxergar os irmaos e responder "esta desatualizado" com o atualizado
+  // invisivel.
+  const irmaos = await withTimeout(
+    db().from('client_dossiers')
+      .select('id, dossier_type, project_id, version, summary, source, updated_at, project:projects(name)')
+      .eq('client_id', opts.client_id)
+      .eq('is_current', true)
+      .order('updated_at', { ascending: false }),
+  );
+  const chavePedida = `${tipo}:${opts.project_id ?? 'geral'}`;
+  const outros = ((irmaos.data ?? []) as Array<Record<string, unknown>>)
+    .filter((d) => `${d.dossier_type}:${d.project_id ?? 'geral'}` !== chavePedida)
+    .map((d) => ({
+      dossier_type: d.dossier_type,
+      project_id: d.project_id ?? null,
+      project_name: (d.project as { name?: string } | null)?.name ?? null,
+      version: d.version,
+      summary: d.summary,
+      source: d.source,
+      updated_at: d.updated_at,
+    }));
+
+  const atualizadoEm = (atual.data as { updated_at?: string } | null)?.updated_at ?? null;
+  const maisNovo = outros.find(
+    (d) => typeof d.updated_at === 'string' && (!atualizadoEm || d.updated_at > atualizadoEm),
+  );
+
+  let aviso: string | null = null;
+  if (!atual.data) {
+    aviso = outros.length > 0
+      ? `Sem dossie atual para esta chave (${tipo}, ${opts.project_id ? 'projeto' : 'geral'}), mas o cliente TEM ${outros.length} dossie(s) atual(is) em outra chave — veja outros_dossies_atuais antes de concluir que nao ha contexto. Para criar nesta chave: aceleriq_upsert_current_dossier (expected_version=0).`
+      : 'Sem dossie atual para esta chave. Grave um com aceleriq_upsert_current_dossier (expected_version=0).';
+  } else if (maisNovo) {
+    aviso = `Este dossie (${tipo}, ${opts.project_id ? 'projeto' : 'geral'}) foi atualizado em ${String(atualizadoEm).slice(0, 10)}, mas existe um mais novo em outra chave: ${maisNovo.dossier_type}${maisNovo.project_name ? ` do projeto ${maisNovo.project_name}` : ' geral'}, de ${String(maisNovo.updated_at).slice(0, 10)}. Leia-o tambem — e, se este aqui ficou para tras, atualize-o.`;
+  }
+
   return {
     current: atual.data ?? null,
     current_version: (atual.data as { version?: number } | null)?.version ?? 0,
     history: historico.data ?? [],
     requested_version: versao_pedida,
-    aviso: atual.data
-      ? null
-      : 'Sem dossie atual para esta chave. Grave um com aceleriq_upsert_current_dossier (expected_version=0).',
+    outros_dossies_atuais: outros,
+    aviso,
   };
 }
 
