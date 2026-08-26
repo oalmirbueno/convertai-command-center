@@ -98,6 +98,201 @@ function linhasDe(valor: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
+/* ───────────────────────── A cobrança que existe ─────────────────────── */
+
+/**
+ * O dinheiro real da casa mora em `billing`, não no módulo v2.
+ *
+ * O v2 nasceu completo (planos, competência, baixa, apuração) e a tela dele
+ * foi retirada antes de a operação migrar. Resultado: as tabelas do v2
+ * ficaram quase vazias e a cobrança do dia a dia seguiu em `billing` —
+ * mensalidade, avulso e projeto, com vencimento e pagamento.
+ *
+ * Ler só o v2 fazia o agente responder "não há caixa" com trinta e quatro
+ * cobranças reais no banco. Uma leitura financeira que não vê o dinheiro
+ * que existe é pior que nenhuma: ela responde com autoridade e erra.
+ *
+ * As duas fontes NUNCA são somadas. Somar criaria receita fantasma se um
+ * mesmo valor existir dos dois lados; elas vêm lado a lado, cada uma com o
+ * nome da sua origem, e a leitura diz em qual confiar hoje.
+ */
+/**
+ * As MESMAS réguas da tela /financeiro, uma por uma.
+ *
+ * Cada linha abaixo existe porque a tela faz assim. Inventar régua mais
+ * "correta" aqui produziria um número que o dono nunca viu, e o agente
+ * discordaria dele na frente do cliente. Se a tela mudar, isto muda junto.
+ */
+async function lerCobranca(competence: string) {
+  const fimDoMes = (() => {
+    const [ano, mes] = competence.split('-').map(Number);
+    return mes === 12 ? `${ano + 1}-01-01` : `${ano}-${String(mes + 1).padStart(2, '0')}-01`;
+  })();
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  const [cobrancas, clientes] = await Promise.all([
+    comPrazo(
+      db()
+        .from('billing')
+        .select('id, client_id, type, amount, paid_amount, status, due_date, paid_date, platform, description')
+        .order('due_date', { ascending: false })
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+    comPrazo(
+      db()
+        .from('profiles')
+        .select('id, full_name, company_name, plan_value, plan_status, client_type, services_config')
+        .limit(READ_LIMITS.maxPageSize),
+    ),
+  ]);
+  if (cobrancas.error) throw new Error(`billing: ${cobrancas.error.message}`);
+
+  const linhas = (cobrancas.data ?? []) as Array<Record<string, unknown>>;
+  const perfis = (clientes.data ?? []) as Array<Record<string, unknown>>;
+  const nomePorId = new Map(
+    perfis.map((c) => [String(c.id), texto(c.company_name) ?? texto(c.full_name) ?? '(sem nome)']),
+  );
+
+  // Empresa do grupo é casa, não cliente: fica fora de qualquer cobrança.
+  const ehInterno = (c: Record<string, unknown>) =>
+    Boolean((c.services_config as Record<string, unknown> | null)?.internal_company);
+
+  // Cliente em standby/inativo tem a recorrência PAUSADA na visão do
+  // financeiro: cobrar quem está parado infla o a receber com dinheiro que
+  // ninguém espera.
+  const pausados = new Set(
+    perfis
+      .filter((c) => {
+        const situacao = texto(c.plan_status);
+        return situacao === 'standby' || situacao === 'inactive' || ehInterno(c);
+      })
+      .map((c) => String(c.id)),
+  );
+  const recorrenciaPausada = (r: Record<string, unknown>) =>
+    texto(r.type) === 'renewal' && pausados.has(String(r.client_id));
+
+  // Recebido respeita pagamento PARCIAL: nesse caso vale o que entrou, não
+  // o que foi cobrado.
+  const recebidoDe = (r: Record<string, unknown>) => {
+    const total = numero(r.amount);
+    const pago = numero(r.paid_amount);
+    const situacao = texto(r.status);
+    if (situacao === 'partial') return Math.min(pago, total);
+    if (situacao === 'paid') return pago > 0 && pago < total ? pago : total;
+    return 0;
+  };
+
+  const noMes = (data: string | null) => Boolean(data && data >= competence && data < fimDoMes);
+  // Recarga de anúncio não é receita da casa: é verba do cliente passando.
+  const contaComoReceita = (r: Record<string, unknown>) => texto(r.type) !== 'ads_recharge';
+
+  const abertas = linhas.filter((r) => texto(r.status) === 'pending' && !recorrenciaPausada(r));
+  const pagas = linhas.filter((r) => ['paid', 'partial'].includes(texto(r.status) ?? ''));
+
+  const abertasDoMes = abertas.filter((r) => contaComoReceita(r) && noMes(texto(r.due_date)));
+  const pagasDoMes = pagas.filter(
+    (r) => contaComoReceita(r) && noMes(texto(r.paid_date) ?? texto(r.due_date)),
+  );
+  const vencidas = abertas.filter((r) => {
+    const venc = texto(r.due_date);
+    return Boolean(venc && venc < hoje);
+  });
+
+  // Receita mensal esperada: a soma dos planos ativos, fora avulso e fora
+  // empresa do grupo. É o MRR que a tela mostra.
+  const receitaEsperada = perfis
+    .filter(
+      (c) =>
+        numero(c.plan_value) > 0 &&
+        texto(c.plan_status) === 'active' &&
+        texto(c.client_type) !== 'one_off' &&
+        !ehInterno(c),
+    )
+    .reduce((s, c) => s + numero(c.plan_value), 0);
+
+  return {
+    linhas,
+    nomePorId,
+    recebidoDe,
+    contaComoReceita,
+    recorrenciaPausada,
+    resumo: {
+      recebido_no_mes: pagasDoMes.reduce((s, r) => s + recebidoDe(r), 0),
+      a_receber_no_mes: abertasDoMes.reduce((s, r) => s + numero(r.amount), 0),
+      vencido_no_mes: abertasDoMes
+        .filter((r) => (texto(r.due_date) ?? '') < hoje)
+        .reduce((s, r) => s + numero(r.amount), 0),
+      // Vencido total não se prende ao mês: dívida velha continua dívida.
+      vencido_total: vencidas.filter(contaComoReceita).reduce((s, r) => s + numero(r.amount), 0),
+      recebido_total: pagas.filter(contaComoReceita).reduce((s, r) => s + recebidoDe(r), 0),
+      a_receber_total: abertas.filter(contaComoReceita).reduce((s, r) => s + numero(r.amount), 0),
+      receita_mensal_esperada: receitaEsperada,
+      cobrancas_abertas: abertas.length,
+      cobrancas_vencidas: vencidas.length,
+      cobrancas_no_banco: linhas.length,
+    },
+  };
+}
+
+/**
+ * A cobrança da casa, linha a linha, como a tela /financeiro mostra.
+ *
+ * Devolve cada cobrança com cliente, tipo, valor, vencimento, pagamento e
+ * o quanto de fato entrou (respeitando parcial), mais o resumo do mês.
+ */
+export async function getFinanceBilling(opts: {
+  competence?: string;
+  status?: string;
+  type?: string;
+  client_id?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  const competence = normalizarCompetencia(opts.competence);
+  const limit = Math.min(Math.max(Number(opts.limit) || READ_LIMITS.defaultPageSize, 1), READ_LIMITS.maxPageSize);
+  const offset = Math.max(Number(opts.offset) || 0, 0);
+  if (opts.client_id && !isUuid(opts.client_id)) throw new Error('client_id must be a UUID');
+
+  const cobranca = await lerCobranca(competence);
+  const hoje = new Date().toISOString().slice(0, 10);
+
+  let linhas = cobranca.linhas.map((r) => {
+    const venc = texto(r.due_date);
+    const situacao = texto(r.status);
+    return {
+      id: texto(r.id),
+      cliente_id: texto(r.client_id),
+      cliente: cobranca.nomePorId.get(String(r.client_id)) ?? '(sem nome)',
+      tipo: texto(r.type),
+      descricao: texto(r.description),
+      valor: numero(r.amount),
+      recebido: cobranca.recebidoDe(r),
+      situacao,
+      vencimento: venc,
+      pagamento: texto(r.paid_date),
+      vencida: Boolean(situacao === 'pending' && venc && venc < hoje),
+      plataforma: texto(r.platform),
+      // A recorrência de cliente parado fica visível, mas marcada: ela não
+      // entra nos totais, e esconder isso viraria pergunta sem resposta.
+      recorrencia_pausada: cobranca.recorrenciaPausada(r),
+      conta_como_receita: cobranca.contaComoReceita(r),
+    };
+  });
+
+  if (opts.status) linhas = linhas.filter((l) => l.situacao === String(opts.status));
+  if (opts.type) linhas = linhas.filter((l) => l.tipo === String(opts.type));
+  if (opts.client_id) linhas = linhas.filter((l) => l.cliente_id === opts.client_id);
+
+  const total = linhas.length;
+  return {
+    competence,
+    fonte: 'billing (a mesma tabela da tela /financeiro)',
+    items: linhas.slice(offset, offset + limit),
+    resumo: cobranca.resumo,
+    ...pageMeta(total, limit, offset),
+  };
+}
+
 /* ─────────────────────────── O retrato do mês ────────────────────────── */
 
 /**
@@ -112,14 +307,49 @@ export async function getFinanceOverview(opts: { mode?: string; competence?: str
   const mode = normalizarModo(opts.mode);
   const competence = normalizarCompetencia(opts.competence);
 
-  const { data, error } = await comPrazo(
-    db().rpc('financial_overview_v2', { p_mode: mode, p_competence: competence }),
-  );
+  const [retrato, cobranca] = await Promise.all([
+    comPrazo(db().rpc('financial_overview_v2', { p_mode: mode, p_competence: competence })),
+    lerCobranca(competence),
+  ]);
+  const { data, error } = retrato;
   if (error) throw new Error(`financial_overview_v2: ${error.message}`);
 
   const linha = (Array.isArray(data) ? data[0] : data) as Record<string, unknown> | null;
+
+  /**
+   * O bloco que impede a resposta zerada com dinheiro no banco.
+   *
+   * A cobrança real vem sempre, ao lado do módulo v2 e NUNCA somada a ele:
+   * somar criaria receita fantasma se um valor existir dos dois lados. O
+   * campo `use_estes_numeros` diz qual das duas fontes responde hoje, para
+   * o agente não ter que escolher no escuro.
+   */
+  const moduloVazio = cobranca.resumo.cobrancas_no_banco > 0
+    && numero(linha?.income) === 0
+    && numero(linha?.settled_income) === 0;
+
+  const bloco = {
+    cobranca: {
+      fonte: 'billing (a mesma tabela da tela /financeiro)',
+      ...cobranca.resumo,
+    },
+    use_estes_numeros: moduloVazio ? 'cobranca' : 'modulo_v2',
+    aviso: moduloVazio
+      ? 'O módulo financeiro v2 está sem lançamentos nesta competência, mas a cobrança da casa TEM registros. Responda pelos números de `cobranca` e diga que vieram da tela /financeiro. Não afirme que não há caixa.'
+      : null,
+  };
+
   if (!linha) {
-    return { mode, competence, encontrado: false, leitura: 'Sem dados financeiros para esta competência.' };
+    return {
+      mode,
+      competence,
+      encontrado: cobranca.resumo.cobrancas_no_banco > 0,
+      ...bloco,
+      leitura:
+        `Competência ${competence.slice(0, 7)}: recebido ${cobranca.resumo.recebido_no_mes.toFixed(2)}, ` +
+        `a receber ${cobranca.resumo.a_receber_no_mes.toFixed(2)}, vencido ${cobranca.resumo.vencido_total.toFixed(2)} ` +
+        `(fonte: cobrança da casa).`,
+    };
   }
 
   const entrou = numero(linha.income);
@@ -134,6 +364,7 @@ export async function getFinanceOverview(opts: { mode?: string; competence?: str
     mode,
     competence,
     encontrado: true,
+    ...bloco,
     saldo_inicial: numero(linha.opening_balance),
     entrou,
     saiu,
@@ -151,12 +382,25 @@ export async function getFinanceOverview(opts: { mode?: string; competence?: str
     clientes: Math.trunc(numero(linha.clients_count)),
     // A frase existe para o número não ser lido fora de contexto: mês com
     // líquido negativo e muito a receber não é prejuízo, é mês em curso.
-    leitura: [
-      `Competência ${competence.slice(0, 7)} (${mode}): entrou ${entrou.toFixed(2)}, saiu ${saiu.toFixed(2)}, líquido ${liquido.toFixed(2)}.`,
-      aReceber > 0 ? `Ainda há ${aReceber.toFixed(2)} a receber neste mês.` : null,
-      vencido > 0 ? `ATENÇÃO: ${vencido.toFixed(2)} vencido e não recebido.` : null,
-      recorrente > 0 ? `Receita recorrente do mês: ${recorrente.toFixed(2)}.` : null,
-    ].filter(Boolean).join(' '),
+    leitura: (moduloVazio
+      ? [
+        `Competência ${competence.slice(0, 7)}: pelos números da tela /financeiro, recebido ` +
+        `${cobranca.resumo.recebido_no_mes.toFixed(2)}, a receber ${cobranca.resumo.a_receber_no_mes.toFixed(2)}.`,
+        cobranca.resumo.vencido_total > 0
+          ? `ATENÇÃO: ${cobranca.resumo.vencido_total.toFixed(2)} vencido em ${cobranca.resumo.cobrancas_vencidas} cobranças.`
+          : null,
+        cobranca.resumo.receita_mensal_esperada > 0
+          ? `Receita mensal esperada dos planos ativos: ${cobranca.resumo.receita_mensal_esperada.toFixed(2)}.`
+          : null,
+        'O módulo v2 está sem lançamentos nesta competência; estes números vêm da cobrança da casa.',
+      ]
+      : [
+        `Competência ${competence.slice(0, 7)} (${mode}): entrou ${entrou.toFixed(2)}, saiu ${saiu.toFixed(2)}, líquido ${liquido.toFixed(2)}.`,
+        aReceber > 0 ? `Ainda há ${aReceber.toFixed(2)} a receber neste mês.` : null,
+        vencido > 0 ? `ATENÇÃO: ${vencido.toFixed(2)} vencido e não recebido.` : null,
+        recorrente > 0 ? `Receita recorrente do mês: ${recorrente.toFixed(2)}.` : null,
+      ]
+    ).filter(Boolean).join(' '),
     raw: linha,
   };
 }

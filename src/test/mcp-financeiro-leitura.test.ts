@@ -70,6 +70,43 @@ describe("o financeiro enxerga o mês inteiro", () => {
   });
 });
 
+describe("o agente vê o MESMO que o dono vê na tela", () => {
+  it("lê a cobrança real (billing), não só o módulo v2 vazio", () => {
+    // O relato: "ele puxou tudo zerado, diferente do que aparece pra mim".
+    // O módulo v2 tinha 2 lançamentos; a cobrança da casa tinha 34. Ler só
+    // o v2 fazia o agente responder "não há caixa" com dinheiro no banco.
+    expect(ferramentas).toContain("'aceleriq_get_finance_billing'");
+    expect(servicos).toContain("from('billing')");
+    expect(servicos).toContain("export async function getFinanceBilling");
+  });
+
+  it("aplica as MESMAS réguas da tela /financeiro", () => {
+    // Cada uma existe porque a tela faz assim. Régua "melhor" aqui daria um
+    // número que o dono nunca viu.
+    // 1. Pagamento parcial vale o que entrou, não o que foi cobrado.
+    expect(servicos).toContain("if (situacao === 'partial') return Math.min(pago, total)");
+    // 2. Recarga de anúncio não é receita da casa.
+    expect(servicos).toContain("texto(r.type) !== 'ads_recharge'");
+    // 3. Recorrência de cliente parado/interno fica fora dos totais.
+    expect(servicos).toContain("situacao === 'standby' || situacao === 'inactive'");
+    expect(servicos).toContain("internal_company");
+    // 4. Recebido do mês pela data de pagamento, com o vencimento de reserva.
+    expect(servicos).toContain("texto(r.paid_date) ?? texto(r.due_date)");
+    // 5. Parcial conta como pago nos totais recebidos.
+    expect(servicos).toContain("['paid', 'partial'].includes");
+  });
+
+  it("as duas fontes andam lado a lado e NUNCA somadas", () => {
+    // Somar v2 com cobrança criaria receita fantasma se um valor existir
+    // dos dois lados. O agente recebe as duas e a indicação de qual usar.
+    expect(servicos).toContain("use_estes_numeros");
+    expect(servicos).toContain("moduloVazio");
+    expect(servicos).toContain("Não afirme que não há caixa");
+    // A soma proibida não pode aparecer disfarçada de conveniência.
+    expect(servicos).not.toMatch(/entrou \+ cobranca|cobranca\.resumo\.recebido_no_mes \+ /);
+  });
+});
+
 describe("os números vêm da mesma fonte da tela do dono", () => {
   it("usa as RPCs oficiais do Financeiro, sem recalcular por fora", () => {
     expect(servicos).toContain("'financial_overview_v2'");

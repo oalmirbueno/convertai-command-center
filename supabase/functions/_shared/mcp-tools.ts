@@ -32,6 +32,7 @@ import {
   auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
+  getFinanceBilling,
   getFinanceOverview,
   listFinanceClientSummaries,
   listFinanceEntries,
@@ -258,7 +259,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.23.0',
+  version: '1.24.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2137,6 +2138,33 @@ const financeRecurringTool = makeFinanceRead(
   (input) => listFinanceRecurringRules(input),
 );
 
+const financeBillingTool = makeFinanceRead(
+  'aceleriq_get_finance_billing',
+  'Cobranca da casa (a tela /financeiro)',
+  'A cobranca real do painel, linha a linha, com as MESMAS reguas da tela /financeiro: cliente, tipo (renewal, one_off, project, ads_recharge), valor, quanto de fato entrou (respeitando pagamento parcial), vencimento, pagamento e se esta vencida. O resumo traz recebido no mes, a receber, vencido total e a receita mensal esperada dos planos ativos. Recarga de anuncio nao conta como receita e recorrencia de cliente parado fica fora dos totais, exatamente como na tela. USE ESTA FERRAMENTA quando o modulo v2 vier zerado: e aqui que mora o dinheiro da casa hoje. SOMENTE LEITURA.',
+  z.object({
+    competence: COMPETENCIA.optional(),
+    status: z.string().max(40).optional(),
+    type: z.string().max(40).optional(),
+    client_id: UUID.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      competence: COMPETENCIA_JSON,
+      status: { type: 'string', description: 'Situacao: pending, paid, partial, cancelled.' },
+      type: { type: 'string', description: 'Tipo: renewal, one_off, project, ads_recharge.' },
+      client_id: { type: 'string', description: 'UUID do cliente.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => getFinanceBilling(input),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2160,6 +2188,7 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getFileTool,
   // Financeiro: acompanhar sem poder mexer
   financeOverviewTool,
+  financeBillingTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,
