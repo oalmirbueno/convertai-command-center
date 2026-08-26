@@ -95,6 +95,10 @@ export interface SituacaoDoCliente {
   briefingRespondido: boolean;
   /** Já existe dossiê de contexto escrito. */
   temDossie: boolean;
+  /** Chaves de pendência que já viraram tarefa aberta no Kanban.
+      Enquanto a tarefa existir, o alerta sai da lista: ele deixou de
+      ser aviso e virou trabalho com dono e lugar. */
+  pendenciasEncaminhadas: string[];
 }
 
 export function situacaoVazia(clientId: string): SituacaoDoCliente {
@@ -133,8 +137,18 @@ export function situacaoVazia(clientId: string): SituacaoDoCliente {
     diasSemMetrica: null,
     briefingRespondido: false,
     temDossie: false,
+    pendenciasEncaminhadas: [],
   };
 }
+
+/**
+ * A marca que liga uma tarefa do Kanban ao alerta que a gerou.
+ *
+ * Fica na coluna `source` como `ciclo:<chave>`: sem coluna nova, sem
+ * migration, e legível a olho nu quando alguém abre a tarefa e pergunta de
+ * onde ela veio.
+ */
+export const MARCA_DE_ENCAMINHAMENTO = "ciclo:";
 
 const diasEntre = (iso: string, agora: number) =>
   Math.floor((agora - new Date(iso).getTime()) / 86_400_000);
@@ -227,7 +241,7 @@ export async function lerSituacoes(
     // engole, e a contagem ficaria sempre zero sem ninguem perceber.
     (supabase as any)
       .from("projects")
-      .select("id, client_id, tasks(status, due_date, assigned_to, title)")
+      .select("id, client_id, tasks(status, due_date, assigned_to, title, source)")
       .in("client_id", clientIds)
       .is("deleted_at", null),
     // Pauta no calendario sem arte: primary_file_id nulo. E o buraco entre
@@ -329,10 +343,20 @@ export async function lerSituacoes(
     if (!s) continue;
     const lista = (projeto.tasks ?? []) as Array<{
       status?: string | null; due_date?: string | null; assigned_to?: string | null;
+      source?: string | null;
     }>;
     for (const t of lista) {
       if (!ABERTAS.has(String(t.status ?? ""))) continue;
       s.tarefasAbertas += 1;
+      // A tarefa nascida de um alerta carrega a chave dele na origem. É o
+      // que faz o alerta calar enquanto a tarefa estiver de pé.
+      const origem = String(t.source ?? "");
+      if (origem.startsWith(MARCA_DE_ENCAMINHAMENTO)) {
+        const chave = origem.slice(MARCA_DE_ENCAMINHAMENTO.length);
+        if (chave && !s.pendenciasEncaminhadas.includes(chave)) {
+          s.pendenciasEncaminhadas.push(chave);
+        }
+      }
       if (typeof t.due_date === "string" && t.due_date < hoje) {
         s.tarefasAtrasadas += 1;
         const nome = String((t as { title?: unknown }).title ?? "").trim();

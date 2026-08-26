@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   CalendarDays, Check, CheckCheck, ClipboardCopy, Clock, ExternalLink,
   FileArchive, FileText, MessageCircle, RefreshCw, Sparkles, X,
@@ -21,6 +21,7 @@ import {
   type StepsOptions,
 } from "@/lib/cycleTasks";
 import { textoDaEtapa } from "@/lib/cycleSuggest";
+import { MARCA_DE_ENCAMINHAMENTO } from "@/lib/cycleSituation";
 import { addDays, closedStreak, localIso } from "@/lib/cycleWeek";
 import {
   MEMORY_LABELS, readMemory, recordMemory, type MemoryEntry,
@@ -94,6 +95,8 @@ export interface ClientCycleSheetProps {
   doneByNames?: Record<string, string>;
   currentUserId?: string;
   canWrite: boolean;
+  /** O que o painel já prova sozinho naquela etapa, ou null. */
+  provaDaEtapa?: (step: number) => string | null;
   pendingKey: string | null;
   onToggle: (client: any, step: number, semana?: string) => Promise<void> | void;
   onClose: () => void;
@@ -117,6 +120,7 @@ function monthsSince(iso?: string | null): string | null {
 
 export default function ClientCycleSheet({
   client, area, servicoAvulso, fatosDoPainel, pendencias, jornada, rotuloDaEtapa,
+  provaDaEtapa,
   weekStart, realMonday, historyWeekKeys, historySets, doneMap,
   pastRows = [], pastWeekKey, doneByNames, currentUserId, canWrite, pendingKey,
   onToggle, onClose,
@@ -128,6 +132,7 @@ export default function ClientCycleSheet({
   /** Qual etapa esta com o contexto aberto — "a etapa nao e so uma frase". */
   const [etapaAberta, setEtapaAberta] = useState<number | null>(null);
   const [criandoTarefa, setCriandoTarefa] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   /**
    * O contexto de cada rotulo que veio de pendencia: por que a etapa
@@ -160,17 +165,39 @@ export default function ClientCycleSheet({
         toast.error("Este cliente nao tem projeto vivo para receber a tarefa.");
         return;
       }
+      const titulo = textoDaEtapa(p as Parameters<typeof textoDaEtapa>[0]);
       const { error } = await (supabase as any).from("tasks").insert({
         project_id: projeto.id,
-        title: textoDaEtapa(p as Parameters<typeof textoDaEtapa>[0]),
+        title: titulo,
         description: [p.texto, ...(p.detalhes || []).map((d) => `- ${d}`)].join("\n"),
         status: "backlog",
         kanban_status: "backlog",
         priority: p.gravidade === "urgente" ? "high" : "medium",
-        source: "ciclo",
+        // A origem carrega a chave do alerta: e o fio que faz o vermelho
+        // calar enquanto a tarefa existir, e voltar se ela fechar sem o
+        // problema ter sido resolvido no painel.
+        source: `${MARCA_DE_ENCAMINHAMENTO}${p.chave}`,
       });
-      if (error) toast.error("Nao foi possivel criar a tarefa.");
-      else toast.success("Tarefa criada no Kanban.");
+      if (error) {
+        toast.error("Nao foi possivel criar a tarefa.");
+        return;
+      }
+      // O encaminhamento entra na historia: "virou tarefa" e um passo do
+      // crescimento, nao um clique que some.
+      await recordMemory({
+        clientId: client.id,
+        kind: "ciclo",
+        title: `Alerta virou tarefa: ${titulo}`,
+        content: `${p.texto} O alerta saiu do ciclo e virou tarefa no Kanban.`,
+        source: "ciclo",
+        tags: [area, "encaminhada"],
+        metadata: { chave: p.chave, registro: "encaminhada" },
+      });
+      // A situacao do painel recarrega: e ela que guarda quais alertas ja
+      // viraram tarefa, e sem isso o vermelho so sumiria na proxima abertura.
+      await queryClient.invalidateQueries({ queryKey: ["ciclo-situacao"] });
+      void recarregarHistoria();
+      toast.success("Tarefa criada. O alerta saiu da lista.");
     } finally {
       setCriandoTarefa(null);
     }
@@ -210,14 +237,29 @@ export default function ClientCycleSheet({
     );
   };
 
+  /**
+   * A prova do painel para esta etapa, só na semana corrente.
+   *
+   * Na semana anterior a folha é conserto, não fila: lá a marcação é o que
+   * vale, porque a prova de hoje não diz nada sobre o que acontecia lá.
+   */
+  const provaDe = (step: number) =>
+    editandoAnterior ? null : provaDaEtapa?.(step) ?? null;
+
+  /** Fechada: alguém marcou OU o painel prova. As duas tiram da fila. */
+  const fechada = (step: number) => Boolean(marcacaoDe(step)) || Boolean(provaDe(step));
+
   const doneSteps = useMemo(() => {
     if (!client) return [] as number[];
     return Array.from({ length: clientTotal }, (_, index) => index + 1).filter((step) =>
       editandoAnterior
         ? pastRows.some((r) => r.client_id === client.id && r.area === area && r.step === step)
-        : doneMap.has(`${client.id}:${area}:${step}`),
+        // Provada pelo painel conta como feita: o placar e a celebração não
+        // podem cobrar o que já está pronto lá dentro.
+        : doneMap.has(`${client.id}:${area}:${step}`) || Boolean(provaDaEtapa?.(step)),
     );
-  }, [client, clientTotal, doneMap, area, editandoAnterior, pastRows]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [client, clientTotal, doneMap, area, editandoAnterior, pastRows, provaDaEtapa]);
 
   const complete = doneSteps.length >= clientTotal;
 
@@ -598,7 +640,7 @@ export default function ClientCycleSheet({
                   <span
                     key={index}
                     className={`flex-1 rounded-full ${
-                      marcacaoDe(index + 1)
+                      fechada(index + 1)
                         ? index + 1 > totalSteps ? "bg-info" : "bg-primary"
                         : "bg-secondary"
                     }`}
@@ -931,7 +973,7 @@ export default function ClientCycleSheet({
 
                   const feitas = grupos
                     .flatMap((g) => g.steps)
-                    .filter((step) => marcacaoDe(step))
+                    .filter((step) => fechada(step))
                     .sort((a, b) => {
                       const ra = marcacaoDe(a)?.done_at || "";
                       const rb = marcacaoDe(b)?.done_at || "";
@@ -941,7 +983,7 @@ export default function ClientCycleSheet({
                   return (
                     <>
                       {grupos.map((grupo) => {
-                        const pendentes = grupo.steps.filter((s2) => !marcacaoDe(s2));
+                        const pendentes = grupo.steps.filter((s2) => !fechada(s2));
                         const atualDaFila = pendentes[0] ?? null;
                         return (
                           <div key={grupo.nome ?? "fila"}>
@@ -1059,6 +1101,28 @@ export default function ClientCycleSheet({
                               const key = `${client.id}:${area}:${step}`;
                               const row = marcacaoDe(step);
                               const who = quemFez(row);
+                              const prova = row ? null : provaDe(step);
+                              // Fato do painel não se desfaz com o dedo: quem
+                              // desfaz é a realidade lá dentro. A linha diz o
+                              // motivo e fica quieta.
+                              if (prova) {
+                                return (
+                                  <div
+                                    key={key}
+                                    className="flex w-full items-start gap-2 rounded-lg border border-success/20 bg-success/[0.04] px-2.5 py-1.5 text-left"
+                                  >
+                                    <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success" strokeWidth={3} />
+                                    <span className="min-w-0 flex-1">
+                                      <span className="block truncate text-[11.5px] text-foreground/80">
+                                        {rotuloDe(step)}
+                                      </span>
+                                      <span className="block text-[9.5px] text-muted-foreground">
+                                        reconhecido pelo painel · {prova}
+                                      </span>
+                                    </span>
+                                  </div>
+                                );
+                              }
                               return (
                                 <button
                                   key={key}

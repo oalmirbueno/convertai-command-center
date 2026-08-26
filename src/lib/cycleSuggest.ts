@@ -560,6 +560,27 @@ export function etapasPorSlot(input: {
   return input.slots.map((slot) => ocupado.get(slot) ?? "");
 }
 
+/**
+ * As pendências que ainda merecem aparecer como ALERTA.
+ *
+ * O relato do dono: "quando eu clico e gero tarefa, ele tem que sumir dali
+ * e tirar o vermelho, senão fica um monte de vermelho". Alerta que virou
+ * tarefa deixou de ser aviso: ele tem dono, lugar e fila no Kanban. Some
+ * do vermelho e é executado de lá.
+ *
+ * O que NÃO acontece aqui: dar o problema por resolvido. A lista completa
+ * continua existindo (é ela que prova a etapa e que faz o alerta voltar se
+ * a tarefa for fechada sem o painel mudar). Isto aqui é só a vista.
+ */
+export function pendenciasVisiveis(
+  pendencias: Pendencia[],
+  encaminhadas: string[] | undefined,
+): Pendencia[] {
+  if (!encaminhadas?.length) return pendencias;
+  const calado = new Set(encaminhadas);
+  return pendencias.filter((p) => !calado.has(p.chave));
+}
+
 /** A pendência dita como tarefa: o que fazer, não o que está errado. */
 export function textoDaEtapa(p: Pendencia): string {
   switch (p.chave) {

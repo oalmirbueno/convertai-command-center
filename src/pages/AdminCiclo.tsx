@@ -17,6 +17,7 @@ import { entregaConcluida, listEtapasDeVarios, marcarEtapa } from "@/lib/entrega
 import { SERVICE_LABELS } from "@/lib/cycleDefs";
 import { extraAreas, inCycle, setCycleExtra } from "@/lib/cycleExtras";
 import { apagarRegistroDoCiclo, recordMemory } from "@/lib/clientMemory";
+import { provaDaEtapa } from "@/lib/cycleEvidencia";
 import {
   PHASE_LABELS, phaseForClient, stepLabelForWeek, stepLabelsForWeek, stepsForWeek,
   type StepsOptions,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/cycleJourney";
 import {
   acoesDoDia, leituraDaCarteira, ordenarPelaUrgencia, pendenciasDoCliente,
+  pendenciasVisiveis,
   textoDaEtapa,
   type Pendencia,
 } from "@/lib/cycleSuggest";
@@ -269,7 +271,17 @@ export default function AdminCiclo() {
     enabled: idsNoCiclo.length > 0 && !avulsosAbertos,
   });
 
-  const pendenciasPorCliente = useMemo(() => {
+  /**
+   * Duas listas, de propósito.
+   *
+   * REAIS: tudo que o painel acusa. É o que monta a semana e o que prova a
+   * etapa — pendência encaminhada para o Kanban saiu do alerta, mas não foi
+   * resolvida, e dá-la por feita seria o falso positivo de sempre.
+   *
+   * VISÍVEIS: o que ainda merece o vermelho na tela. O que virou tarefa
+   * sai daqui: "senão fica um monte de vermelho".
+   */
+  const pendenciasReaisPorCliente = useMemo(() => {
     const mapa = new Map<string, Pendencia[]>();
     if (!situacoes) return mapa;
     for (const client of activeClients as any[]) {
@@ -278,6 +290,15 @@ export default function AdminCiclo() {
     }
     return mapa;
   }, [situacoes, activeClients, area]);
+
+  const pendenciasPorCliente = useMemo(() => {
+    const mapa = new Map<string, Pendencia[]>();
+    for (const [id, lista] of pendenciasReaisPorCliente) {
+      const s = situacoes?.get(id);
+      mapa.set(id, pendenciasVisiveis(lista, s?.pendenciasEncaminhadas));
+    }
+    return mapa;
+  }, [pendenciasReaisPorCliente, situacoes]);
 
   /**
    * A jornada de entrada, só para quem ainda está entrando. Sai da
@@ -318,7 +339,7 @@ export default function AdminCiclo() {
         const id = String(client.id);
         const chave = `${id}:${area}:${weekKey}`;
         if (congeladosRef.current.has(chave)) continue;
-        const pend = pendenciasPorCliente.get(id);
+        const pend = pendenciasReaisPorCliente.get(id);
         if (!pend) continue;
         const acervoPorSlot: Record<number, string> = {};
         for (const slot of etapasDoSorteio(area, id, weekKey, stepOptionsFor(client))) {
@@ -638,6 +659,41 @@ export default function AdminCiclo() {
     }
     return totalSteps + (isOnboarding(client) ? ONBOARDING_STEPS.length : 0);
   };
+  // Cada cliente tem a sua semana: três etapas fixas e três que giram.
+  const stepLabelOf = (client: any, step: number) => {
+    if (ehAvulso(client)) {
+      const servico = servicoDoCard(client);
+      return servico ? etapasDoServico(servico)[step - 1] || "" : "";
+    }
+    if (step > totalSteps) return ONBOARDING_STEPS[step - totalSteps - 1];
+    // O plano congelado (escolhido da realidade) manda nas etapas que
+    // giram; o sorteio antigo fica só de reserva para semana sem plano.
+    return rotuloDoPlano(String(client.id), step)
+      ?? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client));
+  };
+
+  /**
+   * A etapa que o painel já prova, sem ninguém marcar.
+   *
+   * "Se for atualizado tudo lá dentro pelo painel, o ciclo reconhece e
+   * coloca como concluído. Se não, fica pendente, e eu não quero que fique
+   * pendente." A prova é lida na hora: se o fato sumir do painel, a etapa
+   * volta a pedir atenção sozinha — nada é gravado às escondidas.
+   */
+  const provaDaEtapaDe = (client: any, step: number): string | null => {
+    if (ehAvulso(client)) return null;
+    const s = situacoes?.get(String(client.id));
+    if (!s) return null;
+    return provaDaEtapa({
+      area,
+      step,
+      rotulo: stepLabelOf(client, step),
+      fatos: s,
+      pendenciasReais: pendenciasReaisPorCliente.get(String(client.id)) ?? null,
+      agoraMs: Date.now(),
+    });
+  };
+
   const doneCountFor = (client: any) => {
     if (ehAvulso(client)) {
       const feitas = etapasFeitasDe(client, servicoDoCard(client));
@@ -650,7 +706,11 @@ export default function AdminCiclo() {
     }
     let count = 0;
     for (let step = 1; step <= totalFor(client); step += 1) {
-      if (doneMap.has(`${client.id}:${area}:${step}`)) count += 1;
+      // Marcada por alguém OU provada pelo painel: as duas contam, senão o
+      // cliente fica pendente com o trabalho todo feito lá dentro.
+      if (doneMap.has(`${client.id}:${area}:${step}`) || provaDaEtapaDe(client, step)) {
+        count += 1;
+      }
     }
     return count;
   };
@@ -1032,23 +1092,11 @@ export default function AdminCiclo() {
     return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
   }
 
-  // Cada cliente tem a sua semana: três etapas fixas e três que giram.
-  const stepLabelOf = (client: any, step: number) => {
-    if (ehAvulso(client)) {
-      const servico = servicoDoCard(client);
-      return servico ? etapasDoServico(servico)[step - 1] || "" : "";
-    }
-    if (step > totalSteps) return ONBOARDING_STEPS[step - totalSteps - 1];
-    // O plano congelado (escolhido da realidade) manda nas etapas que
-    // giram; o sorteio antigo fica só de reserva para semana sem plano.
-    return rotuloDoPlano(String(client.id), step)
-      ?? stepLabelForWeek(area, client.id, weekKey, step, stepOptionsFor(client));
-  };
-
   const etapaFeita = (client: any, step: number) =>
     ehAvulso(client)
       ? etapasFeitasDe(client, servicoDoCard(client)).has(step)
-      : doneMap.has(`${client.id}:${area}:${step}`);
+      : doneMap.has(`${client.id}:${area}:${step}`)
+        || Boolean(provaDaEtapaDe(client, step));
 
   const nextStepOf = (client: any) =>
     Array.from({ length: totalFor(client) }, (_, i) => i + 1).find(
@@ -1941,6 +1989,13 @@ export default function AdminCiclo() {
         rotuloDaEtapa={
           detailClient && !avulsosAbertos
             ? (step: number) => stepLabelOf(detailClient, step)
+            : undefined
+        }
+        /* O que o painel já prova sozinho: a folha mostra como concluído,
+           com o motivo, em vez de cobrar de novo. */
+        provaDaEtapa={
+          detailClient && !avulsosAbertos
+            ? (step: number) => provaDaEtapaDe(detailClient, step)
             : undefined
         }
         /* Os fatos desta semana e deste cliente, lidos do painel: são o
