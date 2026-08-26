@@ -32,6 +32,13 @@ import {
   auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
+  getFinanceOverview,
+  listFinanceClientSummaries,
+  listFinanceEntries,
+  listFinancePlans,
+  listFinanceRecurringRules,
+} from './aceleriq-finance-services.ts';
+import {
   bridgeStatus,
   CONTEXT_ORDER,
   getContextBundle,
@@ -251,7 +258,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.21.0',
+  version: '1.22.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -276,6 +283,45 @@ function makeRead(
     title,
     description,
     scopes: READ,
+    annotations: READ_ANNOTATIONS,
+    inputSchema: jsonSchema,
+    handler: async (input, ctx) => {
+      const parsed = schema.safeParse(input ?? {});
+      if (!parsed.success) {
+        throw new Error(`Invalid input: ${parsed.error.issues.map(i => `${i.path.join('.') || '(root)'}: ${i.message}`).join('; ')}`);
+      }
+      return await fn(parsed.data, ctx);
+    },
+  };
+}
+
+/**
+ * Leitura financeira: escopo próprio, e só ele.
+ *
+ * `aceleriq:read` NÃO expande para `aceleriq:finance` (ver SCOPE_EXPANSIONS),
+ * então quem tem leitura geral continua sem ver dinheiro: o financeiro é
+ * consentimento à parte, marcado como sensível na tela de permissão. E o
+ * despachante barra princípio restrito a cliente em ferramenta fora da lista
+ * de tenant-scoped — nenhuma daqui está, então finanças da casa não vazam
+ * para chave de cliente.
+ *
+ * Todas são readOnly de verdade: não existe escrita financeira pelo MCP.
+ */
+const FINANCE: readonly ToolScope[] = ['aceleriq:finance'];
+
+function makeFinanceRead(
+  name: string,
+  title: string,
+  description: string,
+  schema: z.ZodTypeAny,
+  jsonSchema: Record<string, unknown>,
+  fn: (input: any, ctx: AuthContext) => Promise<unknown>,
+): ToolDefinition {
+  return {
+    name,
+    title,
+    description,
+    scopes: FINANCE,
     annotations: READ_ANNOTATIONS,
     inputSchema: jsonSchema,
     handler: async (input, ctx) => {
@@ -1977,6 +2023,120 @@ const processingStatusTool = makeFileTool(
 );
 
 
+
+// ─── Financeiro (somente leitura) ─────────────────────────────
+const MODO_FINANCEIRO = z.enum(['cash', 'accrual', 'forecast']);
+const COMPETENCIA = z.string().regex(/^\d{4}-\d{2}(-\d{2})?$/, 'competence must be YYYY-MM or YYYY-MM-DD');
+
+const MODO_JSON = {
+  type: 'string',
+  enum: ['cash', 'accrual', 'forecast'],
+  description: "Olhar: 'cash' (caixa, o que entrou/saiu), 'accrual' (competência) ou 'forecast' (previsto). Padrão: cash.",
+};
+const COMPETENCIA_JSON = {
+  type: 'string',
+  description: 'Mês de competência, YYYY-MM (ou YYYY-MM-DD, normalizado para o dia 1). Padrão: mês corrente.',
+};
+
+const financeOverviewTool = makeFinanceRead(
+  'aceleriq_get_finance_overview',
+  'Retrato financeiro do mês',
+  'O mês em uma leitura: saldo inicial, entrou, saiu, líquido, recebido e pago, a receber e a pagar, vencido, receita recorrente, custo fixo, previsão de 30/60/90 dias e número de clientes. Vem das MESMAS funções que a tela do Financeiro usa, então nunca discorda dela. SOMENTE LEITURA: o MCP não lança, não baixa e não cancela nada.',
+  z.object({ mode: MODO_FINANCEIRO.optional(), competence: COMPETENCIA.optional() }).strict(),
+  {
+    type: 'object',
+    properties: { mode: MODO_JSON, competence: COMPETENCIA_JSON },
+    additionalProperties: false,
+  },
+  (input) => getFinanceOverview(input),
+);
+
+const financeEntriesTool = makeFinanceRead(
+  'aceleriq_list_finance_entries',
+  'Movimentações do caixa',
+  'As linhas do mês: cada entrada e saída com data, vencimento, cliente, valor, imposto reservado, se já foi baixada e por qual método. Filtra por direção (in/out), situação e cliente, e devolve os totais do filtro. SOMENTE LEITURA.',
+  z.object({
+    mode: MODO_FINANCEIRO.optional(),
+    competence: COMPETENCIA.optional(),
+    direction: z.enum(['in', 'out']).optional(),
+    status: z.string().max(40).optional(),
+    client_id: UUID.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      mode: MODO_JSON,
+      competence: COMPETENCIA_JSON,
+      direction: { type: 'string', enum: ['in', 'out'], description: "'in' = entrada, 'out' = saída." },
+      status: { type: 'string', description: 'Situação do lançamento (ex.: pending, settled, scheduled).' },
+      client_id: { type: 'string', description: 'UUID do cliente. Traz também as baixas do lançamento dele.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceEntries(input),
+);
+
+const financeClientSummariesTool = makeFinanceRead(
+  'aceleriq_get_finance_client_summaries',
+  'Financeiro por cliente',
+  'Cada cliente com plano, valor contratado, recebido, em aberto, vencido, próximo vencimento e margem de contribuição depois do imposto e do custo direto. Traz o resumo da carteira (receita contratada, total em aberto, total vencido, quantos clientes têm vencido) e sinaliza quem está com revisão pendente. SOMENTE LEITURA.',
+  z.object({ client_id: UUID.optional() }).strict(),
+  {
+    type: 'object',
+    properties: { client_id: { type: 'string', description: 'UUID do cliente, para trazer só ele.' } },
+    additionalProperties: false,
+  },
+  (input) => listFinanceClientSummaries(input),
+);
+
+const financePlansTool = makeFinanceRead(
+  'aceleriq_list_finance_plans',
+  'Planos da casa',
+  'Os planos e a versão vigente de cada um: valor operacional, valor final, alíquota, custo direto, taxa de entrada e desde quando vale. `natureza_do_valor` avisa quando o valor ainda precisa de revisão. SOMENTE LEITURA.',
+  z.object({
+    include_archived: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      include_archived: { type: 'boolean', description: 'Incluir planos arquivados. Padrão: false.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinancePlans(input),
+);
+
+const financeRecurringTool = makeFinanceRead(
+  'aceleriq_list_finance_recurring',
+  'Recorrências',
+  'As regras que se repetem sozinhas todo mês (mensalidade, custo fixo, imposto, pró-labore): valor, frequência, dia de vencimento, vigência e se estão ligadas. É o esqueleto do MRR — o resumo separa receita recorrente de custo recorrente. Atenção: aqui a direção é income/expense, e não o in/out dos lançamentos. SOMENTE LEITURA.',
+  z.object({
+    client_id: UUID.optional(),
+    include_inactive: z.boolean().optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      client_id: { type: 'string', description: 'UUID do cliente, para trazer só as regras dele.' },
+      include_inactive: { type: 'boolean', description: 'Incluir regras desligadas. Padrão: false.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 25 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceRecurringRules(input),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -1998,6 +2158,12 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   getWorkspaceNodeTool,
   listFilesTool,
   getFileTool,
+  // Financeiro: acompanhar sem poder mexer
+  financeOverviewTool,
+  financeEntriesTool,
+  financeClientSummariesTool,
+  financePlansTool,
+  financeRecurringTool,
   // Second Brain bridge (round 4)
   memoryGetContextTool,
   memorySearchTool,
