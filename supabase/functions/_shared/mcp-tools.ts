@@ -32,6 +32,13 @@ import {
   auditIntegrity,
 } from './aceleriq-read-services.ts';
 import {
+  getFinanceAdsInvestment,
+  getFinanceCapital,
+  getFinanceCashFlow,
+  listFinanceHistory,
+  listFinanceMensalidades,
+} from './aceleriq-finance-fluxo.ts';
+import {
   getFinanceDashboard,
   listFinanceExpenses,
   listFinanceProjectPayments,
@@ -264,7 +271,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.25.0',
+  version: '1.26.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2240,6 +2247,93 @@ const financeProjectPaymentsTool = makeFinanceRead(
   (input) => listFinanceProjectPayments(input),
 );
 
+const financeCashFlowTool = makeFinanceRead(
+  'aceleriq_get_finance_cash_flow',
+  'Fluxo de caixa',
+  'O caixa da casa: base conciliada, tudo que entrou, tudo que saiu, saldo, quanto esta reservado em caixinhas e o SALDO LIVRE - o numero que decide se da para gastar. Traz a serie mes a mes (entrou, saiu, resultado, aportes de socio), as saidas por categoria e o total a pagar em aberto. O segmento separa a carteira recorrente da avulsa pelo tipo do cliente, como na tela. Aporte de socio nao entra como receita nem como despesa: e capital. SOMENTE LEITURA.',
+  z.object({
+    meses: z.number().int().min(1).max(24).optional(),
+    segmento: z.enum(['all', 'recurring', 'one_off']).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      meses: { type: 'integer', minimum: 1, maximum: 24, default: 12, description: 'Quantos meses na serie.' },
+      segmento: { type: 'string', enum: ['all', 'recurring', 'one_off'], description: 'Carteira: toda, recorrente ou avulsa.' },
+    },
+    additionalProperties: false,
+  },
+  (input) => getFinanceCashFlow(input),
+);
+
+const financeMensalidadesTool = makeFinanceRead(
+  'aceleriq_list_finance_mensalidades',
+  'Mensalidades e MRR',
+  'A carteira recorrente cliente por cliente: plano, valor mensal, situacao, renovacao, ultimo pagamento, proxima cobranca, quanto esta em aberto, quanto esta vencido e se esta em dia. O resumo traz MRR, ticket medio, quantos mensalistas ativos e quantos inadimplentes. Responde de onde vem o MRR e quem esta devendo, apontando o nome - nao um total anonimo. SOMENTE LEITURA.',
+  z.object({ incluir_inativos: z.boolean().optional() }).strict(),
+  {
+    type: 'object',
+    properties: {
+      incluir_inativos: { type: 'boolean', description: 'Incluir planos pausados/inativos. Padrao: false.' },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceMensalidades(input),
+);
+
+const financeCapitalTool = makeFinanceRead(
+  'aceleriq_get_finance_capital',
+  'Capital e investimentos',
+  'O dinheiro do socio, separado da operacao: total aportado, total investido por categoria (trafego, ferramentas, insumos, escritorio, outros), a receita do periodo desde o primeiro aporte e o retorno bruto. Cada aporte vem listado com data e valor. Aporte NAO e despesa: misturar faria o mes parecer prejuizo sempre que entrasse dinheiro proprio. SOMENTE LEITURA.',
+  z.object({ desde: COMPETENCIA.optional() }).strict(),
+  {
+    type: 'object',
+    properties: {
+      desde: { type: 'string', description: 'Data de corte YYYY-MM-DD. Padrao: a data do primeiro aporte.' },
+    },
+    additionalProperties: false,
+  },
+  (input) => getFinanceCapital(input),
+);
+
+const financeAdsTool = makeFinanceRead(
+  'aceleriq_get_finance_ads_investment',
+  'Investimento em anuncio',
+  'Quanto a casa investe em aquisicao (Marketing & Ads proprios + Trafego pago) contra a receita recebida, mes a mes. Traz tambem o saldo das carteiras de anuncio dos clientes e as recargas pendentes. E termometro de aquisicao, nao atribuicao por campanha - e a verba do cliente e dinheiro dele, nao investimento da casa. SOMENTE LEITURA.',
+  z.object({ meses: z.number().int().min(1).max(24).optional() }).strict(),
+  {
+    type: 'object',
+    properties: {
+      meses: { type: 'integer', minimum: 1, maximum: 24, default: 12 },
+    },
+    additionalProperties: false,
+  },
+  (input) => getFinanceAdsInvestment(input),
+);
+
+const financeHistoryTool = makeFinanceRead(
+  'aceleriq_list_finance_history',
+  'Historico de alteracoes',
+  'Quem mexeu em pagamento, quando, o que mudou (situacao e valor, antes e depois) e com que observacao. Sem isto, "esse valor estava diferente ontem" nao tem resposta e a conversa vira memoria contra memoria. SOMENTE LEITURA.',
+  z.object({
+    entity_type: z.string().max(40).optional(),
+    entity_id: UUID.optional(),
+    limit: z.number().int().min(1).max(500).optional(),
+    offset: z.number().int().min(0).optional(),
+  }).strict(),
+  {
+    type: 'object',
+    properties: {
+      entity_type: { type: 'string', description: 'billing, installment...' },
+      entity_id: { type: 'string', description: 'UUID do registro, para ver a historia de um so.' },
+      limit: { type: 'integer', minimum: 1, maximum: 500, default: 50 },
+      offset: { type: 'integer', minimum: 0, default: 0 },
+    },
+    additionalProperties: false,
+  },
+  (input) => listFinanceHistory(input),
+);
+
 const RAW_TOOLS: readonly ToolDefinition[] = [
   healthTool,
   capabilitiesTool,
@@ -2267,6 +2361,11 @@ const RAW_TOOLS: readonly ToolDefinition[] = [
   financeBillingTool,
   financeExpensesTool,
   financeProjectPaymentsTool,
+  financeCashFlowTool,
+  financeMensalidadesTool,
+  financeCapitalTool,
+  financeAdsTool,
+  financeHistoryTool,
   financeEntriesTool,
   financeClientSummariesTool,
   financePlansTool,

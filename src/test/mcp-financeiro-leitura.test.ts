@@ -70,6 +70,74 @@ describe("o financeiro enxerga o mês inteiro", () => {
   });
 });
 
+describe("a area financeira inteira, nao so a visao geral", () => {
+  const fluxo = readFileSync(
+    resolve(raiz, "supabase/functions/_shared/aceleriq-finance-fluxo.ts"), "utf8",
+  );
+
+  it("as oito abas do painel tem leitura no MCP", () => {
+    // O pedido: "tem que ter tudo, fluxo de caixa, mensalidades, o que
+    // entrou e saiu, custos, investimentos, tudo completo mesmo".
+    for (const nome of [
+      "aceleriq_get_finance_dashboard",         // visao geral
+      "aceleriq_get_finance_cash_flow",         // fluxo de caixa
+      "aceleriq_list_finance_mensalidades",     // mensalidades
+      "aceleriq_list_finance_expenses",         // custos fixos
+      "aceleriq_get_finance_capital",           // capital
+      "aceleriq_get_finance_ads_investment",    // ads wallet
+      "aceleriq_list_finance_history",          // historico
+      "aceleriq_list_finance_plans",            // planos & precos
+      "aceleriq_list_finance_project_payments", // projetos
+    ]) {
+      expect(ferramentas, `falta ${nome}`).toContain(`'${nome}'`);
+    }
+  });
+
+  it("aporte de socio NAO e despesa, em nenhuma conta", () => {
+    // Misturar capital com operacao faria o mes parecer prejuizo sempre que
+    // entrasse dinheiro proprio, e lucro quando o socio tirasse.
+    expect(fluxo).toContain("const ehCapital");
+    expect(fluxo).toContain("c === 'investidor' || c.startsWith('inv_')");
+    // O fluxo de caixa separa antes de somar.
+    expect(fluxo).toContain("gastos.filter((e) => !ehCapital(e))");
+    expect(fluxo).toContain("aportes_de_socio");
+  });
+
+  it("o caixa entrega o SALDO LIVRE, nao so o saldo", () => {
+    // Olhar so o saldo total ja fez gente gastar a reserva do imposto
+    // achando que era lucro.
+    expect(fluxo).toContain("saldo_livre");
+    expect(fluxo).toContain("reservado_em_caixinhas");
+    expect(fluxo).toContain("finance_boxes");
+  });
+
+  it("as mensalidades apontam o NOME, nao um total anonimo", () => {
+    expect(fluxo).toContain("inadimplentes");
+    expect(fluxo).toContain("em_dia");
+    expect(fluxo).toContain("proxima_cobranca");
+    expect(fluxo).toContain("ticket_medio");
+    // "Em dia" e fato: nada vencido em aberto.
+    expect(fluxo).toContain("em_dia: vencidas.length === 0");
+  });
+
+  it("o retorno de ads se declara termometro, nao atribuicao", () => {
+    // Vender causalidade que o dado nao prova e o jeito mais facil de o
+    // agente mentir com numero certo.
+    expect(fluxo).toContain("termômetro de aquisição, não atribuição");
+    expect(fluxo).toContain("verba do cliente");
+  });
+
+  it("o historico diz quem mexeu, quando e o que mudou", () => {
+    expect(fluxo).toContain("payment_audit_log");
+    expect(fluxo).toContain("valor_antes");
+    expect(fluxo).toContain("valor_depois");
+  });
+
+  it("tudo isso continua sendo somente leitura", () => {
+    expect(fluxo).not.toMatch(/\.(insert|update|upsert|delete)\(/);
+  });
+});
+
 describe("o painel financeiro inteiro, mes a mes", () => {
   const painel = readFileSync(
     resolve(raiz, "supabase/functions/_shared/aceleriq-finance-dashboard.ts"), "utf8",
