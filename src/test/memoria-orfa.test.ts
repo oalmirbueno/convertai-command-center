@@ -38,27 +38,38 @@ describe("a tabela que deixou o órfão entrar", () => {
 });
 
 describe("a escrita de memória fecha a porta", () => {
+  // A validação saiu do arquivo de memória e virou guarda compartilhado
+  // (mcp-client-id-guard), porque o dossiê precisava exatamente da mesma
+  // porta. A proteção é a mesma, e agora vale nos dois caminhos.
+  const guarda = readFileSync(
+    resolve(raiz, "supabase/functions/_shared/mcp-client-id-guard.ts"), "utf8",
+  );
+
   it("valida que o cliente existe antes de inserir", () => {
     const trecho = memoria.slice(
       memoria.indexOf("export async function upsertMemory"),
       memoria.indexOf("memoryToPromptBlock"),
     );
-    expect(trecho).toContain("from('profiles')");
-    expect(trecho).toContain("nao corresponde a nenhum cliente ativo");
+    expect(trecho).toContain("exigirClienteExistente");
     // A checagem vem ANTES do insert, senão o órfão já entrou.
-    expect(trecho.indexOf("from('profiles')")).toBeLessThan(
+    expect(trecho.indexOf("exigirClienteExistente")).toBeLessThan(
       trecho.indexOf("from('project_memory').insert"),
     );
+    // E o guarda realmente consulta o cadastro, em vez de confiar no id.
+    expect(guarda).toContain("from('profiles')");
+    expect(guarda).toContain("nao corresponde a nenhum cliente ativo");
   });
 
   it("o erro ensina o caminho, em vez de só recusar", () => {
     // Quem recebe é um agente: dizer onde achar o id certo evita a
-    // segunda tentativa igual.
-    expect(memoria).toContain("aceleriq_list_clients");
+    // segunda tentativa igual. Agora ensina mais - aponta o id correto
+    // quando os caracteres foram trocados de lugar.
+    expect(guarda).toContain("aceleriq_list_clients");
+    expect(guarda).toContain("O id correto de");
   });
 
   it("recusa também cliente removido, não só inexistente", () => {
-    expect(memoria).toContain("deleted_at");
+    expect(guarda).toContain("deleted_at");
   });
 });
 
