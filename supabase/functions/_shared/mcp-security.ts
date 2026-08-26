@@ -97,6 +97,16 @@ export function canGrantMcpOAuthAdmin(
 export const OAUTH_STAFF_SCOPES = [
   'aceleriq:read',
   'aceleriq:write',
+  // O financeiro é anunciado na descoberta, aparece na tela de permissão e
+  // tem ferramentas no catálogo — mas sem estar AQUI ele nunca era
+  // concedido a um principal OAuth: a lista abaixo é o filtro final, e o
+  // que falta nela é descartado em silêncio. Era uma porta pintada.
+  //
+  // Conceder aqui não abre o caixa para a equipe inteira: as ferramentas
+  // financeiras não estão na lista tenant-scoped, então o segundo portão
+  // (dataScopeAllowsTool) ainda exige principal irrestrito, que só o admin
+  // é. Quem não for admin recebe o escopo e continua sem ver nada.
+  'aceleriq:finance',
   'clients:read',
   'projects:read',
   'projects:write',

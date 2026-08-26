@@ -148,6 +148,22 @@ describe("dinheiro é consentimento à parte", () => {
     expect(expansoes).not.toContain("aceleriq:finance");
   });
 
+  it("o escopo é CONCEDÍVEL: sem estar na lista de staff, era porta pintada", () => {
+    // O relato: "não mostra nada do financeiro, o Hermes não enxerga, nem o
+    // GPT, nem o Claude". O escopo era anunciado na descoberta, aparecia na
+    // tela de permissão e tinha ferramentas no catálogo — e o filtro final
+    // de concessão OAuth o descartava em silêncio, porque ninguém o havia
+    // colocado na lista. Anunciar sem poder conceder é o pior dos mundos.
+    const seguranca = readFileSync(
+      resolve(raiz, "supabase/functions/_shared/mcp-security.ts"), "utf8",
+    );
+    const lista = seguranca.slice(
+      seguranca.indexOf("export const OAUTH_STAFF_SCOPES"),
+      seguranca.indexOf("] as const", seguranca.indexOf("export const OAUTH_STAFF_SCOPES")),
+    );
+    expect(lista).toContain("'aceleriq:finance'");
+  });
+
   it("chave restrita a cliente não alcança o financeiro da casa", () => {
     // O despachante nega por padrão quem não é irrestrito; só as ferramentas
     // da lista tenant-scoped passam. Nenhuma financeira pode entrar lá.
