@@ -1,6 +1,7 @@
 // Persistent large-memory services for project/client scope.
 // Used by MCP tools and by the Studio agent to survive across threads.
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.57.4';
+import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 
 const admin = () => createClient(
   Deno.env.get('SUPABASE_URL')!,
@@ -66,15 +67,11 @@ export async function upsertMemory(input: {
   // nao aparecia em lugar nenhum do painel. Foi exatamente o que aconteceu
   // com a Verzelo — a memoria "salvou", o dossie (que valida) recusou, e a
   // divergencia entre os dois foi lida como defeito do dossie.
-  const { data: perfil, error: perfilErr } = await sb
-    .from('profiles').select('id, deleted_at').eq('id', input.client_id).maybeSingle();
-  if (perfilErr) throw new Error(perfilErr.message);
-  if (!perfil || (perfil as { deleted_at: string | null }).deleted_at) {
-    throw new Error(
-      `client_id ${input.client_id} nao corresponde a nenhum cliente ativo. `
-      + 'Confira o id com aceleriq_list_clients antes de gravar.',
-    );
-  }
+  // A recusa vem com o conserto junto: "confira o id" nao dizia ONDE o
+  // agente errou, e ele tentava de novo com o mesmo id — 12 vezes seguidas
+  // no caso da Verzelo, que era um uuid com dois caracteres trocados de
+  // lugar. O guarda detecta a transposicao e nomeia o id certo.
+  await exigirClienteExistente(sb, input.client_id, `${input.title ?? ''} ${input.content}`);
 
   const row = {
     client_id: input.client_id,

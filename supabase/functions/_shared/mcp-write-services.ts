@@ -9,6 +9,7 @@ import { createClient, type SupabaseClient } from 'https://esm.sh/@supabase/supa
 import { z } from 'https://esm.sh/zod@3.23.8';
 import { auditPrincipalSelector, dataScopeAllowsClient } from './mcp-security.ts';
 import type { ClientDataScope } from './mcp-auth.ts';
+import { exigirClienteExistente } from './mcp-client-id-guard.ts';
 
 // ─── Config ───────────────────────────────────────────────────
 const IDEMPOTENCY_TTL_HOURS = 24;
@@ -845,6 +846,15 @@ export type UpsertCurrentDossierInput = z.infer<typeof upsertCurrentDossierSchem
 
 export async function upsertCurrentDossier(input: UpsertCurrentDossierInput, ctx: WriteCtx) {
   assertWriteClientScope(ctx, input.client_id);
+
+  // O id fantasma e barrado ANTES do RPC, para a recusa vir com o conserto
+  // junto. O RPC tambem valida (e continua sendo a ultima palavra), mas a
+  // mensagem dele so diz "client_id inexistente": o agente que trocou dois
+  // caracteres tentava de novo com o mesmo id e falhava de novo, 22 vezes
+  // seguidas no caso da Verzelo. Aqui a mensagem nomeia o cliente e o id
+  // certo — e o conteudo entra como pista, porque o nome do cliente quase
+  // sempre esta escrito no proprio texto que ele tentou gravar.
+  await exigirClienteExistente(db(), input.client_id, `${input.content} ${input.summary ?? ''}`);
 
   const { data, error } = await db().rpc('upsert_current_dossier', {
     _client_id: input.client_id,

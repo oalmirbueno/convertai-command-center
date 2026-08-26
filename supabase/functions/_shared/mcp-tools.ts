@@ -271,7 +271,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.26.0',
+  version: '1.27.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -345,6 +345,32 @@ function makeFinanceRead(
       return await fn(parsed.data, ctx);
     },
   };
+}
+
+/**
+ * Teto de pagina que ACOMODA em vez de recusar.
+ *
+ * O log de auditoria mostrou o defeito mais caro do MCP inteiro: 203
+ * chamadas de aceleriq_search e 94 de memory_search falharam por pedirem
+ * acima do teto ("Number must be less than or equal to 10"). O agente
+ * pedia 50, recebia um erro de validacao e ficava sem resposta nenhuma —
+ * quando a resposta certa sempre existiu: os 10 que cabem.
+ *
+ * Pedir mais do que o maximo e um exagero de quem quer contexto, nao uma
+ * tentativa de abuso. Recusar a chamada inteira por isso e hostil e nao
+ * protege nada, porque o teto continua valendo do mesmo jeito.
+ *
+ * O teto CONTINUA sendo respeitado: nunca sai mais que `max`. O que muda e
+ * que 50 vira 10 em vez de virar erro. Texto que nao e numero segue sendo
+ * recusado — ali o pedido e ambiguo de verdade.
+ */
+function limite(max: number, min = 1) {
+  return z.preprocess((valor) => {
+    if (valor === undefined || valor === null || valor === '') return undefined;
+    const n = Number(valor);
+    if (!Number.isFinite(n)) return valor;
+    return Math.min(Math.max(Math.floor(n), min), max);
+  }, z.number().int().min(min).max(max).optional());
 }
 
 const UUID = z.string().uuid();
@@ -423,7 +449,7 @@ const listClientsTool = makeRead(
   'Lista clientes reais do Aceleriq OS (user_roles.role = client + profiles). Suporta busca por nome, empresa ou email, paginação e limite. Consulta somente dados existentes.',
   z.object({
     query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -446,7 +472,7 @@ const listOpportunitiesTool = makeRead(
     classe: z.enum(['cliente_atual', 'upsell', 'novo_prospect', 'sem_classe']).optional(),
     etapa: z.enum(['novo', 'contato', 'diagnostico', 'proposta', 'negociacao', 'ganho', 'perdido']).optional(),
     incluir_fechadas: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -497,7 +523,7 @@ const listProjectsTool = makeRead(
     client_id: UUID.optional(),
     status: z.string().max(64).optional(),
     query: z.string().max(200).optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -540,7 +566,7 @@ const listTasksTool = makeRead(
     delivery_type: z.string().max(64).optional(),
     workstream: z.enum(['general', 'design', 'content', 'video', 'traffic', 'development', 'operations']).optional(),
     only_open: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -576,7 +602,7 @@ const listEditorialCalendarTool = makeRead(
     production_status: z.enum(['draft', 'production', 'ready']).optional(),
     publication_status: z.enum(['planned', 'scheduled', 'published', 'failed', 'cancelled']).optional(),
     include_unscheduled: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict()
     .refine(
@@ -616,7 +642,7 @@ const listReportsTool = makeRead(
   z.object({
     client_id: UUID.optional(),
     project_id: UUID.optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -654,7 +680,7 @@ const listBriefingsTool = makeRead(
     client_id: UUID.optional(),
     project_id: UUID.optional(),
     submitted: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -694,7 +720,7 @@ const listWorkspaceNodesTool = makeRead(
     client_id: UUID.optional(),
     scope: z.string().max(64).optional(),
     kind: z.string().max(64).optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -735,7 +761,7 @@ const listFilesTool = makeRead(
     project_id: UUID.optional(),
     folder: z.string().max(128).optional(),
     approval_status: z.string().max(64).optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -774,7 +800,7 @@ const searchTool = makeRead(
   z.object({
     query: z.string().min(1).max(200),
     entities: z.array(z.enum(ALLOWED_ENTITY_TYPES as unknown as [string, ...string[]])).max(9).optional(),
-    limit_per_entity: z.number().int().min(1).max(10).optional(),
+    limit_per_entity: limite(10),
   }).strict(),
   {
     type: 'object',
@@ -864,7 +890,7 @@ const memorySearchTool: ToolDefinition = {
     additionalProperties: false,
   },
   handler: async (input) => {
-    const schema = z.object({ query: z.string().min(2).max(200), limit: z.number().int().min(1).max(25).optional() }).strict();
+    const schema = z.object({ query: z.string().min(2).max(200), limit: limite(25) }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     try { return { results: await searchCode(parsed.data.query, parsed.data.limit ?? 10) }; }
@@ -908,7 +934,7 @@ const memoryListPendingTool: ToolDefinition = {
     additionalProperties: false,
   },
   handler: async (input) => {
-    const schema = z.object({ limit: z.number().int().min(1).max(500).optional() }).strict();
+    const schema = z.object({ limit: limite(500) }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
     try { return { inbox: INBOX_PREFIX, items: await listInboxPending(parsed.data.limit ?? 25) }; }
@@ -952,7 +978,7 @@ const memoryRecentCommitsTool: ToolDefinition = {
   },
   handler: async (input) => {
     const schema = z.object({
-      limit: z.number().int().min(1).max(30).optional(),
+      limit: limite(30),
       path: z.string().min(1).max(512).optional(),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
@@ -1632,7 +1658,7 @@ const getWeeklyCycleTool: ToolDefinition = {
       client_id: z.string().uuid().optional(),
       area: z.enum(['social', 'trafego']).optional(),
       week_start: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
-      weeks: z.number().int().min(1).max(12).optional(),
+      weeks: limite(12),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
@@ -1665,7 +1691,7 @@ const getSocialMetricsTool: ToolDefinition = {
   handler: async (input) => {
     const schema = z.object({
       client_id: z.string().uuid().optional(),
-      weeks: z.number().int().min(1).max(52).optional(),
+      weeks: limite(52),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
@@ -1690,7 +1716,7 @@ const listSocialPostsTool: ToolDefinition = {
   handler: async (input) => {
     const schema = z.object({
       client_id: z.string().uuid().optional(),
-      limit: z.number().int().min(1).max(100).optional(),
+      limit: limite(100),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
@@ -1740,7 +1766,7 @@ const getAdsPerformanceTool: ToolDefinition = {
   handler: async (input) => {
     const schema = z.object({
       client_id: z.string().uuid().optional(),
-      days: z.number().int().min(1).max(30).optional(),
+      days: limite(30),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
@@ -1773,7 +1799,7 @@ const getProjectMemoryTool: ToolDefinition = {
       client_id: z.string().uuid(),
       project_id: z.string().uuid().optional(),
       kind: z.enum(['ritual','ciclo','entrega','aprovacao','decisao','nota','marco','avulso','checklist','note','summary','decision','fact','second_brain','external']).optional(),
-      limit: z.number().int().min(1).max(200).optional(),
+      limit: limite(200),
     }).strict();
     const parsed = schema.safeParse(input ?? {});
     if (!parsed.success) throw new Error(`Invalid input: ${parsed.error.message}`);
@@ -2074,7 +2100,7 @@ const financeEntriesTool = makeFinanceRead(
     direction: z.enum(['in', 'out']).optional(),
     status: z.string().max(40).optional(),
     client_id: UUID.optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2112,7 +2138,7 @@ const financePlansTool = makeFinanceRead(
   'Os planos e a versão vigente de cada um: valor operacional, valor final, alíquota, custo direto, taxa de entrada e desde quando vale. `natureza_do_valor` avisa quando o valor ainda precisa de revisão. SOMENTE LEITURA.',
   z.object({
     include_archived: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2134,7 +2160,7 @@ const financeRecurringTool = makeFinanceRead(
   z.object({
     client_id: UUID.optional(),
     include_inactive: z.boolean().optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2159,7 +2185,7 @@ const financeBillingTool = makeFinanceRead(
     status: z.string().max(40).optional(),
     type: z.string().max(40).optional(),
     client_id: UUID.optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2208,7 +2234,7 @@ const financeExpensesTool = makeFinanceRead(
     status: z.string().max(40).optional(),
     recurrence: z.string().max(40).optional(),
     category: z.string().max(60).optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2232,7 +2258,7 @@ const financeProjectPaymentsTool = makeFinanceRead(
   'Cada projeto contratado com valor total, entrada, quanto ja foi recebido, quanto falta e quanto esta atrasado, com a lista de parcelas uma a uma (numero, valor, situacao, vencimento e pagamento). E o pedaco que faltava no recebido do mes: a tela soma planos + parcelas de projeto. SOMENTE LEITURA.',
   z.object({
     client_id: UUID.optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
@@ -2252,7 +2278,7 @@ const financeCashFlowTool = makeFinanceRead(
   'Fluxo de caixa',
   'O caixa da casa: base conciliada, tudo que entrou, tudo que saiu, saldo, quanto esta reservado em caixinhas e o SALDO LIVRE - o numero que decide se da para gastar. Traz a serie mes a mes (entrou, saiu, resultado, aportes de socio), as saidas por categoria e o total a pagar em aberto. O segmento separa a carteira recorrente da avulsa pelo tipo do cliente, como na tela. Aporte de socio nao entra como receita nem como despesa: e capital. SOMENTE LEITURA.',
   z.object({
-    meses: z.number().int().min(1).max(24).optional(),
+    meses: limite(24),
     segmento: z.enum(['all', 'recurring', 'one_off']).optional(),
   }).strict(),
   {
@@ -2300,7 +2326,7 @@ const financeAdsTool = makeFinanceRead(
   'aceleriq_get_finance_ads_investment',
   'Investimento em anuncio',
   'Quanto a casa investe em aquisicao (Marketing & Ads proprios + Trafego pago) contra a receita recebida, mes a mes. Traz tambem o saldo das carteiras de anuncio dos clientes e as recargas pendentes. E termometro de aquisicao, nao atribuicao por campanha - e a verba do cliente e dinheiro dele, nao investimento da casa. SOMENTE LEITURA.',
-  z.object({ meses: z.number().int().min(1).max(24).optional() }).strict(),
+  z.object({ meses: limite(24) }).strict(),
   {
     type: 'object',
     properties: {
@@ -2318,7 +2344,7 @@ const financeHistoryTool = makeFinanceRead(
   z.object({
     entity_type: z.string().max(40).optional(),
     entity_id: UUID.optional(),
-    limit: z.number().int().min(1).max(500).optional(),
+    limit: limite(500),
     offset: z.number().int().min(0).optional(),
   }).strict(),
   {
