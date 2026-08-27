@@ -1143,6 +1143,71 @@ export default function Workspace() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   }
 
+  /**
+   * Ctrl+V no Workspace: imagem copiada vira arquivo na pasta aberta.
+   *
+   * Print de tela, imagem de site, recorte do WhatsApp — tudo isso chega
+   * pela área de transferência, e obrigar a salvar no disco para depois
+   * arrastar era um desvio que ninguém deveria precisar fazer. O colar
+   * entrega um FileList igual ao do arrastar, então o caminho de upload é
+   * EXATAMENTE o mesmo (fila, progresso, destino na pasta aberta) — colar
+   * não é um segundo jeito de subir arquivo, é uma segunda porta para o
+   * mesmo jeito.
+   *
+   * Duas escolhas deliberadas:
+   *  - Colar dentro de campo de texto continua colando texto: a captura
+   *    só age fora de input/textarea/contenteditable, senão renomear um
+   *    arquivo com Ctrl+V viraria upload acidental.
+   *  - Toda imagem colada chega chamada "image.png"; aqui ela ganha nome
+   *    com data e hora, senão a pasta vira uma pilha de arquivos
+   *    homônimos que ninguém distingue.
+   */
+  const colarImagemRef = useRef<(e: ClipboardEvent) => void>(() => {});
+  colarImagemRef.current = (e: ClipboardEvent) => {
+    const alvo = e.target as HTMLElement | null;
+    if (alvo?.closest("input, textarea, [contenteditable=true], [contenteditable='']")) return;
+
+    const arquivos = Array.from(e.clipboardData?.files ?? []);
+    if (arquivos.length === 0) return;
+    e.preventDefault();
+
+    const agora = new Date();
+    const carimbo = [
+      agora.getFullYear(),
+      String(agora.getMonth() + 1).padStart(2, "0"),
+      String(agora.getDate()).padStart(2, "0"),
+    ].join("-") + " " + [
+      String(agora.getHours()).padStart(2, "0"),
+      String(agora.getMinutes()).padStart(2, "0"),
+      String(agora.getSeconds()).padStart(2, "0"),
+    ].join(".");
+
+    const dt = new DataTransfer();
+    arquivos.forEach((arquivo, indice) => {
+      // Nome genérico ("image.png") vira "Colado 2026-08-27 11.32.05.png";
+      // arquivo copiado do Explorer mantém o nome que já tem.
+      const generico = /^(image|imagem|screenshot|captura)[.-]?\d*\./i.test(arquivo.name) || !arquivo.name;
+      if (generico) {
+        const extensao = arquivo.name.includes(".")
+          ? arquivo.name.slice(arquivo.name.lastIndexOf("."))
+          : (arquivo.type.split("/")[1] ? `.${arquivo.type.split("/")[1]}` : ".png");
+        const sufixo = arquivos.length > 1 ? ` (${indice + 1})` : "";
+        dt.items.add(new File([arquivo], `Colado ${carimbo}${sufixo}${extensao}`, { type: arquivo.type }));
+      } else {
+        dt.items.add(arquivo);
+      }
+    });
+    void handleUpload(dt.files);
+  };
+
+  useEffect(() => {
+    // Registrado uma vez, lendo o handler pela ref: handleUpload nasce de
+    // novo a cada render, e assinar/desassinar o document a cada render só
+    // para acompanhá-lo seria ruído.
+    const ouvir = (e: ClipboardEvent) => colarImagemRef.current(e);
+    document.addEventListener("paste", ouvir);
+    return () => document.removeEventListener("paste", ouvir);
+  }, []);
 
   async function performDelete(n: Node) {
     if (deletingNode) return;
@@ -1734,7 +1799,7 @@ export default function Workspace() {
       <div className="shrink-0 flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/95 pb-3 md:mb-5 md:border-b-0 md:bg-transparent md:pb-0">
         <div className="min-w-0">
           <h1 className="heading-page">Workspace</h1>
-          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe. Arraste para mover, solte arquivos para enviar</p>
+          <p className="hidden md:block text-xs text-muted-foreground mt-1">Drive interno da equipe. Arraste para mover, solte arquivos ou cole uma imagem (Ctrl+V) para enviar</p>
         </div>
         {/* Context switcher: collapsed picker with search + filters */}
         <Popover open={pickerOpen} onOpenChange={setPickerOpen}>
@@ -2022,7 +2087,7 @@ export default function Workspace() {
             ) : !filtered.length ? (
               <div className="text-center py-16 text-sm text-muted-foreground">
                 <Folder className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                Pasta vazia. Arraste arquivos aqui, envie ou crie uma subpasta.
+                Pasta vazia. Arraste arquivos, cole uma imagem (Ctrl+V), envie ou crie uma subpasta.
               </div>
             ) : view === "grid" ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 pb-3 md:pb-0">
