@@ -22,7 +22,7 @@ describe("colar imagem no workspace", () => {
       pagina.indexOf("colarImagemRef"),
       pagina.indexOf("async function performDelete"),
     );
-    expect(trecho).toContain("void handleUpload(dt.files)");
+    expect(trecho).toContain("void handleUpload(montarColados(arquivos))");
     expect(trecho).not.toContain("uploads.enqueue");
   });
 
@@ -63,5 +63,50 @@ describe("colar imagem no workspace", () => {
     // Recurso invisível é recurso que não existe: as dicas de arrastar
     // passam a mencionar o Ctrl+V.
     expect(pagina).toContain("cole uma imagem (Ctrl+V)");
+  });
+});
+
+describe("menu do botao direito no fundo da area", () => {
+  it("oferece as quatro acoes do dia a dia", () => {
+    expect(pagina).toContain("Colar imagem");
+    expect(pagina).toContain("Enviar arquivos…");
+    expect(pagina).toContain("Nova pasta…");
+    expect(pagina).toContain('mr-2" /> Atualizar');
+  });
+
+  it("cede a vez ao menu dos cartoes, em vez de abrir por cima", () => {
+    // Os nós já têm menu próprio (Radix), que chama preventDefault ao
+    // abrir. Sem esta guarda, o clique num cartão abriria DOIS menus.
+    const trecho = pagina.slice(
+      pagina.indexOf("setMenuDaArea({ x: e.clientX") - 600,
+      pagina.indexOf("setMenuDaArea({ x: e.clientX"),
+    );
+    expect(trecho).toContain("if (e.defaultPrevented) return;");
+  });
+
+  it("as duas portas de colar usam o MESMO nomeador", () => {
+    // Ctrl+V e o menu chamam montarColados; dois nomeadores divergiriam
+    // no primeiro conserto.
+    expect(pagina).toContain("function montarColados(arquivos: File[]): FileList");
+    const usos = pagina.match(/handleUpload\(montarColados\(/g) ?? [];
+    expect(usos.length).toBe(2);
+  });
+
+  it("clipboard negado ou vazio responde com o que fazer, nunca falha mudo", () => {
+    // A Async Clipboard API pede permissão; sem imagem ou sem permissão o
+    // usuário recebe instrução — e o Ctrl+V é citado como o caminho que
+    // funciona sempre.
+    expect(pagina).toContain("Nada de imagem copiada");
+    expect(pagina).toContain("O navegador bloqueou a leitura");
+    expect(pagina).toContain("cole com Ctrl+V");
+  });
+
+  it("clicar fora ou dar outro botao direito fecha o menu", () => {
+    const trecho = pagina.slice(
+      pagina.indexOf("{menuDaArea && ("),
+      pagina.indexOf('role="menu"'),
+    );
+    expect(trecho).toContain("onClick={() => setMenuDaArea(null)}");
+    expect(trecho).toContain("setMenuDaArea(null); }}");
   });
 });

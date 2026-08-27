@@ -20,12 +20,7 @@ import {
   ContextMenu, ContextMenuContent, ContextMenuItem, ContextMenuTrigger,
   ContextMenuSeparator, ContextMenuSub, ContextMenuSubTrigger, ContextMenuSubContent,
 } from "@/components/ui/context-menu";
-import {
-  Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film,
-  Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2,
-  Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft,
-  ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw, AlertCircle,
-} from "lucide-react";
+import { Folder, FolderPlus, Upload, ChevronRight, FileText, FileImage, Film, Archive, Trash2, Send, Download, ExternalLink, Users as UsersIcon, Globe2, Search, Grid2X2, List, Loader2, MoreVertical, Pencil, FolderInput, ArrowLeft, ChevronDown, Check, X as XIcon, Wand2, Link2, Copy, RefreshCw, AlertCircle, ClipboardPaste } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { downloadFile, openFile } from "@/lib/fileActions";
@@ -236,6 +231,8 @@ export default function Workspace() {
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Node | null>(null);
   const [newFolderOpen, setNewFolderOpen] = useState(false);
+  /** Menu do botão direito no FUNDO da área (os nós têm o próprio). */
+  const [menuDaArea, setMenuDaArea] = useState<{ x: number; y: number } | null>(null);
   const [templateOpen, setTemplateOpen] = useState(false);
   const [applyingTpl, setApplyingTpl] = useState<string | null>(null);
   const [organizing, setOrganizing] = useState(false);
@@ -1171,6 +1168,16 @@ export default function Workspace() {
     if (arquivos.length === 0) return;
     e.preventDefault();
 
+    void handleUpload(montarColados(arquivos));
+  };
+
+  /**
+   * Nomeia o que veio da área de transferência, nas DUAS portas de colar
+   * (Ctrl+V e o menu do botão direito). Nome genérico ("image.png") vira
+   * "Colado 2026-08-27 11.32.05.png"; arquivo copiado do Explorer mantém o
+   * nome que já tem. Um nomeador só: dois divergiriam no primeiro conserto.
+   */
+  function montarColados(arquivos: File[]): FileList {
     const agora = new Date();
     const carimbo = [
       agora.getFullYear(),
@@ -1184,8 +1191,6 @@ export default function Workspace() {
 
     const dt = new DataTransfer();
     arquivos.forEach((arquivo, indice) => {
-      // Nome genérico ("image.png") vira "Colado 2026-08-27 11.32.05.png";
-      // arquivo copiado do Explorer mantém o nome que já tem.
       const generico = /^(image|imagem|screenshot|captura)[.-]?\d*\./i.test(arquivo.name) || !arquivo.name;
       if (generico) {
         const extensao = arquivo.name.includes(".")
@@ -1197,8 +1202,38 @@ export default function Workspace() {
         dt.items.add(arquivo);
       }
     });
-    void handleUpload(dt.files);
-  };
+    return dt.files;
+  }
+
+  /**
+   * Colar pelo MENU (botão direito): sem evento de paste, a área de
+   * transferência só se alcança pela Async Clipboard API — que pede
+   * permissão ao navegador. Negou ou não tem imagem? A resposta diz o que
+   * fazer, em vez de falhar mudo: o Ctrl+V continua sempre funcionando.
+   */
+  async function colarDoClipboard() {
+    try {
+      const itens = await navigator.clipboard.read();
+      const arquivos: File[] = [];
+      for (const item of itens) {
+        const tipo = item.types.find((t) => t.startsWith("image/"));
+        if (!tipo) continue;
+        const blob = await item.getType(tipo);
+        arquivos.push(new File([blob], "", { type: tipo }));
+      }
+      if (arquivos.length === 0) {
+        toast({ title: "Nada de imagem copiada", description: "Copie uma imagem (ou um print) e tente de novo." });
+        return;
+      }
+      void handleUpload(montarColados(arquivos));
+    } catch {
+      toast({
+        title: "O navegador bloqueou a leitura",
+        description: "Permita o acesso à área de transferência, ou cole com Ctrl+V — esse funciona sempre.",
+        variant: "destructive",
+      });
+    }
+  }
 
   useEffect(() => {
     // Registrado uma vez, lendo o handler pela ref: handleUpload nasce de
@@ -2049,11 +2084,57 @@ export default function Workspace() {
               if (e.currentTarget === e.target) setDragOverArea(false);
             }}
             onDrop={(e) => { if (!dragOverId || dragOverId === "root") onDropFolder(e, parent?.id || null); }}
+            onContextMenu={(e) => {
+              // Os cartões têm menu próprio (Radix), que chama preventDefault
+              // ao abrir. Se chegou aqui já prevenido, o clique foi num nó:
+              // o menu do fundo cede a vez em vez de abrir por cima.
+              if (e.defaultPrevented) return;
+              e.preventDefault();
+              setMenuDaArea({ x: e.clientX, y: e.clientY });
+            }}
             className={cn("relative flex-1 min-h-0 overflow-y-auto rounded-xl transition-all md:overflow-visible px-0.5 pb-[max(1rem,env(safe-area-inset-bottom))]",
               rootDropActive && "ring-2 ring-primary/50 bg-primary/5")}
             style={{ overscrollBehavior: "contain", WebkitOverflowScrolling: "touch" }}
 
           >
+
+      {menuDaArea && (
+        <>
+          <div
+            className="fixed inset-0 z-40"
+            onClick={() => setMenuDaArea(null)}
+            onContextMenu={(e) => { e.preventDefault(); setMenuDaArea(null); }}
+          />
+          <div
+            role="menu"
+            className="fixed z-50 w-56 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-md"
+            style={{
+              left: Math.min(menuDaArea.x, window.innerWidth - 240),
+              top: Math.min(menuDaArea.y, window.innerHeight - 190),
+            }}
+          >
+            <button type="button" role="menuitem" className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              onClick={() => { setMenuDaArea(null); void colarDoClipboard(); }}>
+              <ClipboardPaste className="w-3.5 h-3.5 mr-2" /> Colar imagem
+              <span className="ml-auto text-[10px] text-muted-foreground">Ctrl+V</span>
+            </button>
+            <button type="button" role="menuitem" className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              onClick={() => { setMenuDaArea(null); fileInputRef.current?.click(); }}>
+              <Upload className="w-3.5 h-3.5 mr-2" /> Enviar arquivos…
+            </button>
+            <button type="button" role="menuitem" className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              onClick={() => { setMenuDaArea(null); setNewFolderOpen(true); }}>
+              <FolderPlus className="w-3.5 h-3.5 mr-2" /> Nova pasta…
+            </button>
+            <div className="my-1 h-px bg-border" />
+            <button type="button" role="menuitem" className="flex w-full items-center rounded-sm px-2 py-1.5 text-sm hover:bg-accent"
+              onClick={() => { setMenuDaArea(null); invalidate(); }}>
+              <RefreshCw className="w-3.5 h-3.5 mr-2" /> Atualizar
+            </button>
+          </div>
+        </>
+      )}
+
             {rootDropActive && (
               <div className="absolute inset-0 rounded-xl bg-primary/10 border-2 border-dashed border-primary/50 flex items-center justify-center pointer-events-none z-10">
                 <p className="text-sm font-medium text-primary">Solte para enviar aqui</p>
