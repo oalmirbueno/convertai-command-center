@@ -285,7 +285,7 @@ export interface ToolDefinition {
 export const SERVER_INFO = {
   name: 'aceleriq-mcp',
   title: 'Aceleriq OS MCP',
-  version: '1.31.0',
+  version: '1.32.0',
 } as const;
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -2460,7 +2460,7 @@ const operatorReportTool: ToolDefinition = {
 const operatorBoardTool = makeRead(
   'aceleriq_operator_board',
   'Quadro dos operadores internos',
-  'A area Execucao da equipe em dados: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Antes de listar, expira runs sem heartbeat (timeout vira visivel e a trava libera para retomada segura). Filtra por operador e status. SOMENTE LEITURA.',
+  'A area Execucao da equipe em dados, com MANUAL DE USO no proprio retorno (como_usar), RESUMO em numeros e as TAREFAS DISPONIVEIS do Kanban (com kanban_task_id pronto, cliente, projeto e prazo) para o operador escolher trabalho real em vez de inventar id. Traz tambem: operadores (Vertice, Registro, Prisma, Augusto), vinculos com tarefa/projeto/cliente/RESPONSAVEL HUMANO/status/prazo/evidencia/proximo passo/bloqueio/aprovacao, runs recentes, incidentes e ultima falha. Antes de listar, expira runs sem heartbeat (timeout vira visivel e a trava libera para retomada segura). Filtra por operador e status. SOMENTE LEITURA.',
   z.object({
     operator: z.enum(['vertice', 'registro', 'prisma', 'augusto']).optional(),
     status: z.enum(['queued', 'in_progress', 'done', 'review', 'awaiting_input', 'blocked']).optional(),

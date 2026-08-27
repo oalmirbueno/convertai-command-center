@@ -161,7 +161,72 @@ export async function operatorBoard(opts: { operator?: string; status?: string; 
   const execucoes = (runs.data ?? []) as Array<Record<string, unknown>>;
   const incidentes = execucoes.filter((r) => ['failed', 'timeout', 'blocked'].includes(String(r.status)));
 
+  /**
+   * As tarefas do Kanban que ainda não têm operador, com o id pronto.
+   *
+   * Sem isto o agente lê o quadro, vê que está vazio e não tem como
+   * escolher trabalho real — ou pior, inventa um id. Com isto ele
+   * escolhe uma tarefa que existe, do cliente certo, com prazo à vista.
+   */
+  const jaVinculadas = new Set(
+    ((links.data ?? []) as Array<Record<string, unknown>>)
+      .map((l) => texto(l.kanban_task_id)).filter(Boolean) as string[],
+  );
+  const { data: abertas } = await comPrazo(
+    db().from('tasks')
+      .select('id, title, status, due_date, assigned_to, project:projects(name, client:profiles(full_name, company_name))')
+      .in('status', ['backlog', 'todo', 'doing', 'review'])
+      .is('deleted_at', null)
+      .order('due_date', { ascending: true })
+      .limit(100),
+  );
+  const disponiveis = ((abertas ?? []) as Array<Record<string, unknown>>)
+    .filter((t) => !jaVinculadas.has(String(t.id)))
+    .slice(0, 25)
+    .map((t) => {
+      const projeto = (t.project ?? null) as Record<string, unknown> | null;
+      const cliente = (projeto?.client ?? null) as Record<string, unknown> | null;
+      return {
+        kanban_task_id: t.id,
+        tarefa: t.title,
+        projeto: projeto?.name ?? null,
+        cliente: cliente ? (texto(cliente.company_name) ?? texto(cliente.full_name)) : null,
+        prazo: t.due_date ?? null,
+        coluna: t.status,
+        tem_responsavel_humano: Boolean(t.assigned_to),
+      };
+    });
+
   return {
+    /**
+     * O manual, no próprio retorno. Um agente que lê o quadro precisa
+     * saber o que pode fazer com ele sem depender de alguém ter colado
+     * as regras num prompt que talvez não esteja mais na janela.
+     */
+    como_usar: {
+      reportar: 'Use aceleriq_operator_report com { operator, event, run_key, kanban_task_id }. '
+        + 'Eventos: started, progress, done, failed, blocked, review, awaiting_input, heartbeat.',
+      run_key: 'Escolha uma chave estavel por execucao (ex.: "vertice-<tarefa>-2026-08-27"). '
+        + 'Repetir a mesma chave ATUALIZA a mesma run, nao cria outra.',
+      evidencia: 'done SEM evidence e rebaixado para review automaticamente. Evidencia e link ou '
+        + 'descricao verificavel; nada de token ou URL assinada.',
+      travas: 'Uma execucao em andamento por tarefa. Se colidir, termine ou reporte failed/blocked antes.',
+      limites: 'Voce RELATA execucao. Atribuir tarefa a humano, publicar, agendar, enviar mensagem, '
+        + 'gastar, contratar e alterar financeiro NAO estao neste catalogo, por construcao.',
+      escolher_tarefa: 'Pegue um kanban_task_id de `tarefas_disponiveis`. Nunca invente id.',
+    },
+    resumo: {
+      em_andamento: vinculos.filter((l) => l.status === 'in_progress').length,
+      feitas_com_evidencia: vinculos.filter((l) => l.status === 'done' && texto(l.last_evidence)).length,
+      em_revisao: vinculos.filter((l) => l.status === 'review').length,
+      aguardando_insumo: vinculos.filter((l) => l.status === 'awaiting_input').length,
+      bloqueadas: vinculos.filter((l) => l.status === 'blocked').length,
+      aprovacoes_pendentes: vinculos.filter((l) => l.approval_required === true && l.status !== 'done').length,
+      kanban_abertas: (abertas ?? []).length,
+      sem_operador: disponiveis.length,
+      incidentes: incidentes.length,
+    },
+    tarefas_disponiveis: disponiveis,
     operadores: operadores.map((o) => ({
       slug: o.slug, nome: o.display_name, funcao: o.role, situacao: o.status,
       escopo: o.scope, coordenador: o.is_coordinator === true, ultima_execucao: o.last_run_at,

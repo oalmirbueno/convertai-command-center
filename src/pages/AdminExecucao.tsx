@@ -85,13 +85,26 @@ export default function AdminExecucao() {
   const [visao, setVisao] = useState<(typeof VISOES)[number]["id"]>("fila");
   const destacadoRef = useRef<HTMLDivElement | null>(null);
 
+  /**
+   * A flag, com a distinção que faltava: DESLIGADA e NÃO-CONSEGUI-LER são
+   * estados diferentes.
+   *
+   * A primeira versão devolvia `false` nos dois casos, e a tela anunciava
+   * "a camada está desligada" quando a verdade era outra (a tabela tinha
+   * acabado de nascer e o cache do PostgREST ainda não a via). Mensagem
+   * errada com ar de certeza é pior que erro cru: manda consertar o que
+   * não está quebrado.
+   */
   const { data: flag } = useQuery({
     queryKey: ["flag-operators-layer"],
-    queryFn: async () => {
-      const { data } = await (supabase as any)
+    queryFn: async (): Promise<"on" | "off" | "erro"> => {
+      const { data, error } = await (supabase as any)
         .from("feature_flags").select("enabled").eq("flag_key", "operators_layer").maybeSingle();
-      return data?.enabled === true;
+      if (error) return "erro";
+      if (!data) return "erro";
+      return data.enabled === true ? "on" : "off";
     },
+    retry: 2,
   });
 
   const { data: operadores = [] } = useQuery({
@@ -104,7 +117,7 @@ export default function AdminExecucao() {
       if (error) return [];
       return (data || []) as Operador[];
     },
-    enabled: flag === true,
+    enabled: flag === "on",
   });
 
   const { data: vinculos = [], dataUpdatedAt } = useQuery({
@@ -118,7 +131,7 @@ export default function AdminExecucao() {
       if (error) return [];
       return (data || []) as Vinculo[];
     },
-    enabled: flag === true,
+    enabled: flag === "on",
     refetchInterval: 30_000,
   });
 
@@ -132,7 +145,7 @@ export default function AdminExecucao() {
       if (error) return [];
       return (data || []) as Array<Record<string, any>>;
     },
-    enabled: flag === true,
+    enabled: flag === "on",
     refetchInterval: 30_000,
   });
 
@@ -152,7 +165,7 @@ export default function AdminExecucao() {
       for (const t of data || []) mapa.set(String(t.id), t);
       return mapa;
     },
-    enabled: flag === true && taskIds.length > 0,
+    enabled: flag === "on" && taskIds.length > 0,
   });
 
   const humanIds = useMemo(() => {
@@ -172,8 +185,66 @@ export default function AdminExecucao() {
     enabled: humanIds.length > 0,
   });
 
+  /**
+   * As tarefas do Kanban que ainda não têm operador.
+   *
+   * Sem isto, a tela vazia dizia só "nada em execução" — verdade que não
+   * ajuda. Com isto ela responde a pergunta seguinte: quantas tarefas
+   * existem esperando, e QUAIS. É o que liga esta área ao Kanban de
+   * verdade em vez de deixá-la como um painel que só sabe falar de si.
+   */
+  const { data: disponiveis = [] } = useQuery({
+    queryKey: ["operador-tarefas-disponiveis"],
+    queryFn: async () => {
+      const { data } = await (supabase as any)
+        .from("tasks")
+        .select("id, title, status, due_date, assigned_to, project:projects(name, client:profiles(full_name, company_name))")
+        .in("status", ["backlog", "todo", "doing", "review"])
+        .is("deleted_at", null)
+        .order("due_date", { ascending: true, nullsFirst: false })
+        .limit(200);
+      return (data || []) as Array<Record<string, any>>;
+    },
+    enabled: flag === "on",
+    refetchInterval: 60_000,
+  });
+
   const opDe = (id: string) => operadores.find((o) => o.id === id);
   const hoje = new Date().toISOString().slice(0, 10);
+
+  /** Os números do quadro, uma vez só: cabeçalho, cartões e vazios usam. */
+  const numeros = useMemo(() => {
+    const por = (st: string) => vinculos.filter((v) => v.status === st).length;
+    const comOperador = new Set(vinculos.map((v) => v.kanban_task_id).filter(Boolean));
+    const semOperador = disponiveis.filter((t) => !comOperador.has(String(t.id)));
+    return {
+      fila: por("queued") + por("in_progress"),
+      andamento: por("in_progress"),
+      feitas: vinculos.filter((v) => v.status === "done" && v.last_evidence).length,
+      revisao: por("review"),
+      aguardando: por("awaiting_input"),
+      bloqueadas: por("blocked"),
+      aprovacoes: vinculos.filter((v) => v.approval_required && v.status !== "done").length,
+      kanbanAbertas: disponiveis.length,
+      semOperador,
+      // Prazo estourado é a única contagem que vale por si: ela decide o dia.
+      vencidas: vinculos.filter((v) => {
+        const t = v.kanban_task_id ? tarefas.get(String(v.kanban_task_id)) : null;
+        return t?.due_date && String(t.due_date) <= hoje && v.status !== "done";
+      }).length,
+    };
+  }, [vinculos, disponiveis, tarefas, hoje]);
+
+  const numerosDoOperador = (operatorId: string) => {
+    const meus = vinculos.filter((v) => v.operator_id === operatorId);
+    return {
+      fila: meus.filter((v) => ["queued", "in_progress"].includes(v.status)).length,
+      andamento: meus.filter((v) => v.status === "in_progress").length,
+      feitas: meus.filter((v) => v.status === "done").length,
+      bloqueadas: meus.filter((v) => v.status === "blocked").length,
+      total: meus.length,
+    };
+  };
 
   // A notificação abre direto o vínculo: rola até ele e destaca.
   useEffect(() => {
@@ -287,10 +358,24 @@ export default function AdminExecucao() {
   if (!["admin", "manager", "design", "traffic"].includes(profile?.role || "")) {
     return <div className="p-6 text-sm text-muted-foreground">Esta área é da equipe.</div>;
   }
-  if (flag === false) {
+  if (flag === "off") {
     return (
       <div className="p-6 text-sm text-muted-foreground">
-        A camada de operadores está desligada (flag operators_layer). Nada foi apagado; religar a flag traz tudo de volta.
+        A camada de operadores está <strong>desligada</strong> (flag <code>operators_layer</code>).
+        Nada foi apagado; religar a flag traz tudo de volta.
+      </div>
+    );
+  }
+  if (flag === "erro") {
+    // A distinção que faltava: não é "desligada", é "não consegui ler".
+    return (
+      <div className="mx-auto max-w-lg p-6">
+        <p className="text-sm font-medium text-foreground">Não consegui ler a configuração desta área.</p>
+        <p className="mt-1 text-[12.5px] leading-relaxed text-muted-foreground">
+          Isso não quer dizer que ela esteja desligada. Costuma acontecer nos primeiros minutos
+          depois que as tabelas nascem, enquanto a API ainda não as enxerga. Recarregue em
+          instantes; se persistir, confira se a migration dos operadores foi aplicada.
+        </p>
       </div>
     );
   }
@@ -384,27 +469,74 @@ export default function AdminExecucao() {
         </p>
       </div>
 
-      {/* Os operadores do piloto, sem e-mail e sem senha: outra entidade. */}
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
-        {operadores.map((o) => (
-          <div key={o.id} className="rounded-xl border border-border bg-card p-3">
-            <div className="flex items-center gap-1.5">
-              <Bot className="h-3.5 w-3.5 text-primary" />
-              <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
-              {o.is_coordinator && (
-                <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">coordenador</span>
-              )}
-              <span className={cn(
-                "ml-auto h-2 w-2 rounded-full",
-                o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
-              )} />
-            </div>
-            <p className="mt-0.5 text-[10px] text-muted-foreground">{o.scope}</p>
-            <p className="mt-1 text-[9.5px] text-muted-foreground">
-              {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
+      {/* O placar do dia: o que decide a atenção, em números. */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-6">
+        {[
+          { rotulo: "Em andamento", valor: numeros.andamento, tom: "text-info" },
+          { rotulo: "Feitas com evidência", valor: numeros.feitas, tom: "text-success" },
+          { rotulo: "Em revisão", valor: numeros.revisao, tom: "text-warning" },
+          { rotulo: "Aguardando insumo", valor: numeros.aguardando, tom: "text-muted-foreground" },
+          { rotulo: "Bloqueadas", valor: numeros.bloqueadas, tom: "text-destructive" },
+          { rotulo: "Prazo estourado", valor: numeros.vencidas, tom: "text-destructive" },
+        ].map((k) => (
+          <div key={k.rotulo} className="rounded-xl border border-border bg-card px-3 py-2.5">
+            <p className={cn("text-[19px] font-bold tabular-nums leading-none", k.valor > 0 ? k.tom : "text-muted-foreground/50")}>
+              {k.valor}
             </p>
+            <p className="mt-1 text-[10px] leading-tight text-muted-foreground">{k.rotulo}</p>
           </div>
         ))}
+      </div>
+
+      {/* A ponte com o Kanban: quantas tarefas existem esperando alguém. */}
+      <div className="rounded-xl border border-border bg-card px-3.5 py-2.5">
+        <p className="text-[12px] text-foreground">
+          <strong className="tabular-nums">{numeros.kanbanAbertas}</strong> tarefas abertas no Kanban ·{" "}
+          <strong className="tabular-nums">{numeros.kanbanAbertas - numeros.semOperador.length}</strong> com operador ·{" "}
+          <strong className="tabular-nums">{numeros.semOperador.length}</strong> ainda sem
+          {numeros.aprovacoes > 0 && (
+            <> · <span className="font-semibold text-warning">{numeros.aprovacoes} esperando sua aprovação</span></>
+          )}
+        </p>
+      </div>
+
+      {/* Os operadores do piloto, sem e-mail e sem senha: outra entidade. */}
+      <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+        {operadores.map((o) => {
+          const n = numerosDoOperador(o.id);
+          return (
+            <div key={o.id} className="rounded-xl border border-border bg-card p-3">
+              <div className="flex items-center gap-1.5">
+                <Bot className="h-3.5 w-3.5 text-primary" />
+                <p className="text-[12.5px] font-semibold text-foreground">{o.display_name}</p>
+                {o.is_coordinator && (
+                  <span className="rounded-full bg-primary/10 px-1.5 text-[9px] font-semibold text-primary">coordenador</span>
+                )}
+                <span className={cn(
+                  "ml-auto h-2 w-2 rounded-full",
+                  o.status === "active" ? "bg-success" : "bg-muted-foreground/40",
+                )} />
+              </div>
+              <p className="mt-0.5 text-[10px] leading-tight text-muted-foreground">{o.scope}</p>
+              {/* Números por operador: "quanto cada um tem na mão" era a
+                  pergunta que o cartão não respondia. */}
+              <div className="mt-1.5 flex flex-wrap gap-x-2.5 gap-y-0.5 text-[10px]">
+                {n.total === 0 ? (
+                  <span className="text-muted-foreground/70">nenhuma tarefa ainda</span>
+                ) : (
+                  <>
+                    <span className="text-info">{n.andamento} em andamento</span>
+                    <span className="text-success">{n.feitas} feitas</span>
+                    {n.bloqueadas > 0 && <span className="text-destructive">{n.bloqueadas} bloqueadas</span>}
+                  </>
+                )}
+              </div>
+              <p className="mt-1 text-[9.5px] text-muted-foreground">
+                {o.last_run_at ? `última execução ${dataCurta(o.last_run_at)}` : "sem execução ainda"}
+              </p>
+            </div>
+          );
+        })}
       </div>
 
       {incidentes.length > 0 && (
@@ -479,7 +611,8 @@ export default function AdminExecucao() {
                 </p>
                 {doOperador.length === 0 ? (
                   <p className="rounded-xl border border-dashed border-border p-3 text-[11px] text-muted-foreground">
-                    Nada em execução para {o.display_name}.
+                    {o.display_name} ainda não pegou nenhuma tarefa.
+                    {numeros.semOperador.length > 0 && ` Há ${numeros.semOperador.length} esperando alguém.`}
                   </p>
                 ) : (
                   <div className="space-y-2">{doOperador.map((v) => <Cartao key={v.id} v={v} />)}</div>
@@ -487,11 +620,65 @@ export default function AdminExecucao() {
               </div>
             );
           })}
+
+          {/* Esperando alguém: as tarefas reais do Kanban sem operador, com
+              o id pronto para copiar. É o que transforma "está vazio" em
+              "comece por aqui" — e o que o Hermes precisa para escolher uma
+              tarefa de verdade em vez de inventar. */}
+          {numeros.semOperador.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Esperando um operador · {numeros.semOperador.length} no Kanban
+              </p>
+              <div className="space-y-1">
+                {numeros.semOperador.slice(0, 8).map((t) => {
+                  const cliente = t.project?.client;
+                  const vencida = t.due_date && String(t.due_date) <= hoje;
+                  return (
+                    <div key={String(t.id)} className="flex items-center gap-2 rounded-lg border border-border bg-card px-2.5 py-1.5">
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[11.5px] text-foreground">{t.title}</p>
+                        <p className="truncate text-[10px] text-muted-foreground">
+                          {[cliente ? (cliente.company_name || cliente.full_name) : null, t.project?.name]
+                            .filter(Boolean).join(" · ") || "sem projeto"}
+                          {t.due_date && (
+                            <span className={cn("ml-1", vencida && "font-semibold text-destructive")}>
+                              · prazo {t.due_date}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => void copiar(String(t.id), "ID da tarefa")}
+                        title="Copiar o ID para o operador reportar nesta tarefa"
+                        className="shrink-0 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold text-muted-foreground hover:text-foreground"
+                      >
+                        copiar ID
+                      </button>
+                    </div>
+                  );
+                })}
+                {numeros.semOperador.length > 8 && (
+                  <p className="text-[10px] text-muted-foreground">
+                    e mais {numeros.semOperador.length - 8} no Kanban.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       ) : filtrados.length === 0 ? (
         <div className="rounded-xl border border-dashed border-border p-8 text-center">
           <PauseCircle className="mx-auto h-5 w-5 text-muted-foreground" />
-          <p className="mt-1 text-[12px] text-muted-foreground">Nada nesta visão agora.</p>
+          <p className="mt-1 text-[12px] text-muted-foreground">
+            Nada em <strong>{VISOES.find((x) => x.id === visao)?.rotulo.toLowerCase()}</strong> agora.
+          </p>
+          <p className="mt-0.5 text-[11px] text-muted-foreground">
+            {numeros.andamento > 0
+              ? `${numeros.andamento} tarefa(s) em andamento em outra visão.`
+              : `${numeros.kanbanAbertas} tarefas abertas no Kanban esperando execução.`}
+          </p>
         </div>
       ) : (
         <div className="space-y-2">{filtrados.map((v) => <Cartao key={v.id} v={v} />)}</div>

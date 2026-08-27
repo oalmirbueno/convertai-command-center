@@ -146,7 +146,7 @@ describe("flag com rollback documentado", () => {
   it("a flag existe, o RPC respeita e a pagina tambem", () => {
     expect(migracao).toContain("'operators_layer'");
     expect(migracao).toContain("flag_off: a camada de operadores esta desligada");
-    expect(pagina).toContain("flag === false");
+    expect(pagina).toContain('flag === "off"');
     expect(pagina).toContain("Nada foi apagado");
   });
 
@@ -208,6 +208,41 @@ describe("a area Execucao da equipe", () => {
     const app = readFileSync(resolve(raiz, "src/App.tsx"), "utf8");
     expect(app).toContain('path="/execucao"');
     expect(app).toMatch(/execucao.*StaffRoute/);
+  });
+
+  it("a tela responde COM NUMEROS, nao so com listas", () => {
+    // "Nada em execucao" e verdade que nao ajuda. O placar diz quanto ha
+    // em cada estado, e a ponte com o Kanban diz quantas esperam alguem.
+    expect(pagina).toContain("Prazo estourado");
+    expect(pagina).toContain("tarefas abertas no Kanban");
+    expect(pagina).toContain("ainda sem");
+    expect(pagina).toContain("numerosDoOperador");
+    expect(pagina).toContain("Esperando um operador");
+  });
+
+  it("o vazio ensina: mostra as tarefas reais com o id para copiar", () => {
+    expect(pagina).toContain("copiar ID");
+    expect(pagina).toContain("semOperador");
+  });
+
+  it("nao-consegui-ler nao e mais confundido com desligada", () => {
+    // A tela chegou a anunciar "desligada" quando so nao tinha conseguido
+    // ler a flag. Mensagem errada com ar de certeza manda consertar o que
+    // nao esta quebrado.
+    expect(pagina).toContain('flag === "erro"');
+    expect(pagina).toContain("Não consegui ler a configuração desta área");
+    expect(pagina).toContain('flag === "off"');
+  });
+
+  it("o quadro do MCP ensina o agente e aponta tarefa real", () => {
+    // O Hermes le o quadro e precisa saber o que fazer com ele sem
+    // depender de alguem ter colado as regras num prompt.
+    expect(servicos).toContain("como_usar");
+    expect(servicos).toContain("Nunca invente id");
+    expect(servicos).toContain("tarefas_disponiveis");
+    expect(servicos).toContain("resumo");
+    // E os limites viajam junto do manual.
+    expect(servicos).toContain("NAO estao neste catalogo");
   });
 
   it("os relatorios saem dos MESMOS dados da tela", () => {
